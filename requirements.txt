@@ -1,0 +1,30 @@
+# Основные зависимости
+flask==2.3.2
+flask-socketio==5.3.4
+python-dotenv==1.0.0
+gevent==22.10.2
+gevent-websocket==0.10.1
+
+# AI/ML
+torch==2.0.1
+torchaudio==2.0.2
+transformers==4.31.0
+sentence-transformers==2.2.2
+TTS==0.17.6
+numpy==1.24.3
+
+# Обработка медиа
+opencv-python==4.7.0.72
+ffmpeg-python==0.2.0
+soundfile==0.12.1
+librosa==0.10.0.post2
+scipy==1.10.1
+
+# Дополнительные
+sqlite3==2.6.0
+concurrent-log-handler==0.9.24
+python-json-logger==2.0.7
+tqdm==4.65.0
+
+# Для Wav2Lip (дополнительно)
+git+https://github.com/Rudrabha/Wav2Lip.git
