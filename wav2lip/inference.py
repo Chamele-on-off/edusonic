@@ -7,6 +7,9 @@ from typing import Optional, Tuple
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import ffmpeg
+import time
+import asyncio
+import subprocess
 
 # Настройка логирования
 logging.basicConfig(
@@ -25,22 +28,26 @@ class Wav2LipInference:
         checkpoint_path: str = "wav2lip/pretrained/wav2lip.pth",
         face_detector_path: str = "wav2lip/pretrained/mobilenet.pth",
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
-        tmp_dir: str = "static/tmp"
+        tmp_dir: str = "static/tmp",
+        img_size: int = 96,
+        fps: float = 25.0
     ):
         self.device = device
         self.tmp_dir = Path(tmp_dir)
         self.tmp_dir.mkdir(exist_ok=True, parents=True)
+        self.img_size = img_size
+        self.fps = fps
+        self._executor = ThreadPoolExecutor(max_workers=2)
         
         # Проверка наличия моделей
         self.checkpoint_path = self._validate_path(checkpoint_path)
         self.face_detector_path = self._validate_path(face_detector_path)
         
-        # Загрузка моделей
-        self.model = self._load_model()
-        self.face_detector = self._load_face_detector()
-        self._executor = ThreadPoolExecutor(max_workers=2)
+        # Ленивая загрузка моделей
+        self.model = None
+        self.face_detector = None
         
-        logger.info(f"Wav2Lip initialized on {device}")
+        logger.info(f"Wav2Lip initialized (device: {device})")
 
     def _validate_path(self, path: str) -> Path:
         """Проверка наличия файла модели"""
@@ -51,43 +58,48 @@ class Wav2LipInference:
 
     def _load_model(self):
         """Загрузка модели Wav2Lip"""
+        if self.model is not None:
+            return
+            
         try:
             from wav2lip.models import Wav2Lip
-            model = Wav2Lip()
+            logger.info("Loading Wav2Lip model...")
+            self.model = Wav2Lip()
             checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
             
             if 'state_dict' in checkpoint:
-                model.load_state_dict(checkpoint['state_dict'])
+                self.model.load_state_dict(checkpoint['state_dict'])
             else:
-                model.load_state_dict(checkpoint)
+                self.model.load_state_dict(checkpoint)
             
-            model = model.to(self.device).eval()
+            self.model = self.model.to(self.device).eval()
             logger.info("Wav2Lip model loaded successfully")
-            return model
         except Exception as e:
             logger.error(f"Failed to load Wav2Lip model: {str(e)}")
             raise
 
     def _load_face_detector(self):
         """Загрузка детектора лиц"""
+        if self.face_detector is not None:
+            return
+            
         try:
             from wav2lip.face_detection import FaceDetector
-            detector = FaceDetector(
-                mobilenet_path=self.face_detector_path,
+            logger.info("Loading face detector...")
+            self.face_detector = FaceDetector(
+                mobilenet_path=str(self.face_detector_path),
                 device=self.device
             )
             logger.info("Face detector loaded successfully")
-            return detector
         except Exception as e:
             logger.error(f"Failed to load face detector: {str(e)}")
             raise
 
-    def process(
+    async def process(
         self,
         audio_path: str,
         face_path: str,
         output_path: Optional[str] = None,
-        fps: float = 25.0,
         pads: Tuple[int, int, int, int] = (0, 10, 0, 0),
         resize_factor: int = 1,
         rotate: bool = False,
@@ -100,7 +112,6 @@ class Wav2LipInference:
             audio_path: Путь к аудиофайлу
             face_path: Путь к видео/изображению лица
             output_path: Выходной файл (если None - генерируется автоматически)
-            fps: Кадры в секунду
             pads: Отступы (верх, низ, лево, право)
             resize_factor: Фактор изменения размера
             rotate: Нужно ли вращать видео
@@ -110,24 +121,28 @@ class Wav2LipInference:
             Путь к выходному файлу
         """
         start_time = time.time()
-        output_path = output_path or self.tmp_dir / f"output_{int(start_time)}.mp4"
+        output_path = output_path or str(self.tmp_dir / f"output_{int(start_time)}.mp4")
         
         try:
+            # Загружаем модели при первом вызове
+            self._load_model()
+            self._load_face_detector()
+            
             # Подготовка входных данных
-            face_data = self._prepare_face(face_path, resize_factor, rotate, crop)
-            audio_data = self._prepare_audio(audio_path)
+            face_frames = await self._prepare_face(face_path, resize_factor, rotate, crop)
+            audio_data = await self._prepare_audio(audio_path)
             
             # Обработка кадров
             processed_frames = []
-            for frame in self._process_frames(face_data, audio_data, pads):
+            async for frame in self._process_frames(face_frames, audio_data, pads):
                 processed_frames.append(frame)
             
             # Сохранение результата
-            self._save_video(processed_frames, str(output_path), fps, audio_path)
+            await self._save_video(processed_frames, output_path, audio_path)
             
             duration = time.time() - start_time
             logger.info(f"Processing completed in {duration:.2f}s. Output: {output_path}")
-            return str(output_path)
+            return output_path
             
         except Exception as e:
             logger.error(f"Processing failed: {str(e)}")
@@ -135,13 +150,9 @@ class Wav2LipInference:
 
     async def process_async(self, *args, **kwargs):
         """Асинхронная версия обработки"""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self._executor,
-            lambda: self.process(*args, **kwargs)
-        )
+        return await self.process(*args, **kwargs)
 
-    def _prepare_face(self, face_path: str, resize_factor: int, rotate: bool, crop: Tuple[int, int, int, int]):
+    async def _prepare_face(self, face_path: str, resize_factor: int, rotate: bool, crop: Tuple[int, int, int, int]):
         """Подготовка видео/изображения лица"""
         from wav2lip.utils import read_frames
         
@@ -159,9 +170,15 @@ class Wav2LipInference:
         if not face:
             raise ValueError("No face detected in the reference media")
         
-        return itertools.chain([first_frame], frames)
+        # Возвращаем асинхронный генератор
+        async def frame_generator():
+            yield first_frame
+            for frame in frames:
+                yield frame
+                
+        return frame_generator()
 
-    def _prepare_audio(self, audio_path: str) -> np.ndarray:
+    async def _prepare_audio(self, audio_path: str) -> np.ndarray:
         """Подготовка аудиоданных"""
         try:
             # Используем ffmpeg для чтения аудио
@@ -175,54 +192,103 @@ class Wav2LipInference:
             logger.error(f"Audio preparation failed: {str(e)}")
             raise
 
-    def _process_frames(self, frames, audio, pads):
+    async def _process_frames(self, frames, audio, pads):
         """Обработка кадров с синхронизацией губ"""
-        from wav2lip.utils import get_smoothened_boxes
         from wav2lip.audio import get_mel
         
         mel = get_mel(audio).T
-        mel_idx_multiplier = 80. / fps
+        mel_chunks = []
+        mel_idx_multiplier = 80. / self.fps
+        i = 0
         
-        for i, frame in enumerate(frames):
+        async for frame in frames:
             face = self.face_detector.detect(frame)
             
             if not face:
                 logger.warning(f"No face detected in frame {i}")
+                i += 1
                 continue
                 
-            face = get_smoothened_boxes([face], pads)[0]
+            face = self._get_smoothened_boxes([face], pads)[0]
             
             # Подготовка входных данных для модели
-            img_batch = self._prepare_frame_batch(frame, face, mel, i, mel_idx_multiplier)
+            face_img = self._prepare_face_image(frame, face)
+            mel_chunk = mel[:, int(i * mel_idx_multiplier) : int((i + 1) * mel_idx_multiplier)]
+            mel_chunks.append(mel_chunk)
             
-            # Предсказание
-            with torch.no_grad():
-                pred = self.model(img_batch.to(self.device))
+            if len(mel_chunks) >= 16:  # Размер батча
+                batch = self._create_batch(face_img, mel_chunks)
+                
+                # Предсказание
+                with torch.no_grad():
+                    pred = self.model(batch.to(self.device))
+                
+                # Постобработка и yield кадров
+                for p in pred:
+                    yield self._postprocess_frame(p, frame, face)
+                
+                mel_chunks = []
             
-            yield self._postprocess_frame(pred, frame, face)
+            i += 1
 
-    def _prepare_frame_batch(self, frame, face, mel, frame_idx, mel_idx_multiplier):
-        """Подготовка батча для модели"""
-        raise NotImplementedError("Frame batch preparation not implemented")
+    def _get_smoothened_boxes(self, boxes, pads):
+        """Сглаживание bounding boxes"""
+        from wav2lip.utils import get_smoothened_boxes
+        return get_smoothened_boxes(boxes, pads)
 
-    def _postprocess_frame(self, pred, original_frame, face):
+    def _prepare_face_image(self, frame, face_box):
+        """Подготовка изображения лица для модели"""
+        face = frame[
+            int(face_box[1]):int(face_box[3]),
+            int(face_box[0]):int(face_box[2])
+        ]
+        face = cv2.resize(face, (self.img_size, self.img_size))
+        return torch.FloatTensor(face.transpose(2, 0, 1)).unsqueeze(0) / 255.
+
+    def _create_batch(self, face_img, mel_chunks):
+        """Создание батча для модели"""
+        batch = []
+        for mel in mel_chunks:
+            if mel.shape[1] < 16:
+                mel = np.pad(mel, ((0, 0), (0, 16 - mel.shape[1])))
+            
+            batch.append((face_img, torch.FloatTensor(mel).unsqueeze(0)))
+        
+        return torch.cat([torch.cat([f, m], dim=1) for f, m in batch])
+
+    def _postprocess_frame(self, pred, original_frame, face_box):
         """Постобработка кадра"""
-        raise NotImplementedError("Frame postprocessing not implemented")
+        pred = pred.cpu().numpy().transpose(1, 2, 0) * 255.
+        pred = cv2.resize(pred.astype(np.uint8), 
+                         (int(face_box[2] - face_box[0]), 
+                         int(face_box[3] - face_box[1])))
+        
+        result = original_frame.copy()
+        result[
+            int(face_box[1]):int(face_box[3]),
+            int(face_box[0]):int(face_box[2])
+        ] = pred
+        
+        return result
 
-    def _save_video(self, frames, output_path, fps, audio_path):
+    async def _save_video(self, frames, output_path, audio_path):
         """Сохранение видео с аудио"""
         try:
+            if not frames:
+                raise ValueError("No frames to save")
+            
             # Сохраняем временное видео без звука
             tmp_video = str(self.tmp_dir / "temp_video.mp4")
             height, width = frames[0].shape[:2]
             
             (
                 ffmpeg
-                .input('pipe:', format='rawvideo', pix_fmt='bgr24', s=f'{width}x{height}', r=fps)
+                .input('pipe:', format='rawvideo', pix_fmt='bgr24', 
+                      s=f'{width}x{height}', r=self.fps)
                 .output(tmp_video, pix_fmt='yuv420p')
                 .overwrite_output()
-                .run(input=b''.join([frame.tobytes() for frame in frames]), quiet=True)
-            )
+                .run_async(pipe_stdin=True, quiet=True)
+            ).stdin.write(b''.join([frame.tobytes() for frame in frames]))
             
             # Наложение аудио
             (
@@ -253,13 +319,15 @@ class Wav2LipInference:
                     logger.warning(f"Could not delete {f.name}: {str(e)}")
 
 if __name__ == "__main__":
-    # Пример использования
-    wav2lip = Wav2LipInference()
-    
-    result = wav2lip.process(
-        audio_path="static/reference_voice.wav",
-        face_path="static/reference_video.mp4",
-        output_path="output.mp4"
-    )
-    
-    print(f"Result saved to: {result}")
+    async def main():
+        wav2lip = Wav2LipInference()
+        
+        result = await wav2lip.process(
+            audio_path="static/reference_voice.wav",
+            face_path="static/reference_video.mp4",
+            output_path="output.mp4"
+        )
+        
+        print(f"Result saved to: {result}")
+
+    asyncio.run(main())
