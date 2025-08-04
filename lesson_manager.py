@@ -49,6 +49,8 @@ class LessonManager:
     def __init__(self, db_path: str = "materials/materials.db"):
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._active_lessons: Dict[str, LessonSession] = {}
+        self.lessons_dir = Path("static/lessons")
+        self.lessons_dir.mkdir(parents=True, exist_ok=True)
         self._init_db(db_path)
         
     def _init_db(self, db_path: str):
@@ -119,15 +121,15 @@ class LessonManager:
 
     async def _handle_qa_session(self, session: 'LessonSession', phase: LessonPhase):
         """Обработка сессии вопросов-ответов"""
-        qa_timeout = phase.options.get("timeout", 300)  # 5 минут по умолчанию
+        qa_timeout = phase.options.get("timeout", 300) if phase.options else 300
         start_time = asyncio.get_event_loop().time()
         
         while (asyncio.get_event_loop().time() - start_time) < qa_timeout and session.is_active:
-            await asyncio.sleep(1)  # Ожидаем вопросы через callback
+            await asyncio.sleep(1)
 
     async def _handle_practice_session(self, session: 'LessonSession', phase: LessonPhase):
         """Обработка практической сессии"""
-        exercises = phase.options.get("exercises", [])
+        exercises = phase.options.get("exercises", []) if phase.options else []
         
         for exercise in exercises:
             if not session.is_active:
@@ -158,8 +160,7 @@ class LessonManager:
 
     async def _process_user_answer(self, session: 'LessonSession', response: Dict):
         """Обработка ответа на упражнение"""
-        # Здесь можно добавить логику проверки ответа
-        is_correct = True  # Заглушка - в реальности нужно проверять
+        is_correct = True  # В реальной реализации нужно добавить проверку
         
         feedback = {
             "type": "feedback",
@@ -174,15 +175,12 @@ class LessonManager:
     async def _process_user_question(self, session: 'LessonSession', response: Dict):
         """Обработка вопроса от пользователя"""
         question = response["text"]
-        
-        # Получаем контекст урока
         context = {
             "lesson": session.lesson_config.title,
             "subject": session.lesson_config.subject,
             "current_phase": session.current_phase
         }
         
-        # Генерируем ответ с учетом контекста
         answer = await self._generate_answer(question, context)
         
         response = {
@@ -190,65 +188,48 @@ class LessonManager:
             "session_id": session.session_id,
             "question": question,
             "answer": answer,
-            "is_relevant": True  # Флаг релевантности вопроса
+            "is_relevant": True
         }
         
         await session.callback(response)
 
     async def _generate_answer(self, question: str, context: Dict) -> str:
         """Генерация ответа на вопрос с учетом контекста"""
-        # В реальной реализации здесь будет интеграция с LLM
         return f"Ответ на вопрос '{question}' в контексте {context['subject']}"
 
     def _load_lesson_config(self, lesson_id: str) -> LessonConfig:
-        """Загрузка конфигурации урока"""
-        # В реальной реализации нужно загружать из БД или файлов
-        example_lesson = LessonConfig(
-            id="math_01",
-            title="Введение в алгебру",
-            description="Базовые понятия алгебры",
-            subject="math",
-            difficulty="beginner",
-            phases=[
-                LessonPhase(
-                    type=LessonPhaseType.GREETING,
-                    content="Привет! Сегодня мы изучим основы алгебры.",
-                    duration=30
-                ),
-                LessonPhase(
-                    type=LessonPhaseType.EXPLANATION,
-                    content="Алгебра - это раздел математики, изучающий операции и отношения.",
-                    duration=300,
-                    options={
-                        "slides": ["slide1.jpg", "slide2.jpg"]
-                    }
-                ),
-                LessonPhase(
-                    type=LessonPhaseType.PRACTICE,
-                    content="Попробуйте решить эти примеры:",
-                    duration=600,
-                    options={
-                        "exercises": [
-                            {"question": "2 + 2 = ?", "answers": ["4"]},
-                            {"question": "3 * 5 = ?", "answers": ["15"]}
-                        ]
-                    }
-                ),
-                LessonPhase(
-                    type=LessonPhaseType.QA,
-                    content="Есть ли у вас вопросы?",
-                    duration=300
-                ),
-                LessonPhase(
-                    type=LessonPhaseType.FAREWELL,
-                    content="Спасибо за внимание! Урок завершен.",
-                    duration=30
-                )
-            ],
-            materials=["algebra_basics.pdf"]
-        )
+        """Загрузка конфигурации урока из файла"""
+        lesson_file = self.lessons_dir / f"{lesson_id}.json"
         
-        return example_lesson
+        if not lesson_file.exists():
+            logger.error(f"Lesson file {lesson_file} not found")
+            raise FileNotFoundError(f"Lesson file {lesson_file} not found")
+        
+        try:
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            phases = [
+                LessonPhase(
+                    type=LessonPhaseType(phase["type"]),
+                    content=phase["content"],
+                    duration=phase["duration"],
+                    options=phase.get("options", {})
+                ) for phase in data["phases"]
+            ]
+            
+            return LessonConfig(
+                id=data["id"],
+                title=data["title"],
+                description=data["description"],
+                subject=data["subject"],
+                difficulty=data["difficulty"],
+                phases=phases,
+                materials=data.get("materials", [])
+            )
+        except Exception as e:
+            logger.error(f"Error loading lesson config: {str(e)}")
+            raise
 
     def _cleanup_session(self, session_id: str):
         """Очистка ресурсов сессии"""
@@ -261,6 +242,23 @@ class LessonManager:
         if session_id in self._active_lessons:
             self._active_lessons[session_id].is_active = False
             logger.info(f"Lesson {session_id} stopped by request")
+
+    def list_available_lessons(self) -> List[Dict]:
+        """Получение списка доступных уроков"""
+        lessons = []
+        for lesson_file in self.lessons_dir.glob("*.json"):
+            try:
+                with open(lesson_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    lessons.append({
+                        'id': data['id'],
+                        'title': data['title'],
+                        'subject': data['subject'],
+                        'description': data['description']
+                    })
+            except Exception as e:
+                logger.error(f"Error reading lesson file {lesson_file}: {str(e)}")
+        return lessons
 
 class LessonSession:
     def __init__(self, lesson_config: LessonConfig, room_id: str, callback: Callable):
