@@ -9,6 +9,7 @@ import numpy as np
 import soundfile as sf
 from TTS.api import TTS
 from scipy.io.wavfile import write as write_wav
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(
@@ -32,17 +33,18 @@ class TextToSpeech:
         self.model_name = model_name
         self.device = device
         self.output_dir = Path(output_dir)
-        self.reference_voice = reference_voice
+        self.reference_voice = Path(reference_voice)
         self._executor = ThreadPoolExecutor(max_workers=2)
         
         # Создаем директории
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Проверяем референсный голос
-        if not Path(self.reference_voice).exists():
+        if not self.reference_voice.exists():
             logger.warning(f"Reference voice not found at {self.reference_voice}")
             self._generate_default_voice()
         
+        self.tts = None
         self._load_model()
         self._warmup()
 
@@ -76,10 +78,11 @@ class TextToSpeech:
         logger.info("Generating default reference voice...")
         try:
             # Используем английский для генерации, так как он более стабилен
-            tts = TTS(model_name="tts_models/en/ljspeech/vits").to(self.device)
-            tts.tts_to_file(
+            temp_tts = TTS(model_name="tts_models/en/ljspeech/vits").to(self.device)
+            temp_tts.tts_to_file(
                 text="This is a default reference voice for the system.",
                 file_path=str(self.reference_voice)
+            )
             logger.info(f"Default voice saved to {self.reference_voice}")
         except Exception as e:
             logger.error(f"Failed to generate default voice: {str(e)}")
@@ -117,7 +120,7 @@ class TextToSpeech:
             # Генерация аудио
             self.tts.tts_to_file(
                 text=text,
-                speaker_wav=voice_file,
+                speaker_wav=str(voice_file),
                 language=language,
                 file_path=output_path,
                 speed=speed,
@@ -186,7 +189,6 @@ class TextToSpeech:
             self.generate_speech(text, output_file=temp_file, **kwargs)
             
             # Читаем обратно в массив
-            import soundfile as sf
             data, samplerate = sf.read(str(self.output_dir / temp_file))
             
             # Удаляем временный файл
@@ -198,11 +200,11 @@ class TextToSpeech:
             logger.error(f"Error in waveform generation: {str(e)}")
             raise
 
-    def cleanup(self):
-        """Очистка сгенерированных файлов старше 24 часов"""
+    def cleanup(self, max_age_hours: int = 24):
+        """Очистка сгенерированных файлов старше указанного возраста"""
         now = time.time()
         for f in self.output_dir.glob("*.wav"):
-            if f.is_file() and (now - f.stat().st_mtime) > 86400:  # 24 часа
+            if f.is_file() and (now - f.stat().st_mtime) > max_age_hours * 3600:
                 try:
                     f.unlink()
                     logger.info(f"Deleted old file: {f.name}")
