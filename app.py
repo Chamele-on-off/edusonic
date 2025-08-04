@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
 from pathlib import Path
 from typing import Dict, Optional
@@ -11,6 +11,7 @@ from tts import TextToSpeech
 from inference import Wav2LipInference
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import time
 
 # Настройка логирования
 logging.basicConfig(
@@ -23,9 +24,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key')
+app = Flask(__name__, static_folder='static')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+
+# Создаем директории, если они не существуют
+Path("static/audio").mkdir(parents=True, exist_ok=True)
+Path("static/tmp").mkdir(parents=True, exist_ok=True)
+Path("materials").mkdir(parents=True, exist_ok=True)
 
 class AIServer:
     def __init__(self):
@@ -36,10 +42,10 @@ class AIServer:
         self.active_sessions: Dict[str, Dict] = {}
         self._executor = ThreadPoolExecutor(max_workers=4)
         
-        # Загрузка материалов
+        # Загрузка материалов при инициализации
         self._load_materials()
         
-        logger.info("AI Server initialized")
+        logger.info("AI Server initialized successfully")
 
     def _load_materials(self):
         """Загрузка учебных материалов"""
@@ -49,7 +55,8 @@ class AIServer:
                 self.llm.load_materials_from_dir(materials_dir)
                 logger.info(f"Loaded materials from {materials_dir}")
             else:
-                logger.warning("Materials directory not found")
+                logger.warning("Materials directory not found, creating empty one")
+                materials_dir.mkdir(parents=True)
         except Exception as e:
             logger.error(f"Failed to load materials: {str(e)}")
 
@@ -71,10 +78,11 @@ class AIServer:
             self.active_sessions[session_id] = {
                 'lesson_id': lesson_id,
                 'room_id': room_id,
-                'status': 'running'
+                'status': 'running',
+                'start_time': time.time()
             }
             
-            logger.info(f"Lesson {lesson_id} started in room {room_id}")
+            logger.info(f"Lesson {lesson_id} started in room {room_id}, session_id: {session_id}")
             return session_id
             
         except Exception as e:
@@ -103,12 +111,13 @@ class AIServer:
             session = self.active_sessions[session_id]
             context = {
                 'lesson': session['lesson_id'],
-                'subject': 'math',  # В реальности нужно получать из урока
+                'subject': self.lesson_manager._load_lesson_config(session['lesson_id']).subject,
                 'current_phase': 'qa'
             }
             
             # Генерация текстового ответа
             text_response = self.llm.generate_response(question, context)
+            logger.info(f"Generated response for question: {question[:50]}...")
             
             # Генерация аудио и видео
             audio_path, duration = await self.tts.generate_speech_async(text_response)
@@ -117,10 +126,16 @@ class AIServer:
                 face_path="static/reference_video.mp4"
             )
             
+            # Создаем URL для доступа к файлам
+            audio_url = f"/static/audio/{Path(audio_path).name}"
+            video_url = f"/static/tmp/{Path(video_path).name}"
+            
+            logger.info(f"Generated audio: {audio_url}, video: {video_url}")
+            
             return {
                 'text': text_response,
-                'audio_url': f"/static/audio/{Path(audio_path).name}",
-                'video_url': f"/static/tmp/{Path(video_path).name}",
+                'audio_url': audio_url,
+                'video_url': video_url,
                 'duration': duration
             }
             
@@ -128,45 +143,139 @@ class AIServer:
             logger.error(f"Failed to generate response: {str(e)}")
             raise
 
+    async def process_audio_stream(self, session_id: str, audio_data: bytes):
+        """Обработка аудиопотока от учеников"""
+        try:
+            if session_id not in self.active_sessions:
+                raise ValueError("Session not found")
+                
+            # Сохраняем временный аудиофайл
+            audio_path = f"static/tmp/student_audio_{int(time.time())}.wav"
+            with open(audio_path, 'wb') as f:
+                f.write(audio_data)
+                
+            # Транскрибация аудио (в реальной реализации используйте ваш AudioProcessor)
+            text = "Текст из аудио"  # Заглушка - замените на реальную транскрибацию
+            os.remove(audio_path)  # Удаляем временный файл
+            
+            if not text:
+                return
+                
+            # Отправляем текст как вопрос
+            await self.process_user_message(session_id, {
+                'type': 'question',
+                'text': text,
+                'user_id': 'student_audio'
+            })
+            
+        except Exception as e:
+            logger.error(f"Audio processing error: {str(e)}")
+            raise
+
+    async def stop_lesson(self, session_id: str):
+        """Остановка урока"""
+        try:
+            if session_id in self.active_sessions:
+                await self.lesson_manager.stop_lesson(session_id)
+                del self.active_sessions[session_id]
+                logger.info(f"Lesson {session_id} stopped successfully")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to stop lesson: {str(e)}")
+            raise
+
 # Инициализация сервера
 ai_server = AIServer()
 
 # HTTP Endpoints
+@app.route('/')
+def index():
+    return send_from_directory('static', 'teacher.html')
+
+@app.route('/static/<path:path>')
+def serve_static(path):
+    return send_from_directory('static', path)
+
 @app.route('/api/lessons', methods=['GET'])
 def list_lessons():
     """Получение списка доступных уроков"""
-    return jsonify({
-        'lessons': [
-            {'id': 'math_01', 'title': 'Введение в алгебру', 'subject': 'math'},
-            {'id': 'physics_01', 'title': 'Основы механики', 'subject': 'physics'}
-        ]
-    })
+    try:
+        lessons = ai_server.lesson_manager.list_available_lessons()
+        return jsonify({
+            'success': True,
+            'lessons': lessons
+        })
+    except Exception as e:
+        logger.error(f"Failed to list lessons: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/start_lesson', methods=['POST'])
 async def start_lesson():
     """Запуск урока"""
     data = request.json
     try:
+        if not data or 'lesson_id' not in data or 'room_id' not in data:
+            raise ValueError("Missing lesson_id or room_id in request")
+            
         session_id = await ai_server.start_lesson(
             lesson_id=data['lesson_id'],
             room_id=data['room_id']
         )
-        return jsonify({'success': True, 'session_id': session_id})
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'message': 'Lesson started successfully'
+        })
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        logger.error(f"Error starting lesson: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
 
 @app.route('/api/generate_response', methods=['POST'])
 async def generate_response():
     """Генерация ответа на вопрос"""
     data = request.json
     try:
+        if not data or 'session_id' not in data or 'question' not in data:
+            raise ValueError("Missing session_id or question in request")
+            
         response = await ai_server.generate_response(
             session_id=data['session_id'],
             question=data['question']
         )
-        return jsonify({'success': True, 'response': response})
+        return jsonify({
+            'success': True,
+            'response': response
+        })
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        logger.error(f"Error generating response: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
+
+@app.route('/api/stop_lesson', methods=['POST'])
+async def stop_lesson():
+    """Остановка урока"""
+    data = request.json
+    try:
+        if not data or 'session_id' not in data:
+            raise ValueError("Missing session_id in request")
+            
+        success = await ai_server.stop_lesson(data['session_id'])
+        return jsonify({
+            'success': success,
+            'message': 'Lesson stopped' if success else 'Lesson not found'
+        })
+    except Exception as e:
+        logger.error(f"Error stopping lesson: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 400
 
 # WebSocket Handlers
 @socketio.on('connect')
@@ -179,24 +288,62 @@ def handle_disconnect():
 
 @socketio.on('join_room')
 async def handle_join_room(data):
-    room_id = data['room_id']
-    socketio.emit('system_message', {'text': f"New user joined room {room_id}"}, room=room_id)
+    room_id = data.get('room_id', 'default_room')
+    socketio.emit('system_message', {
+        'text': f"New user joined room {room_id}"
+    }, room=room_id)
     logger.info(f"User joined room {room_id}")
 
 @socketio.on('user_message')
 async def handle_user_message(data):
     try:
+        if not data or 'session_id' not in data or 'text' not in data:
+            raise ValueError("Missing session_id or text in message")
+            
         await ai_server.process_user_message(
             session_id=data['session_id'],
             message={
                 'type': 'question',
                 'text': data['text'],
-                'user_id': data.get('user_id')
+                'user_id': data.get('user_id', 'anonymous')
             }
         )
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
-        socketio.emit('error', {'message': str(e)}, room=request.sid)
+        socketio.emit('error', {
+            'message': str(e)
+        }, room=request.sid)
+
+@socketio.on('student_audio')
+async def handle_student_audio(data):
+    try:
+        if not data or 'session_id' not in data or 'audio' not in data:
+            raise ValueError("Missing session_id or audio in message")
+            
+        await ai_server.process_audio_stream(
+            session_id=data['session_id'],
+            audio_data=data['audio']
+        )
+    except Exception as e:
+        logger.error(f"Error processing audio: {str(e)}")
+        socketio.emit('error', {
+            'message': str(e)
+        }, room=request.sid)
+
+# Очистка временных файлов при запуске
+def cleanup_temp_files():
+    import glob
+    for file in glob.glob('static/tmp/*') + glob.glob('static/audio/*'):
+        try:
+            if os.path.isfile(file):
+                os.unlink(file)
+        except Exception as e:
+            logger.warning(f"Could not delete {file}: {str(e)}")
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    cleanup_temp_files()
+    socketio.run(app, 
+                host='0.0.0.0', 
+                port=5000, 
+                debug=True, 
+                allow_unsafe_werkzeug=True)
