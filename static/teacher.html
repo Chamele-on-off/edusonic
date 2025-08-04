@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Учитель</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #video-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        #teacher-video {
+            width: 100%;
+            max-width: 800px;
+            height: 450px;
+            background: #000;
+            border-radius: 4px;
+            margin: 0 auto;
+        }
+        #controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        select, button {
+            padding: 10px 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+        }
+        select {
+            flex-grow: 1;
+            min-width: 200px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        #lesson-content {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+        }
+        #log {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .answer {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f4fc;
+            border-radius: 4px;
+        }
+        .answer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Учитель</h1>
+        
+        <div id="controls">
+            <select id="lesson-select">
+                <option value="">-- Выберите урок --</option>
+            </select>
+            <button id="start-btn">Начать урок</button>
+            <button id="stop-btn" disabled>Остановить</button>
+        </div>
+        
+        <div id="video-container">
+            <video id="teacher-video" autoplay muted></video>
+            <div id="lesson-content"></div>
+        </div>
+        
+        <h3>Журнал событий:</h3>
+        <div id="log"></div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const lessonSelect = document.getElementById('lesson-select');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const teacherVideo = document.getElementById('teacher-video');
+        const lessonContent = document.getElementById('lesson-content');
+        const logDiv = document.getElementById('log');
+        
+        let currentSessionId = null;
+        let peerConnection = null;
+        
+        // Загрузка списка уроков
+        function loadLessons() {
+            fetch('/api/lessons')
+                .then(res => {
+                    if (!res.ok) throw new Error('Ошибка загрузки уроков');
+                    return res.json();
+                })
+                .then(data => {
+                    lessonSelect.innerHTML = '<option value="">-- Выберите урок --</option>';
+                    data.lessons.forEach(lesson => {
+                        const option = document.createElement('option');
+                        option.value = lesson.id;
+                        option.textContent = `${lesson.title} (${lesson.subject})`;
+                        lessonSelect.appendChild(option);
+                    });
+                    log('Список уроков загружен');
+                })
+                .catch(err => {
+                    log(`Ошибка: ${err.message}`);
+                    console.error(err);
+                });
+        }
+        
+        // Начало урока
+        async function startLesson() {
+            const lessonId = lessonSelect.value;
+            if (!lessonId) {
+                log('Пожалуйста, выберите урок');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/start_lesson', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lesson_id: lessonId,
+                        room_id: getRoomId()
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Неизвестная ошибка');
+                }
+                
+                const data = await response.json();
+                currentSessionId = data.session_id;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                lessonContent.innerHTML = '';
+                log(`Урок "${lessonSelect.options[lessonSelect.selectedIndex].text}" начат`);
+                
+                // Подключение к видеоконференции
+                setupPeerConnection();
+            } catch (err) {
+                log(`Ошибка: ${err.message}`);
+                console.error(err);
+            }
+        }
+        
+        // Остановка урока
+        async function stopLesson() {
+            if (!currentSessionId) return;
+            
+            try {
+                const response = await fetch('/api/stop_lesson', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Неизвестная ошибка');
+                }
+                
+                log('Урок остановлен');
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                currentSessionId = null;
+                
+                // Отключение от видеоконференции
+                if (peerConnection) {
+                    peerConnection.close();
+                    peerConnection = null;
+                }
+            } catch (err) {
+                log(`Ошибка: ${err.message}`);
+                console.error(err);
+            }
+        }
+        
+        // Получение ID комнаты из URL
+        function getRoomId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('room') || 'default_room';
+        }
+        
+        // Настройка подключения к видеоконференции (заглушка)
+        function setupPeerConnection() {
+            log('Подключение к видеоконференции...');
+            // Здесь должен быть ваш код подключения к PeerJS
+            // teacherVideo.srcObject = ваш видеопоток
+        }
+        
+        // WebSocket обработчики
+        socket.on('connect', () => {
+            log('Подключено к серверу AI учителя');
+            loadLessons();
+        });
+        
+        socket.on('disconnect', () => {
+            log('Отключено от сервера AI учителя');
+        });
+        
+        socket.on('lesson_update', data => {
+            switch (data.type) {
+                case 'phase_start':
+                    lessonContent.innerHTML = `
+                        <h2>${data.phase.toUpperCase()}</h2>
+                        <p>${data.content}</p>
+                    `;
+                    log(`Начата фаза: ${data.phase}`);
+                    break;
+                
+                case 'answer':
+                    const answerDiv = document.createElement('div');
+                    answerDiv.className = 'answer';
+                    answerDiv.innerHTML = `
+                        <p><strong>Вопрос:</strong> ${data.question}</p>
+                        <p><strong>Ответ:</strong> ${data.answer}</p>
+                    `;
+                    lessonContent.appendChild(answerDiv);
+                    log('Учитель ответил на вопрос');
+                    break;
+                
+                case 'video_update':
+                    teacherVideo.src = data.video_url;
+                    log('Видео учителя обновлено');
+                    break;
+                
+                case 'feedback':
+                    const feedbackDiv = document.createElement('div');
+                    feedbackDiv.className = data.is_correct ? 'feedback-correct' : 'feedback-incorrect';
+                    feedbackDiv.innerHTML = `
+                        <p><strong>${data.is_correct ? '✓ Правильно!' : '✗ Неверно'}</strong></p>
+                        ${data.explanation ? `<p>${data.explanation}</p>` : ''}
+                        ${!data.is_correct && data.correct_answer ? 
+                          `<p><strong>Правильный ответ:</strong> ${data.correct_answer}</p>` : ''}
+                    `;
+                    lessonContent.appendChild(feedbackDiv);
+                    log(`Получена обратная связь: ${data.is_correct ? 'правильно' : 'неправильно'}`);
+                    break;
+            }
+        });
+        
+        socket.on('error', data => {
+            log(`Ошибка: ${data.message}`);
+        });
+        
+        // Вспомогательная функция для логов
+        function log(message) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${timeString}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        // Обработчики событий
+        startBtn.addEventListener('click', startLesson);
+        stopBtn.addEventListener('click', stopLesson);
+        
+        // Инициализация при загрузке
+        document.addEventListener('DOMContentLoaded', () => {
+            log('Система AI учителя инициализирована');
+        });
+    </script>
+</body>
+</html>
