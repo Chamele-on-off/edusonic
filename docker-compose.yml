@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  ai-teacher:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./static:/app/static
+    #  - ./materials:/app/materials
+    #  - ./models:/app/models  # Для кэширования моделей
+    environment:
+      - FLASK_ENV=production
+      - DEVICE=cpu  # или "cpu" для CPU-версии
+    #deploy:
+    #  resources:
+    #    reservations:
+    #      devices:
+    #        - driver: nvidia
+    #          count: 1
+    #          capabilities: [gpu]
+    # Для CPU-версии закомментируйте блок deploy выше
+
+
+volumes:
+  redis_data:
