@@ -26,9 +26,9 @@ class RAGDatabase:
     def __init__(self, db_path: str = "materials/materials.db"):
         self.db_path = db_path
         self._init_db()
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+        self.embedding_model = None
         self._executor = ThreadPoolExecutor(max_workers=2)
-
+        
     def _init_db(self):
         """Инициализация базы данных для RAG"""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
@@ -49,8 +49,16 @@ class RAGDatabase:
             """)
             conn.commit()
 
+    def _load_embedding_model(self):
+        """Ленивая загрузка модели для эмбеддингов"""
+        if self.embedding_model is None:
+            logger.info("Loading embedding model...")
+            self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+            logger.info("Embedding model loaded")
+
     def add_material(self, subject: str, title: str, content: str):
         """Добавление материала в базу с индексированием"""
+        self._load_embedding_model()
         embedding = self._get_embedding(content)
         
         with sqlite3.connect(self.db_path) as conn:
@@ -67,10 +75,12 @@ class RAGDatabase:
 
     def _get_embedding(self, text: str) -> np.ndarray:
         """Генерация embedding для текста"""
+        self._load_embedding_model()
         return self.embedding_model.encode(text, convert_to_numpy=True)
 
     def search_relevant_materials(self, query: str, subject: str, top_k: int = 3) -> List[Dict]:
         """Поиск релевантных материалов по семантическому сходству"""
+        self._load_embedding_model()
         query_embedding = self._get_embedding(query)
         
         with sqlite3.connect(self.db_path) as conn:
@@ -111,25 +121,35 @@ class LessonLLM:
         self.model_name = model_name
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.rag = RAGDatabase()
-        self._load_model()
+        self.model = None
+        self.tokenizer = None
+        self._executor = ThreadPoolExecutor(max_workers=2)
+        logger.info(f"LLM initialized (device: {self.device})")
 
     def _load_model(self):
         """Загрузка модели и токенизатора"""
-        logger.info(f"Loading model {self.model_name} on {self.device}...")
+        if self.model is not None and self.tokenizer is not None:
+            return
+            
+        logger.info(f"Loading model {self.model_name}...")
         
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name,
-            trust_remote_code=True
-        )
-        
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            device_map=self.device,
-            trust_remote_code=True
-        )
-        
-        logger.info("Model loaded successfully")
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_name,
+                trust_remote_code=True
+            )
+            
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device_map=self.device,
+                trust_remote_code=True
+            )
+            
+            logger.info("Model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load model: {str(e)}")
+            raise
 
     def generate_response(
         self,
@@ -156,6 +176,8 @@ class LessonLLM:
         Returns:
             Сгенерированный ответ
         """
+        self._load_model()
+        
         try:
             # Поиск релевантных материалов
             materials = self.rag.search_relevant_materials(question, context['subject'])
