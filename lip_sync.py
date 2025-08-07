@@ -7,6 +7,7 @@ import logging
 from typing import List, Tuple
 import ffmpeg
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 # Настройка логирования
