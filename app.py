@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from lesson_manager import LessonManager
 from llm import LessonLLM
 from tts import TextToSpeech
-from lip_sync import AdvancedLipSync  # Заменяем Wav2LipInference на AdvancedLipSync
+from lip_sync import AdvancedLipSync
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -40,7 +40,7 @@ class AIServer:
     def __init__(self):
         self.llm = LessonLLM()
         self.tts = TextToSpeech()
-        self.lip_sync = AdvancedLipSync(  # Заменяем Wav2Lip на AdvancedLipSync
+        self.lip_sync = AdvancedLipSync(
             reference_video="static/reference/video.mp4",
             mouth_frames_dir="static/mouth_frames",
             output_dir="static/tmp"
@@ -53,7 +53,6 @@ class AIServer:
         logger.info("AI Server initialized successfully")
 
     def _load_materials(self):
-        """Загрузка учебных материалов"""
         try:
             materials_dir = Path("materials")
             if materials_dir.exists():
@@ -66,20 +65,16 @@ class AIServer:
             logger.error(f"Failed to load materials: {str(e)}")
 
     async def start_lesson(self, lesson_id: str, room_id: str) -> str:
-        """Запуск нового урока с подключением к конференции"""
         try:
-            # Создаем callback для отправки сообщений через WebSocket
             def callback(message):
                 socketio.emit('lesson_update', message, room=room_id)
             
-            # Запускаем урок
             session_id = await self.lesson_manager.start_lesson(
                 lesson_id=lesson_id,
                 room_id=room_id,
                 callback=callback
             )
             
-            # Сохраняем сессию
             self.active_sessions[session_id] = {
                 'lesson_id': lesson_id,
                 'room_id': room_id,
@@ -96,44 +91,25 @@ class AIServer:
             raise
 
     async def connect_to_conference(self, room_id: str):
-        """Подключение к видеоконференции"""
         try:
             if room_id in self.active_conferences:
                 logger.info(f"Already connected to conference {room_id}")
                 return True
                 
-            peer_id = f"ai_teacher_{room_id}"
             self.active_conferences[room_id] = {
-                'peer_id': peer_id,
-                'status': 'connecting',
+                'peer_id': f"ai_teacher_{room_id}",
+                'status': 'connected',
                 'connected_at': time.time()
             }
             
-            # Эмулируем подключение к PeerJS
-            await asyncio.sleep(1)
-            self.active_conferences[room_id]['status'] = 'connected'
-            
-            logger.info(f"Connected to conference {room_id} with peer_id {peer_id}")
+            logger.info(f"Connected to conference {room_id}")
             return True
             
         except Exception as e:
             logger.error(f"Failed to connect to conference: {str(e)}")
             raise
 
-    async def disconnect_from_conference(self, room_id: str):
-        """Отключение от видеоконференции"""
-        try:
-            if room_id in self.active_conferences:
-                del self.active_conferences[room_id]
-                logger.info(f"Disconnected from conference {room_id}")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to disconnect from conference: {str(e)}")
-            raise
-
     async def process_user_message(self, session_id: str, message: Dict):
-        """Обработка сообщения от пользователя"""
         try:
             if session_id not in self.active_sessions:
                 raise ValueError("Session not found")
@@ -146,7 +122,6 @@ class AIServer:
             raise
 
     async def generate_response(self, session_id: str, question: str) -> Dict:
-        """Генерация ответа на вопрос с видео и аудио"""
         try:
             if session_id not in self.active_sessions:
                 raise ValueError("Session not found")
@@ -158,21 +133,17 @@ class AIServer:
                 'current_phase': 'qa'
             }
             
-            # Генерация текстового ответа
             text_response = self.llm.generate_response(question, context)
             logger.info(f"Generated response for question: {question[:50]}...")
             
-            # Генерация аудио и видео
             audio_path, duration = await self.tts.generate_speech_async(text_response)
-            video_path = await self.lip_sync.process_async(audio_path)  # Используем новый LipSync
+            video_path = await self.lip_sync.process_async(audio_path)
             
-            # Создаем URL для доступа к файлам
             audio_url = f"/static/audio/{Path(audio_path).name}"
             video_url = f"/static/tmp/{Path(video_path).name}"
             
             logger.info(f"Generated audio: {audio_url}, video: {video_url}")
             
-            # Отправляем видео в конференцию
             if session['room_id'] in self.active_conferences:
                 socketio.emit('video_stream', {
                     'session_id': session_id,
@@ -192,19 +163,13 @@ class AIServer:
             raise
 
     async def stop_lesson(self, session_id: str):
-        """Остановка урока"""
         try:
             if session_id in self.active_sessions:
                 room_id = self.active_sessions[session_id]['room_id']
                 await self.lesson_manager.stop_lesson(session_id)
                 del self.active_sessions[session_id]
                 
-                # Отключаемся от конференции, если больше нет активных уроков
-                active_in_room = any(
-                    s['room_id'] == room_id 
-                    for s in self.active_sessions.values()
-                )
-                if not active_in_room and room_id in self.active_conferences:
+                if not any(s['room_id'] == room_id for s in self.active_sessions.values()):
                     await self.disconnect_from_conference(room_id)
                 
                 logger.info(f"Lesson {session_id} stopped successfully")
@@ -214,10 +179,19 @@ class AIServer:
             logger.error(f"Failed to stop lesson: {str(e)}")
             raise
 
-# Инициализация сервера
+    async def disconnect_from_conference(self, room_id: str):
+        try:
+            if room_id in self.active_conferences:
+                del self.active_conferences[room_id]
+                logger.info(f"Disconnected from conference {room_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to disconnect from conference: {str(e)}")
+            raise
+
 ai_server = AIServer()
 
-# HTTP Endpoints
 @app.route('/')
 def index():
     return send_from_directory('static', 'teacher.html')
@@ -228,32 +202,22 @@ def serve_static(path):
 
 @app.route('/api/lessons', methods=['GET'])
 def list_lessons():
-    """Получение списка доступных уроков"""
     try:
         lessons = ai_server.lesson_manager.list_available_lessons()
-        return jsonify({
-            'success': True,
-            'lessons': lessons
-        })
+        return jsonify({'success': True, 'lessons': lessons})
     except Exception as e:
         logger.error(f"Failed to list lessons: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/start_lesson', methods=['POST'])
 async def start_lesson():
-    """Запуск урока"""
     data = request.json
     try:
         if not data or 'lesson_id' not in data or 'room_id' not in data:
             raise ValueError("Missing lesson_id or room_id in request")
             
-        # Подключаемся к конференции
         await ai_server.connect_to_conference(data['room_id'])
-        
-        session_id = await ai_server.start_lesson(
-            lesson_id=data['lesson_id'],
-            room_id=data['room_id']
-        )
+        session_id = await ai_server.start_lesson(data['lesson_id'], data['room_id'])
         return jsonify({
             'success': True,
             'session_id': session_id,
@@ -261,37 +225,23 @@ async def start_lesson():
         })
     except Exception as e:
         logger.error(f"Error starting lesson: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 400
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/generate_response', methods=['POST'])
 async def generate_response():
-    """Генерация ответа на вопрос"""
     data = request.json
     try:
         if not data or 'session_id' not in data or 'question' not in data:
             raise ValueError("Missing session_id or question in request")
             
-        response = await ai_server.generate_response(
-            session_id=data['session_id'],
-            question=data['question']
-        )
-        return jsonify({
-            'success': True,
-            'response': response
-        })
+        response = await ai_server.generate_response(data['session_id'], data['question'])
+        return jsonify({'success': True, 'response': response})
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 400
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/stop_lesson', methods=['POST'])
 async def stop_lesson():
-    """Остановка урока"""
     data = request.json
     try:
         if not data or 'session_id' not in data:
@@ -304,12 +254,8 @@ async def stop_lesson():
         })
     except Exception as e:
         logger.error(f"Error stopping lesson: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 400
+        return jsonify({'success': False, 'error': str(e)}), 400
 
-# WebSocket Handlers
 @socketio.on('connect')
 def handle_connect():
     logger.info(f"Client connected: {request.sid}")
@@ -321,9 +267,7 @@ def handle_disconnect():
 @socketio.on('join_room')
 async def handle_join_room(data):
     room_id = data.get('room_id', 'default_room')
-    socketio.emit('system_message', {
-        'text': f"New user joined room {room_id}"
-    }, room=room_id)
+    socketio.emit('system_message', {'text': f"New user joined room {room_id}"}, room=room_id)
     logger.info(f"User joined room {room_id}")
 
 @socketio.on('user_message')
@@ -342,13 +286,10 @@ async def handle_user_message(data):
         )
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
-        socketio.emit('error', {
-            'message': str(e)
-        }, room=request.sid)
+        socketio.emit('error', {'message': str(e)}, room=request.sid)
 
 @socketio.on('video_stream')
 async def handle_video_stream(data):
-    """Обработка потока видео для конференции"""
     try:
         if not data or 'room_id' not in data or 'video_url' not in data:
             raise ValueError("Missing room_id or video_url in message")
@@ -360,7 +301,6 @@ async def handle_video_stream(data):
     except Exception as e:
         logger.error(f"Error processing video stream: {str(e)}")
 
-# Очистка временных файлов при запуске
 def cleanup_temp_files():
     import glob
     for file in glob.glob('static/tmp/*') + glob.glob('static/audio/*'):
@@ -372,8 +312,4 @@ def cleanup_temp_files():
 
 if __name__ == '__main__':
     cleanup_temp_files()
-    socketio.run(app, 
-                host='0.0.0.0', 
-                port=5000, 
-                debug=True, 
-                allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
