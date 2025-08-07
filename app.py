@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from lesson_manager import LessonManager
 from llm import LessonLLM
 from tts import TextToSpeech
-from inference import Wav2LipInference
+from lip_sync import AdvancedLipSync  # Заменяем Wav2LipInference на AdvancedLipSync
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import time
@@ -33,12 +33,18 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 Path("static/audio").mkdir(parents=True, exist_ok=True)
 Path("static/tmp").mkdir(parents=True, exist_ok=True)
 Path("materials").mkdir(parents=True, exist_ok=True)
+Path("static/reference").mkdir(parents=True, exist_ok=True)
+Path("static/mouth_frames").mkdir(parents=True, exist_ok=True)
 
 class AIServer:
     def __init__(self):
         self.llm = LessonLLM()
         self.tts = TextToSpeech()
-        self.wav2lip = Wav2LipInference()
+        self.lip_sync = AdvancedLipSync(  # Заменяем Wav2Lip на AdvancedLipSync
+            reference_video="static/reference/video.mp4",
+            mouth_frames_dir="static/mouth_frames",
+            output_dir="static/tmp"
+        )
         self.lesson_manager = LessonManager()
         self.active_sessions: Dict[str, Dict] = {}
         self.active_conferences: Dict[str, Dict] = {}
@@ -158,10 +164,7 @@ class AIServer:
             
             # Генерация аудио и видео
             audio_path, duration = await self.tts.generate_speech_async(text_response)
-            video_path = await self.wav2lip.process_async(
-                audio_path=audio_path,
-                face_path="static/reference_video.mp4"
-            )
+            video_path = await self.lip_sync.process_async(audio_path)  # Используем новый LipSync
             
             # Создаем URL для доступа к файлам
             audio_url = f"/static/audio/{Path(audio_path).name}"
