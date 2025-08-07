@@ -13,21 +13,25 @@ transformers==4.31.0
 sentence-transformers==2.2.2
 TTS==0.17.6
 numpy==1.24.3
-dlib==19.24.2  # Добавлено для работы с facial landmarks
+dlib==19.24.2
+opencv-python==4.7.0.72
 
 # Обработка медиа
-opencv-python==4.7.0.72
 ffmpeg-python==0.2.0
 soundfile==0.12.1
 librosa==0.10.0.post2
 scipy==1.10.1
-imageio==2.31.1  # Добавлено для работы с изображениями
-imageio-ffmpeg==0.4.8  # Для обработки видео
+imageio==2.31.1
+imageio-ffmpeg==0.4.8
+
+# WebRTC (если выберете FastAPI)
+aiortc==1.5.0
+fastapi==0.95.2
+uvicorn==0.22.0
 
 # Дополнительные
 sqlite3==2.6.0
-concurrent-log-handler==0.9.24
-python-json-logger==2.0.7
 tqdm==4.65.0
-numba==0.57.1  # Для оптимизации audio processing
-protobuf==3.20.3  # Требуется для некоторых моделей TTS
+numba==0.57.1
+protobuf==3.20.3
+requests==2.31.0  # Для загрузки файлов
