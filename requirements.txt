@@ -8,8 +8,8 @@ python-dotenv==1.0.0
 # AI/ML (CPU версии)
 torch==2.1.0
 torchaudio==2.1.0
---extra-index-url https://download.pytorch.org/whl/cpu
-transformers==4.31.0
+--index-url https://download.pytorch.org/whl/cpu
+transformers==4.33.3  # Версия, совместимая и с TTS и с sentence-transformers
 sentence-transformers==2.2.2
 TTS==0.17.6
 numpy==1.24.3
@@ -18,4 +18,4 @@ librosa==0.10.0.post2
 
 # Обработка медиа
 soundfile==0.12.1
-scipy>=1.11.2  # Обновлено для совместимости с TTS
+scipy>=1.11.2
