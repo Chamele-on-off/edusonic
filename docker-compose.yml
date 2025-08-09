@@ -2,21 +2,20 @@ version: '3.8'
 
 services:
   ai-teacher:
-    container_name: ai-teacher  # Добавьте эту строку
     build: .
+    container_name: ai-teacher
     ports:
       - "5000:5000"
     volumes:
+      - ./templates:/app/templates
       - ./static:/app/static
-      - ./materials:/app/materials
     environment:
       - FLASK_ENV=production
-      - DEVICE=cpu
     restart: unless-stopped
 
   nginx:
-    container_name: nginx  # Добавьте эту строку
     image: nginx:latest
+    container_name: nginx
     ports:
       - "80:80"
       - "443:443"
@@ -24,7 +23,6 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
       - ./ssl:/etc/nginx/ssl
       - ./static:/app/static
-      - /var/log/nginx:/var/log/nginx
     depends_on:
       - ai-teacher
     restart: unless-stopped
