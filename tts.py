@@ -1,107 +1,59 @@
-import os
-import time
+from gtts import gTTS
 import base64
+from io import BytesIO
 import logging
+from typing import List, Tuple
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-from flask_socketio import emit
-import torch
-from TTS.api import TTS
-from phonemizer import phonemize
-from phonemizer.separator import Separator
-import numpy as np
-import soundfile as sf
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('tts.log'),
-        logging.StreamHandler()
-    ]
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-class TextToSpeech:
-    def __init__(
-        self,
-        model_name: str = "tts_models/multilingual/multi-dataset/xtts_v2",
-        output_dir: str = "static/audio"
-    ):
-        self.model_name = model_name
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._executor = ThreadPoolExecutor(max_workers=2)
-        self.tts = None
-        self._load_model()
+class SimpleTTS:
+    def __init__(self, cache_dir: str = "static/audio"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _load_model(self):
-        """Загрузка TTS модели"""
+    def text_to_phonemes(self, text: str) -> List[Tuple[str, float]]:
+        """Упрощенная генерация фонем (заглушка)"""
+        vowels = {'а', 'е', 'ё', 'и', 'о', 'у', 'ы', 'э', 'ю', 'я'}
+        phonemes = []
+        for char in text.lower():
+            if char in vowels:
+                phonemes.append((char, 0.3))  # Гласные длиннее
+            elif char.isalpha():
+                phonemes.append((char, 0.1))  # Согласные короче
+        return phonemes[:50]  # Ограничиваем количество
+
+    def synthesize(self, text: str, language: str = 'ru') -> dict:
+        """Синтез речи с псевдо-фонемами"""
         try:
-            logger.info(f"Загрузка модели TTS {self.model_name}...")
-            self.tts = TTS(model_name=self.model_name, progress_bar=False)
-            logger.info("Модель TTS загружена")
-        except Exception as e:
-            logger.error(f"Ошибка загрузки модели TTS: {str(e)}")
-            raise
-
-    def generate_speech(self, text: str, language: str = "ru") -> dict:
-        """Генерация речи из текста"""
-        try:
-            output_file = self.output_dir / f"tts_{int(time.time())}.wav"
+            # Генерация аудио в оперативной памяти
+            tts = gTTS(text=text, lang=language, slow=False)
+            audio_buffer = BytesIO()
+            tts.write_to_fp(audio_buffer)
+            audio_buffer.seek(0)
             
-            self.tts.tts_to_file(
-                text=text,
-                file_path=str(output_file),
-                language=language
-            )
-
-            with open(output_file, 'rb') as f:
-                audio_data = f.read()
+            # Генерация упрощенных фонем
+            phonemes = self.text_to_phonemes(text)
             
-            phonemes = self._extract_phonemes(text)
-            os.remove(output_file)
-
             return {
-                'audio': base64.b64encode(audio_data).decode('utf-8'),
-                'phonemes': phonemes
+                'audio': base64.b64encode(audio_buffer.read()).decode('utf-8'),
+                'phonemes': phonemes,
+                'text': text
             }
         except Exception as e:
-            logger.error(f"Ошибка генерации речи: {str(e)}")
-            return {'error': str(e)}
+            logger.error(f"Ошибка синтеза речи: {str(e)}")
+            return {
+                'error': str(e),
+                'phonemes': [('а', 0.2)] * 3  # Фолбэк
+            }
 
-    def _extract_phonemes(self, text: str) -> list:
-        """Извлечение фонем из текста"""
-        try:
-            phonemes = phonemize(
-                text,
-                language='ru',
-                backend='espeak',
-                separator=Separator(phone=' ', word='|', syllable='')
-            )
-            return [(p, 0.2) for p in phonemes.split()]  # Упрощенный тайминг
-        except Exception as e:
-            logger.error(f"Ошибка извлечения фонем: {str(e)}")
-            return [('а', 0.2)] * len(text.split())
-
-    def generate_stream(self, text: str, callback: callable):
-        """Потоковая генерация речи"""
-        self._executor.submit(
-            self._generate_in_thread,
-            text,
-            callback
-        )
-
-    def _generate_in_thread(self, text: str, callback: callable):
-        """Генерация в отдельном потоке"""
-        try:
-            result = self.generate_speech(text)
-            callback(result)
-        except Exception as e:
-            logger.error(f"Ошибка в потоковой генерации: {str(e)}")
-            callback({'error': str(e)})
-
-    def shutdown(self):
-        """Очистка ресурсов"""
-        self._executor.shutdown()
-        logger.info("TextToSpeech остановлен")
+# Пример использования:
+if __name__ == "__main__":
+    tts = SimpleTTS()
+    result = tts.synthesize("Привет, это тест синтеза речи")
+    print(f"Аудио (base64): {result['audio'][:30]}...")
+    print(f"Фонемы: {result['phonemes']}")
