@@ -1,220 +1,242 @@
 import os
 import logging
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO
-from lesson_manager import LessonManager
-from llm import LessonLLM
-from tts import TextToSpeech
-from webrtc_handler import WebRTCHandler
-from concurrent.futures import ThreadPoolExecutor
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import sqlite3
 from pathlib import Path
 import uuid
-import time
+from concurrent.futures import ThreadPoolExecutor
+from gtts import gTTS
+import base64
+from io import BytesIO
+from typing import List, Dict, Tuple
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('ai_teacher.log'),
+        logging.FileHandler('logs/app.log'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация Flask и SocketIO
+# Инициализация Flask
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Создание необходимых директорий
+# Создание директорий
 Path("static/audio").mkdir(parents=True, exist_ok=True)
-Path("materials/lessons").mkdir(parents=True, exist_ok=True)
-Path("static/reference").mkdir(parents=True, exist_ok=True)
+Path("materials").mkdir(parents=True, exist_ok=True)
+Path("logs").mkdir(parents=True, exist_ok=True)
 
-class AITeacher:
-    def __init__(self):
-        self.executor = ThreadPoolExecutor(max_workers=4)
-        self.llm = LessonLLM()
-        self.tts = TextToSpeech()
-        self.webrtc = WebRTCHandler(socketio)
-        self.lesson_manager = LessonManager(socketio)
-        self.active_sessions = {}
-        logger.info("AI Teacher initialized")
+class KnowledgeBase:
+    def __init__(self, db_path: str = "materials/knowledge.db"):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(self.db_path)
+        self.model = SentenceTransformer('all-MiniLM-L6-v2')  # 80MB модель
+        self._init_db()
 
-    def start_lesson(self, lesson_id: str, room_id: str) -> str:
-        """Запуск нового урока с генерацией сессии"""
-        session_id = f"{lesson_id}-{room_id}-{uuid.uuid4().hex[:8]}"
+    def _init_db(self):
+        """Инициализация структуры базы данных"""
+        self.conn.execute("""
+        CREATE TABLE IF NOT EXISTS materials (
+            id INTEGER PRIMARY KEY,
+            subject TEXT,
+            title TEXT,
+            content TEXT,
+            embedding BLOB
+        )
+        """)
+        self.conn.commit()
+
+    def add_material(self, subject: str, title: str, content: str):
+        """Добавление материала в базу знаний"""
+        embedding = self.model.encode(content)
+        self.conn.execute(
+            "INSERT INTO materials (subject, title, content, embedding) VALUES (?, ?, ?, ?)",
+            (subject, title, content, embedding.tobytes())
+        )
+        self.conn.commit()
+
+    def find_similar(self, query: str, subject: str, top_k: int = 3) -> List[Dict]:
+        """Поиск релевантных материалов"""
+        query_embed = self.model.encode(query)
+        cursor = self.conn.cursor()
         
-        self.active_sessions[session_id] = {
-            'lesson_id': lesson_id,
-            'room_id': room_id,
-            'status': 'running',
-            'start_time': time.time()
-        }
-
-        # Запуск в фоновом потоке
-        self.executor.submit(
-            self._run_lesson_session,
-            session_id,
-            lesson_id,
-            room_id
+        cursor.execute(
+            "SELECT id, title, content, embedding FROM materials WHERE subject = ?",
+            (subject,)
         )
         
-        return session_id
+        results = []
+        for row in cursor.fetchall():
+            embed = np.frombuffer(row[3], dtype=np.float32)
+            similarity = cosine_similarity([query_embed], [embed])[0][0]
+            results.append({
+                'id': row[0],
+                'title': row[1],
+                'content': row[2],
+                'score': float(similarity)
+            })
+        
+        return sorted(results, key=lambda x: x['score'], reverse=True)[:top_k]
 
-    def _run_lesson_session(self, session_id: str, lesson_id: str, room_id: str):
-        """Основной цикл выполнения урока"""
+    def generate_response(self, question: str, context: List[Dict]) -> Dict:
+        """Генерация ответа на основе контекста"""
+        if not context:
+            return {
+                'text': "Информация по данному вопросу не найдена.",
+                'materials': []
+            }
+        
+        return {
+            'text': f"Вот что я нашел по вашему вопросу '{question}':\n\n" +
+                   "\n\n".join(f"### {item['title']}\n{item['content']}" for item in context),
+            'materials': context
+        }
+
+    def close(self):
+        self.conn.close()
+
+class SimpleTTS:
+    def __init__(self, cache_dir: str = "static/audio"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def text_to_phonemes(self, text: str) -> List[Tuple[str, float]]:
+        """Упрощенная генерация фонем"""
+        vowels = {'а', 'е', 'ё', 'и', 'о', 'у', 'ы', 'э', 'ю', 'я'}
+        phonemes = []
+        for char in text.lower():
+            if char in vowels:
+                phonemes.append((char, 0.3))
+            elif char.isalpha():
+                phonemes.append((char, 0.1))
+        return phonemes[:50]
+
+    def synthesize(self, text: str, language: str = 'ru') -> dict:
+        """Синтез речи с фонемами"""
         try:
-            # Подключение к конференции
-            self.webrtc.connect_to_conference(room_id)
+            tts = gTTS(text=text, lang=language, slow=False)
+            audio_buffer = BytesIO()
+            tts.write_to_fp(audio_buffer)
+            audio_buffer.seek(0)
             
-            # Запуск урока через менеджер
-            self.lesson_manager.start_lesson(lesson_id, room_id)
-            
-            logger.info(f"Lesson {lesson_id} started in session {session_id}")
-            
+            return {
+                'audio': base64.b64encode(audio_buffer.read()).decode('utf-8'),
+                'phonemes': self.text_to_phonemes(text),
+                'text': text
+            }
         except Exception as e:
-            logger.error(f"Lesson session {session_id} failed: {str(e)}")
-            self.stop_lesson(session_id)
+            logger.error(f"TTS error: {str(e)}")
+            return {
+                'error': str(e),
+                'phonemes': [('а', 0.2)] * 3
+            }
 
-    def stop_lesson(self, session_id: str):
-        """Корректная остановка урока"""
-        if session_id in self.active_sessions:
-            self.active_sessions[session_id]['status'] = 'stopped'
-            self.lesson_manager.stop_lesson(session_id)
-            logger.info(f"Lesson {session_id} stopped")
+# Инициализация компонентов
+executor = ThreadPoolExecutor(max_workers=4)
+kb = KnowledgeBase()
+tts = SimpleTTS()
 
-    def process_user_message(self, session_id: str, message: dict) -> dict:
-        """Обработка сообщений от пользователя (вопросы/ответы)"""
-        if session_id not in self.active_sessions:
-            return {'error': 'Session not found'}
+def init_demo_data():
+    """Инициализация демо-данных по обществознанию"""
+    if not list(kb.find_similar("", "обществознание", 1)):
+        demo_materials = [
+            ("обществознание", "Понятие общества", "Общество — это совокупность людей, объединенных исторически сложившимися формами взаимодействия."),
+            ("обществознание", "Типы экономических систем", "1. Традиционная 2. Командная 3. Рыночная 4. Смешанная. Россия имеет смешанную экономическую систему."),
+            ("обществознание", "Разделение властей", "1. Законодательная (Федеральное Собрание) 2. Исполнительная (Правительство) 3. Судебная (суды)."),
+            ("обществознание", "Социальная стратификация", "Деление общества на слои по доходам, власти, образованию. Основные классы: высший, средний, низший."),
+            ("обществознание", "Политические режимы", "1. Демократия 2. Авторитаризм 3. Тоталитаризм. Россия — демократическое государство."),
+            ("обществознание", "Конституция РФ", "Основной закон России. Принята 12 декабря 1993 года. Гарантирует права и свободы человека."),
+            ("обществознание", "Глобализация", "Процесс worldwide интеграции в экономике, культуре и технологиях. Имеет как плюсы, так и минусы.")
+        ]
         
-        if message['type'] == 'question':
-            return self._generate_ai_response(session_id, message['text'])
-        elif message['type'] == 'answer':
-            return self._validate_answer(session_id, message)
+        for subject, title, content in demo_materials:
+            kb.add_material(subject, title, content)
+        logger.info("Демо-данные по обществознанию загружены")
 
-    def _generate_ai_response(self, session_id: str, question: str) -> dict:
-        """Генерация ответа через LLM + TTS"""
-        session = self.active_sessions.get(session_id)
-        if not session:
-            return {'error': 'Session not found'}
-        
-        # Получаем контекст урока
-        context = {
-            'lesson': session['lesson_id'],
-            'subject': self.lesson_manager.get_lesson_subject(session['lesson_id']),
-            'current_phase': 'qa'
-        }
-        
-        # Генерация текстового ответа
-        text_response = self.llm.generate_response(question, context)
-        
-        # Синтез речи и фонем
-        audio_data = self.tts.generate_speech(text_response)
-        
-        return {
-            'type': 'ai_response',
-            'text': text_response,
-            'audio': audio_data['audio'],
-            'phonemes': audio_data['phonemes'],
-            'session_id': session_id
-        }
+# Инициализация демо-данных при старте
+init_demo_data()
 
-    def _validate_answer(self, session_id: str, message: dict) -> dict:
-        """Проверка ответа ученика (заглушка)"""
-        return {
-            'type': 'feedback',
-            'is_correct': True,
-            'explanation': 'Correct answer!',
-            'session_id': session_id
-        }
-
-    def shutdown(self):
-        """Корректное завершение работы"""
-        self.executor.shutdown()
-        self.webrtc.stop()
-        self.tts.shutdown()
-        logger.info("AI Teacher shutdown complete")
-
-# Инициализация системы
-ai_teacher = AITeacher()
-
-# HTTP Endpoints
+# Web Routes
 @app.route('/')
-def index():
+def home():
     return render_template('teacher.html')
 
-@app.route('/api/lessons')
-def list_lessons():
-    try:
-        lessons = ai_teacher.lesson_manager.list_available_lessons()
-        return jsonify({'success': True, 'lessons': lessons})
-    except Exception as e:
-        logger.error(f"Failed to list lessons: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/materials', methods=['GET'])
+def get_materials():
+    subject = request.args.get('subject', 'обществознание')
+    return jsonify({
+        'materials': [m for m in kb.find_similar("", subject, 10) if m['score'] > 0.3]
+    })
 
-@app.route('/api/start_lesson', methods=['POST'])
-def start_lesson():
-    try:
-        data = request.get_json()
-        session_id = ai_teacher.start_lesson(data['lesson_id'], data['room_id'])
-        return jsonify({'success': True, 'session_id': session_id})
-    except Exception as e:
-        logger.error(f"Failed to start lesson: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 400
-
-@app.route('/api/stop_lesson', methods=['POST'])
-def stop_lesson():
-    try:
-        data = request.get_json()
-        ai_teacher.stop_lesson(data['session_id'])
-        return jsonify({'success': True})
-    except Exception as e:
-        logger.error(f"Failed to stop lesson: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 400
+@app.route('/api/ask', methods=['POST'])
+def ask_question():
+    data = request.json
+    question = data.get('question', '')
+    subject = data.get('subject', 'обществознание')
+    
+    materials = kb.find_similar(question, subject)
+    response = kb.generate_response(question, materials)
+    audio_data = tts.synthesize(response['text'])
+    
+    return jsonify({
+        **response,
+        'audio': audio_data['audio'],
+        'phonemes': audio_data['phonemes']
+    })
 
 # WebSocket Handlers
 @socketio.on('connect')
 def handle_connect():
-    logger.info('Client connected')
+    logger.info(f"Client connected: {request.sid}")
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    logger.info('Client disconnected')
+    logger.info(f"Client disconnected: {request.sid}")
 
-@socketio.on('start_lesson')
-def handle_start_lesson(data):
-    try:
-        session_id = ai_teacher.start_lesson(data['lesson_id'], data['room_id'])
-        emit('session_started', {'session_id': session_id})
-    except Exception as e:
-        emit('error', {'message': str(e)})
-
-@socketio.on('user_message')
-def handle_user_message(data):
-    try:
-        response = ai_teacher.process_user_message(data['session_id'], data)
-        emit('lesson_update', response)
-    except Exception as e:
-        emit('error', {'message': str(e)})
-
-@socketio.on('stop_lesson')
-def handle_stop_lesson(data):
-    try:
-        ai_teacher.stop_lesson(data['session_id'])
-        emit('session_stopped', {})
-    except Exception as e:
-        emit('error', {'message': str(e)})
-
-# Завершение работы
-@app.teardown_appcontext
-def shutdown_system(exception=None):
-    ai_teacher.shutdown()
+@socketio.on('ask_question')
+def handle_question(data):
+    session_id = data.get('session_id', str(uuid.uuid4()))
+    
+    def process():
+        try:
+            materials = kb.find_similar(data['question'], data.get('subject', 'обществознание'))
+            response = kb.generate_response(data['question'], materials)
+            audio = tts.synthesize(response['text'])
+            
+            socketio.emit('response', {
+                'session_id': session_id,
+                'text': response['text'],
+                'audio': audio['audio'],
+                'phonemes': audio['phonemes'],
+                'materials': response['materials']
+            }, room=request.sid)
+        except Exception as e:
+            logger.error(f"Error processing question: {str(e)}")
+            socketio.emit('error', {
+                'session_id': session_id,
+                'message': str(e)
+            }, room=request.sid)
+    
+    executor.submit(process)
 
 if __name__ == '__main__':
     try:
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True)
-    except KeyboardInterrupt:
-        ai_teacher.shutdown()
+        host = os.getenv('HOST', '0.0.0.0')
+        port = int(os.getenv('PORT', 5000))
+        logger.info(f"Starting server on {host}:{port}")
+        socketio.run(app, host=host, port=port)
+    except Exception as e:
+        logger.error(f"Server error: {str(e)}")
+    finally:
+        executor.shutdown()
+        kb.close()
