@@ -11,6 +11,12 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from typing import List, Tuple
 
+# Создание директорий
+Path("static/audio").mkdir(parents=True, exist_ok=True)
+Path("materials").mkdir(parents=True, exist_ok=True)
+Path("logs").mkdir(parents=True, exist_ok=True)
+Path("models").mkdir(parents=True, exist_ok=True)
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -26,12 +32,6 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
 socketio = SocketIO(app, cors_allowed_origins="*")
-
-# Создание директорий
-Path("static/audio").mkdir(parents=True, exist_ok=True)
-Path("materials").mkdir(parents=True, exist_ok=True)
-Path("logs").mkdir(parents=True, exist_ok=True)
-Path("models").mkdir(parents=True, exist_ok=True)
 
 class SimpleTTS:
     def __init__(self):
@@ -94,6 +94,23 @@ init_demo_data()
 def home():
     return render_template('teacher.html')
 
+@app.route('/api/lessons')
+def list_lessons():
+    lessons = []
+    for lesson_file in Path("static/lessons").glob("*.json"):
+        try:
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                lessons.append({
+                    'id': data['id'],
+                    'title': data['title'],
+                    'subject': data['subject'],
+                    'description': data['description']
+                })
+        except Exception as e:
+            logger.error(f"Error loading lesson {lesson_file}: {str(e)}")
+    return jsonify({"lessons": lessons})
+
 @app.route('/api/materials')
 def get_materials():
     subject = request.args.get('subject', 'обществознание')
@@ -115,6 +132,37 @@ def ask_question():
         **response,
         "audio": audio['audio'],
         "phonemes": audio['phonemes']
+    })
+
+@app.route('/api/start_lesson', methods=['POST'])
+def start_lesson():
+    data = request.json
+    lesson_id = data.get('lesson_id')
+    room_id = data.get('room_id')
+    
+    if not lesson_id or not room_id:
+        return jsonify({"error": "Missing lesson_id or room_id"}), 400
+    
+    session_id = f"{lesson_id}_{room_id}_{int(time.time())}"
+    
+    # Здесь должна быть логика запуска урока
+    return jsonify({
+        "session_id": session_id,
+        "status": "started"
+    })
+
+@app.route('/api/stop_lesson', methods=['POST'])
+def stop_lesson():
+    data = request.json
+    session_id = data.get('session_id')
+    
+    if not session_id:
+        return jsonify({"error": "Missing session_id"}), 400
+    
+    # Здесь должна быть логика остановки урока
+    return jsonify({
+        "session_id": session_id,
+        "status": "stopped"
     })
 
 # WebSocket Handlers
