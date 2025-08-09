@@ -2,13 +2,15 @@ import os
 import torch
 import time
 import logging
-from typing import Optional, Tuple
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+import base64
 import numpy as np
 import soundfile as sf
+from typing import Tuple, List, Optional
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from TTS.api import TTS
-from scipy.io.wavfile import write as write_wav
+from phonemizer import phonemize
+from phonemizer.separator import Separator
 import asyncio
 
 # Настройка логирования
@@ -28,7 +30,7 @@ class TextToSpeech:
         model_name: str = "tts_models/multilingual/multi-dataset/xtts_v2",
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         output_dir: str = "static/audio",
-        reference_voice: str = "static/reference_voice.wav"
+        reference_voice: str = "static/reference/reference_voice.wav"
     ):
         self.model_name = model_name
         self.device = device
@@ -77,16 +79,48 @@ class TextToSpeech:
         """Генерация стандартного референсного голоса"""
         logger.info("Generating default reference voice...")
         try:
-            # Используем английский для генерации, так как он более стабилен
-            temp_tts = TTS(model_name="tts_models/en/ljspeech/vits").to(self.device)
+            self.reference_voice.parent.mkdir(parents=True, exist_ok=True)
+            temp_tts = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to(self.device)
             temp_tts.tts_to_file(
-                text="This is a default reference voice for the system.",
-                file_path=str(self.reference_voice)
+                text="Это стандартный референсный голос для системы.",
+                file_path=str(self.reference_voice),
+                speaker_wav=str(self.reference_voice),  # Будет создан новый голос
+                language="ru"
             )
             logger.info(f"Default voice saved to {self.reference_voice}")
         except Exception as e:
             logger.error(f"Failed to generate default voice: {str(e)}")
             raise
+
+    def _extract_phonemes(self, text: str) -> List[Tuple[str, float]]:
+        """Извлечение фонем с таймингами (упрощенная версия)"""
+        try:
+            # Разбиваем текст на фонемы
+            phonemes = phonemize(
+                text,
+                language='ru',
+                backend='espeak',
+                separator=Separator(phone=' ', word='|', syllable='')
+            ).split()
+            
+            # Генерируем приблизительные тайминги (0.2 сек на фонему)
+            phoneme_timings = []
+            current_time = 0.0
+            for phone in phonemes:
+                duration = 0.2  # Базовая длительность
+                # Корректировка для некоторых фонем
+                if phone in ['а', 'о', 'у', 'и', 'э', 'ы']:
+                    duration = 0.3
+                elif phone in ['п', 'б', 'т', 'д', 'к', 'г']:
+                    duration = 0.1
+                
+                phoneme_timings.append((phone, current_time))
+                current_time += duration
+            
+            return [(phone, duration) for phone, duration in zip(phonemes, [0.2]*len(phonemes))]
+        except Exception as e:
+            logger.error(f"Phoneme extraction failed: {str(e)}")
+            return [('а', 0.2)] * len(text.split())  # Fallback
 
     def generate_speech(
         self,
@@ -96,9 +130,9 @@ class TextToSpeech:
         language: str = "ru",
         speed: float = 1.0,
         emotion: str = "neutral"
-    ) -> Tuple[str, float]:
+    ) -> Tuple[str, float, List[Tuple[str, float]]]:
         """
-        Генерация аудио из текста
+        Генерация аудио из текста с фонемами
         
         Args:
             text: Текст для озвучки
@@ -109,7 +143,7 @@ class TextToSpeech:
             emotion: Эмоциональная окраска (neutral/happy/sad/angry)
             
         Returns:
-            tuple: (путь к файлу, длительность в секундах)
+            tuple: (путь к файлу, длительность в секундах, список фонем с таймингами)
         """
         start_time = time.time()
         voice_file = voice_file or self.reference_voice
@@ -130,8 +164,11 @@ class TextToSpeech:
             # Получаем длительность аудио
             duration = self._get_audio_duration(output_path)
             
-            logger.info(f"Generated speech: {text[:50]}... (duration: {duration:.2f}s)")
-            return output_path, duration
+            # Извлекаем фонемы
+            phonemes = self._extract_phonemes(text)
+            
+            logger.info(f"Generated speech: {text[:50]}... (duration: {duration:.2f}s, phonemes: {len(phonemes)})")
+            return output_path, duration, phonemes
             
         except Exception as e:
             logger.error(f"Error generating speech: {str(e)}")
@@ -145,6 +182,37 @@ class TextToSpeech:
             lambda: self.generate_speech(*args, **kwargs)
         )
 
+    def generate_with_phonemes(
+        self,
+        text: str,
+        return_base64: bool = True
+    ) -> Tuple[bytes, List[Tuple[str, float]]]:
+        """
+        Генерация аудио с фонемами (для WebSocket)
+        
+        Returns:
+            tuple: (аудио в base64, список фонем с таймингами)
+        """
+        try:
+            # Генерируем временный файл
+            temp_file = f"temp_{int(time.time())}.wav"
+            _, _, phonemes = self.generate_speech(text, output_file=temp_file)
+            
+            # Читаем аудио файл
+            with open(self.output_dir / temp_file, 'rb') as f:
+                audio_data = f.read()
+            
+            # Удаляем временный файл
+            (self.output_dir / temp_file).unlink()
+            
+            if return_base64:
+                return base64.b64encode(audio_data).decode('utf-8'), phonemes
+            return audio_data, phonemes
+            
+        except Exception as e:
+            logger.error(f"Error in generate_with_phonemes: {str(e)}")
+            raise
+
     def _get_audio_duration(self, file_path: str) -> float:
         """Получение длительности аудиофайла"""
         try:
@@ -153,52 +221,6 @@ class TextToSpeech:
         except Exception as e:
             logger.warning(f"Could not get duration: {str(e)}")
             return 0.0
-
-    def generate_batch(self, texts: list, output_prefix: str = "batch") -> list:
-        """
-        Пакетная генерация аудио
-        
-        Args:
-            texts: Список текстов для озвучки
-            output_prefix: Префикс для имен файлов
-            
-        Returns:
-            list: Список кортежей (путь к файлу, длительность)
-        """
-        results = []
-        for i, text in enumerate(texts):
-            try:
-                output_file = f"{output_prefix}_{i}.wav"
-                result = self.generate_speech(text, output_file=output_file)
-                results.append(result)
-            except Exception as e:
-                logger.error(f"Error in batch item {i}: {str(e)}")
-                results.append((None, 0.0))
-        return results
-
-    def text_to_waveform(self, text: str, **kwargs) -> Tuple[np.ndarray, int]:
-        """
-        Генерация аудио в виде waveform (для стриминга)
-        
-        Returns:
-            tuple: (audio_array, sample_rate)
-        """
-        try:
-            # Создаем временный файл
-            temp_file = f"temp_{time.time()}.wav"
-            self.generate_speech(text, output_file=temp_file, **kwargs)
-            
-            # Читаем обратно в массив
-            data, samplerate = sf.read(str(self.output_dir / temp_file))
-            
-            # Удаляем временный файл
-            (self.output_dir / temp_file).unlink(missing_ok=True)
-            
-            return data, samplerate
-            
-        except Exception as e:
-            logger.error(f"Error in waveform generation: {str(e)}")
-            raise
 
     def cleanup(self, max_age_hours: int = 24):
         """Очистка сгенерированных файлов старше указанного возраста"""
@@ -216,17 +238,8 @@ if __name__ == "__main__":
     # Инициализация TTS
     tts = TextToSpeech()
     
-    # Пример генерации речи
+    # Пример генерации речи с фонемами
     text = "Привет, это тестовое сообщение для проверки работы системы."
-    audio_file, duration = tts.generate_speech(text)
-    print(f"Generated audio: {audio_file}, duration: {duration:.2f}s")
-    
-    # Пример пакетной генерации
-    texts = [
-        "Первое сообщение для озвучки.",
-        "Второе сообщение, более длинное и содержательное.",
-        "Третье сообщение с важной информацией."
-    ]
-    results = tts.generate_batch(texts)
-    for file, dur in results:
-        print(f"- {file} ({dur:.2f}s)")
+    audio_data, phonemes = tts.generate_with_phonemes(text)
+    print(f"Generated audio (size: {len(audio_data)} bytes)")
+    print("Phonemes:", phonemes)
