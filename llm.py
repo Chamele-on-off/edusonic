@@ -1,10 +1,11 @@
 import sqlite3
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from pathlib import Path
+import joblib
 from typing import List, Dict
 import logging
-from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,87 +14,104 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class KnowledgeBase:
-    def __init__(self, db_path: str = "materials.db"):
+    def __init__(self, db_path: str = "materials/knowledge.db"):
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(exist_ok=True)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
+        self.vectorizer = self._init_vectorizer()
         self._init_db()
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')  # 80MB модель
 
     def _init_db(self):
-        """Инициализация базы данных"""
+        """Инициализация структуры базы данных"""
         self.conn.execute("""
         CREATE TABLE IF NOT EXISTS materials (
             id INTEGER PRIMARY KEY,
             subject TEXT,
             title TEXT,
-            content TEXT,
-            embedding BLOB
+            content TEXT
         )
         """)
         self.conn.commit()
 
+    def _init_vectorizer(self):
+        """Инициализация TF-IDF векторайзера"""
+        vectorizer_path = Path("models/tfidf_vectorizer.joblib")
+        vectorizer_path.parent.mkdir(exist_ok=True)
+        
+        if vectorizer_path.exists():
+            logger.info("Загрузка существующего векторайзера")
+            return joblib.load(vectorizer_path)
+        
+        logger.info("Создание нового TF-IDF векторайзера")
+        vectorizer = TfidfVectorizer(max_features=5000)
+        
+        # Инициализация на демо-данных
+        demo_texts = [
+            "Общество — это совокупность людей",
+            "Экономика изучает производство и потребление",
+            "Право — система норм и правил поведения"
+        ]
+        vectorizer.fit(demo_texts)
+        joblib.dump(vectorizer, vectorizer_path)
+        return vectorizer
+
     def add_material(self, subject: str, title: str, content: str):
         """Добавление учебного материала"""
-        embedding = self.model.encode(content)
         self.conn.execute(
-            "INSERT INTO materials (subject, title, content, embedding) VALUES (?, ?, ?, ?)",
-            (subject, title, content, embedding.tobytes())
+            "INSERT INTO materials (subject, title, content) VALUES (?, ?, ?)",
+            (subject, title, content)
         )
         self.conn.commit()
         logger.info(f"Добавлен материал: {title} ({subject})")
 
     def find_similar(self, query: str, subject: str, top_k: int = 3) -> List[Dict]:
-        """Поиск релевантных материалов"""
-        query_embed = self.model.encode(query)
-        
+        """Поиск релевантных материалов с TF-IDF"""
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT id, title, content, embedding FROM materials WHERE subject = ?",
+            "SELECT id, title, content FROM materials WHERE subject = ?",
             (subject,)
         )
-        
-        results = []
-        for row in cursor.fetchall():
-            embed = np.frombuffer(row[3], dtype=np.float32)
-            similarity = cosine_similarity([query_embed], [embed])[0][0]
-            results.append({
-                'id': row[0],
-                'title': row[1],
-                'content': row[2],
-                'score': float(similarity)
-            })
-        
-        return sorted(results, key=lambda x: x['score'], reverse=True)[:top_k]
+        materials = [
+            {"id": row[0], "title": row[1], "content": row[2]}
+            for row in cursor.fetchall()
+        ]
 
-    def generate_response(self, question: str, context: List[Dict]) -> str:
-        """Генерация ответа на основе контекста"""
+        if not materials:
+            return []
+
+        # Векторизация контента и запроса
+        contents = [m["content"] for m in materials]
+        all_texts = contents + [query]
+        tfidf_matrix = self.vectorizer.transform(all_texts)
+
+        # Вычисление схожести
+        query_vector = tfidf_matrix[-1]
+        for i, material in enumerate(materials):
+            material["score"] = cosine_similarity(
+                query_vector, 
+                tfidf_matrix[i]
+            )[0][0]
+
+        return sorted(materials, key=lambda x: x["score"], reverse=True)[:top_k]
+
+    def generate_response(self, question: str, context: List[Dict]) -> Dict:
+        """Формирование ответа на основе найденных материалов"""
         if not context:
-            return "Информация по данному вопросу не найдена."
-        
-        # Простое объединение лучших результатов
-        combined = "\n".join(
+            return {
+                "text": "Информация по данному вопросу не найдена.",
+                "materials": []
+            }
+
+        response_text = f"Ответ на вопрос '{question}':\n\n"
+        response_text += "\n\n".join(
             f"### {item['title']}\n{item['content']}" 
             for item in context
         )
         
-        return f"""Вот что я нашел по вашему вопросу "{question}":\n\n{combined}"""
+        return {
+            "text": response_text,
+            "materials": context
+        }
 
     def close(self):
         self.conn.close()
-
-# Пример использования:
-if __name__ == "__main__":
-    kb = KnowledgeBase()
-    
-    # Добавление материалов (обычно делается один раз)
-    kb.add_material(
-        subject="математика",
-        title="Квадратные уравнения",
-        content="Квадратное уравнение имеет вид ax² + bx + c = 0..."
-    )
-    
-    # Поиск информации
-    results = kb.find_similar("Как решать уравнения второй степени?", "математика")
-    answer = kb.generate_response("Квадратные уравнения", results)
-    print(answer)
