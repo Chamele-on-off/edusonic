@@ -1,9 +1,9 @@
 # Основные зависимости
-fastapi==0.68.1  # Стабильная версия с широкой поддержкой
-uvicorn==0.15.3
-python-multipart==0.0.5
-python-socketio==4.6.1
-python-dotenv==0.19.0
+flask==2.3.2
+flask-socketio==5.3.4
+python-dotenv==1.0.0
+gevent==22.10.2
+gevent-websocket==0.10.1
 
 # AI/ML (CPU версии)
 torch==1.12.1+cpu
