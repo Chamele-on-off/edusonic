@@ -1,21 +1,21 @@
 # Основные зависимости
-fastapi==0.95.2
-uvicorn==0.22.0
-python-multipart==0.0.6
-python-socketio==5.8.0
+fastapi==0.109.2  # Обновленная версия
+uvicorn==0.27.0
+python-multipart==0.0.9
+python-socketio==5.11.2
 python-dotenv==1.0.0
 
 # AI/ML (CPU версии)
 torch==2.1.0
 torchaudio==2.1.0
 --index-url https://download.pytorch.org/whl/cpu
-transformers==4.33.3  # Версия, совместимая и с TTS и с sentence-transformers
-sentence-transformers==2.2.2
-TTS==0.17.6
-numpy==1.24.3
+transformers==4.36.2  # Совместимая версия
+sentence-transformers==2.7.0
+TTS==0.22.0
+numpy==1.26.4
 phonemizer==3.2.1
-librosa==0.10.0.post2
+librosa==0.10.1
 
 # Обработка медиа
 soundfile==0.12.1
-scipy>=1.11.2
+scipy==1.13.0
