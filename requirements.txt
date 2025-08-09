@@ -5,9 +5,10 @@ python-multipart==0.0.6
 python-socketio==5.8.0
 python-dotenv==1.0.0
 
-# AI/ML
-torch==2.0.1+cpu
-torchaudio==2.0.2+cpu
+# AI/ML (CPU-only версии)
+torch==2.0.1
+torchaudio==2.0.2
+--extra-index-url https://download.pytorch.org/whl/cpu
 transformers==4.31.0
 sentence-transformers==2.2.2
 TTS==0.17.6
@@ -18,5 +19,3 @@ librosa==0.10.0.post2
 # Обработка медиа
 soundfile==0.12.1
 scipy==1.10.1
-
-# База данных (удален sqlite3, так как он встроен в Python)
