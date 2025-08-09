@@ -1,6 +1,17 @@
-flask>=3.0.0
-flask-socketio>=5.3.0
-transformers>=4.40.0
-TTS>=0.22.0
-aiortc>=1.5.0
-python-dotenv>=1.0.0
+# Core
+flask==3.0.2
+flask-socketio==5.3.6
+python-dotenv==1.0.0
+
+# LLM & NLP
+sentence-transformers==2.5.1
+scikit-learn==1.4.0
+numpy==1.26.4
+
+# TTS
+gtts==2.5.1
+pydub==0.25.1
+
+# Utils
+concurrent-log-handler==0.9.20
+uuid==1.30
