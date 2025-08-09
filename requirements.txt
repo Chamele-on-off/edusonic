@@ -1,37 +1,23 @@
 # Основные зависимости
-flask==2.3.2
-flask-socketio==5.3.4
+fastapi==0.95.2
+uvicorn==0.22.0
+python-multipart==0.0.6
+python-socketio==5.8.0
 python-dotenv==1.0.0
-gevent==22.10.2
-gevent-websocket==0.10.1
 
 # AI/ML
 torch==2.0.1
 torchaudio==2.0.2
-torchvision==0.15.2
 transformers==4.31.0
 sentence-transformers==2.2.2
 TTS==0.17.6
 numpy==1.24.3
-dlib==19.24.2
-opencv-python==4.7.0.72
+phonemizer==3.2.1  # Для работы с фонемами
+librosa==0.10.0.post2  # Для обработки аудио
 
 # Обработка медиа
-ffmpeg-python==0.2.0
 soundfile==0.12.1
-librosa==0.10.0.post2
 scipy==1.10.1
-imageio==2.31.1
-imageio-ffmpeg==0.4.8
 
-# WebRTC (если выберете FastAPI)
-aiortc==1.5.0
-fastapi==0.95.2
-uvicorn==0.22.0
-
-# Дополнительные
+# Базы данных
 sqlite3==2.6.0
-tqdm==4.65.0
-numba==0.57.1
-protobuf==3.20.3
-requests==2.31.0  # Для загрузки файлов
