@@ -1,6 +1,5 @@
 import os
 import json
-import asyncio
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -8,9 +7,9 @@ from typing import Dict, List, Optional, Callable
 from pathlib import Path
 from datetime import timedelta
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
+import time
+from flask_socketio import emit
 
-# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -32,7 +31,7 @@ class LessonPhaseType(Enum):
 class LessonPhase:
     type: LessonPhaseType
     content: str
-    duration: int  # в секундах
+    duration: int
     options: Optional[Dict] = None
 
 @dataclass
@@ -46,15 +45,15 @@ class LessonConfig:
     materials: List[str]
 
 class LessonManager:
-    def __init__(self, db_path: str = "materials/materials.db"):
-        self._executor = ThreadPoolExecutor(max_workers=4)
-        self._active_lessons: Dict[str, LessonSession] = {}
+    def __init__(self, socketio, db_path: str = "materials/materials.db"):
+        self.socketio = socketio
+        self._active_lessons: Dict[str, dict] = {}
         self.lessons_dir = Path("static/lessons")
         self.lessons_dir.mkdir(parents=True, exist_ok=True)
         self._init_db(db_path)
-        
+
     def _init_db(self, db_path: str):
-        """Инициализация базы данных с материалами"""
+        """Инициализация базы данных"""
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         
@@ -69,182 +68,158 @@ class LessonManager:
             """)
             conn.commit()
 
-    async def start_lesson(self, lesson_id: str, room_id: str, callback: Callable) -> str:
+    def start_lesson(self, lesson_id: str, room_id: str) -> str:
         """Запуск нового урока"""
         lesson_config = self._load_lesson_config(lesson_id)
-        session = LessonSession(lesson_config, room_id, callback)
-        self._active_lessons[session.session_id] = session
+        session_id = f"{lesson_id}_{room_id}_{int(time.time())}"
         
-        # Запускаем урок в фоновом режиме
-        asyncio.create_task(self._run_lesson_session(session))
-        
-        return session.session_id
+        self._active_lessons[session_id] = {
+            'config': lesson_config,
+            'room_id': room_id,
+            'status': 'running',
+            'current_phase': None,
+            'start_time': time.time()
+        }
 
-    async def _run_lesson_session(self, session: 'LessonSession'):
-        """Основной цикл выполнения урока"""
-        try:
-            logger.info(f"Starting lesson session {session.session_id}")
-            
-            for phase in session.lesson_config.phases:
-                if not session.is_active:
-                    break
-                    
-                await self._execute_phase(session, phase)
-                
-            logger.info(f"Lesson session {session.session_id} completed")
-        except Exception as e:
-            logger.error(f"Error in lesson session {session.session_id}: {str(e)}")
-        finally:
-            self._cleanup_session(session.session_id)
+        self.socketio.start_background_task(
+            self._run_lesson_session,
+            session_id
+        )
 
-    async def _execute_phase(self, session: 'LessonSession', phase: LessonPhase):
-        """Выполнение одной фазы урока"""
-        logger.info(f"Executing phase {phase.type} for session {session.session_id}")
-        
-        # Отправляем контент фазы
-        await session.callback({
-            "type": "phase_start",
-            "session_id": session.session_id,
-            "phase": phase.type.value,
-            "content": phase.content,
-            "duration": phase.duration
-        })
-        
-        # Ожидаем завершения фазы или действий пользователя
-        await asyncio.sleep(phase.duration)
-        
-        # Обработка специальных фаз
-        if phase.type == LessonPhaseType.QA:
-            await self._handle_qa_session(session, phase)
-        elif phase.type == LessonPhaseType.PRACTICE:
-            await self._handle_practice_session(session, phase)
+        logger.info(f"Урок {lesson_id} запущен в комнате {room_id}")
+        return session_id
 
-    async def _handle_qa_session(self, session: 'LessonSession', phase: LessonPhase):
-        """Обработка сессии вопросов-ответов"""
-        qa_timeout = phase.options.get("timeout", 300) if phase.options else 300
-        start_time = asyncio.get_event_loop().time()
-        
-        while (asyncio.get_event_loop().time() - start_time) < qa_timeout and session.is_active:
-            await asyncio.sleep(1)
-
-    async def _handle_practice_session(self, session: 'LessonSession', phase: LessonPhase):
-        """Обработка практической сессии"""
-        exercises = phase.options.get("exercises", []) if phase.options else []
-        
-        for exercise in exercises:
-            if not session.is_active:
-                break
-                
-            await session.callback({
-                "type": "exercise",
-                "session_id": session.session_id,
-                "exercise": exercise,
-                "time_limit": exercise.get("time_limit", 60)
-            })
-            
-            # Ожидаем ответ или таймаут
-            await asyncio.sleep(exercise.get("time_limit", 60))
-
-    async def handle_user_response(self, session_id: str, response: Dict):
-        """Обработка ответа от пользователя"""
-        if session_id not in self._active_lessons:
-            logger.warning(f"Session {session_id} not found")
+    def _run_lesson_session(self, session_id: str):
+        """Фоновая задача для выполнения урока"""
+        session = self._active_lessons.get(session_id)
+        if not session:
             return
-            
-        session = self._active_lessons[session_id]
-        
-        if response["type"] == "answer":
-            await self._process_user_answer(session, response)
-        elif response["type"] == "question":
-            await self._process_user_question(session, response)
 
-    async def _process_user_answer(self, session: 'LessonSession', response: Dict):
-        """Обработка ответа на упражнение"""
-        is_correct = True  # В реальной реализации нужно добавить проверку
-        
-        feedback = {
-            "type": "feedback",
-            "session_id": session.session_id,
-            "is_correct": is_correct,
-            "correct_answer": None if is_correct else "Правильный ответ",
-            "explanation": "Отличная работа!" if is_correct else "Попробуйте еще раз"
-        }
-        
-        await session.callback(feedback)
+        try:
+            for phase in session['config'].phases:
+                if session['status'] != 'running':
+                    break
 
-    async def _process_user_question(self, session: 'LessonSession', response: Dict):
-        """Обработка вопроса от пользователя"""
-        question = response["text"]
-        context = {
-            "lesson": session.lesson_config.title,
-            "subject": session.lesson_config.subject,
-            "current_phase": session.current_phase
-        }
-        
-        answer = await self._generate_answer(question, context)
-        
-        response = {
-            "type": "answer",
-            "session_id": session.session_id,
-            "question": question,
-            "answer": answer,
-            "is_relevant": True
-        }
-        
-        await session.callback(response)
+                session['current_phase'] = phase.type.value
+                self._send_phase_update(session_id, phase)
 
-    async def _generate_answer(self, question: str, context: Dict) -> str:
-        """Генерация ответа на вопрос с учетом контекста"""
-        return f"Ответ на вопрос '{question}' в контексте {context['subject']}"
+                time.sleep(phase.duration)
+
+                if phase.type == LessonPhaseType.QA:
+                    self._handle_qa_session(session_id, phase)
+                elif phase.type == LessonPhaseType.PRACTICE:
+                    self._handle_practice_session(session_id, phase)
+
+            self.stop_lesson(session_id)
+        except Exception as e:
+            logger.error(f"Ошибка в уроке {session_id}: {str(e)}")
+
+    def _send_phase_update(self, session_id: str, phase: LessonPhase):
+        """Отправка обновления фазы урока"""
+        emit('lesson_update', {
+            'type': 'phase_start',
+            'session_id': session_id,
+            'phase': phase.type.value,
+            'content': phase.content,
+            'duration': phase.duration
+        }, room=self._active_lessons[session_id]['room_id'])
+
+    def _handle_qa_session(self, session_id: str, phase: LessonPhase):
+        """Обработка сессии вопросов-ответов"""
+        timeout = phase.options.get("timeout", 300) if phase.options else 300
+        time.sleep(timeout)
+
+    def _handle_practice_session(self, session_id: str, phase: LessonPhase):
+        """Обработка практической сессии"""
+        for exercise in phase.options.get("exercises", []):
+            if self._active_lessons[session_id]['status'] != 'running':
+                break
+
+            emit('lesson_update', {
+                'type': 'exercise',
+                'session_id': session_id,
+                'exercise': exercise,
+                'time_limit': exercise.get("time_limit", 60)
+            }, room=self._active_lessons[session_id]['room_id'])
+
+            time.sleep(exercise.get("time_limit", 60))
+
+    def process_user_message(self, session_id: str, message: dict):
+        """Обработка сообщения от пользователя"""
+        if message['type'] == 'question':
+            self._process_question(session_id, message)
+        elif message['type'] == 'answer':
+            self._process_answer(session_id, message)
+
+    def _process_question(self, session_id: str, message: dict):
+        """Обработка вопроса пользователя"""
+        session = self._active_lessons.get(session_id)
+        if not session:
+            return
+
+        emit('lesson_update', {
+            'type': 'user_question',
+            'session_id': session_id,
+            'question': message['text'],
+            'user_id': message.get('user_id')
+        }, room=session['room_id'])
+
+    def _process_answer(self, session_id: str, message: dict):
+        """Обработка ответа пользователя"""
+        is_correct = self._check_answer_correctness(message)
+        session = self._active_lessons.get(session_id)
+        if not session:
+            return
+
+        emit('lesson_update', {
+            'type': 'feedback',
+            'session_id': session_id,
+            'is_correct': is_correct,
+            'explanation': "Правильно!" if is_correct else "Попробуйте еще раз"
+        }, room=session['room_id'])
+
+    def _check_answer_correctness(self, message: dict) -> bool:
+        """Проверка правильности ответа (заглушка)"""
+        return True
+
+    def stop_lesson(self, session_id: str):
+        """Остановка урока"""
+        if session_id in self._active_lessons:
+            self._active_lessons[session_id]['status'] = 'stopped'
+            del self._active_lessons[session_id]
+            logger.info(f"Урок {session_id} остановлен")
 
     def _load_lesson_config(self, lesson_id: str) -> LessonConfig:
-        """Загрузка конфигурации урока из файла"""
+        """Загрузка конфигурации урока"""
         lesson_file = self.lessons_dir / f"{lesson_id}.json"
         
         if not lesson_file.exists():
-            logger.error(f"Lesson file {lesson_file} not found")
-            raise FileNotFoundError(f"Lesson file {lesson_file} not found")
-        
-        try:
-            with open(lesson_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                
-            phases = [
-                LessonPhase(
-                    type=LessonPhaseType(phase["type"]),
-                    content=phase["content"],
-                    duration=phase["duration"],
-                    options=phase.get("options", {})
-                ) for phase in data["phases"]
-            ]
-            
-            return LessonConfig(
-                id=data["id"],
-                title=data["title"],
-                description=data["description"],
-                subject=data["subject"],
-                difficulty=data["difficulty"],
-                phases=phases,
-                materials=data.get("materials", [])
-            )
-        except Exception as e:
-            logger.error(f"Error loading lesson config: {str(e)}")
-            raise
+            raise FileNotFoundError(f"Файл урока {lesson_file} не найден")
 
-    def _cleanup_session(self, session_id: str):
-        """Очистка ресурсов сессии"""
-        if session_id in self._active_lessons:
-            del self._active_lessons[session_id]
-            logger.info(f"Session {session_id} cleaned up")
+        with open(lesson_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
 
-    async def stop_lesson(self, session_id: str):
-        """Принудительная остановка урока"""
-        if session_id in self._active_lessons:
-            self._active_lessons[session_id].is_active = False
-            logger.info(f"Lesson {session_id} stopped by request")
+        phases = [
+            LessonPhase(
+                type=LessonPhaseType(phase["type"]),
+                content=phase["content"],
+                duration=phase["duration"],
+                options=phase.get("options")
+            ) for phase in data["phases"]
+        ]
 
-    def list_available_lessons(self) -> List[Dict]:
-        """Получение списка доступных уроков"""
+        return LessonConfig(
+            id=data["id"],
+            title=data["title"],
+            description=data["description"],
+            subject=data["subject"],
+            difficulty=data["difficulty"],
+            phases=phases,
+            materials=data.get("materials", [])
+        )
+
+    def list_available_lessons(self) -> List[dict]:
+        """Список доступных уроков"""
         lessons = []
         for lesson_file in self.lessons_dir.glob("*.json"):
             try:
@@ -257,50 +232,5 @@ class LessonManager:
                         'description': data['description']
                     })
             except Exception as e:
-                logger.error(f"Error reading lesson file {lesson_file}: {str(e)}")
+                logger.error(f"Ошибка загрузки урока {lesson_file}: {str(e)}")
         return lessons
-
-class LessonSession:
-    def __init__(self, lesson_config: LessonConfig, room_id: str, callback: Callable):
-        self.session_id = f"{lesson_config.id}_{room_id}_{os.urandom(4).hex()}"
-        self.lesson_config = lesson_config
-        self.room_id = room_id
-        self.callback = callback
-        self.is_active = True
-        self.current_phase = None
-        self.start_time = asyncio.get_event_loop().time()
-        
-    @property
-    def elapsed_time(self) -> timedelta:
-        return timedelta(seconds=asyncio.get_event_loop().time() - self.start_time)
-
-# Пример использования
-async def example_callback(message: Dict):
-    print("Received message:", message)
-
-async def main():
-    manager = LessonManager()
-    
-    # Запускаем урок
-    session_id = await manager.start_lesson(
-        lesson_id="math_01",
-        room_id="room_123",
-        callback=example_callback
-    )
-    
-    # Эмуляция пользовательского ввода
-    await asyncio.sleep(10)
-    await manager.handle_user_response(
-        session_id=session_id,
-        response={
-            "type": "question",
-            "text": "Что такое алгебра?",
-            "user_id": "student_1"
-        }
-    )
-    
-    await asyncio.sleep(5)
-    await manager.stop_lesson(session_id)
-
-if __name__ == "__main__":
-    asyncio.run(main())
