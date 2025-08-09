@@ -273,7 +273,7 @@
     </div>
     
     <!-- Библиотеки -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
@@ -311,7 +311,6 @@
         // Конфигурация сервера видеоконференции
         const CONFERENCE_SERVER = "https://conf.zindaki-edu.ru";
         const AVATAR_MODEL_URL = "models/teacher.glb";
-        const WEBSOCKET_URL = window.location.origin.replace("http", "ws");
         
         // Соответствие фонем морф-таргетам модели
         const PHONEME_MAP = {
