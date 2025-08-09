@@ -1,5 +1,6 @@
-# Основные зависимости
-fastapi==0.109.2  # Обновленная версия
+# Основные зависимости (с зеркалом)
+-i https://pypi.org/simple/
+fastapi==0.109.2
 uvicorn==0.27.0
 python-multipart==0.0.9
 python-socketio==5.11.2
@@ -9,7 +10,7 @@ python-dotenv==1.0.0
 torch==2.1.0
 torchaudio==2.1.0
 --index-url https://download.pytorch.org/whl/cpu
-transformers==4.36.2  # Совместимая версия
+transformers==4.36.2
 sentence-transformers==2.7.0
 TTS==0.22.0
 numpy==1.26.4
