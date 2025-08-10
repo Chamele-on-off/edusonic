@@ -1,3 +1,4 @@
+import json
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO
 from llm import KnowledgeBase
