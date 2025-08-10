@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_socketio import SocketIO
+from flask_cors import CORS
 from llm import KnowledgeBase
 from gtts import gTTS
 import base64
@@ -7,15 +8,18 @@ from io import BytesIO
 import logging
 from pathlib import Path
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+import json
+import time
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
-# Создание директорий
+# Инициализация директорий
 Path("static/audio").mkdir(parents=True, exist_ok=True)
 Path("materials").mkdir(parents=True, exist_ok=True)
 Path("logs").mkdir(parents=True, exist_ok=True)
 Path("models").mkdir(parents=True, exist_ok=True)
+Path("static/lessons").mkdir(parents=True, exist_ok=True)  # Добавлено для уроков
 
 # Настройка логирования
 logging.basicConfig(
@@ -31,7 +35,8 @@ logger = logging.getLogger(__name__)
 # Инициализация Flask
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
-socketio = SocketIO(app, cors_allowed_origins="*")
+CORS(app)  # Включение CORS для всех доменов
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
 
 class SimpleTTS:
     def __init__(self):
@@ -73,46 +78,65 @@ tts = SimpleTTS()
 executor = ThreadPoolExecutor(max_workers=4)
 
 def init_demo_data():
-    """Загрузка демо-материалов по обществознанию"""
+    """Загрузка демо-материалов"""
     if not kb.find_similar("", "обществознание", 1):
         demo_materials = [
-            ("обществознание", "Понятие общества", "Общество — это совокупность людей, объединенных исторически сложившимися формами взаимодействия."),
-            ("обществознание", "Государство", "Государство — политическая организация общества, обладающая суверенитетом."),
-            ("обществознание", "Право", "Право — система общеобязательных норм, установленных государством."),
-            ("обществознание", "Экономика", "Экономика — хозяйственная деятельность общества по производству и распределению благ.")
+            ("обществознание", "Понятие общества", "Общество — это совокупность людей..."),
+            ("обществознание", "Государство", "Государство — политическая организация..."),
         ]
         
         for subject, title, content in demo_materials:
             kb.add_material(subject, title, content)
-        logger.info("Демо-материалы загружены")
+        
+        # Создаем демо-урок, если нет ни одного
+        if not list(Path("static/lessons").glob("*.json")):
+            demo_lesson = {
+                "id": "demo-lesson",
+                "title": "Демо-урок",
+                "subject": "обществознание",
+                "description": "Пример урока по обществознанию",
+                "phases": []
+            }
+            with open(Path("static/lessons/demo-lesson.json"), 'w') as f:
+                json.dump(demo_lesson, f, ensure_ascii=False, indent=2)
 
-# Инициализация при старте
 init_demo_data()
 
-# HTTP Endpoints
+# API Endpoints
 @app.route('/')
 def home():
     return render_template('teacher.html')
 
+@app.route('/static/<path:subpath>/<path:filename>')
+def static_files(subpath, filename):
+    """Обработка статических файлов (аватар, модели и т.д.)"""
+    return send_from_directory(f'static/{subpath}', filename)
+
 @app.route('/api/lessons')
 def list_lessons():
+    """Получение списка доступных уроков"""
     lessons = []
-    for lesson_file in Path("static/lessons").glob("*.json"):
-        try:
-            with open(lesson_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                lessons.append({
-                    'id': data['id'],
-                    'title': data['title'],
-                    'subject': data['subject'],
-                    'description': data['description']
-                })
-        except Exception as e:
-            logger.error(f"Error loading lesson {lesson_file}: {str(e)}")
-    return jsonify({"lessons": lessons})
+    try:
+        for lesson_file in Path("static/lessons").glob("*.json"):
+            try:
+                with open(lesson_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    lessons.append({
+                        'id': data['id'],
+                        'title': data['title'],
+                        'subject': data['subject'],
+                        'description': data['description']
+                    })
+            except Exception as e:
+                logger.error(f"Error loading lesson {lesson_file}: {str(e)}")
+        return jsonify({"lessons": lessons})
+    except Exception as e:
+        logger.error(f"Error listing lessons: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/materials')
 def get_materials():
+    """Получение учебных материалов"""
     subject = request.args.get('subject', 'обществознание')
     return jsonify({
         "materials": kb.find_similar("", subject, 10)
@@ -120,6 +144,7 @@ def get_materials():
 
 @app.route('/api/ask', methods=['POST'])
 def ask_question():
+    """Обработка вопросов"""
     data = request.json
     question = data.get('question', '')
     subject = data.get('subject', 'обществознание')
@@ -132,37 +157,6 @@ def ask_question():
         **response,
         "audio": audio['audio'],
         "phonemes": audio['phonemes']
-    })
-
-@app.route('/api/start_lesson', methods=['POST'])
-def start_lesson():
-    data = request.json
-    lesson_id = data.get('lesson_id')
-    room_id = data.get('room_id')
-    
-    if not lesson_id or not room_id:
-        return jsonify({"error": "Missing lesson_id or room_id"}), 400
-    
-    session_id = f"{lesson_id}_{room_id}_{int(time.time())}"
-    
-    # Здесь должна быть логика запуска урока
-    return jsonify({
-        "session_id": session_id,
-        "status": "started"
-    })
-
-@app.route('/api/stop_lesson', methods=['POST'])
-def stop_lesson():
-    data = request.json
-    session_id = data.get('session_id')
-    
-    if not session_id:
-        return jsonify({"error": "Missing session_id"}), 400
-    
-    # Здесь должна быть логика остановки урока
-    return jsonify({
-        "session_id": session_id,
-        "status": "stopped"
     })
 
 # WebSocket Handlers
@@ -208,7 +202,7 @@ if __name__ == '__main__':
         host = os.getenv('HOST', '0.0.0.0')
         port = int(os.getenv('PORT', 5000))
         logger.info(f"Starting server on {host}:{port}")
-        socketio.run(app, host=host, port=port)
+        socketio.run(app, host=host, port=port, debug=True)
     except Exception as e:
         logger.error(f"Server error: {str(e)}")
     finally:
