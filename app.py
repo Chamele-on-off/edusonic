@@ -19,7 +19,7 @@ Path("static/audio").mkdir(parents=True, exist_ok=True)
 Path("materials").mkdir(parents=True, exist_ok=True)
 Path("logs").mkdir(parents=True, exist_ok=True)
 Path("models").mkdir(parents=True, exist_ok=True)
-Path("static/lessons").mkdir(parents=True, exist_ok=True)  # Добавлено для уроков
+Path("static/lessons").mkdir(parents=True, exist_ok=True)
 
 # Настройка логирования
 logging.basicConfig(
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Инициализация Flask
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
-CORS(app)  # Включение CORS для всех доменов
+CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
 
 class SimpleTTS:
@@ -50,7 +50,7 @@ class SimpleTTS:
         return [
             (char, self.phoneme_map.get(char.lower(), 0.15))
             for char in text if char.isalpha()
-        ][:50]  # Ограничение количества
+        ][:50]
 
     def synthesize(self, text: str, lang: str = 'ru') -> dict:
         """Синтез речи с помощью gTTS"""
@@ -81,24 +81,12 @@ def init_demo_data():
     """Загрузка демо-материалов"""
     if not kb.find_similar("", "обществознание", 1):
         demo_materials = [
-            ("обществознание", "Понятие общества", "Общество — это совокупность людей..."),
-            ("обществознание", "Государство", "Государство — политическая организация..."),
+            ("обществознание", "Понятие общества", "Общество — это совокупность людей, объединённых исторически сложившимися формами совместной жизни и деятельности."),
+            ("обществознание", "Государство", "Государство — это политическая организация общества, обладающая суверенитетом, специальным аппаратом управления и принуждения."),
         ]
         
         for subject, title, content in demo_materials:
             kb.add_material(subject, title, content)
-        
-        # Создаем демо-урок, если нет ни одного
-        if not list(Path("static/lessons").glob("*.json")):
-            demo_lesson = {
-                "id": "demo-lesson",
-                "title": "Демо-урок",
-                "subject": "обществознание",
-                "description": "Пример урока по обществознанию",
-                "phases": []
-            }
-            with open(Path("static/lessons/demo-lesson.json"), 'w') as f:
-                json.dump(demo_lesson, f, ensure_ascii=False, indent=2)
 
 init_demo_data()
 
@@ -109,7 +97,6 @@ def home():
 
 @app.route('/static/<path:subpath>/<path:filename>')
 def static_files(subpath, filename):
-    """Обработка статических файлов (аватар, модели и т.д.)"""
     return send_from_directory(f'static/{subpath}', filename)
 
 @app.route('/api/lessons')
@@ -118,46 +105,66 @@ def list_lessons():
     lessons = []
     try:
         for lesson_file in Path("static/lessons").glob("*.json"):
-            try:
-                with open(lesson_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    lessons.append({
-                        'id': data['id'],
-                        'title': data['title'],
-                        'subject': data['subject'],
-                        'description': data['description']
-                    })
-            except Exception as e:
-                logger.error(f"Error loading lesson {lesson_file}: {str(e)}")
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                lessons.append({
+                    'id': data['id'],
+                    'title': data['title'],
+                    'subject': data['subject'],
+                    'description': data['description']
+                })
         return jsonify({"lessons": lessons})
     except Exception as e:
         logger.error(f"Error listing lessons: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/materials')
-def get_materials():
-    """Получение учебных материалов"""
-    subject = request.args.get('subject', 'обществознание')
-    return jsonify({
-        "materials": kb.find_similar("", subject, 10)
-    })
+@app.route('/api/start_lesson', methods=['POST'])
+def start_lesson():
+    """Запуск урока"""
+    try:
+        data = request.json
+        lesson_id = data.get('lesson_id')
+        room_id = data.get('room_id')
+        
+        if not lesson_id or not room_id:
+            return jsonify({"error": "Missing lesson_id or room_id"}), 400
+            
+        # Здесь должна быть логика LessonManager
+        session_id = f"{lesson_id}-{room_id}-{int(time.time())}"
+        
+        return jsonify({
+            "success": True,
+            "session_id": session_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/ask', methods=['POST'])
-def ask_question():
-    """Обработка вопросов"""
-    data = request.json
-    question = data.get('question', '')
-    subject = data.get('subject', 'обществознание')
-    
-    materials = kb.find_similar(question, subject)
-    response = kb.generate_response(question, materials)
-    audio = tts.synthesize(response['text'])
-    
-    return jsonify({
-        **response,
-        "audio": audio['audio'],
-        "phonemes": audio['phonemes']
-    })
+@app.route('/api/stop_lesson', methods=['POST'])
+def stop_lesson():
+    """Остановка урока"""
+    try:
+        data = request.json
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({"error": "Missing session_id"}), 400
+            
+        # Здесь должна быть логика остановки урока
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/get_peer_id', methods=['POST'])
+def get_peer_id():
+    """Генерация PeerID для WebRTC"""
+    try:
+        data = request.json
+        return jsonify({
+            "success": True,
+            "peer_id": f"teacher-{uuid.uuid4()}"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # WebSocket Handlers
 @socketio.on('connect')
