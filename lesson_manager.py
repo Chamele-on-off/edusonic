@@ -3,10 +3,8 @@ import json
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional
 from pathlib import Path
-from datetime import timedelta
-import sqlite3
 import time
 from flask_socketio import emit
 
@@ -45,28 +43,11 @@ class LessonConfig:
     materials: List[str]
 
 class LessonManager:
-    def __init__(self, socketio, db_path: str = "materials/materials.db"):
+    def __init__(self, socketio):
         self.socketio = socketio
         self._active_lessons: Dict[str, dict] = {}
         self.lessons_dir = Path("static/lessons")
         self.lessons_dir.mkdir(parents=True, exist_ok=True)
-        self._init_db(db_path)
-
-    def _init_db(self, db_path: str):
-        """Инициализация базы данных"""
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        
-        with sqlite3.connect(db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS lesson_materials (
-                    id TEXT PRIMARY KEY,
-                    subject TEXT,
-                    content TEXT,
-                    metadata TEXT
-                )
-            """)
-            conn.commit()
 
     def start_lesson(self, lesson_id: str, room_id: str) -> str:
         """Запуск нового урока"""
@@ -190,7 +171,7 @@ class LessonManager:
             logger.info(f"Урок {session_id} остановлен")
 
     def _load_lesson_config(self, lesson_id: str) -> LessonConfig:
-        """Загрузка конфигурации урока"""
+        """Загрузка конфигурации урока из JSON"""
         lesson_file = self.lessons_dir / f"{lesson_id}.json"
         
         if not lesson_file.exists():
