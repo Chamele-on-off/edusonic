@@ -73,11 +73,13 @@
             text-align: center;
         }
         
-        #avatar-canvas {
+        #avatar-image {
             width: 100%;
             height: 400px;
-            background: #000;
+            background: #f0f0f0;
             border-radius: 4px;
+            object-fit: cover;
+            image-rendering: crisp-edges;
         }
         
         #conference-iframe {
@@ -139,6 +141,8 @@
             border-radius: 4px;
             border-left: 4px solid #3498db;
             min-height: 100px;
+            overflow-y: auto;
+            max-height: 300px;
         }
         
         #log {
@@ -156,6 +160,18 @@
             margin-bottom: 5px;
             padding-bottom: 5px;
             border-bottom: 1px solid #eee;
+        }
+        
+        .log-info {
+            color: #2c3e50;
+        }
+        
+        .log-error {
+            color: #e74c3c;
+        }
+        
+        .log-success {
+            color: #27ae60;
         }
         
         .answer {
@@ -207,6 +223,19 @@
             margin-bottom: 15px;
         }
         
+        #upload-area {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+        
+        #upload-area:hover {
+            border-color: #3498db;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
@@ -216,7 +245,7 @@
                 grid-template-columns: 1fr;
             }
             
-            #avatar-canvas, #conference-iframe {
+            #avatar-image, #conference-iframe {
                 height: 300px;
             }
         }
@@ -225,6 +254,20 @@
 <body>
     <div class="container">
         <h1>AI Учитель - Цифровой аватар</h1>
+        
+        <div class="panel">
+            <div class="panel-title">Управление уроками</div>
+            <div id="upload-area">
+                Перетащите файл урока сюда<br>или кликните для выбора
+                <input type="file" id="lesson-upload" accept=".json" style="display: none;">
+            </div>
+            <div class="control-group">
+                <div id="controls">
+                    <button id="save-lessons">Сохранить уроки</button>
+                    <button id="load-lessons">Загрузить уроки</button>
+                </div>
+            </div>
+        </div>
         
         <div class="panel">
             <div class="panel-title">Управление уроком</div>
@@ -259,13 +302,21 @@
         
         <div id="video-container">
             <div class="video-wrapper">
-                <div class="video-title">3D Аватар учителя</div>
-                <canvas id="avatar-canvas"></canvas>
+                <div class="video-title">2D Аватар учителя</div>
+                <img id="avatar-image" src="" alt="AI Teacher Avatar">
                 <audio id="avatar-audio" hidden></audio>
             </div>
             <div class="video-wrapper">
                 <div class="video-title">Видеоконференция</div>
                 <iframe id="conference-iframe" allow="camera; microphone; display-capture"></iframe>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-title">Вопрос к учителю</div>
+            <div class="control-group">
+                <input type="text" id="question-input" placeholder="Введите ваш вопрос">
+                <button id="ask-btn">Задать вопрос</button>
             </div>
         </div>
         
@@ -275,9 +326,6 @@
     <!-- Библиотеки -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
     
     <script>
         // Глобальные переменные
@@ -288,7 +336,7 @@
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
         const roomNameInput = document.getElementById('room-name');
-        const avatarCanvas = document.getElementById('avatar-canvas');
+        const avatarImage = document.getElementById('avatar-image');
         const avatarAudio = document.getElementById('avatar-audio');
         const conferenceIframe = document.getElementById('conference-iframe');
         const lessonContent = document.getElementById('lesson-content');
@@ -298,162 +346,21 @@
         const conferenceStatusIndicator = document.getElementById('conference-status');
         const conferenceStatusText = document.getElementById('conference-status-text');
         const participantsList = document.getElementById('participants-list');
+        const uploadArea = document.getElementById('upload-area');
+        const lessonUpload = document.getElementById('lesson-upload');
+        const saveLessonsBtn = document.getElementById('save-lessons');
+        const loadLessonsBtn = document.getElementById('load-lessons');
+        const questionInput = document.getElementById('question-input');
+        const askBtn = document.getElementById('ask-btn');
         
-        // Настройки 3D сцены
-        let scene, camera, renderer, avatar, mixer, clock;
-        let morphTargets = {};
+        // Настройки
+        const CONFERENCE_SERVER = "https://conf.zindaki-edu.ru";
         let currentSessionId = null;
         let currentRoom = null;
         let peer = null;
         let mediaStream = null;
         let currentPeerId = null;
-        
-        // Конфигурация сервера видеоконференции
-        const CONFERENCE_SERVER = "https://conf.zindaki-edu.ru";
-        const AVATAR_MODEL_URL = "models/teacher.glb";
-        
-        // Соответствие фонем морф-таргетам модели
-        const PHONEME_MAP = {
-            "а": "mouth_aa",
-            "о": "mouth_oo",
-            "у": "mouth_uu",
-            "и": "mouth_ee",
-            "э": "mouth_ee",
-            "ы": "mouth_aa",
-            "е": "mouth_ee",
-            "ё": "mouth_oo",
-            "ю": "mouth_uu",
-            "я": "mouth_aa",
-            "м": "mouth_mm",
-            "п": "mouth_pp",
-            "б": "mouth_bb",
-            "ф": "mouth_ff",
-            "в": "mouth_vv",
-            "ш": "mouth_sh",
-            "ж": "mouth_zh",
-            "с": "mouth_ss",
-            "з": "mouth_zz",
-            "р": "mouth_rr",
-            "л": "mouth_ll",
-            "н": "mouth_nn",
-            "т": "mouth_tt",
-            "д": "mouth_dd",
-            "к": "mouth_kk",
-            "г": "mouth_gg",
-            "х": "mouth_hh",
-            "ч": "mouth_ch",
-            "щ": "mouth_sh",
-            "ц": "mouth_ss",
-            "й": "mouth_ee"
-        };
-        
-        // Инициализация Three.js сцены
-        function initThreeJS() {
-            // Создаем сцену
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xf0f0f0);
-            
-            // Настраиваем камеру
-            camera = new THREE.PerspectiveCamera(75, avatarCanvas.clientWidth / avatarCanvas.clientHeight, 0.1, 1000);
-            camera.position.set(0, 1.5, 2);
-            
-            // Настраиваем рендерер
-            renderer = new THREE.WebGLRenderer({ canvas: avatarCanvas, antialias: true });
-            renderer.setSize(avatarCanvas.clientWidth, avatarCanvas.clientHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            
-            // Добавляем освещение
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(1, 1, 1);
-            scene.add(directionalLight);
-            
-            // Загружаем модель аватара
-            loadAvatarModel();
-            
-            // Запускаем анимацию
-            clock = new THREE.Clock();
-            animate();
-            
-            // Обработчик изменения размера окна
-            window.addEventListener('resize', onWindowResize);
-        }
-        
-        // Загрузка модели аватара
-        function loadAvatarModel() {
-            const loader = new THREE.GLTFLoader();
-            
-            loader.load(AVATAR_MODEL_URL, (gltf) => {
-                avatar = gltf.scene;
-                scene.add(avatar);
-                
-                // Находим все морф-таргеты для анимации рта
-                if (gltf.morphTargetDictionary) {
-                    for (const [key, value] of Object.entries(gltf.morphTargetDictionary)) {
-                        if (key.startsWith('mouth_')) {
-                            morphTargets[key] = value;
-                        }
-                    }
-                }
-                
-                // Настраиваем анимацию
-                if (gltf.animations && gltf.animations.length > 0) {
-                    mixer = new THREE.AnimationMixer(avatar);
-                    const idleAction = mixer.clipAction(gltf.animations[0]);
-                    idleAction.play();
-                }
-                
-                log("3D аватар загружен и готов к работе");
-            }, undefined, (error) => {
-                log(`Ошибка загрузки модели: ${error.message}`, 'error');
-                console.error(error);
-            });
-        }
-        
-        // Анимация сцены
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            if (mixer) {
-                mixer.update(clock.getDelta());
-            }
-            
-            renderer.render(scene, camera);
-        }
-        
-        // Обработчик изменения размера окна
-        function onWindowResize() {
-            camera.aspect = avatarCanvas.clientWidth / avatarCanvas.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(avatarCanvas.clientWidth, avatarCanvas.clientHeight);
-        }
-        
-        // Анимация рта по фонемам
-        function animateMouth(phonemes) {
-            if (!avatar || !morphTargets) return;
-            
-            // Сбрасываем все морф-таргеты рта
-            Object.keys(morphTargets).forEach(key => {
-                avatar.morphTargetInfluences[morphTargets[key]] = 0;
-            });
-            
-            // Анимируем каждую фонему
-            phonemes.forEach(([phoneme, duration]) => {
-                const morphName = PHONEME_MAP[phoneme] || 'mouth_neutral';
-                const morphIndex = morphTargets[morphName];
-                
-                if (morphIndex !== undefined) {
-                    // Плавное появление и исчезновение морфа
-                    avatar.morphTargetInfluences[morphIndex] = 1;
-                    
-                    setTimeout(() => {
-                        avatar.morphTargetInfluences[morphIndex] = 0;
-                    }, duration * 1000 * 0.8); // Уменьшаем длительность для плавности
-                }
-            });
-        }
+        let avatarFrameInterval = null;
         
         // Инициализация PeerJS
         function initPeerJS() {
@@ -461,14 +368,13 @@
             peer = new Peer(currentPeerId);
             
             peer.on('open', (id) => {
-                log(`PeerJS подключен с ID: ${id}`);
+                log(`PeerJS подключен с ID: ${id}`, 'success');
                 updateConferenceStatus('online', 'Готов к подключению');
             });
             
             peer.on('error', (err) => {
                 log(`Ошибка PeerJS: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
-                console.error(err);
             });
         }
         
@@ -486,35 +392,14 @@
                 // Загружаем iframe с конференцией
                 conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
                 
-                // Создаем медиапоток из canvas и аудио
-                const canvasStream = avatarCanvas.captureStream(25);
-                const audioContext = new AudioContext();
-                const destination = audioContext.createMediaStreamDestination();
-                const audioSource = audioContext.createMediaElementSource(avatarAudio);
-                audioSource.connect(destination);
+                // Инициализируем аватар
+                avatarImage.src = '/api/avatar_frame';
                 
-                // Объединяем потоки
-                const audioTrack = destination.stream.getAudioTracks()[0];
-                const videoTrack = canvasStream.getVideoTracks()[0];
-                mediaStream = new MediaStream([videoTrack, audioTrack]);
-                
-                // Подключаемся к конференции
-                const call = peer.call(`conference-${currentRoom}`, mediaStream);
-                
-                call.on('stream', (remoteStream) => {
-                    log(`Успешно подключено к комнате "${currentRoom}"`);
-                    updateConferenceStatus('online', 'Подключено к конференции');
-                });
-                
-                call.on('close', () => {
-                    log(`Отключено от комнаты "${currentRoom}"`);
-                    updateConferenceStatus('offline', 'Отключено от конференции');
-                });
+                log(`Подключение к комнате "${currentRoom}"`, 'info');
                 
             } catch (err) {
                 log(`Ошибка подключения: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
-                console.error(err);
             }
         }
         
@@ -527,7 +412,7 @@
             
             conferenceIframe.src = '';
             updateConferenceStatus('offline', 'Нет подключения');
-            log(`Отключено от комнаты "${currentRoom}"`);
+            log(`Отключено от комнаты "${currentRoom}"`, 'info');
             currentRoom = null;
         }
         
@@ -566,12 +451,104 @@
                         option.textContent = `${lesson.title} (${lesson.subject})`;
                         lessonSelect.appendChild(option);
                     });
-                    log('Список уроков загружен');
+                    log('Список уроков загружен', 'success');
                 })
                 .catch(err => {
                     log(`Ошибка: ${err.message}`, 'error');
-                    console.error(err);
                 });
+        }
+        
+        // Загрузка урока
+        function setupUpload() {
+            // Обработка клика по области загрузки
+            uploadArea.addEventListener('click', () => lessonUpload.click());
+            
+            // Обработка перетаскивания файла
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#3498db';
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.style.borderColor = '#ccc';
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.borderColor = '#ccc';
+                if (e.dataTransfer.files.length) {
+                    handleLessonUpload(e.dataTransfer.files[0]);
+                }
+            });
+            
+            // Обработка выбора файла
+            lessonUpload.addEventListener('change', () => {
+                if (lessonUpload.files.length) {
+                    handleLessonUpload(lessonUpload.files[0]);
+                }
+            });
+        }
+        
+        function handleLessonUpload(file) {
+            if (!file.name.endsWith('.json')) {
+                log('Файл должен быть в формате JSON', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('lesson', file);
+            
+            const lessonId = prompt('Введите ID урока (оставьте пустым для автогенерации)');
+            if (lessonId !== null) {
+                formData.append('lesson_id', lessonId || '');
+                
+                fetch('/api/upload_lesson', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    log(`Урок успешно загружен с ID: ${data.lesson_id}`, 'success');
+                    loadLessons();
+                })
+                .catch(err => {
+                    log(`Ошибка загрузки урока: ${err.message}`, 'error');
+                });
+            }
+        }
+        
+        // Сохранение уроков в localStorage
+        function saveLessonsToLocal() {
+            fetch('/api/lessons')
+                .then(res => res.json())
+                .then(data => {
+                    localStorage.setItem('savedLessons', JSON.stringify(data.lessons));
+                    log('Уроки сохранены в localStorage', 'success');
+                });
+        }
+        
+        // Загрузка уроков из localStorage
+        function loadLessonsFromLocal() {
+            const saved = localStorage.getItem('savedLessons');
+            if (!saved) {
+                log('Нет сохраненных уроков', 'error');
+                return;
+            }
+            
+            try {
+                const lessons = JSON.parse(saved);
+                lessonSelect.innerHTML = '<option value="">-- Выберите урок --</option>';
+                lessons.forEach(lesson => {
+                    const option = document.createElement('option');
+                    option.value = lesson.id;
+                    option.textContent = `${lesson.title} (${lesson.subject})`;
+                    lessonSelect.appendChild(option);
+                });
+                log('Уроки загружены из localStorage', 'success');
+            } catch (err) {
+                log(`Ошибка загрузки уроков: ${err.message}`, 'error');
+            }
         }
         
         // Начало урока
@@ -609,11 +586,10 @@
                 lessonContent.innerHTML = '';
                 
                 updateAIStatus('online', 'Урок активен');
-                log(`Урок "${lessonSelect.options[lessonSelect.selectedIndex].text}" начат`);
+                log(`Урок "${lessonSelect.options[lessonSelect.selectedIndex].text}" начат`, 'success');
                 
             } catch (err) {
                 log(`Ошибка: ${err.message}`, 'error');
-                console.error(err);
             }
         }
         
@@ -633,7 +609,7 @@
                     throw new Error(error.error || 'Неизвестная ошибка');
                 }
                 
-                log('Урок остановлен');
+                log('Урок остановлен', 'info');
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 currentSessionId = null;
@@ -642,11 +618,10 @@
                 
             } catch (err) {
                 log(`Ошибка: ${err.message}`, 'error');
-                console.error(err);
             }
         }
         
-        // Воспроизведение аудио и анимация рта
+        // Воспроизведение аудио и анимация аватара
         function playAudioWithAnimation(audioData, phonemes) {
             // Создаем Blob из base64 аудио
             const byteCharacters = atob(audioData);
@@ -660,13 +635,63 @@
             // Устанавливаем источник для аудио элемента
             avatarAudio.src = URL.createObjectURL(blob);
             
-            // Запускаем анимацию рта
-            animateMouth(phonemes);
+            // Запускаем анимацию аватара
+            startAvatarAnimation(phonemes);
             
             // Воспроизводим аудио
             avatarAudio.play().catch(e => {
                 log(`Ошибка воспроизведения аудио: ${e.message}`, 'error');
             });
+        }
+        
+        // Анимация аватара
+        function startAvatarAnimation(phonemes) {
+            clearInterval(avatarFrameInterval);
+            
+            let phonemeIndex = 0;
+            let lastUpdate = 0;
+            
+            const updateFrame = () => {
+                const now = Date.now();
+                if (phonemes && phonemeIndex < phonemes.length) {
+                    const [phoneme, duration] = phonemes[phonemeIndex];
+                    
+                    // Обновляем кадр только если прошло достаточно времени
+                    if (now - lastUpdate > duration * 1000 * 0.8) {
+                        avatarImage.src = `/api/avatar_frame?phoneme=${phoneme}&t=${now}`;
+                        lastUpdate = now;
+                        phonemeIndex++;
+                    }
+                } else {
+                    // Нейтральное состояние
+                    avatarImage.src = `/api/avatar_frame?t=${now}`;
+                }
+            };
+            
+            avatarFrameInterval = setInterval(updateFrame, 50); // 20 FPS
+        }
+        
+        // Отправка вопроса AI учителю
+        function askQuestion() {
+            const question = questionInput.value.trim();
+            if (!question) {
+                log('Введите текст вопроса', 'error');
+                return;
+            }
+            
+            if (!currentSessionId) {
+                log('Сначала начните урок', 'error');
+                return;
+            }
+            
+            socket.emit('ask_question', {
+                session_id: currentSessionId,
+                question: question,
+                subject: lessonSelect.options[lessonSelect.selectedIndex]?.text.split('(')[1]?.replace(')', '') || 'обществознание'
+            });
+            
+            questionInput.value = '';
+            log(`Отправлен вопрос: ${question}`, 'info');
         }
         
         // Логирование
@@ -682,57 +707,27 @@
         
         // WebSocket обработчики
         socket.on('connect', () => {
-            log('Подключено к серверу AI учителя');
+            log('Подключено к серверу AI учителя', 'success');
             updateAIStatus('online', 'Сервер подключен');
             loadLessons();
         });
         
         socket.on('disconnect', () => {
-            log('Отключено от сервера AI учителя');
+            log('Отключено от сервера AI учителя', 'error');
             updateAIStatus('offline', 'Сервер отключен');
         });
         
-        socket.on('lesson_update', data => {
-            switch (data.type) {
-                case 'phase_start':
-                    lessonContent.innerHTML = `
-                        <h2>${data.phase.toUpperCase()}</h2>
-                        <p>${data.content}</p>
-                    `;
-                    log(`Начата фаза: ${data.phase}`);
-                    break;
-                
-                case 'answer':
-                    const answerDiv = document.createElement('div');
-                    answerDiv.className = 'answer';
-                    answerDiv.innerHTML = `
-                        <p><strong>Вопрос:</strong> ${data.question}</p>
-                        <p><strong>Ответ:</strong> ${data.answer}</p>
-                    `;
-                    lessonContent.appendChild(answerDiv);
-                    log('Учитель ответил на вопрос');
-                    break;
-                
-                case 'video_update':
-                    // В новой версии мы не используем видеофайлы, анимация идет через Three.js
-                    break;
-                
-                case 'feedback':
-                    const feedbackDiv = document.createElement('div');
-                    feedbackDiv.className = data.is_correct ? 'feedback-correct' : 'feedback-incorrect';
-                    feedbackDiv.innerHTML = `
-                        <p><strong>${data.is_correct ? '✓ Правильно!' : '✗ Неверно'}</strong></p>
-                        ${data.explanation ? `<p>${data.explanation}</p>` : ''}
-                    `;
-                    lessonContent.appendChild(feedbackDiv);
-                    log(`Получена обратная связь: ${data.is_correct ? 'правильно' : 'неправильно'}`);
-                    break;
-                
-                case 'audio_phonemes':
-                    // Обработка аудио с фонемами
-                    playAudioWithAnimation(data.audio, data.phonemes);
-                    break;
-            }
+        socket.on('ai_response', data => {
+            const responseDiv = document.createElement('div');
+            responseDiv.className = 'answer';
+            responseDiv.innerHTML = `
+                <p><strong>Ответ:</strong> ${data.text}</p>
+                ${data.materials?.length ? `<p><small>Источники: ${data.materials.map(m => m.title).join(', ')}</small></p>` : ''}
+            `;
+            lessonContent.appendChild(responseDiv);
+            
+            playAudioWithAnimation(data.audio, data.phonemes);
+            log('Получен ответ от AI учителя', 'success');
         });
         
         socket.on('error', data => {
@@ -740,27 +735,29 @@
         });
         
         // Обработчики событий
+        document.addEventListener('DOMContentLoaded', () => {
+            log('Система AI учителя инициализирована', 'info');
+            updateAIStatus('offline', 'Урок не активен');
+            updateConferenceStatus('offline', 'Нет подключения');
+            
+            // Инициализация
+            initPeerJS();
+            setupUpload();
+            loadLessons();
+            
+            // Загрузка первого кадра аватара
+            avatarImage.src = '/api/avatar_frame';
+        });
+        
         startBtn.addEventListener('click', startLesson);
         stopBtn.addEventListener('click', stopLesson);
         connectBtn.addEventListener('click', connectToConference);
         disconnectBtn.addEventListener('click', disconnectFromConference);
-        
-        // Инициализация при загрузке
-        document.addEventListener('DOMContentLoaded', () => {
-            log('Система AI учителя инициализирована');
-            updateAIStatus('offline', 'Урок не активен');
-            updateConferenceStatus('offline', 'Нет подключения');
-            
-            // Инициализируем Three.js сцену
-            initThreeJS();
-            
-            // Инициализируем PeerJS
-            initPeerJS();
-            
-            // Проверяем поддержку WebRTC
-            if (!window.RTCPeerConnection) {
-                log('Ваш браузер не поддерживает WebRTC. Некоторые функции могут быть недоступны.', 'error');
-            }
+        saveLessonsBtn.addEventListener('click', saveLessonsToLocal);
+        loadLessonsBtn.addEventListener('click', loadLessonsFromLocal);
+        askBtn.addEventListener('click', askQuestion);
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') askQuestion();
         });
     </script>
 </body>
