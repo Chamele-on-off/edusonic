@@ -73,12 +73,11 @@
             text-align: center;
         }
         
-        #avatar-image {
+        #avatar-canvas {
             width: 100%;
             height: 400px;
             background: #f0f0f0;
             border-radius: 4px;
-            object-fit: cover;
             image-rendering: crisp-edges;
         }
         
@@ -97,7 +96,7 @@
             margin-bottom: 20px;
         }
         
-        select, button, input {
+        select, button, input, textarea {
             padding: 10px 15px;
             border-radius: 4px;
             border: 1px solid #ddd;
@@ -107,6 +106,12 @@
         select {
             flex-grow: 1;
             min-width: 200px;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            resize: vertical;
         }
         
         button {
@@ -245,7 +250,7 @@
                 grid-template-columns: 1fr;
             }
             
-            #avatar-image, #conference-iframe {
+            #avatar-canvas, #conference-iframe {
                 height: 300px;
             }
         }
@@ -303,12 +308,22 @@
         <div id="video-container">
             <div class="video-wrapper">
                 <div class="video-title">2D Аватар учителя</div>
-                <img id="avatar-image" src="" alt="AI Teacher Avatar">
+                <canvas id="avatar-canvas" width="640" height="480"></canvas>
                 <audio id="avatar-audio" hidden></audio>
             </div>
             <div class="video-wrapper">
                 <div class="video-title">Видеоконференция</div>
                 <iframe id="conference-iframe" allow="camera; microphone; display-capture"></iframe>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-title">Добавить учебный материал</div>
+            <div class="control-group">
+                <input type="text" id="material-subject" placeholder="Предмет">
+                <input type="text" id="material-title" placeholder="Название">
+                <textarea id="material-content" placeholder="Содержание"></textarea>
+                <button id="add-material-btn">Добавить материал</button>
             </div>
         </div>
         
@@ -336,7 +351,8 @@
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
         const roomNameInput = document.getElementById('room-name');
-        const avatarImage = document.getElementById('avatar-image');
+        const canvas = document.getElementById('avatar-canvas');
+        const ctx = canvas.getContext('2d');
         const avatarAudio = document.getElementById('avatar-audio');
         const conferenceIframe = document.getElementById('conference-iframe');
         const lessonContent = document.getElementById('lesson-content');
@@ -352,6 +368,10 @@
         const loadLessonsBtn = document.getElementById('load-lessons');
         const questionInput = document.getElementById('question-input');
         const askBtn = document.getElementById('ask-btn');
+        const materialSubject = document.getElementById('material-subject');
+        const materialTitle = document.getElementById('material-title');
+        const materialContent = document.getElementById('material-content');
+        const addMaterialBtn = document.getElementById('add-material-btn');
         
         // Настройки
         const CONFERENCE_SERVER = "https://conf.zindaki-edu.ru";
@@ -360,7 +380,11 @@
         let peer = null;
         let mediaStream = null;
         let currentPeerId = null;
-        let avatarFrameInterval = null;
+        let avatarFrames = {};
+        let currentPhoneme = 'mouth_neutral';
+        let currentFrameIndex = 0;
+        let lastFrameTime = 0;
+        let animationFrameId = null;
         
         // Инициализация PeerJS
         function initPeerJS() {
@@ -376,6 +400,16 @@
                 log(`Ошибка PeerJS: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
             });
+            
+            peer.on('call', (call) => {
+                log(`Входящий вызов от ${call.peer}`, 'info');
+                call.answer(mediaStream);
+                
+                call.on('stream', (remoteStream) => {
+                    log(`Получен медиапоток от ${call.peer}`, 'success');
+                    addParticipant(call.peer, remoteStream);
+                });
+            });
         }
         
         // Подключение к конференции
@@ -389,17 +423,30 @@
             try {
                 updateConferenceStatus('connecting', 'Подключение...');
                 
-                // Загружаем iframe с конференцией
-                conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
+                // Получаем доступ к микрофону
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 
-                // Инициализируем аватар
-                avatarImage.src = '/api/avatar_frame';
+                // Создаем оффер
+                const offer = await peer.connect(currentRoom);
+                
+                // Отправляем оффер на сервер через Socket.IO
+                socket.emit('webrtc_offer', {
+                    room: currentRoom,
+                    offer: offer
+                });
                 
                 log(`Подключение к комнате "${currentRoom}"`, 'info');
+                
+                // Загружаем iframe с конференцией
+                conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
                 
             } catch (err) {
                 log(`Ошибка подключения: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                }
             }
         }
         
@@ -410,10 +457,25 @@
                 mediaStream = null;
             }
             
+            if (peer) {
+                peer.disconnect();
+            }
+            
             conferenceIframe.src = '';
             updateConferenceStatus('offline', 'Нет подключения');
+            participantsList.innerHTML = '<li>Нет активных участников</li>';
             log(`Отключено от комнаты "${currentRoom}"`, 'info');
             currentRoom = null;
+        }
+        
+        // Добавление участника в список
+        function addParticipant(peerId, stream) {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span class="status-indicator status-online"></span>
+                <span>${peerId}</span>
+            `;
+            participantsList.appendChild(li);
         }
         
         // Обновление статуса конференции
@@ -458,12 +520,54 @@
                 });
         }
         
-        // Загрузка урока
+        // Загрузка кадров аватара
+        async function loadAvatarFrames() {
+            try {
+                const response = await fetch('/api/avatar_frames');
+                avatarFrames = await response.json();
+                log('Кадры аватара загружены', 'success');
+                startAvatarAnimation();
+            } catch (err) {
+                log(`Ошибка загрузки кадров аватара: ${err.message}`, 'error');
+            }
+        }
+        
+        // Анимация аватара
+        function startAvatarAnimation() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            
+            const animate = (timestamp) => {
+                if (!avatarFrames[currentPhoneme] || avatarFrames[currentPhoneme].length === 0) {
+                    currentPhoneme = 'mouth_neutral';
+                }
+                
+                const frames = avatarFrames[currentPhoneme];
+                const frameDuration = 100; // ms per frame
+                
+                if (timestamp - lastFrameTime > frameDuration) {
+                    currentFrameIndex = (currentFrameIndex + 1) % frames.length;
+                    lastFrameTime = timestamp;
+                    
+                    const img = new Image();
+                    img.onload = function() {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    };
+                    img.src = frames[currentFrameIndex];
+                }
+                
+                animationFrameId = requestAnimationFrame(animate);
+            };
+            
+            animationFrameId = requestAnimationFrame(animate);
+        }
+        
+        // Настройка загрузки уроков
         function setupUpload() {
-            // Обработка клика по области загрузки
             uploadArea.addEventListener('click', () => lessonUpload.click());
             
-            // Обработка перетаскивания файла
             uploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 uploadArea.style.borderColor = '#3498db';
@@ -481,7 +585,6 @@
                 }
             });
             
-            // Обработка выбора файла
             lessonUpload.addEventListener('change', () => {
                 if (lessonUpload.files.length) {
                     handleLessonUpload(lessonUpload.files[0]);
@@ -635,8 +738,10 @@
             // Устанавливаем источник для аудио элемента
             avatarAudio.src = URL.createObjectURL(blob);
             
-            // Запускаем анимацию аватара
-            startAvatarAnimation(phonemes);
+            // Обновляем фонемы для анимации
+            if (phonemes && phonemes.length > 0) {
+                currentPhoneme = phonemes[0][0]; // Берем первую фонему
+            }
             
             // Воспроизводим аудио
             avatarAudio.play().catch(e => {
@@ -644,31 +749,36 @@
             });
         }
         
-        // Анимация аватара
-        function startAvatarAnimation(phonemes) {
-            clearInterval(avatarFrameInterval);
+        // Добавление учебного материала
+        async function addMaterial() {
+            const subject = materialSubject.value.trim();
+            const title = materialTitle.value.trim();
+            const content = materialContent.value.trim();
             
-            let phonemeIndex = 0;
-            let lastUpdate = 0;
+            if (!subject || !title || !content) {
+                log('Заполните все поля', 'error');
+                return;
+            }
             
-            const updateFrame = () => {
-                const now = Date.now();
-                if (phonemes && phonemeIndex < phonemes.length) {
-                    const [phoneme, duration] = phonemes[phonemeIndex];
-                    
-                    // Обновляем кадр только если прошло достаточно времени
-                    if (now - lastUpdate > duration * 1000 * 0.8) {
-                        avatarImage.src = `/api/avatar_frame?phoneme=${phoneme}&t=${now}`;
-                        lastUpdate = now;
-                        phonemeIndex++;
-                    }
+            try {
+                const response = await fetch('/api/add_material', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subject, title, content })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    log('Материал успешно добавлен', 'success');
+                    materialSubject.value = '';
+                    materialTitle.value = '';
+                    materialContent.value = '';
                 } else {
-                    // Нейтральное состояние
-                    avatarImage.src = `/api/avatar_frame?t=${now}`;
+                    throw new Error(data.error || 'Ошибка добавления');
                 }
-            };
-            
-            avatarFrameInterval = setInterval(updateFrame, 50); // 20 FPS
+            } catch (err) {
+                log(`Ошибка: ${err.message}`, 'error');
+            }
         }
         
         // Отправка вопроса AI учителю
@@ -705,11 +815,23 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
         
+        // Получение текущего предмета
+        function getCurrentSubject() {
+            const selectedOption = lessonSelect.options[lessonSelect.selectedIndex];
+            if (selectedOption) {
+                const text = selectedOption.text;
+                const match = text.match(/\(([^)]+)\)/);
+                return match ? match[1] : 'обществознание';
+            }
+            return 'обществознание';
+        }
+        
         // WebSocket обработчики
         socket.on('connect', () => {
             log('Подключено к серверу AI учителя', 'success');
             updateAIStatus('online', 'Сервер подключен');
             loadLessons();
+            loadAvatarFrames();
         });
         
         socket.on('disconnect', () => {
@@ -730,6 +852,31 @@
             log('Получен ответ от AI учителя', 'success');
         });
         
+        socket.on('transcription', data => {
+            if (data.room === currentRoom) {
+                log(`Ученик: ${data.text}`, 'info');
+                // Автоматически отправляем вопрос учителю
+                socket.emit('ask_question', {
+                    session_id: currentSessionId,
+                    question: data.text,
+                    subject: getCurrentSubject()
+                });
+            }
+        });
+        
+        socket.on('webrtc_answer', data => {
+            if (data.room === currentRoom && peer) {
+                peer.handleAnswer(data.sdp).catch(err => {
+                    log(`Ошибка обработки ответа WebRTC: ${err.message}`, 'error');
+                });
+            }
+        });
+        
+        socket.on('webrtc_error', data => {
+            log(`WebRTC ошибка: ${data.error}`, 'error');
+            updateConferenceStatus('offline', 'Ошибка подключения');
+        });
+        
         socket.on('error', data => {
             log(`Ошибка: ${data.message}`, 'error');
         });
@@ -744,9 +891,7 @@
             initPeerJS();
             setupUpload();
             loadLessons();
-            
-            // Загрузка первого кадра аватара
-            avatarImage.src = '/api/avatar_frame';
+            loadAvatarFrames();
         });
         
         startBtn.addEventListener('click', startLesson);
@@ -758,6 +903,20 @@
         askBtn.addEventListener('click', askQuestion);
         questionInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') askQuestion();
+        });
+        addMaterialBtn.addEventListener('click', addMaterial);
+        
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            if (peer) {
+                peer.destroy();
+            }
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
         });
     </script>
 </body>
