@@ -13,6 +13,8 @@ from flask import Flask, request, jsonify, render_template, send_file
 from flask_socketio import SocketIO
 from PIL import Image, ImageDraw
 import numpy as np
+import asyncio
+from aiortc import RTCPeerConnection, RTCSessionDescription
 
 # Настройка логирования
 logging.basicConfig(
@@ -42,7 +44,7 @@ for dir_path in [CONFIG["lessons_dir"], CONFIG["avatar_frames_dir"], CONFIG["aud
 # Инициализация Flask
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, async_mode='threading')
 executor = ThreadPoolExecutor(max_workers=CONFIG["max_workers"])
 
 class AvatarGenerator:
@@ -158,6 +160,14 @@ class AvatarGenerator:
         
         # Нейтральное состояние
         return self.frames.get('mouth_neutral', [self._generate_default_frame(True, False)])[0]
+
+    def get_available_frames(self) -> Dict[str, List[str]]:
+        """Возвращает список доступных кадров для фронтенда"""
+        frames = {}
+        for group in ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink']:
+            frame_files = sorted(Path(self.frames_dir).glob(f"{group}_*.jpg"))
+            frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
+        return frames
 
 class KnowledgeBase:
     """База знаний для ответов на вопросы (JSON-based)"""
@@ -295,10 +305,67 @@ class SimpleTTS:
                 "phonemes": [('mouth_neutral', 0.2)] * 3
             }
 
+class WebRTCHandler:
+    """Обработчик WebRTC соединений"""
+    def __init__(self, socketio):
+        self.socketio = socketio
+        self.pcs = set()
+        self.logger = logging.getLogger(__name__)
+    
+    def handle_offer(self, offer: dict, room: str):
+        """Обработка WebRTC оффера в отдельном потоке"""
+        executor.submit(self._async_handle_offer, offer, room)
+    
+    def _async_handle_offer(self, offer: dict, room: str):
+        """Асинхронная обработка оффера"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self._process_offer(offer, room))
+        loop.close()
+    
+    async def _process_offer(self, offer: dict, room: str):
+        """Основная логика обработки оффера"""
+        pc = RTCPeerConnection()
+        self.pcs.add(pc)
+
+        @pc.on("iceconnectionstatechange")
+        async def on_iceconnectionstatechange():
+            if pc.iceConnectionState == "failed":
+                await pc.close()
+                self.pcs.discard(pc)
+
+        try:
+            await pc.setRemoteDescription(
+                RTCSessionDescription(sdp=offer["sdp"], type=offer["type"])
+            )
+            answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
+
+            self.socketio.emit('webrtc_answer', {
+                "sdp": pc.localDescription.sdp,
+                "type": pc.localDescription.type
+            }, room=room)
+            
+            self.logger.info(f"WebRTC соединение установлено для комнаты {room}")
+
+        except Exception as e:
+            self.logger.error(f"WebRTC ошибка: {str(e)}")
+            self.socketio.emit('webrtc_error', {
+                "error": str(e)
+            }, room=room)
+
+    async def cleanup(self):
+        """Очистка соединений"""
+        for pc in self.pcs:
+            await pc.close()
+        self.pcs.clear()
+        self.logger.info("Все WebRTC соединения закрыты")
+
 # Инициализация компонентов
 avatar_generator = AvatarGenerator()
 knowledge_base = KnowledgeBase()
 tts_engine = SimpleTTS()
+webrtc_handler = WebRTCHandler(socketio)
 
 # API Endpoints
 @app.route('/')
@@ -310,6 +377,10 @@ def get_avatar_frame():
     phoneme = request.args.get('phoneme')
     frame = avatar_generator.get_current_frame(phoneme)
     return send_file(BytesIO(frame), mimetype='image/jpeg')
+
+@app.route('/api/avatar_frames')
+def get_avatar_frames():
+    return jsonify(avatar_generator.get_available_frames())
 
 @app.route('/api/lessons')
 def list_lessons():
@@ -363,10 +434,29 @@ def start_lesson():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/add_material', methods=['POST'])
+def add_material():
+    try:
+        data = request.json
+        knowledge_base.add_material(
+            subject=data['subject'],
+            title=data['title'],
+            content=data['content']
+        )
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # WebSocket handlers
 @socketio.on('connect')
 def handle_connect():
     logger.info(f"Клиент подключен: {request.sid}")
+
+@socketio.on('webrtc_offer')
+def handle_webrtc_offer(data):
+    room = data.get('room')
+    offer = data.get('offer')
+    webrtc_handler.handle_offer(offer, room)
 
 @socketio.on('ask_question')
 def handle_question(data):
@@ -392,6 +482,36 @@ def handle_question(data):
     
     executor.submit(process)
 
+@socketio.on('audio_data')
+def handle_audio_data(data):
+    def process():
+        try:
+            from speech_recognition import Recognizer, AudioData
+            import wave
+            
+            audio_bytes = base64.b64decode(data['audio'])
+            
+            # Конвертируем в формат, понятный для speech_recognition
+            with wave.open(BytesIO(audio_bytes), 'rb') as wav_file:
+                audio_data = AudioData(
+                    wav_file.readframes(wav_file.getnframes()),
+                    wav_file.getframerate(),
+                    wav_file.getsampwidth()
+                )
+            
+            recognizer = Recognizer()
+            text = recognizer.recognize_google(audio_data, language="ru-RU")
+            
+            socketio.emit('transcription', {
+                "text": text,
+                "room": data['room']
+            }, room=request.sid)
+            
+        except Exception as e:
+            logger.error(f"Ошибка транскрипции: {str(e)}")
+    
+    executor.submit(process)
+
 if __name__ == '__main__':
     try:
         host = os.getenv('HOST', '0.0.0.0')
@@ -402,4 +522,5 @@ if __name__ == '__main__':
         logger.error(f"Ошибка сервера: {str(e)}")
     finally:
         executor.shutdown()
+        asyncio.get_event_loop().run_until_complete(webrtc_handler.cleanup())
         logger.info("Сервер остановлен")
