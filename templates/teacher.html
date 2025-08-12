@@ -282,7 +282,7 @@
                 </select>
                 <input type="text" id="room-name" placeholder="Название комнаты (например: math-lesson-1)">
                 <div id="controls">
-                    <button id="start-btn" disabled>Начать урок</button>
+                    <button id="start-btn" style="display: none;">Начать урок</button>
                     <button id="stop-btn" disabled>Остановить</button>
                     <button id="connect-btn" class="success">Подключиться</button>
                     <button id="disconnect-btn" class="danger" disabled>Отключиться</button>
@@ -387,9 +387,8 @@
         let lastFrameTime = 0;
         let animationFrameId = null;
         let isConnecting = false;
-        let isLessonActive = false;
         
-        // Инициализация PeerJS
+        // Инициализация PeerJS (только при нажатии кнопки подключения)
         function initPeerJS() {
             // Уничтожаем предыдущее соединение, если оно есть
             if (peer) {
@@ -471,22 +470,20 @@
                     conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
                     updateConferenceStatus('online', 'Подключено к конференции');
                     
-                    // Активируем кнопку начала урока
-                    startBtn.disabled = false;
+                    // Автоматически начинаем урок после подключения
+                    startLesson();
                 });
                 
                 peerConnection.on('error', (err) => {
                     log(`Ошибка соединения: ${err.message}`, 'error');
                     updateConferenceStatus('offline', 'Ошибка подключения');
                     isConnecting = false;
-                    startBtn.disabled = true;
                 });
                 
             } catch (err) {
                 log(`Ошибка подключения: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
                 isConnecting = false;
-                startBtn.disabled = true;
                 
                 if (mediaStream) {
                     mediaStream.getTracks().forEach(track => track.stop());
@@ -521,12 +518,9 @@
             log(`Отключено от комнаты "${currentRoom}"`, 'info');
             currentRoom = null;
             isConnecting = false;
-            startBtn.disabled = true;
             
-            // Останавливаем урок, если он активен
-            if (isLessonActive) {
-                await stopLesson();
-            }
+            // Останавливаем урок при отключении
+            stopLesson();
             
             // Пересоздаем Peer для будущих подключений
             initPeerJS();
@@ -589,21 +583,20 @@
             try {
                 const response = await fetch('/api/avatar_frames');
                 avatarFrames = await response.json();
-                log('Кадры аватара загружены', 'success');
                 
                 // Устанавливаем нейтральное выражение по умолчанию
-                if (avatarFrames.mouth_neutral && avatarFrames.mouth_neutral.length > 0) {
-                    const img = new Image();
-                    img.onload = function() {
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    };
-                    img.src = avatarFrames.mouth_neutral[0];
-                }
+                currentPhoneme = 'mouth_neutral';
                 
+                log('Кадры аватара загружены', 'success');
                 startAvatarAnimation();
             } catch (err) {
                 log(`Ошибка загрузки кадров аватара: ${err.message}`, 'error');
+                
+                // Создаем фолбэк анимацию с нейтральным выражением
+                avatarFrames = {
+                    'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg']
+                };
+                startAvatarAnimation();
             }
         }
         
@@ -759,10 +752,8 @@
                 
                 const data = await response.json();
                 currentSessionId = data.session_id;
-                startBtn.disabled = true;
                 stopBtn.disabled = false;
                 lessonContent.innerHTML = '';
-                isLessonActive = true;
                 
                 updateAIStatus('online', 'Урок активен');
                 log(`Урок "${lessonSelect.options[lessonSelect.selectedIndex].text}" начат`, 'success');
@@ -789,10 +780,8 @@
                 }
                 
                 log('Урок остановлен', 'info');
-                startBtn.disabled = false;
                 stopBtn.disabled = true;
                 currentSessionId = null;
-                isLessonActive = false;
                 
                 updateAIStatus('offline', 'Урок не активен');
                 
@@ -824,11 +813,6 @@
             avatarAudio.play().catch(e => {
                 log(`Ошибка воспроизведения аудио: ${e.message}`, 'error');
             });
-            
-            // После окончания воспроизведения возвращаем нейтральное выражение
-            avatarAudio.onended = () => {
-                currentPhoneme = 'mouth_neutral';
-            };
         }
         
         // Добавление учебного материала
@@ -914,7 +898,6 @@
             updateAIStatus('online', 'Сервер подключен');
             loadLessons();
             loadAvatarFrames();
-            initPeerJS();
         });
         
         socket.on('disconnect', () => {
@@ -972,14 +955,14 @@
             updateConferenceStatus('offline', 'Нет подключения');
             
             // Инициализация
-            initPeerJS();
             setupUpload();
             loadLessons();
             loadAvatarFrames();
+            
+            // Скрываем кнопку "Начать урок" (теперь урок начинается автоматически при подключении)
+            startBtn.style.display = 'none';
         });
         
-        startBtn.addEventListener('click', startLesson);
-        stopBtn.addEventListener('click', stopLesson);
         connectBtn.addEventListener('click', connectToConference);
         disconnectBtn.addEventListener('click', disconnectFromConference);
         saveLessonsBtn.addEventListener('click', saveLessonsToLocal);
