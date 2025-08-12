@@ -4,12 +4,12 @@ import uuid
 import time
 import random
 import logging
-import sqlite3
+import base64
 from pathlib import Path
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, request, jsonify, render_template, send_file, Response
+from flask import Flask, request, jsonify, render_template, send_file
 from flask_socketio import SocketIO
 from PIL import Image, ImageDraw
 import numpy as np
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Конфигурация
 BASE_DIR = Path(__file__).parent
 CONFIG = {
-    "database": "materials/knowledge.db",
+    "materials_dir": "materials",
     "lessons_dir": "static/lessons",
     "avatar_frames_dir": "static/avatar/frames",
     "audio_cache": "static/audio",
@@ -36,7 +36,7 @@ CONFIG = {
 }
 
 # Создание необходимых директорий
-for dir_path in [CONFIG["lessons_dir"], CONFIG["avatar_frames_dir"], CONFIG["audio_cache"], "logs"]:
+for dir_path in [CONFIG["lessons_dir"], CONFIG["avatar_frames_dir"], CONFIG["audio_cache"], "logs", CONFIG["materials_dir"]]:
     Path(dir_path).mkdir(parents=True, exist_ok=True)
 
 # Инициализация Flask
@@ -160,51 +160,75 @@ class AvatarGenerator:
         return self.frames.get('mouth_neutral', [self._generate_default_frame(True, False)])[0]
 
 class KnowledgeBase:
-    """База знаний для ответов на вопросы"""
-    def __init__(self, db_path: str = CONFIG["database"]):
-        self.conn = sqlite3.connect(db_path)
-        self._init_db()
-        self.vectorizer = self._init_vectorizer()
-
-    def _init_db(self):
-        """Инициализирует структуру БД"""
-        self.conn.execute("""
-        CREATE TABLE IF NOT EXISTS materials (
-            id INTEGER PRIMARY KEY,
-            subject TEXT,
-            title TEXT,
-            content TEXT
-        )""")
-        self.conn.commit()
-
-    def _init_vectorizer(self):
-        """Инициализирует TF-IDF векторайзер"""
+    """База знаний для ответов на вопросы (JSON-based)"""
+    def __init__(self, data_dir: str = CONFIG["materials_dir"]):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.materials_file = self.data_dir / "materials.json"
+        self._init_data()
+    
+    def _init_data(self):
+        """Инициализирует данные, если файла нет"""
+        if not self.materials_file.exists():
+            with open(self.materials_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    "materials": [
+                        {
+                            "id": "1",
+                            "subject": "обществознание",
+                            "title": "Понятие общества",
+                            "content": "Общество — это совокупность людей, объединенных исторически сложившимися формами взаимодействия."
+                        },
+                        {
+                            "id": "2",
+                            "subject": "обществознание",
+                            "title": "Государство",
+                            "content": "Государство — политическая организация общества, обладающая суверенитетом."
+                        }
+                    ]
+                }, f, ensure_ascii=False, indent=2)
+    
+    def _load_materials(self) -> List[Dict]:
+        """Загружает материалы из JSON файла"""
         try:
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            return TfidfVectorizer(max_features=5000)
-        except ImportError:
-            logger.warning("TF-IDF vectorizer not available")
-            return None
-
+            with open(self.materials_file, 'r', encoding='utf-8') as f:
+                return json.load(f).get("materials", [])
+        except Exception as e:
+            logger.error(f"Ошибка загрузки материалов: {str(e)}")
+            return []
+    
+    def _save_materials(self, materials: List[Dict]):
+        """Сохраняет материалы в JSON файл"""
+        with open(self.materials_file, 'w', encoding='utf-8') as f:
+            json.dump({"materials": materials}, f, ensure_ascii=False, indent=2)
+    
     def add_material(self, subject: str, title: str, content: str):
         """Добавляет учебный материал"""
-        self.conn.execute(
-            "INSERT INTO materials (subject, title, content) VALUES (?, ?, ?)",
-            (subject, title, content)
-        )
-        self.conn.commit()
-
+        materials = self._load_materials()
+        materials.append({
+            "id": str(uuid.uuid4()),
+            "subject": subject,
+            "title": title,
+            "content": content
+        })
+        self._save_materials(materials)
+        logger.info(f"Добавлен материал: {title} ({subject})")
+    
     def find_similar(self, query: str, subject: str, top_k: int = 3) -> List[Dict]:
-        """Находит релевантные материалы"""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT id, title, content FROM materials WHERE subject = ?",
-            (subject,)
-        )
-        return [
-            {"id": row[0], "title": row[1], "content": row[2]}
-            for row in cursor.fetchall()
-        ][:top_k]
+        """Находит релевантные материалы (простая реализация)"""
+        materials = self._load_materials()
+        filtered = [m for m in materials if m.get("subject") == subject]
+        
+        if not query:
+            return filtered[:top_k]
+        
+        # Простая фильтрация по вхождению слов запроса
+        query_words = set(query.lower().split())
+        for m in filtered:
+            content_words = set(m["content"].lower().split())
+            m["score"] = len(query_words & content_words)
+        
+        return sorted(filtered, key=lambda x: x.get("score", 0), reverse=True)[:top_k]
 
 class SimpleTTS:
     """Синтезатор речи с кэшированием"""
@@ -275,19 +299,6 @@ class SimpleTTS:
 avatar_generator = AvatarGenerator()
 knowledge_base = KnowledgeBase()
 tts_engine = SimpleTTS()
-
-# Загрузка демо-данных
-def init_demo_data():
-    if not knowledge_base.find_similar("", "обществознание", 1):
-        demo_materials = [
-            ("обществознание", "Понятие общества", "Общество — это совокупность людей, объединенных исторически сложившимися формами взаимодействия."),
-            ("обществознание", "Государство", "Государство — политическая организация общества, обладающая суверенитетом.")
-        ]
-        for subject, title, content in demo_materials:
-            knowledge_base.add_material(subject, title, content)
-        logger.info("Загружены демо-материалы")
-
-init_demo_data()
 
 # API Endpoints
 @app.route('/')
@@ -391,5 +402,4 @@ if __name__ == '__main__':
         logger.error(f"Ошибка сервера: {str(e)}")
     finally:
         executor.shutdown()
-        knowledge_base.conn.close()
         logger.info("Сервер остановлен")
