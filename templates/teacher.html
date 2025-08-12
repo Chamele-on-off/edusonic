@@ -378,6 +378,7 @@
         let currentSessionId = null;
         let currentRoom = null;
         let peer = null;
+        let peerConnection = null;
         let mediaStream = null;
         let currentPeerId = null;
         let avatarFrames = {};
@@ -385,35 +386,51 @@
         let currentFrameIndex = 0;
         let lastFrameTime = 0;
         let animationFrameId = null;
+        let isConnecting = false;
         
         // Инициализация PeerJS
         function initPeerJS() {
+            // Уничтожаем предыдущее соединение, если оно есть
+            if (peer) {
+                peer.destroy();
+            }
+            
             currentPeerId = `ai-teacher-${Math.random().toString(36).substr(2, 9)}`;
             peer = new Peer(currentPeerId);
             
             peer.on('open', (id) => {
                 log(`PeerJS подключен с ID: ${id}`, 'success');
                 updateConferenceStatus('online', 'Готов к подключению');
+                isConnecting = false;
             });
             
             peer.on('error', (err) => {
                 log(`Ошибка PeerJS: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
+                isConnecting = false;
+                
+                // Автоматически пересоздаем Peer при ошибке
+                setTimeout(initPeerJS, 1000);
             });
             
-            peer.on('call', (call) => {
-                log(`Входящий вызов от ${call.peer}`, 'info');
-                call.answer(mediaStream);
+            peer.on('connection', (conn) => {
+                log(`Входящее соединение от ${conn.peer}`, 'info');
+                peerConnection = conn;
                 
-                call.on('stream', (remoteStream) => {
-                    log(`Получен медиапоток от ${call.peer}`, 'success');
-                    addParticipant(call.peer, remoteStream);
+                conn.on('close', () => {
+                    log(`Соединение с ${conn.peer} закрыто`, 'info');
+                    peerConnection = null;
                 });
             });
         }
         
         // Подключение к конференции
         async function connectToConference() {
+            if (isConnecting) {
+                log('Уже идет процесс подключения', 'info');
+                return;
+            }
+            
             currentRoom = roomNameInput.value.trim();
             if (!currentRoom) {
                 log('Пожалуйста, укажите название комнаты', 'error');
@@ -421,44 +438,75 @@
             }
             
             try {
+                isConnecting = true;
                 updateConferenceStatus('connecting', 'Подключение...');
                 
+                // Инициализируем новое Peer соединение
+                initPeerJS();
+                
                 // Получаем доступ к микрофону
-                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                
-                // Создаем оффер
-                const offer = await peer.connect(currentRoom);
-                
-                // Отправляем оффер на сервер через Socket.IO
-                socket.emit('webrtc_offer', {
-                    room: currentRoom,
-                    offer: offer
+                mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: true, 
+                    video: false 
                 });
                 
-                log(`Подключение к комнате "${currentRoom}"`, 'info');
+                // Ждем пока Peer будет готов
+                await new Promise((resolve, reject) => {
+                    const checkReady = () => {
+                        if (peer && peer.disconnected === false && !peer.destroyed) {
+                            resolve();
+                        } else {
+                            setTimeout(checkReady, 100);
+                        }
+                    };
+                    checkReady();
+                });
                 
-                // Загружаем iframe с конференцией
-                conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
+                // Подключаемся к комнате
+                peerConnection = peer.connect(currentRoom);
+                
+                peerConnection.on('open', () => {
+                    log(`Подключение к комнате "${currentRoom}" установлено`, 'success');
+                    conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
+                    updateConferenceStatus('online', 'Подключено к конференции');
+                });
+                
+                peerConnection.on('error', (err) => {
+                    log(`Ошибка соединения: ${err.message}`, 'error');
+                    updateConferenceStatus('offline', 'Ошибка подключения');
+                    isConnecting = false;
+                });
                 
             } catch (err) {
                 log(`Ошибка подключения: ${err.message}`, 'error');
                 updateConferenceStatus('offline', 'Ошибка подключения');
+                isConnecting = false;
+                
                 if (mediaStream) {
                     mediaStream.getTracks().forEach(track => track.stop());
                     mediaStream = null;
                 }
+                
+                // Пересоздаем Peer для будущих подключений
+                setTimeout(initPeerJS, 1000);
             }
         }
         
         // Отключение от конференции
         async function disconnectFromConference() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
             }
             
             if (peer) {
-                peer.disconnect();
+                peer.destroy();
+                peer = null;
             }
             
             conferenceIframe.src = '';
@@ -466,6 +514,10 @@
             participantsList.innerHTML = '<li>Нет активных участников</li>';
             log(`Отключено от комнаты "${currentRoom}"`, 'info');
             currentRoom = null;
+            isConnecting = false;
+            
+            // Пересоздаем Peer для будущих подключений
+            initPeerJS();
         }
         
         // Добавление участника в список
@@ -832,6 +884,7 @@
             updateAIStatus('online', 'Сервер подключен');
             loadLessons();
             loadAvatarFrames();
+            initPeerJS();
         });
         
         socket.on('disconnect', () => {
@@ -875,6 +928,7 @@
         socket.on('webrtc_error', data => {
             log(`WebRTC ошибка: ${data.error}`, 'error');
             updateConferenceStatus('offline', 'Ошибка подключения');
+            isConnecting = false;
         });
         
         socket.on('error', data => {
