@@ -12,95 +12,187 @@
             background-color: #f5f5f5;
         }
         #container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 0 auto;
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        #remote-avatar {
+        h1 {
+            text-align: center;
+        }
+        #video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .video-box {
             width: 400px;
-            height: 400px;
-            margin: 20px auto;
-            display: block;
             border: 1px solid #ddd;
-            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+        .video-box h3 {
+            margin-top: 0;
+            text-align: center;
+        }
+        video {
+            width: 100%;
+            background: #000;
+        }
+        #controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 15px;
+            border-radius: 4px;
+            background: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
         }
         #status {
             text-align: center;
             margin: 10px 0;
             font-family: monospace;
         }
-        #debug {
-            margin-top: 20px;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 4px;
-            font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        h1 {
-            text-align: center;
-        }
     </style>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
         <h1>Участник конференции</h1>
-        <div id="status">Ожидание трансляции...</div>
-        <img id="remote-avatar" src="" alt="Удаленный аватар">
-        <audio id="audio-player" controls style="display: none;"></audio>
-        <div id="debug"></div>
+        
+        <div id="video-container">
+            <div class="video-box">
+                <h3>Мое видео</h3>
+                <video id="local-video" autoplay muted></video>
+            </div>
+            <div class="video-box">
+                <h3>Анимация учителя</h3>
+                <video id="remote-video" autoplay></video>
+            </div>
+        </div>
+        
+        <div id="controls">
+            <button id="join-btn">Присоединиться</button>
+            <button id="leave-btn" disabled>Покинуть</button>
+        </div>
+        
+        <div id="status">Готов к подключению</div>
     </div>
 
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
         // Элементы
-        const remoteAvatar = document.getElementById('remote-avatar');
+        const localVideo = document.getElementById('local-video');
+        const remoteVideo = document.getElementById('remote-video');
+        const joinBtn = document.getElementById('join-btn');
+        const leaveBtn = document.getElementById('leave-btn');
         const statusDiv = document.getElementById('status');
-        const debugDiv = document.getElementById('debug');
-        const audioPlayer = document.getElementById('audio-player');
         
-        // Состояние
-        let currentStream = null;
-        let socket = io();
+        // Переменные
+        let peer = null;
+        let localStream = null;
+        let call = null;
         
-        // Логирование
-        function log(message) {
-            const now = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += `[${now}] ${message}<br>`;
-            debugDiv.scrollTop = debugDiv.scrollHeight;
+        // Обновление статуса
+        function updateStatus(message) {
+            statusDiv.textContent = message;
+            console.log(message);
         }
         
-        // Обработка входящих сообщений
-        socket.on('connect', () => {
-            log('Подключен к серверу');
-        });
+        // Присоединение к конференции
+        async function joinConference() {
+            try {
+                updateStatus("Получение медиапотоков...");
+                
+                // Получаем доступ к камере и микрофону пользователя
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+                
+                localVideo.srcObject = localStream;
+                
+                // Подключаемся к PeerJS серверу
+                peer = new Peer({
+                    host: 'localhost',
+                    port: 9000,
+                    path: '/peerjs'
+                });
+                
+                peer.on('open', (id) => {
+                    updateStatus(`Подключено к серверу с ID: ${id}`);
+                    
+                    // Подключаемся к хосту конференции
+                    call = peer.call('conference_host', localStream);
+                    
+                    call.on('stream', (remoteStream) => {
+                        updateStatus("Получен удаленный поток");
+                        remoteVideo.srcObject = remoteStream;
+                    });
+                    
+                    call.on('close', () => {
+                        updateStatus("Соединение закрыто");
+                        remoteVideo.srcObject = null;
+                    });
+                    
+                    joinBtn.disabled = true;
+                    leaveBtn.disabled = false;
+                });
+                
+                peer.on('error', (err) => {
+                    updateStatus(`Ошибка PeerJS: ${err}`);
+                });
+                
+            } catch (error) {
+                updateStatus(`Ошибка: ${error.message}`);
+                console.error(error);
+            }
+        }
         
-        socket.on('disconnect', () => {
-            log('Отключен от сервера');
-        });
+        // Покинуть конференцию
+        function leaveConference() {
+            if (call) {
+                call.close();
+                call = null;
+            }
+            
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+                localVideo.srcObject = null;
+            }
+            
+            remoteVideo.srcObject = null;
+            
+            joinBtn.disabled = false;
+            leaveBtn.disabled = true;
+            updateStatus("Отключено от конференции");
+        }
         
-        socket.on('stream_started', (data) => {
-            statusDiv.textContent = `Трансляция начата: ${data.avatar}`;
-            log(`Начата трансляция аватара: ${data.avatar}`);
-        });
+        // Обработчики событий
+        joinBtn.addEventListener('click', joinConference);
+        leaveBtn.addEventListener('click', leaveConference);
         
-        socket.on('new_frame', (data) => {
-            remoteAvatar.src = data.imageSrc;
-            statusDiv.textContent = `${data.avatar}: кадр ${data.frame + 1}/${data.frameCount}`;
-        });
-        
-        socket.on('new_audio', (data) => {
-            const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-            audioPlayer.src = audioSrc;
-            audioPlayer.play().catch(e => log(`Ошибка воспроизведения: ${e}`));
-            log('Воспроизводится аудио');
-        });
-        
-        log('Готов к приему трансляции...');
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', leaveConference);
     </script>
 </body>
 </html>
