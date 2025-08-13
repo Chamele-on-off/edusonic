@@ -32,173 +32,100 @@
             gap: 10px;
             justify-content: center;
             margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        button, select {
+            padding: 10px 15px;
+            border-radius: 4px;
         }
         button {
-            padding: 10px 15px;
             background: #3498db;
             color: white;
             border: none;
-            border-radius: 4px;
             cursor: pointer;
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        select {
+            border: 1px solid #ddd;
+            min-width: 150px;
         }
         #status {
             text-align: center;
             margin: 10px 0;
             font-family: monospace;
         }
+        #debug {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <h1 style="text-align: center;">Анимация аватара</h1>
-        <img id="avatar" src="" alt="Аватар">
-        <div id="status">Загрузка...</div>
+        
         <div class="controls">
-            <button id="start-btn">Старт</button>
+            <select id="avatar-select">
+                <option value="">Выберите аватар</option>
+            </select>
+            <button id="load-btn" disabled>Загрузить</button>
+        </div>
+        
+        <img id="avatar" src="" alt="Аватар">
+        
+        <div id="status">Выберите аватар</div>
+        
+        <div class="controls">
+            <button id="start-btn" disabled>Старт</button>
             <button id="stop-btn" disabled>Стоп</button>
         </div>
+        
+        <div id="debug"></div>
     </div>
 
     <script>
-        // Все кадры анимации
-        const FRAMES = [
-            // Neutral
-            'mouth_neutral_001.jpg',
-            'mouth_neutral_002.jpg',
-            'mouth_neutral_003.jpg',
-            'mouth_neutral_004.jpg',
-            'mouth_neutral_005.jpg',
-            
-            // Blink
-            'blink_01.jpg',
-            'blink_02.jpg',
-            'blink_03.jpg',
-            'blink_04.jpg',
-            
-            // AA
-            'mouth_aa_001.jpg',
-            'mouth_aa_002.jpg',
-            'mouth_aa_003.jpg',
-            'mouth_aa_004.jpg',
-            
-            // BB
-            'mouth_bb_001.jpg',
-            'mouth_bb_002.jpg',
-            'mouth_bb_003.jpg',
-            'mouth_bb_004.jpg',
-            'mouth_bb_005.jpg',
-            
-            // CH
-            'mouth_ch_001.jpg',
-            'mouth_ch_002.jpg',
-            'mouth_ch_003.jpg',
-            'mouth_ch_004.jpg',
-            'mouth_ch_005.jpg',
-            
-            // DD
-            'mouth_dd_001.jpg',
-            
-            // EE
-            'mouth_ee_001.jpg',
-            'mouth_ee_002.jpg',
-            'mouth_ee_003.jpg',
-            'mouth_ee_004.jpg',
-            'mouth_ee_005.jpg',
-            
-            // FF
-            'mouth_ff_001.jpg',
-            
-            // HH
-            'mouth_hh_001.jpg',
-            
-            // KK
-            'mouth_kk_001.jpg',
-            'mouth_kk_002.jpg',
-            
-            // LL
-            'mouth_ll_001.jpg',
-            'mouth_ll_002.jpg',
-            'mouth_ll_003.jpg',
-            
-            // NN
-            'mouth_nn_001.jpg',
-            
-            // OO
-            'mouth_oo_001.jpg',
-            'mouth_oo_002.jpg',
-            
-            // PP
-            'mouth_pp_001.jpg',
-            'mouth_pp_002.jpg',
-            
-            // RR
-            'mouth_rr_001.jpg',
-            
-            // SH
-            'mouth_sh_001.jpg',
-            'mouth_sh_002.jpg',
-            'mouth_sh_003.jpg',
-            
-            // SS
-            'mouth_ss_001.jpg',
-            'mouth_ss_002.jpg',
-            'mouth_ss_003.jpg',
-            'mouth_ss_004.jpg',
-            'mouth_ss_005.jpg',
-            
-            // TT
-            'mouth_tt_001.jpg',
-            
-            // UU
-            'mouth_uu_001.jpg',
-            'mouth_uu_002.jpg',
-            'mouth_uu_003.jpg',
-            'mouth_uu_004.jpg',
-            
-            // VV
-            'mouth_vv_001.jpg',
-            'mouth_vv_002.jpg',
-            'mouth_vv_003.jpg',
-            'mouth_vv_004.jpg',
-            
-            // ZH
-            'mouth_zh_001.jpg',
-            'mouth_zh_002.jpg',
-            'mouth_zh_003.jpg',
-            'mouth_zh_004.jpg',
-            'mouth_zh_005.jpg',
-            
-            // ZZ
-            'mouth_zz_001.jpg',
-            'mouth_zz_002.jpg',
-            'mouth_zz_003.jpg',
-            'mouth_zz_004.jpg',
-            'mouth_zz_005.jpg'
-        ].map(f => `/frames/${f}`);
-
+        // Конфигурация
+        const FPS = 10;
+        
         // Элементы
         const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
+        const debugDiv = document.getElementById('debug');
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
+        const loadBtn = document.getElementById('load-btn');
+        const avatarSelect = document.getElementById('avatar-select');
         
         // Состояние
+        let currentAvatar = '';
+        let frames = [];
+        let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let loadedImages = [];
         
-        // Загрузка с повторными попытками
-        function loadImageWithRetry(src, retries = 3) {
+        // Логирование
+        function log(message) {
+            const now = new Date().toLocaleTimeString();
+            debugDiv.innerHTML += `[${now}] ${message}<br>`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        // Загрузка изображения с повторами
+        function loadImage(src, retries = 3) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => resolve(img);
                 img.onerror = () => {
                     if (retries > 0) {
-                        setTimeout(() => {
-                            loadImageWithRetry(src, retries - 1)
-                                .then(resolve)
-                                .catch(reject);
-                        }, 300);
+                        setTimeout(() => loadImage(src, retries - 1).then(resolve).catch(reject), 300);
                     } else {
                         reject(`Не удалось загрузить: ${src}`);
                     }
@@ -207,48 +134,91 @@
             });
         }
         
-        // Загрузка всех кадров
-        async function loadAllFrames() {
-            statusDiv.textContent = "Загрузка кадров...";
-            
-            for (let i = 0; i < FRAMES.length; i++) {
-                try {
-                    const img = await loadImageWithRetry(FRAMES[i]);
-                    loadedImages.push(img);
-                    statusDiv.textContent = `Загружено ${i+1}/${FRAMES.length} кадров`;
-                } catch (error) {
-                    console.error(error);
-                }
+        // Загрузка списка аватаров
+        async function loadAvatars() {
+            try {
+                const response = await fetch('/api/avatars');
+                if (!response.ok) throw new Error('Ошибка загрузки аватаров');
+                
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
+                data.avatars.forEach(avatar => {
+                    const option = document.createElement('option');
+                    option.value = avatar;
+                    option.textContent = avatar;
+                    avatarSelect.appendChild(option);
+                });
+                
+                log(`Загружено аватаров: ${data.avatars.length}`);
+            } catch (error) {
+                log(error.message);
             }
-            
-            if (loadedImages.length > 0) {
-                statusDiv.textContent = `Готово (${loadedImages.length}/${FRAMES.length} кадров)`;
-                startBtn.disabled = false;
-                avatar.src = loadedImages[0].src;
-            } else {
-                statusDiv.textContent = "Ошибка загрузки кадров";
+        }
+        
+        // Загрузка кадров аватара
+        async function loadAvatarFrames(avatarName) {
+            try {
+                statusDiv.textContent = `Загрузка ${avatarName}...`;
+                loadedImages = [];
+                
+                const response = await fetch(`/api/frames/${avatarName}`);
+                if (!response.ok) throw new Error('Ошибка загрузки кадров');
+                
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                frames = data.frames;
+                log(`Найдено кадров: ${frames.length}`);
+                
+                // Загружаем все изображения
+                for (let i = 0; i < frames.length; i++) {
+                    try {
+                        const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
+                        loadedImages.push(img);
+                        statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
+                    } catch (error) {
+                        log(error);
+                    }
+                }
+                
+                if (loadedImages.length > 0) {
+                    statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
+                    startBtn.disabled = false;
+                    avatar.src = loadedImages[0].src;
+                    currentFrame = 0;
+                } else {
+                    statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
+                }
+                
+            } catch (error) {
+                statusDiv.textContent = `Ошибка: ${error.message}`;
+                log(error.message);
             }
         }
         
         // Показать текущий кадр
         function showFrame() {
+            if (loadedImages.length === 0) return;
+            
             currentFrame = currentFrame % loadedImages.length;
             avatar.src = loadedImages[currentFrame].src;
-            statusDiv.textContent = `Кадр ${currentFrame + 1}/${loadedImages.length}`;
+            statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
         
         // Запуск анимации
         function startAnimation() {
-            if (animationInterval) return;
+            if (animationInterval || loadedImages.length === 0) return;
             
-            const fps = 10;
             animationInterval = setInterval(() => {
                 currentFrame++;
                 showFrame();
-            }, 1000 / fps);
+            }, 1000 / FPS);
             
             startBtn.disabled = true;
             stopBtn.disabled = false;
+            log(`Анимация запущена (${FPS} FPS)`);
         }
         
         // Остановка анимации
@@ -260,12 +230,28 @@
                 showFrame();
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
+                log("Анимация остановлена");
             }
         }
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            loadAllFrames();
+            // Загрузка списка аватаров
+            loadAvatars();
+            
+            // Выбор аватара
+            avatarSelect.addEventListener('change', () => {
+                currentAvatar = avatarSelect.value;
+                loadBtn.disabled = !currentAvatar;
+            });
+            
+            // Кнопка загрузки
+            loadBtn.addEventListener('click', () => {
+                stopAnimation();
+                loadAvatarFrames(currentAvatar);
+            });
+            
+            // Управление анимацией
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
         });
