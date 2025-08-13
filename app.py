@@ -10,11 +10,9 @@ from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, request, jsonify, render_template, send_file
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, join_room, leave_room
 from PIL import Image, ImageDraw
 import numpy as np
-import asyncio
-from aiortc import RTCPeerConnection, RTCSessionDescription
 
 # Настройка логирования
 logging.basicConfig(
@@ -47,101 +45,9 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 executor = ThreadPoolExecutor(max_workers=CONFIG["max_workers"])
 
-class AvatarGenerator:
-    """Генератор 2D аватара с анимацией рта и морганием"""
-    def __init__(self, frames_dir: str = CONFIG["avatar_frames_dir"]):
-        self.frames_dir = frames_dir
-        self.frames = self._load_frames()
-        self.current_frame_index = 0
-        self.last_phoneme = None
-        self.last_update = 0
-        self.last_blink = time.time()
-        self.blink_interval = random.uniform(3, 5)
-        
-        self.phoneme_groups = {
-            'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
-            'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
-            'е': 'mouth_ee', 'ё': 'mouth_oo', 'ю': 'mouth_uu',
-            'я': 'mouth_aa', 'м': 'mouth_mm', 'п': 'mouth_pp',
-            'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
-            'ш': 'mouth_sh', 'ж': 'mouth_zh', 'с': 'mouth_ss',
-            'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
-            'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
-            'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
-            'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
-            'й': 'mouth_ee'
-        }
-
-    def _load_frames(self) -> Dict[str, List[bytes]]:
-        """Загружает и группирует кадры анимации"""
-        frames = {}
-        
-        if not os.path.exists(self.frames_dir):
-            logger.warning(f"Директория {self.frames_dir} не найдена!")
-            return frames
-
-        for filename in sorted(os.listdir(self.frames_dir)):
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                try:
-                    group = self._get_frame_group(filename)
-                    with open(os.path.join(self.frames_dir, filename), 'rb') as f:
-                        if group not in frames:
-                            frames[group] = []
-                        frames[group].append(f.read())
-                except Exception as e:
-                    logger.error(f"Ошибка загрузки {filename}: {str(e)}")
-
-        if not frames:
-            logger.warning("Созданы дефолтные кадры аватара")
-            frames = {
-                'mouth_neutral': [self._generate_default_frame(True, False)],
-                'mouth_open': [self._generate_default_frame(True, True)],
-                'blink': [self._generate_default_frame(False, False)]
-            }
-
-        logger.info(f"Загружено {sum(len(v) for v in frames.values())} кадров")
-        return frames
-
-    def _get_frame_group(self, filename: str) -> str:
-        """Определяет группу кадра по имени файла"""
-        base = os.path.splitext(filename)[0].rsplit('_', 1)[0]
-        return base if base in self.phoneme_groups.values() else 'mouth_neutral'
-
-    def _generate_default_frame(self, eyes_open: bool, mouth_open: bool) -> bytes:
-        """Генерирует фолбек-кадр SVG"""
-        img = Image.new('RGB', (640, 480), (240, 240, 240))
-        draw = ImageDraw.Draw(img)
-        
-        # Голова
-        draw.ellipse([(120, 50), (520, 430)], outline=(0, 0, 0), width=2, fill=(255, 255, 255))
-        
-        # Глаза
-        eye_y = 180
-        if eyes_open:
-            draw.ellipse([(220, eye_y), (280, eye_y+60)], fill=(0, 0, 0))
-            draw.ellipse([(360, eye_y), (420, eye_y+60)], fill=(0, 0, 0))
-        else:
-            draw.line([(220, eye_y+30), (280, eye_y+30)], fill=(0, 0, 0), width=2)
-            draw.line([(360, eye_y+30), (420, eye_y+30)], fill=(0, 0, 0), width=2)
-        
-        # Рот
-        mouth_y = 320
-        if mouth_open:
-            draw.ellipse([(270, mouth_y), (370, mouth_y+80)], fill=(0, 0, 0))
-        else:
-            draw.line([(270, mouth_y+40), (370, mouth_y+40)], fill=(0, 0, 0), width=2)
-        
-        buf = BytesIO()
-        img.save(buf, format='PNG')
-        return buf.getvalue()
-
-    def get_available_frames(self) -> Dict[str, List[str]]:
-        """Возвращает список доступных кадров для фронтенда"""
-        frames = {}
-        for group in ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink']:
-            frame_files = sorted(Path(self.frames_dir).glob(f"{group}_*.jpg"))
-            frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
-        return frames
+# Глобальные переменные для хранения комнат и пользователей
+rooms = {}
+users = {}
 
 class KnowledgeBase:
     """База знаний для ответов на вопросы (JSON-based)"""
@@ -279,69 +185,9 @@ class SimpleTTS:
                 "phonemes": [('mouth_neutral', 0.2)] * 3
             }
 
-class WebRTCHandler:
-    """Обработчик WebRTC соединений"""
-    def __init__(self, socketio):
-        self.socketio = socketio
-        self.pcs = set()
-        self.logger = logging.getLogger(__name__)
-    
-    def handle_offer(self, offer: dict, room: str, sid: str):
-        """Обработка WebRTC оффера в отдельном потоке"""
-        executor.submit(self._async_handle_offer, offer, room, sid)
-    
-    def _async_handle_offer(self, offer: dict, room: str, sid: str):
-        """Асинхронная обработка оффера"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self._process_offer(offer, room, sid))
-        loop.close()
-    
-    async def _process_offer(self, offer: dict, room: str, sid: str):
-        """Основная логика обработки оффера"""
-        pc = RTCPeerConnection()
-        self.pcs.add(pc)
-
-        @pc.on("iceconnectionstatechange")
-        async def on_iceconnectionstatechange():
-            if pc.iceConnectionState == "failed":
-                await pc.close()
-                self.pcs.discard(pc)
-
-        try:
-            await pc.setRemoteDescription(
-                RTCSessionDescription(sdp=offer["sdp"], type=offer["type"])
-            )
-            answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
-
-            self.socketio.emit('webrtc_answer', {
-                "sdp": pc.localDescription.sdp,
-                "type": pc.localDescription.type,
-                "room": room
-            }, room=sid)
-            
-            self.logger.info(f"WebRTC соединение установлено для комнаты {room}")
-
-        except Exception as e:
-            self.logger.error(f"WebRTC ошибка: {str(e)}")
-            self.socketio.emit('webrtc_error', {
-                "error": str(e),
-                "room": room
-            }, room=sid)
-
-    async def cleanup(self):
-        """Очистка соединений"""
-        for pc in self.pcs:
-            await pc.close()
-        self.pcs.clear()
-        self.logger.info("Все WebRTC соединения закрыты")
-
 # Инициализация компонентов
-avatar_generator = AvatarGenerator()
 knowledge_base = KnowledgeBase()
 tts_engine = SimpleTTS()
-webrtc_handler = WebRTCHandler(socketio)
 
 # API Endpoints
 @app.route('/')
@@ -350,7 +196,22 @@ def home():
 
 @app.route('/api/avatar_frames')
 def get_avatar_frames():
-    return jsonify(avatar_generator.get_available_frames())
+    """Возвращает список доступных кадров аватара для фронтенда"""
+    frames = {}
+    frames_dir = Path(CONFIG["avatar_frames_dir"])
+    
+    for group in ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink']:
+        frame_files = sorted(frames_dir.glob(f"{group}_*.jpg"))
+        frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
+    
+    # Если нет кадров, возвращаем пустой список
+    if not any(frames.values()):
+        frames = {
+            'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg'],
+            'blink': ['/static/avatar/frames/mouth_neutral_001.jpg']
+        }
+    
+    return jsonify(frames)
 
 @app.route('/api/lessons')
 def list_lessons():
@@ -404,22 +265,6 @@ def start_lesson():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/stop_lesson', methods=['POST'])
-def stop_lesson():
-    data = request.json
-    session_id = data.get('session_id')
-    
-    if not session_id:
-        return jsonify({"error": "Не указан ID сессии"}), 400
-    
-    try:
-        return jsonify({
-            "status": "stopped",
-            "session_id": session_id
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route('/api/add_material', methods=['POST'])
 def add_material():
     try:
@@ -437,13 +282,154 @@ def add_material():
 @socketio.on('connect')
 def handle_connect():
     logger.info(f"Клиент подключен: {request.sid}")
+    users[request.sid] = {
+        'room': None,
+        'role': None
+    }
 
-@socketio.on('webrtc_offer')
-def handle_webrtc_offer(data):
+@socketio.on('disconnect')
+def handle_disconnect():
+    logger.info(f"Клиент отключен: {request.sid}")
+    user = users.get(request.sid)
+    if user and user['room']:
+        leave_room(user['room'])
+        socketio.emit('user_left', {
+            'userId': request.sid,
+            'room': user['room']
+        }, room=user['room'])
+        
+        # Обновляем информацию о комнате
+        if user['room'] in rooms:
+            rooms[user['room']]['users'].remove(request.sid)
+            if not rooms[user['room']]['users']:
+                del rooms[user['room']]
+    
+    if request.sid in users:
+        del users[request.sid]
+
+@socketio.on('join_room')
+def handle_join_room(data):
+    room = data.get('room')
+    role = data.get('role', 'student')
+    
+    if not room:
+        return
+    
+    # Покидаем предыдущую комнату, если есть
+    if users[request.sid]['room']:
+        leave_room(users[request.sid]['room'])
+        socketio.emit('user_left', {
+            'userId': request.sid,
+            'room': users[request.sid]['room']
+        }, room=users[request.sid]['room'])
+    
+    # Присоединяемся к новой комнате
+    join_room(room)
+    users[request.sid] = {
+        'room': room,
+        'role': role
+    }
+    
+    # Обновляем информацию о комнате
+    if room not in rooms:
+        rooms[room] = {
+            'users': [],
+            'teacher': None
+        }
+    
+    rooms[room]['users'].append(request.sid)
+    if role == 'teacher':
+        rooms[room]['teacher'] = request.sid
+    
+    # Уведомляем всех в комнате о новом пользователе
+    socketio.emit('user_joined', {
+        'userId': request.sid,
+        'room': room,
+        'role': role
+    }, room=room)
+    
+    # Отправляем подтверждение подключения
+    socketio.emit('room_joined', {
+        'room': room,
+        'role': role,
+        'users': [{
+            'userId': uid,
+            'role': users[uid]['role']
+        } for uid in rooms[room]['users']]
+    }, to=request.sid)
+
+@socketio.on('leave_room')
+def handle_leave_room():
+    user = users.get(request.sid)
+    if not user or not user['room']:
+        return
+    
+    room = user['room']
+    leave_room(room)
+    socketio.emit('user_left', {
+        'userId': request.sid,
+        'room': room
+    }, room=room)
+    
+    # Обновляем информацию о комнате
+    if room in rooms:
+        rooms[room]['users'].remove(request.sid)
+        if request.sid == rooms[room]['teacher']:
+            rooms[room]['teacher'] = None
+        
+        if not rooms[room]['users']:
+            del rooms[room]
+    
+    users[request.sid]['room'] = None
+    users[request.sid]['role'] = None
+
+@socketio.on('offer')
+def handle_offer(data):
+    to = data.get('to')
     room = data.get('room')
     offer = data.get('offer')
-    sid = request.sid
-    webrtc_handler.handle_offer(offer, room, sid)
+    
+    if not to or not room or not offer:
+        return
+    
+    # Пересылаем оффер указанному пользователю
+    socketio.emit('offer', {
+        'from': request.sid,
+        'offer': offer,
+        'room': room
+    }, to=to)
+
+@socketio.on('answer')
+def handle_answer(data):
+    to = data.get('to')
+    room = data.get('room')
+    answer = data.get('answer')
+    
+    if not to or not room or not answer:
+        return
+    
+    # Пересылаем ответ указанному пользователю
+    socketio.emit('answer', {
+        'from': request.sid,
+        'answer': answer,
+        'room': room
+    }, to=to)
+
+@socketio.on('ice_candidate')
+def handle_ice_candidate(data):
+    to = data.get('to')
+    room = data.get('room')
+    candidate = data.get('candidate')
+    
+    if not to or not room or not candidate:
+        return
+    
+    # Пересылаем ICE кандидат указанному пользователю
+    socketio.emit('ice_candidate', {
+        'from': request.sid,
+        'candidate': candidate,
+        'room': room
+    }, to=to)
 
 @socketio.on('ask_question')
 def handle_question(data):
@@ -509,5 +495,4 @@ if __name__ == '__main__':
         logger.error(f"Ошибка сервера: {str(e)}")
     finally:
         executor.shutdown()
-        asyncio.get_event_loop().run_until_complete(webrtc_handler.cleanup())
         logger.info("Сервер остановлен")
