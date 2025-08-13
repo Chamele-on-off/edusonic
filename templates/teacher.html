@@ -160,4 +160,210 @@
                 
                 avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
                 data.avatars.forEach(avatar => {
-                    const option
+                    const option = document.createElement('option');
+                    option.value = avatar;
+                    option.textContent = avatar;
+                    avatarSelect.appendChild(option);
+                });
+                
+                log(`Загружено аватаров: ${data.avatars.length}`);
+            } catch (error) {
+                log(error.message);
+            }
+        }
+        
+        // Загрузка кадров аватара
+        async function loadAvatarFrames(avatarName) {
+            try {
+                statusDiv.textContent = `Загрузка ${avatarName}...`;
+                loadedImages = [];
+                
+                const response = await fetch(`/api/frames/${avatarName}`);
+                if (!response.ok) throw new Error('Ошибка загрузки кадров');
+                
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                frames = data.frames;
+                log(`Найдено кадров: ${frames.length}`);
+                
+                // Загружаем все изображения
+                for (let i = 0; i < frames.length; i++) {
+                    try {
+                        const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
+                        loadedImages.push(img);
+                        statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
+                    } catch (error) {
+                        log(error);
+                    }
+                }
+                
+                if (loadedImages.length > 0) {
+                    statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
+                    startBtn.disabled = false;
+                    avatar.src = loadedImages[0].src;
+                    currentFrame = 0;
+                } else {
+                    statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
+                }
+                
+            } catch (error) {
+                statusDiv.textContent = `Ошибка: ${error.message}`;
+                log(error.message);
+            }
+        }
+        
+        // Показать текущий кадр
+        function showFrame() {
+            if (loadedImages.length === 0) return;
+            
+            currentFrame = currentFrame % loadedImages.length;
+            avatar.src = loadedImages[currentFrame].src;
+            statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
+        }
+        
+        // Запуск анимации
+        function startAnimation() {
+            if (animationInterval || loadedImages.length === 0) return;
+            
+            animationInterval = setInterval(() => {
+                currentFrame++;
+                showFrame();
+            }, 1000 / FPS);
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            log(`Анимация запущена (${FPS} FPS)`);
+        }
+        
+        // Остановка анимации
+        function stopAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+                currentFrame = 0;
+                showFrame();
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                log("Анимация остановлена");
+            }
+        }
+        
+        // Начать конференцию
+        async function startConference() {
+            if (!currentAvatar) {
+                log("Сначала выберите и загрузите аватар");
+                return;
+            }
+            
+            try {
+                // Создаем видео поток из анимации
+                const videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: 400,
+                        height: 400,
+                        frameRate: FPS
+                    },
+                    audio: false
+                });
+                
+                // Заменяем видео поток на нашу анимацию
+                const videoTrack = videoStream.getVideoTracks()[0];
+                const animationStream = new MediaStream();
+                
+                // Создаем canvas для преобразования изображений в видео поток
+                const canvas = document.createElement('canvas');
+                canvas.width = 400;
+                canvas.height = 400;
+                const ctx = canvas.getContext('2d');
+                
+                // Генерируем кадры анимации
+                let frameIndex = 0;
+                const generateFrame = () => {
+                    if (loadedImages.length === 0) return;
+                    
+                    frameIndex = frameIndex % loadedImages.length;
+                    ctx.drawImage(loadedImages[frameIndex], 0, 0, canvas.width, canvas.height);
+                    frameIndex++;
+                    
+                    requestAnimationFrame(generateFrame);
+                };
+                
+                generateFrame();
+                
+                const stream = canvas.captureStream(FPS);
+                const animationTrack = stream.getVideoTracks()[0];
+                animationStream.addTrack(animationTrack);
+                
+                // Получаем аудио поток с сервера
+                const audioStream = await navigator.mediaDevices.getUserMedia({
+                    video: false,
+                    audio: {
+                        autoGainControl: false,
+                        echoCancellation: false,
+                        noiseSuppression: false
+                    }
+                });
+                
+                // Подключаемся к PeerJS серверу
+                peer = new Peer({
+                    host: 'localhost',
+                    port: 9000,
+                    path: '/peerjs'
+                });
+                
+                peer.on('open', (id) => {
+                    log(`Подключено к серверу конференции с ID: ${id}`);
+                    conferenceLink.style.display = 'block';
+                    
+                    // Создаем вызов
+                    call = peer.call('conference_host', animationStream);
+                    call.on('stream', (remoteStream) => {
+                        log("Удаленный поток получен");
+                    });
+                    
+                    // Подключаем аудио
+                    const audioContext = new AudioContext();
+                    const audioSource = audioContext.createMediaStreamSource(audioStream);
+                    audioSource.connect(audioContext.destination);
+                });
+                
+                peer.on('error', (err) => {
+                    log(`Ошибка PeerJS: ${err}`);
+                });
+                
+                startConferenceBtn.disabled = true;
+                log("Конференция начата");
+                
+            } catch (error) {
+                log(`Ошибка при запуске конференции: ${error}`);
+            }
+        }
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            // Загрузка списка аватаров
+            loadAvatars();
+            
+            // Выбор аватара
+            avatarSelect.addEventListener('change', () => {
+                currentAvatar = avatarSelect.value;
+                loadBtn.disabled = !currentAvatar;
+            });
+            
+            // Кнопка загрузки
+            loadBtn.addEventListener('click', () => {
+                stopAnimation();
+                loadAvatarFrames(currentAvatar);
+            });
+            
+            // Управление анимацией
+            startBtn.addEventListener('click', startAnimation);
+            stopBtn.addEventListener('click', stopAnimation);
+            
+            // Кнопка начала конференции
+            startConferenceBtn.addEventListener('click', startConference);
+        });
+    </script>
+</body>
+</html>
