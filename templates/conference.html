@@ -23,6 +23,7 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
         #main-container {
             flex: 1;
@@ -40,8 +41,8 @@
             overflow: hidden;
         }
         #teacher-video {
-            width: 100%;
-            height: 100%;
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
         }
         #user-video-container {
@@ -60,6 +61,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transform: rotateY(180deg); /* Зеркальное отображение */
         }
         #controls {
             position: fixed;
@@ -155,7 +157,7 @@
         </div>
         
         <div id="user-video-container">
-            <video id="user-video" autoplay muted></video>
+            <video id="user-video" autoplay playsinline></video>
             <div id="user-video-off" class="video-off-placeholder hidden">
                 <i class="fas fa-video-slash"></i> Камера выключена
             </div>
@@ -269,11 +271,20 @@
         async function startCamera() {
             try {
                 userStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "user"
+                    }, 
                     audio: true 
                 });
                 
                 userVideo.srcObject = userStream;
+                
+                // Включаем микрофон по умолчанию
+                toggleMute(); // Выключаем, чтобы потом включить и обновить состояние
+                isMuted = true;
+                toggleMute();
                 
                 // Отслеживаем отключение микрофона в потоке
                 const audioTrack = userStream.getAudioTracks()[0];
@@ -295,9 +306,23 @@
                     };
                 }
                 
+                statusDiv.textContent = 'Камера и микрофон подключены';
+                
             } catch (err) {
                 console.error('Ошибка доступа к медиаустройствам:', err);
                 statusDiv.textContent = 'Ошибка доступа к камере/микрофону: ' + err.message;
+                
+                // Пытаемся получить только аудио, если видео недоступно
+                try {
+                    userStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isVideoOff = true;
+                    userVideoOff.classList.remove('hidden');
+                    videoBtn.innerHTML = '<i class="fas fa-video-slash"></i>';
+                    videoBtn.classList.add('danger');
+                    statusDiv.textContent = 'Подключен только микрофон (камера недоступна)';
+                } catch (audioErr) {
+                    console.error('Не удалось получить доступ к микрофону:', audioErr);
+                }
             }
         }
         
@@ -305,7 +330,10 @@
         async function shareScreen() {
             try {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: true,
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
                     audio: false
                 });
                 
@@ -338,13 +366,18 @@
             
             // Возвращаем камеру
             if (userStream && !isVideoOff) {
-                navigator.mediaDevices.getUserMedia({ video: true })
-                    .then(stream => {
-                        const videoTrack = stream.getVideoTracks()[0];
-                        const sender = userStream.getVideoTracks()[0];
-                        if (sender) sender.replaceTrack(videoTrack);
-                        stream.getAudioTracks().forEach(track => track.stop()); // Останавливаем лишние треки
-                    });
+                navigator.mediaDevices.getUserMedia({ 
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "user"
+                    }
+                }).then(stream => {
+                    const videoTrack = stream.getVideoTracks()[0];
+                    const sender = userStream.getVideoTracks()[0];
+                    if (sender) sender.replaceTrack(videoTrack);
+                    stream.getAudioTracks().forEach(track => track.stop());
+                });
             }
             
             isSharingScreen = false;
