@@ -10,7 +10,7 @@ from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, request, jsonify, render_template, send_file
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, join_room, leave_room
 from PIL import Image, ImageDraw
 import numpy as np
 import asyncio
@@ -44,7 +44,7 @@ for dir_path in [CONFIG["lessons_dir"], CONFIG["avatar_frames_dir"], CONFIG["aud
 # Инициализация Flask
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
-socketio = SocketIO(app, async_mode='threading')
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 executor = ThreadPoolExecutor(max_workers=CONFIG["max_workers"])
 
 class AvatarGenerator:
@@ -166,7 +166,15 @@ class AvatarGenerator:
         frames = {}
         for group in ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink']:
             frame_files = sorted(Path(self.frames_dir).glob(f"{group}_*.jpg"))
-            frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
+            if not frame_files:  # Если нет файлов, используем дефолтные
+                if group == 'mouth_neutral':
+                    frames[group] = ["data:image/png;base64," + base64.b64encode(self._generate_default_frame(True, False)).decode('utf-8')]
+                elif group == 'blink':
+                    frames[group] = ["data:image/png;base64," + base64.b64encode(self._generate_default_frame(False, False)).decode('utf-8')]
+                else:
+                    frames[group] = ["data:image/png;base64," + base64.b64encode(self._generate_default_frame(True, True)).decode('utf-8')]
+            else:
+                frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
         return frames
 
 class KnowledgeBase:
@@ -312,18 +320,18 @@ class WebRTCHandler:
         self.pcs = set()
         self.logger = logging.getLogger(__name__)
     
-    def handle_offer(self, offer: dict, room: str):
+    def handle_offer(self, offer: dict, room: str, sid: str):
         """Обработка WebRTC оффера в отдельном потоке"""
-        executor.submit(self._async_handle_offer, offer, room)
+        executor.submit(self._async_handle_offer, offer, room, sid)
     
-    def _async_handle_offer(self, offer: dict, room: str):
+    def _async_handle_offer(self, offer: dict, room: str, sid: str):
         """Асинхронная обработка оффера"""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(self._process_offer(offer, room))
+        loop.run_until_complete(self._process_offer(offer, room, sid))
         loop.close()
     
-    async def _process_offer(self, offer: dict, room: str):
+    async def _process_offer(self, offer: dict, room: str, sid: str):
         """Основная логика обработки оффера"""
         pc = RTCPeerConnection()
         self.pcs.add(pc)
@@ -343,16 +351,18 @@ class WebRTCHandler:
 
             self.socketio.emit('webrtc_answer', {
                 "sdp": pc.localDescription.sdp,
-                "type": pc.localDescription.type
-            }, room=room)
+                "type": pc.localDescription.type,
+                "room": room
+            }, room=sid)
             
             self.logger.info(f"WebRTC соединение установлено для комнаты {room}")
 
         except Exception as e:
             self.logger.error(f"WebRTC ошибка: {str(e)}")
             self.socketio.emit('webrtc_error', {
-                "error": str(e)
-            }, room=room)
+                "error": str(e),
+                "room": room
+            }, room=sid)
 
     async def cleanup(self):
         """Очистка соединений"""
@@ -450,13 +460,26 @@ def add_material():
 # WebSocket handlers
 @socketio.on('connect')
 def handle_connect():
-    logger.info(f"Клиент подключен: {request.sid}")
+    room = request.args.get('room')
+    if room:
+        join_room(room)
+        logger.info(f"Клиент подключен к комнате {room}: {request.sid}")
+    else:
+        logger.info(f"Клиент подключен без комнаты: {request.sid}")
+
+@socketio.on('join_room')
+def handle_join_room(data):
+    room = data.get('room')
+    if room:
+        join_room(room)
+        emit('room_joined', {'room': room}, room=request.sid)
+        logger.info(f"Клиент {request.sid} присоединился к комнате {room}")
 
 @socketio.on('webrtc_offer')
 def handle_webrtc_offer(data):
     room = data.get('room')
     offer = data.get('offer')
-    webrtc_handler.handle_offer(offer, room)
+    webrtc_handler.handle_offer(offer, room, request.sid)
 
 @socketio.on('ask_question')
 def handle_question(data):
@@ -464,6 +487,7 @@ def handle_question(data):
         try:
             question = data.get('question', '')
             subject = data.get('subject', 'обществознание')
+            room = data.get('room')
             
             materials = knowledge_base.find_similar(question, subject)
             response_text = "\n".join([m['content'] for m in materials])
@@ -474,11 +498,12 @@ def handle_question(data):
                 "text": response_text,
                 "audio": tts_result["audio"],
                 "phonemes": tts_result["phonemes"],
-                "materials": materials
-            }, room=request.sid)
+                "materials": materials,
+                "room": room
+            }, room=room or request.sid)
         except Exception as e:
             logger.error(f"Ошибка обработки вопроса: {str(e)}")
-            socketio.emit('error', {"message": str(e)}, room=request.sid)
+            socketio.emit('error', {"message": str(e)}, room=data.get('room') or request.sid)
     
     executor.submit(process)
 
@@ -490,6 +515,7 @@ def handle_audio_data(data):
             import wave
             
             audio_bytes = base64.b64decode(data['audio'])
+            room = data.get('room')
             
             # Конвертируем в формат, понятный для speech_recognition
             with wave.open(BytesIO(audio_bytes), 'rb') as wav_file:
@@ -504,8 +530,8 @@ def handle_audio_data(data):
             
             socketio.emit('transcription', {
                 "text": text,
-                "room": data['room']
-            }, room=request.sid)
+                "room": room
+            }, room=room or request.sid)
             
         except Exception as e:
             logger.error(f"Ошибка транскрипции: {str(e)}")
