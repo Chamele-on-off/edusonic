@@ -34,7 +34,7 @@
             margin: 20px 0;
             flex-wrap: wrap;
         }
-        button, select, input {
+        button, select {
             padding: 10px 15px;
             border-radius: 4px;
         }
@@ -48,7 +48,7 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
-        select, input {
+        select {
             border: 1px solid #ddd;
             min-width: 150px;
         }
@@ -67,11 +67,12 @@
             overflow-y: auto;
         }
         #conference-link {
-            margin-top: 20px;
+            display: block;
             text-align: center;
+            margin: 20px 0;
+            font-size: 18px;
         }
     </style>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -91,21 +92,15 @@
         <div class="controls">
             <button id="start-btn" disabled>Старт</button>
             <button id="stop-btn" disabled>Стоп</button>
-            <button id="stream-btn" disabled>Начать трансляцию</button>
+            <button id="start-conference-btn">Начать конференцию</button>
         </div>
         
-        <div class="controls">
-            <input type="text" id="speech-text" placeholder="Текст для озвучки">
-            <button id="speak-btn" disabled>Озвучить</button>
-        </div>
-        
-        <div id="conference-link">
-            <a href="/conference" target="_blank">Присоединиться к конференции</a>
-        </div>
+        <a id="conference-link" href="/conference" target="_blank" style="display:none;">Присоединиться к конференции</a>
         
         <div id="debug"></div>
     </div>
 
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
         // Конфигурация
         const FPS = 10;
@@ -117,10 +112,9 @@
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
         const loadBtn = document.getElementById('load-btn');
-        const streamBtn = document.getElementById('stream-btn');
-        const speachBtn = document.getElementById('speak-btn');
-        const speechText = document.getElementById('speech-text');
         const avatarSelect = document.getElementById('avatar-select');
+        const startConferenceBtn = document.getElementById('start-conference-btn');
+        const conferenceLink = document.getElementById('conference-link');
         
         // Состояние
         let currentAvatar = '';
@@ -128,8 +122,9 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let socket = io();
-        let isStreaming = false;
+        let peer = null;
+        let mediaStream = null;
+        let call = null;
         
         // Логирование
         function log(message) {
@@ -165,179 +160,4 @@
                 
                 avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
                 data.avatars.forEach(avatar => {
-                    const option = document.createElement('option');
-                    option.value = avatar;
-                    option.textContent = avatar;
-                    avatarSelect.appendChild(option);
-                });
-                
-                log(`Загружено аватаров: ${data.avatars.length}`);
-            } catch (error) {
-                log(error.message);
-            }
-        }
-        
-        // Загрузка кадров аватара
-        async function loadAvatarFrames(avatarName) {
-            try {
-                statusDiv.textContent = `Загрузка ${avatarName}...`;
-                loadedImages = [];
-                
-                const response = await fetch(`/api/frames/${avatarName}`);
-                if (!response.ok) throw new Error('Ошибка загрузки кадров');
-                
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                frames = data.frames;
-                log(`Найдено кадров: ${frames.length}`);
-                
-                // Загружаем все изображения
-                for (let i = 0; i < frames.length; i++) {
-                    try {
-                        const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
-                        loadedImages.push(img);
-                        statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
-                    } catch (error) {
-                        log(error);
-                    }
-                }
-                
-                if (loadedImages.length > 0) {
-                    statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
-                    startBtn.disabled = false;
-                    streamBtn.disabled = false;
-                    speachBtn.disabled = false;
-                    avatar.src = loadedImages[0].src;
-                    currentFrame = 0;
-                } else {
-                    statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
-                }
-                
-            } catch (error) {
-                statusDiv.textContent = `Ошибка: ${error.message}`;
-                log(error.message);
-            }
-        }
-        
-        // Показать текущий кадр
-        function showFrame() {
-            if (loadedImages.length === 0) return;
-            
-            currentFrame = currentFrame % loadedImages.length;
-            avatar.src = loadedImages[currentFrame].src;
-            statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
-            
-            // Если идет трансляция, отправляем кадр
-            if (isStreaming) {
-                const frameData = {
-                    avatar: currentAvatar,
-                    frame: currentFrame,
-                    frameCount: loadedImages.length,
-                    imageSrc: loadedImages[currentFrame].src
-                };
-                socket.emit('stream_frame', frameData);
-            }
-        }
-        
-        // Запуск анимации
-        function startAnimation() {
-            if (animationInterval || loadedImages.length === 0) return;
-            
-            animationInterval = setInterval(() => {
-                currentFrame++;
-                showFrame();
-            }, 1000 / FPS);
-            
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            log(`Анимация запущена (${FPS} FPS)`);
-        }
-        
-        // Остановка анимации
-        function stopAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-                animationInterval = null;
-                currentFrame = 0;
-                showFrame();
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                log("Анимация остановлена");
-            }
-        }
-        
-        // Начать трансляцию
-        function startStreaming() {
-            if (isStreaming) return;
-            
-            isStreaming = true;
-            streamBtn.textContent = 'Остановить трансляцию';
-            socket.emit('start_stream', { 
-                avatar: currentAvatar,
-                frameCount: loadedImages.length
-            });
-            log('Трансляция начата');
-        }
-        
-        // Остановить трансляцию
-        function stopStreaming() {
-            isStreaming = false;
-            streamBtn.textContent = 'Начать трансляцию';
-            log('Трансляция остановлена');
-        }
-        
-        // Озвучить текст
-        function speakText() {
-            const text = speechText.value.trim();
-            if (!text) return;
-            
-            socket.emit('text_to_speech', {
-                text: text,
-                lang: 'ru'
-            });
-            log(`Отправлен текст для озвучки: "${text}"`);
-        }
-        
-        // Инициализация
-        document.addEventListener('DOMContentLoaded', () => {
-            // Загрузка списка аватаров
-            loadAvatars();
-            
-            // Выбор аватара
-            avatarSelect.addEventListener('change', () => {
-                currentAvatar = avatarSelect.value;
-                loadBtn.disabled = !currentAvatar;
-            });
-            
-            // Кнопка загрузки
-            loadBtn.addEventListener('click', () => {
-                stopAnimation();
-                stopStreaming();
-                loadAvatarFrames(currentAvatar);
-            });
-            
-            // Управление анимацией
-            startBtn.addEventListener('click', startAnimation);
-            stopBtn.addEventListener('click', stopAnimation);
-            
-            // Управление трансляцией
-            streamBtn.addEventListener('click', () => {
-                if (isStreaming) {
-                    stopStreaming();
-                } else {
-                    startStreaming();
-                }
-            });
-            
-            // Озвучка текста
-            speachBtn.addEventListener('click', speakText);
-            speechText.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    speakText();
-                }
-            });
-        });
-    </script>
-</body>
-</html>
+                    const option
