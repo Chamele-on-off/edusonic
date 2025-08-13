@@ -34,7 +34,7 @@
             margin: 20px 0;
             flex-wrap: wrap;
         }
-        button, select {
+        button, select, input {
             padding: 10px 15px;
             border-radius: 4px;
         }
@@ -67,18 +67,19 @@
             overflow-y: auto;
         }
         #conference-link {
-            display: block;
+            margin-top: 20px;
             text-align: center;
-            margin: 20px 0;
-            font-size: 18px;
         }
-        #teacher-id {
-            font-weight: bold;
-            text-align: center;
-            margin: 10px 0;
-            padding: 10px;
-            background: #e1f5fe;
+        #tts-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
             border-radius: 4px;
+        }
+        #tts-text {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
         }
     </style>
 </head>
@@ -100,16 +101,25 @@
         <div class="controls">
             <button id="start-btn" disabled>Старт</button>
             <button id="stop-btn" disabled>Стоп</button>
-            <button id="start-conference-btn">Начать конференцию</button>
+            <button id="broadcast-btn" disabled>Транслировать</button>
         </div>
         
-        <div id="teacher-id" style="display: none;">Ваш ID: <span id="peer-id-display"></span></div>
-        <a id="conference-link" href="/conference" target="_blank" style="display:none;">Присоединиться к конференции</a>
+        <div id="tts-container">
+            <h3>Текст для озвучки</h3>
+            <textarea id="tts-text" rows="3" placeholder="Введите текст для синтеза речи..."></textarea>
+            <div class="controls">
+                <button id="speak-btn">Озвучить</button>
+            </div>
+        </div>
         
         <div id="debug"></div>
+        
+        <div id="conference-link">
+            <a href="/conference" target="_blank">Перейти в конференцию</a>
+        </div>
     </div>
 
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Конфигурация
         const FPS = 10;
@@ -121,11 +131,13 @@
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
         const loadBtn = document.getElementById('load-btn');
+        const broadcastBtn = document.getElementById('broadcast-btn');
         const avatarSelect = document.getElementById('avatar-select');
-        const startConferenceBtn = document.getElementById('start-conference-btn');
-        const conferenceLink = document.getElementById('conference-link');
-        const teacherIdDiv = document.getElementById('teacher-id');
-        const peerIdDisplay = document.getElementById('peer-id-display');
+        const ttsText = document.getElementById('tts-text');
+        const speakBtn = document.getElementById('speak-btn');
+        
+        // Socket.io
+        const socket = io();
         
         // Состояние
         let currentAvatar = '';
@@ -133,9 +145,7 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let peer = null;
-        let mediaStream = null;
-        let call = null;
+        let broadcastInterval = null;
         
         // Логирование
         function log(message) {
@@ -212,6 +222,7 @@
                 if (loadedImages.length > 0) {
                     statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
                     startBtn.disabled = false;
+                    broadcastBtn.disabled = false;
                     avatar.src = loadedImages[0].src;
                     currentFrame = 0;
                 } else {
@@ -260,72 +271,47 @@
             }
         }
         
-        // Начать конференцию
-        async function startConference() {
-            if (!currentAvatar) {
-                log("Сначала выберите и загрузите аватар");
-                return;
-            }
+        // Начать трансляцию
+        function startBroadcast() {
+            if (broadcastInterval || loadedImages.length === 0) return;
             
-            try {
-                // Создаем canvas для преобразования изображений в видео поток
-                const canvas = document.createElement('canvas');
-                canvas.width = 400;
-                canvas.height = 400;
-                const ctx = canvas.getContext('2d');
-                
-                // Генерируем кадры анимации
-                let frameIndex = 0;
-                const generateFrame = () => {
-                    if (loadedImages.length === 0) return;
-                    
-                    frameIndex = frameIndex % loadedImages.length;
-                    ctx.drawImage(loadedImages[frameIndex], 0, 0, canvas.width, canvas.height);
-                    frameIndex++;
-                    
-                    requestAnimationFrame(generateFrame);
-                };
-                
-                generateFrame();
-                
-                // Создаем видео поток из canvas
-                const stream = canvas.captureStream(10); // 10 FPS
-                
-                // Подключаемся к PeerJS (используем бесплатный сервер PeerJS)
-                peer = new Peer({
-                    host: '0.peerjs.com',
-                    port: 443,
-                    secure: true,
-                    path: '/'
-                });
-                
-                peer.on('open', (id) => {
-                    log(`Подключено к серверу конференции с ID: ${id}`);
-                    conferenceLink.style.display = 'block';
-                    teacherIdDiv.style.display = 'block';
-                    peerIdDisplay.textContent = id;
-                    
-                    // Обработка входящих соединений
-                    peer.on('call', (incomingCall) => {
-                        log(`Входящее соединение от: ${incomingCall.peer}`);
-                        incomingCall.answer(stream);
-                        
-                        incomingCall.on('stream', (remoteStream) => {
-                            log(`Получен поток от участника: ${incomingCall.peer}`);
-                        });
-                    });
-                    
-                    startConferenceBtn.disabled = true;
-                    log("Готов к подключению участников...");
-                });
-                
-                peer.on('error', (err) => {
-                    log(`Ошибка PeerJS: ${err}`);
-                });
-                
-            } catch (error) {
-                log(`Ошибка при запуске конференции: ${error}`);
+            // Отправляем начальное состояние на сервер
+            socket.emit('start_animation', {
+                avatar_name: currentAvatar,
+                frames: frames,
+                fps: FPS
+            });
+            
+            // Запускаем интервал для отправки кадров
+            broadcastInterval = setInterval(() => {
+                socket.emit('next_frame');
+            }, 1000 / FPS);
+            
+            broadcastBtn.disabled = true;
+            log("Трансляция анимации начата");
+        }
+        
+        // Остановить трансляцию
+        function stopBroadcast() {
+            if (broadcastInterval) {
+                clearInterval(broadcastInterval);
+                broadcastInterval = null;
+                socket.emit('stop_animation');
+                broadcastBtn.disabled = false;
+                log("Трансляция анимации остановлена");
             }
+        }
+        
+        // Озвучить текст
+        function speakText() {
+            const text = ttsText.value.trim();
+            if (!text) return;
+            
+            log(`Отправка текста для озвучки: "${text}"`);
+            socket.emit('text_to_speech', {
+                text: text,
+                lang: 'ru'
+            });
         }
         
         // Инициализация
@@ -342,6 +328,7 @@
             // Кнопка загрузки
             loadBtn.addEventListener('click', () => {
                 stopAnimation();
+                stopBroadcast();
                 loadAvatarFrames(currentAvatar);
             });
             
@@ -349,8 +336,17 @@
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
             
-            // Кнопка начала конференции
-            startConferenceBtn.addEventListener('click', startConference);
+            // Управление трансляцией
+            broadcastBtn.addEventListener('click', () => {
+                if (broadcastInterval) {
+                    stopBroadcast();
+                } else {
+                    startBroadcast();
+                }
+            });
+            
+            // Озвучка текста
+            speakBtn.addEventListener('click', speakText);
         });
     </script>
 </body>
