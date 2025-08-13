@@ -3,135 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Учитель - Цифровой аватар</title>
+    <title>Анимация аватара</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
         body {
-            background-color: #f5f5f5;
-            color: #333;
-            line-height: 1.6;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             padding: 20px;
+            background-color: #f5f5f5;
         }
         
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            max-width: 800px;
+            width: 100%;
         }
         
         h1 {
             color: #2c3e50;
             text-align: center;
-            margin-bottom: 30px;
-            grid-column: 1 / -1;
-        }
-        
-        .panel {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            background: #f9f9f9;
-        }
-        
-        .panel-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: #2c3e50;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 8px;
-        }
-        
-        #video-container {
-            grid-column: 1 / -1;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
             margin-bottom: 20px;
         }
         
-        .video-wrapper {
+        #avatar-container {
             display: flex;
-            flex-direction: column;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        #avatar-image {
+            width: 400px;
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            object-fit: cover;
+            background-color: #f0f0f0;
+        }
+        
+        .controls {
+            display: flex;
             gap: 10px;
-            position: relative;
-        }
-        
-        .video-title {
-            font-weight: bold;
-            text-align: center;
-        }
-        
-        #avatar-canvas {
-            width: 100%;
-            height: 400px;
-            background: #f0f0f0;
-            border-radius: 4px;
-            image-rendering: crisp-edges;
-        }
-        
-        #conference-video {
-            width: 100%;
-            height: 400px;
-            background: #000;
-            border-radius: 4px;
-        }
-        
-        #local-video {
-            width: 150px;
-            height: 112px;
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            border-radius: 4px;
-            border: 2px solid white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-        }
-        
-        #controls {
-            display: flex;
+            margin: 20px 0;
             flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        select, button, input, textarea {
-            padding: 10px 15px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            font-size: 16px;
-        }
-        
-        select {
-            flex-grow: 1;
-            min-width: 200px;
-        }
-        
-        textarea {
-            width: 100%;
-            min-height: 100px;
-            resize: vertical;
+            justify-content: center;
         }
         
         button {
+            padding: 10px 15px;
             background-color: #3498db;
             color: white;
             border: none;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 16px;
             transition: background-color 0.3s;
-            white-space: nowrap;
         }
         
         button:hover {
@@ -143,776 +72,282 @@
             cursor: not-allowed;
         }
         
-        button.danger {
-            background-color: #e74c3c;
-        }
-        
-        button.success {
+        button.active {
             background-color: #2ecc71;
         }
         
-        #lesson-content {
-            background: #f9f9f9;
-            padding: 20px;
-            border-radius: 4px;
-            border-left: 4px solid #3498db;
-            min-height: 100px;
-            overflow-y: auto;
-            max-height: 300px;
-        }
-        
-        #log {
-            height: 200px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
+        .status {
+            margin: 10px 0;
             padding: 10px;
-            background: #f0f0f0;
+            background-color: #f8f9fa;
             border-radius: 4px;
-            font-family: monospace;
-            grid-column: 1 / -1;
+            text-align: center;
         }
         
-        .log-entry {
-            margin-bottom: 5px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .log-info {
-            color: #2c3e50;
-        }
-        
-        .log-error {
-            color: #e74c3c;
-        }
-        
-        .log-success {
-            color: #27ae60;
-        }
-        
-        .answer {
-            margin-top: 15px;
-            padding: 10px;
-            background: #e8f4fc;
-            border-radius: 4px;
-        }
-        
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        
-        .status-offline {
-            background-color: #e74c3c;
-        }
-        
-        .status-online {
-            background-color: #2ecc71;
-        }
-        
-        .status-connecting {
-            background-color: #f39c12;
-        }
-        
-        #participants-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        #participants-list li {
-            padding: 8px 12px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            align-items: center;
-        }
-        
-        .control-group {
+        .animation-controls {
             display: flex;
             flex-direction: column;
             gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .animation-group {
             margin-bottom: 15px;
         }
         
-        #upload-area {
-            border: 2px dashed #ccc;
-            padding: 20px;
-            text-align: center;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            cursor: pointer;
+        .animation-group h3 {
+            margin-bottom: 10px;
+            color: #2c3e50;
         }
         
-        #upload-area:hover {
-            border-color: #3498db;
+        select {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+            width: 100%;
+            max-width: 300px;
         }
         
-        @media (max-width: 768px) {
-            .container {
-                grid-template-columns: 1fr;
-            }
-            
-            #video-container {
-                grid-template-columns: 1fr;
-            }
-            
-            #avatar-canvas, #conference-video {
-                height: 300px;
-            }
+        .debug-info {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>AI Учитель - Цифровой аватар</h1>
+        <h1>Анимация цифрового аватара</h1>
         
-        <div class="panel">
-            <div class="panel-title">Управление уроками</div>
-            <div id="upload-area">
-                Перетащите файл урока сюда<br>или кликните для выбора
-                <input type="file" id="lesson-upload" accept=".json" style="display: none;">
-            </div>
-            <div class="control-group">
-                <div id="controls">
-                    <button id="save-lessons">Сохранить уроки</button>
-                    <button id="load-lessons">Загрузить уроки</button>
-                </div>
-            </div>
+        <div id="avatar-container">
+            <img id="avatar-image" src="/static/avatar/frames/mouth_neutral_001.jpg" alt="Аватар">
         </div>
         
-        <div class="panel">
-            <div class="panel-title">Управление уроком</div>
-            <div class="control-group">
-                <select id="lesson-select">
-                    <option value="">-- Выберите урок --</option>
+        <div class="status">
+            Текущее состояние: <span id="current-state">mouth_neutral</span>
+        </div>
+        
+        <div class="controls">
+            <button id="start-btn">Старт</button>
+            <button id="stop-btn" disabled>Стоп</button>
+            <button id="blink-btn">Моргнуть</button>
+        </div>
+        
+        <div class="animation-controls">
+            <div class="animation-group">
+                <h3>Выражение рта</h3>
+                <select id="mouth-select">
+                    <option value="mouth_neutral">Нейтральное</option>
+                    <option value="mouth_aa">AA</option>
+                    <option value="mouth_bb">BB</option>
+                    <option value="mouth_ch">CH</option>
+                    <option value="mouth_dd">DD</option>
+                    <option value="mouth_ee">EE</option>
+                    <option value="mouth_ff">FF</option>
+                    <option value="mouth_hh">HH</option>
+                    <option value="mouth_kk">KK</option>
+                    <option value="mouth_ll">LL</option>
+                    <option value="mouth_nn">NN</option>
+                    <option value="mouth_oo">OO</option>
+                    <option value="mouth_pp">PP</option>
+                    <option value="mouth_rr">RR</option>
+                    <option value="mouth_ss">SS</option>
+                    <option value="mouth_tt">TT</option>
+                    <option value="mouth_uu">UU</option>
+                    <option value="mouth_vv">VV</option>
+                    <option value="mouth_zh">ZH</option>
+                    <option value="mouth_zz">ZZ</option>
                 </select>
-                <input type="text" id="room-name" placeholder="Название комнаты (например: math-lesson-1)">
-                <div id="controls">
-                    <button id="start-btn" style="display: none;">Начать урок</button>
-                    <button id="stop-btn" disabled>Остановить</button>
-                    <button id="connect-btn" class="success">Подключиться</button>
-                    <button id="disconnect-btn" class="danger" disabled>Отключиться</button>
-                </div>
             </div>
-            <div id="lesson-content"></div>
-        </div>
-        
-        <div class="panel">
-            <div class="panel-title">Состояние системы</div>
-            <div>
-                <p><span class="status-indicator status-offline" id="ai-status"></span> 
-                   <span id="status-text">AI Учитель отключен</span></p>
-                <p><span class="status-indicator status-offline" id="conference-status"></span> 
-                   <span id="conference-status-text">Нет подключения к конференции</span></p>
-            </div>
-            <div class="panel-title" style="margin-top: 15px;">Участники</div>
-            <ul id="participants-list">
-                <li>Нет активных участников</li>
-            </ul>
-        </div>
-        
-        <div id="video-container">
-            <div class="video-wrapper">
-                <div class="video-title">2D Аватар учителя</div>
-                <canvas id="avatar-canvas" width="640" height="480"></canvas>
-                <audio id="avatar-audio" hidden></audio>
-            </div>
-            <div class="video-wrapper">
-                <div class="video-title">Видеоконференция</div>
-                <video id="conference-video" autoplay playsinline></video>
-                <video id="local-video" autoplay playsinline muted></video>
+            
+            <div class="controls">
+                <button id="speak-btn">Говорить</button>
+                <button id="idle-btn">Ожидание</button>
             </div>
         </div>
         
-        <div class="panel">
-            <div class="panel-title">Добавить учебный материал</div>
-            <div class="control-group">
-                <input type="text" id="material-subject" placeholder="Предмет">
-                <input type="text" id="material-title" placeholder="Название">
-                <textarea id="material-content" placeholder="Содержание"></textarea>
-                <button id="add-material-btn">Добавить материал</button>
-            </div>
+        <div class="debug-info">
+            <p>Отладка:</p>
+            <div id="log"></div>
         </div>
-        
-        <div class="panel">
-            <div class="panel-title">Вопрос к учителю</div>
-            <div class="control-group">
-                <input type="text" id="question-input" placeholder="Введите ваш вопрос">
-                <button id="ask-btn">Задать вопрос</button>
-            </div>
-        </div>
-        
-        <div id="log"></div>
     </div>
     
-    <!-- Библиотеки -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
-    
     <script>
-        // Глобальные переменные
-        const socket = io();
-        const lessonSelect = document.getElementById('lesson-select');
+        // Конфигурация анимации
+        const ANIMATION_FPS = 10; // Кадров в секунду
+        const BLINK_DURATION = 200; // Длительность моргания в мс
+        const BASE_PATH = '/static/avatar/frames/';
+        
+        // Элементы DOM
+        const avatarImage = document.getElementById('avatar-image');
+        const currentStateSpan = document.getElementById('current-state');
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
-        const connectBtn = document.getElementById('connect-btn');
-        const disconnectBtn = document.getElementById('disconnect-btn');
-        const roomNameInput = document.getElementById('room-name');
-        const canvas = document.getElementById('avatar-canvas');
-        const ctx = canvas.getContext('2d');
-        const avatarAudio = document.getElementById('avatar-audio');
-        const conferenceVideo = document.getElementById('conference-video');
-        const localVideo = document.getElementById('local-video');
-        const lessonContent = document.getElementById('lesson-content');
+        const blinkBtn = document.getElementById('blink-btn');
+        const speakBtn = document.getElementById('speak-btn');
+        const idleBtn = document.getElementById('idle-btn');
+        const mouthSelect = document.getElementById('mouth-select');
         const logDiv = document.getElementById('log');
-        const aiStatusIndicator = document.getElementById('ai-status');
-        const aiStatusText = document.getElementById('status-text');
-        const conferenceStatusIndicator = document.getElementById('conference-status');
-        const conferenceStatusText = document.getElementById('conference-status-text');
-        const participantsList = document.getElementById('participants-list');
-        const uploadArea = document.getElementById('upload-area');
-        const lessonUpload = document.getElementById('lesson-upload');
-        const saveLessonsBtn = document.getElementById('save-lessons');
-        const loadLessonsBtn = document.getElementById('load-lessons');
-        const questionInput = document.getElementById('question-input');
-        const askBtn = document.getElementById('ask-btn');
-        const materialSubject = document.getElementById('material-subject');
-        const materialTitle = document.getElementById('material-title');
-        const materialContent = document.getElementById('material-content');
-        const addMaterialBtn = document.getElementById('add-material-btn');
         
-        // Настройки
-        let currentSessionId = null;
-        let currentRoom = null;
-        let avatarFrames = {};
-        let currentPhoneme = 'mouth_neutral';
-        let animationFrameId = null;
-        let isConnecting = false;
-        let localStream = null;
-        let remoteStream = null;
-        let participants = {};
-        let peerConnection = null;
-
-        // Проверка допустимости имени комнаты
-        function isValidRoomName(name) {
-            return /^[a-z0-9-]{3,20}$/.test(name);
-        }
-
-        // Подключение к конференции
-        async function connectToConference() {
-            if (isConnecting) {
-                log('Уже идет процесс подключения', 'info');
-                return;
+        // Состояние анимации
+        let animationState = {
+            currentMouth: 'mouth_neutral',
+            isSpeaking: false,
+            isBlinking: false,
+            frameIndex: 0,
+            animationInterval: null,
+            frames: {
+                mouth_neutral: [],
+                blink: [],
+                // Все остальные группы кадров
+                mouth_aa: [],
+                mouth_bb: [],
+                mouth_ch: [],
+                mouth_dd: [],
+                mouth_ee: [],
+                mouth_ff: [],
+                mouth_hh: [],
+                mouth_kk: [],
+                mouth_ll: [],
+                mouth_nn: [],
+                mouth_oo: [],
+                mouth_pp: [],
+                mouth_rr: [],
+                mouth_ss: [],
+                mouth_tt: [],
+                mouth_uu: [],
+                mouth_vv: [],
+                mouth_zh: [],
+                mouth_zz: []
             }
-            
-            currentRoom = roomNameInput.value.trim().toLowerCase();
-            if (!currentRoom) {
-                log('Пожалуйста, укажите название комнаты', 'error');
-                return;
-            }
-            
-            if (!isValidRoomName(currentRoom)) {
-                log('Название комнаты может содержать только латинские буквы, цифры и дефисы (3-20 символов)', 'error');
-                return;
-            }
-            
-            try {
-                isConnecting = true;
-                updateConferenceStatus('connecting', 'Подключение...');
-                
-                // Получаем доступ к камере и микрофону
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: true, 
-                    video: true 
-                });
-                
-                // Отображаем локальное видео
-                localVideo.srcObject = localStream;
-                
-                // Подключаемся к комнате через Socket.IO
-                socket.emit('join_room', {
-                    room: currentRoom,
-                    role: 'teacher'
-                });
-                
-                updateConferenceStatus('online', 'Подключено к конференции');
-                isConnecting = false;
-                
-                // Автоматически начинаем урок после подключения
-                startLesson();
-                
-            } catch (err) {
-                log(`Ошибка подключения: ${err.message}`, 'error');
-                updateConferenceStatus('offline', 'Ошибка подключения');
-                isConnecting = false;
-                
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                    localStream = null;
-                }
-            }
-        }
+        };
         
-        // Отключение от конференции
-        async function disconnectFromConference() {
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
-            
-            if (remoteStream) {
-                remoteStream.getTracks().forEach(track => track.stop());
-                remoteStream = null;
-            }
-            
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            
-            conferenceVideo.srcObject = null;
-            localVideo.srcObject = null;
-            
-            socket.emit('leave_room', { room: currentRoom });
-            
-            updateConferenceStatus('offline', 'Нет подключения');
-            participantsList.innerHTML = '<li>Нет активных участников</li>';
-            log(`Отключено от комнаты "${currentRoom}"`, 'info');
-            currentRoom = null;
-            isConnecting = false;
-            
-            // Останавливаем урок при отключении
-            stopLesson();
-        }
-        
-        // Добавление участника в список
-        function addParticipant(userId, isTeacher = false) {
-            // Удаляем placeholder если он есть
-            if (participantsList.children.length === 1 && 
-                participantsList.children[0].textContent === 'Нет активных участников') {
-                participantsList.innerHTML = '';
-            }
-            
-            // Проверяем, не добавлен ли уже участник
-            if (participants[userId]) return;
-            
-            participants[userId] = true;
-            
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <span class="status-indicator status-online"></span>
-                <span>${userId} ${isTeacher ? '(учитель)' : '(ученик)'}</span>
-            `;
-            participantsList.appendChild(li);
-        }
-        
-        // Удаление участника из списка
-        function removeParticipant(userId) {
-            if (!participants[userId]) return;
-            
-            delete participants[userId];
-            
-            const items = participantsList.getElementsByTagName('li');
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].textContent.includes(userId)) {
-                    items[i].remove();
-                    break;
-                }
-            }
-            
-            // Если участников не осталось, показываем placeholder
-            if (participantsList.children.length === 0) {
-                const li = document.createElement('li');
-                li.textContent = 'Нет активных участников';
-                participantsList.appendChild(li);
-            }
-        }
-        
-        // Обновление статуса конференции
-        function updateConferenceStatus(status, text) {
-            conferenceStatusIndicator.className = `status-indicator status-${status}`;
-            conferenceStatusText.textContent = text;
-            
-            if (status === 'online') {
-                connectBtn.disabled = true;
-                disconnectBtn.disabled = false;
-            } else {
-                connectBtn.disabled = false;
-                disconnectBtn.disabled = true;
-            }
-        }
-        
-        // Обновление статуса AI
-        function updateAIStatus(status, text) {
-            aiStatusIndicator.className = `status-indicator status-${status}`;
-            aiStatusText.textContent = text;
-        }
-        
-        // Загрузка списка уроков
-        function loadLessons() {
-            fetch('/api/lessons')
-                .then(res => {
-                    if (!res.ok) throw new Error('Ошибка загрузки уроков');
-                    return res.json();
-                })
-                .then(data => {
-                    lessonSelect.innerHTML = '<option value="">-- Выберите урок --</option>';
-                    data.lessons.forEach(lesson => {
-                        const option = document.createElement('option');
-                        option.value = lesson.id;
-                        option.textContent = `${lesson.title} (${lesson.subject})`;
-                        lessonSelect.appendChild(option);
-                    });
-                    log('Список уроков загружен', 'success');
-                })
-                .catch(err => {
-                    log(`Ошибка: ${err.message}`, 'error');
-                });
-        }
-        
-        // Загрузка кадров аватара
-        async function loadAvatarFrames() {
+        // Загрузка списка кадров с сервера
+        async function loadFrames() {
             try {
                 const response = await fetch('/api/avatar_frames');
-                avatarFrames = await response.json();
-                
-                // Проверяем, что кадры загружены
-                if (!avatarFrames.mouth_neutral || avatarFrames.mouth_neutral.length === 0) {
-                    throw new Error('No avatar frames loaded');
-                }
-                
-                // Предзагружаем все изображения
-                await preloadFrames(avatarFrames);
-                
-                log('Кадры аватара загружены', 'success');
-                startAvatarAnimation();
-            } catch (err) {
-                log(`Ошибка загрузки кадров аватара: ${err.message}`, 'error');
-                // Создаем фолбэк анимацию
-                avatarFrames = {
-                    'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg'],
-                    'blink': ['/static/avatar/frames/mouth_neutral_001.jpg']
-                };
-                startAvatarAnimation();
-            }
-        }
-
-        // Предзагрузка изображений
-        function preloadFrames(frames) {
-            const promises = [];
-            for (const group in frames) {
-                frames[group].forEach(src => {
-                    promises.push(new Promise((resolve) => {
-                        const img = new Image();
-                        img.onload = resolve;
-                        img.onerror = resolve;
-                        img.src = src;
-                    }));
-                });
-            }
-            return Promise.all(promises);
-        }
-
-        // Анимация аватара
-        function startAvatarAnimation() {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-            
-            // Проверяем наличие кадров
-            if (!avatarFrames.mouth_neutral || avatarFrames.mouth_neutral.length === 0) {
-                log('Нет доступных кадров для анимации', 'error');
-                return;
-            }
-            
-            // Показываем первый кадр сразу
-            showFrame(avatarFrames.mouth_neutral[0]);
-            
-            // Запускаем анимацию
-            let lastBlinkTime = Date.now();
-            const blinkInterval = 3000 + Math.random() * 4000; // 3-7 секунд
-            
-            function animate() {
-                const now = Date.now();
-                const frameDuration = 100; // 10 FPS
-                
-                // Моргание
-                if (now - lastBlinkTime > blinkInterval) {
-                    const blinkFrames = avatarFrames.blink || avatarFrames.mouth_neutral;
-                    showFrame(blinkFrames[0]);
-                    lastBlinkTime = now;
-                    
-                    // Возвращаемся к обычному выражению через 200ms
-                    setTimeout(() => {
-                        showFrame(avatarFrames.mouth_neutral[0]);
-                    }, 200);
-                }
-                
-                // Анимация рта (если есть текущая фонема)
-                if (currentPhoneme && avatarFrames[currentPhoneme]) {
-                    const frames = avatarFrames[currentPhoneme];
-                    const frameIndex = Math.floor(now / frameDuration) % frames.length;
-                    showFrame(frames[frameIndex]);
-                } else {
-                    // Нейтральное выражение
-                    showFrame(avatarFrames.mouth_neutral[0]);
-                }
-                
-                animationFrameId = requestAnimationFrame(animate);
-            }
-            
-            animationFrameId = requestAnimationFrame(animate);
-        }
-
-        function showFrame(src) {
-            const img = new Image();
-            img.onload = function() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            };
-            img.src = src;
-        }
-        
-        // Настройка загрузки уроков
-        function setupUpload() {
-            uploadArea.addEventListener('click', () => lessonUpload.click());
-            
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.style.borderColor = '#3498db';
-            });
-            
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.style.borderColor = '#ccc';
-            });
-            
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.style.borderColor = '#ccc';
-                if (e.dataTransfer.files.length) {
-                    handleLessonUpload(e.dataTransfer.files[0]);
-                }
-            });
-            
-            lessonUpload.addEventListener('change', () => {
-                if (lessonUpload.files.length) {
-                    handleLessonUpload(lessonUpload.files[0]);
-                }
-            });
-        }
-        
-        function handleLessonUpload(file) {
-            if (!file.name.endsWith('.json')) {
-                log('Файл должен быть в формате JSON', 'error');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('lesson', file);
-            
-            const lessonId = prompt('Введите ID урока (оставьте пустым для автогенерации)');
-            if (lessonId !== null) {
-                formData.append('lesson_id', lessonId || '');
-                
-                fetch('/api/upload_lesson', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) throw new Error(data.error);
-                    log(`Урок успешно загружен с ID: ${data.lesson_id}`, 'success');
-                    loadLessons();
-                })
-                .catch(err => {
-                    log(`Ошибка загрузки урока: ${err.message}`, 'error');
-                });
-            }
-        }
-        
-        // Сохранение уроков в localStorage
-        function saveLessonsToLocal() {
-            fetch('/api/lessons')
-                .then(res => res.json())
-                .then(data => {
-                    localStorage.setItem('savedLessons', JSON.stringify(data.lessons));
-                    log('Уроки сохранены в localStorage', 'success');
-                });
-        }
-        
-        // Загрузка уроков из localStorage
-        function loadLessonsFromLocal() {
-            const saved = localStorage.getItem('savedLessons');
-            if (!saved) {
-                log('Нет сохраненных уроков', 'error');
-                return;
-            }
-            
-            try {
-                const lessons = JSON.parse(saved);
-                lessonSelect.innerHTML = '<option value="">-- Выберите урок --</option>';
-                lessons.forEach(lesson => {
-                    const option = document.createElement('option');
-                    option.value = lesson.id;
-                    option.textContent = `${lesson.title} (${lesson.subject})`;
-                    lessonSelect.appendChild(option);
-                });
-                log('Уроки загружены из localStorage', 'success');
-            } catch (err) {
-                log(`Ошибка загрузки уроков: ${err.message}`, 'error');
-            }
-        }
-        
-        // Начало урока
-        async function startLesson() {
-            const lessonId = lessonSelect.value;
-            if (!lessonId) {
-                log('Пожалуйста, выберите урок', 'error');
-                return;
-            }
-            
-            if (!currentRoom) {
-                log('Пожалуйста, подключитесь к конференции', 'error');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/start_lesson', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        lesson_id: lessonId,
-                        room_id: currentRoom
-                    })
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Неизвестная ошибка');
-                }
-                
                 const data = await response.json();
-                currentSessionId = data.session_id;
-                stopBtn.disabled = false;
-                lessonContent.innerHTML = '';
                 
-                updateAIStatus('online', 'Урок активен');
-                log(`Урок "${lessonSelect.options[lessonSelect.selectedIndex].text}" начат`, 'success');
+                // Заполняем кадры из ответа сервера
+                for (const group in data) {
+                    if (animationState.frames[group]) {
+                        animationState.frames[group] = data[group];
+                    }
+                }
                 
-            } catch (err) {
-                log(`Ошибка: ${err.message}`, 'error');
+                log('Кадры анимации загружены');
+                
+                // Если нет кадров для текущего состояния, загружаем первый доступный
+                if (animationState.frames[animationState.currentMouth].length === 0) {
+                    for (const group in animationState.frames) {
+                        if (animationState.frames[group].length > 0) {
+                            animationState.currentMouth = group;
+                            break;
+                        }
+                    }
+                }
+                
+                updateAvatarImage();
+                
+            } catch (error) {
+                log(`Ошибка загрузки кадров: ${error.message}`, 'error');
+                
+                // Фолбэк - используем только нейтральное выражение
+                animationState.frames.mouth_neutral = ['/static/avatar/frames/mouth_neutral_001.jpg'];
+                animationState.currentMouth = 'mouth_neutral';
+                updateAvatarImage();
             }
         }
         
-        // Остановка урока
-        async function stopLesson() {
-            if (!currentSessionId) return;
+        // Обновление изображения аватара
+        function updateAvatarImage() {
+            const frames = animationState.frames[animationState.currentMouth];
+            if (frames.length > 0) {
+                const frameIndex = animationState.frameIndex % frames.length;
+                avatarImage.src = frames[frameIndex];
+                currentStateSpan.textContent = `${animationState.currentMouth} (${frameIndex + 1}/${frames.length})`;
+            }
+        }
+        
+        // Запуск циклической анимации
+        function startAnimation() {
+            if (animationState.animationInterval) return;
             
-            try {
-                const response = await fetch('/api/stop_lesson', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: currentSessionId })
-                });
+            const delay = 1000 / ANIMATION_FPS;
+            animationState.animationInterval = setInterval(() => {
+                animationState.frameIndex++;
+                updateAvatarImage();
+            }, delay);
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            log('Анимация запущена');
+        }
+        
+        // Остановка анимации
+        function stopAnimation() {
+            if (animationState.animationInterval) {
+                clearInterval(animationState.animationInterval);
+                animationState.animationInterval = null;
+                animationState.frameIndex = 0;
+                updateAvatarImage();
                 
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Неизвестная ошибка');
-                }
-                
-                log('Урок остановлен', 'info');
+                startBtn.disabled = false;
                 stopBtn.disabled = true;
-                currentSessionId = null;
-                
-                updateAIStatus('offline', 'Урок не активен');
-                
-            } catch (err) {
-                log(`Ошибка: ${err.message}`, 'error');
+                log('Анимация остановлена');
             }
         }
         
-        // Воспроизведение аудио и анимация аватара
-        function playAudioWithAnimation(audioData, phonemes) {
-            // Создаем Blob из base64 аудио
-            const byteCharacters = atob(audioData);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: 'audio/wav' });
+        // Моргание
+        function blink() {
+            if (animationState.isBlinking) return;
             
-            // Устанавливаем источник для аудио элемента
-            avatarAudio.src = URL.createObjectURL(blob);
+            animationState.isBlinking = true;
+            const originalMouth = animationState.currentMouth;
             
-            // Обновляем фонемы для анимации
-            if (phonemes && phonemes.length > 0) {
-                currentPhoneme = phonemes[0][0]; // Берем первую фонему
-            }
-            
-            // Воспроизводим аудио
-            avatarAudio.play().catch(e => {
-                log(`Ошибка воспроизведения аудио: ${e.message}`, 'error');
-            });
-        }
-        
-        // Добавление учебного материала
-        async function addMaterial() {
-            const subject = materialSubject.value.trim();
-            const title = materialTitle.value.trim();
-            const content = materialContent.value.trim();
-            
-            if (!subject || !title || !content) {
-                log('Заполните все поля', 'error');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/add_material', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ subject, title, content })
-                });
+            // Переключаемся на кадры моргания
+            if (animationState.frames.blink.length > 0) {
+                animationState.currentMouth = 'blink';
+                updateAvatarImage();
                 
-                const data = await response.json();
-                if (data.success) {
-                    log('Материал успешно добавлен', 'success');
-                    materialSubject.value = '';
-                    materialTitle.value = '';
-                    materialContent.value = '';
-                } else {
-                    throw new Error(data.error || 'Ошибка добавления');
-                }
-            } catch (err) {
-                log(`Ошибка: ${err.message}`, 'error');
+                // Возвращаем предыдущее состояние после задержки
+                setTimeout(() => {
+                    animationState.currentMouth = originalMouth;
+                    animationState.isBlinking = false;
+                    updateAvatarImage();
+                }, BLINK_DURATION);
             }
+            
+            log('Моргание');
         }
         
-        // Отправка вопроса AI учителю
-        function askQuestion() {
-            const question = questionInput.value.trim();
-            if (!question) {
-                log('Введите текст вопроса', 'error');
-                return;
+        // Режим "говорит"
+        function startSpeaking() {
+            animationState.isSpeaking = true;
+            const mouthType = mouthSelect.value;
+            
+            if (animationState.frames[mouthType].length > 0) {
+                animationState.currentMouth = mouthType;
+                updateAvatarImage();
             }
             
-            if (!currentSessionId) {
-                log('Сначала начните урок', 'error');
-                return;
-            }
+            speakBtn.classList.add('active');
+            idleBtn.classList.remove('active');
+            log(`Режим "Говорит": ${mouthType}`);
+        }
+        
+        // Режим "ожидание"
+        function startIdle() {
+            animationState.isSpeaking = false;
+            animationState.currentMouth = 'mouth_neutral';
+            updateAvatarImage();
             
-            socket.emit('ask_question', {
-                session_id: currentSessionId,
-                question: question,
-                subject: lessonSelect.options[lessonSelect.selectedIndex]?.text.split('(')[1]?.replace(')', '') || 'обществознание'
-            });
-            
-            questionInput.value = '';
-            log(`Отправлен вопрос: ${question}`, 'info');
+            speakBtn.classList.remove('active');
+            idleBtn.classList.add('active');
+            log('Режим "Ожидание"');
         }
         
         // Логирование
@@ -920,261 +355,30 @@
             const now = new Date();
             const timeString = now.toLocaleTimeString();
             const entry = document.createElement('div');
-            entry.className = `log-entry log-${type}`;
+            entry.className = `log-entry`;
             entry.textContent = `[${timeString}] ${message}`;
             logDiv.appendChild(entry);
             logDiv.scrollTop = logDiv.scrollHeight;
         }
         
-        // Получение текущего предмета
-        function getCurrentSubject() {
-            const selectedOption = lessonSelect.options[lessonSelect.selectedIndex];
-            if (selectedOption) {
-                const text = selectedOption.text;
-                const match = text.match(/\(([^)]+)\)/);
-                return match ? match[1] : 'обществознание';
-            }
-            return 'обществознание';
-        }
-        
-        // WebSocket обработчики
-        socket.on('connect', () => {
-            log('Подключено к серверу AI учителя', 'success');
-            updateAIStatus('online', 'Сервер подключен');
-            loadLessons();
-            loadAvatarFrames();
-        });
-        
-        socket.on('disconnect', () => {
-            log('Отключено от сервера AI учителя', 'error');
-            updateAIStatus('offline', 'Сервер отключен');
-        });
-        
-        socket.on('ai_response', data => {
-            const responseDiv = document.createElement('div');
-            responseDiv.className = 'answer';
-            responseDiv.innerHTML = `
-                <p><strong>Ответ:</strong> ${data.text}</p>
-                ${data.materials?.length ? `<p><small>Источники: ${data.materials.map(m => m.title).join(', ')}</small></p>` : ''}
-            `;
-            lessonContent.appendChild(responseDiv);
-            
-            playAudioWithAnimation(data.audio, data.phonemes);
-            log('Получен ответ от AI учителя', 'success');
-        });
-        
-        socket.on('transcription', data => {
-            if (data.room === currentRoom) {
-                log(`Ученик: ${data.text}`, 'info');
-                // Автоматически отправляем вопрос учителю
-                socket.emit('ask_question', {
-                    session_id: currentSessionId,
-                    question: data.text,
-                    subject: getCurrentSubject()
-                });
-            }
-        });
-        
-        // Обработчики событий конференции
-        socket.on('room_joined', data => {
-            log(`Подключено к комнате "${data.room}" как ${data.role}`, 'success');
-            addParticipant(socket.id, data.role === 'teacher');
-            
-            // Отображаем список участников
-            data.users.forEach(user => {
-                if (user.userId !== socket.id) {
-                    addParticipant(user.userId, user.role === 'teacher');
-                }
-            });
-        });
-        
-        socket.on('user_joined', data => {
-            log(`Участник ${data.userId} присоединился к комнате`, 'info');
-            addParticipant(data.userId, data.role === 'teacher');
-            
-            // Если мы учитель, инициируем WebRTC соединение
-            if (users[socket.id]?.role === 'teacher') {
-                initWebRTC(data.userId);
-            }
-        });
-        
-        socket.on('user_left', data => {
-            log(`Участник ${data.userId} покинул комнату`, 'info');
-            removeParticipant(data.userId);
-        });
-        
-        socket.on('offer', async data => {
-            if (data.room !== currentRoom) return;
-            
-            try {
-                // Создаем RTCPeerConnection
-                peerConnection = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                });
-                
-                // Добавляем локальный поток
-                if (localStream) {
-                    localStream.getTracks().forEach(track => {
-                        peerConnection.addTrack(track, localStream);
-                    });
-                }
-                
-                // Обработчик входящих треков
-                peerConnection.ontrack = event => {
-                    if (!remoteStream) {
-                        remoteStream = new MediaStream();
-                        conferenceVideo.srcObject = remoteStream;
-                    }
-                    event.streams[0].getTracks().forEach(track => {
-                        remoteStream.addTrack(track);
-                    });
-                };
-                
-                // Обработчик ICE кандидатов
-                peerConnection.onicecandidate = event => {
-                    if (event.candidate) {
-                        socket.emit('ice_candidate', {
-                            to: data.from,
-                            candidate: event.candidate,
-                            room: currentRoom
-                        });
-                    }
-                };
-                
-                // Устанавливаем удаленное описание
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                
-                // Создаем ответ
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                
-                // Отправляем ответ
-                socket.emit('answer', {
-                    to: data.from,
-                    answer: answer,
-                    room: currentRoom
-                });
-                
-            } catch (err) {
-                log(`Ошибка обработки оффера: ${err.message}`, 'error');
-            }
-        });
-        
-        socket.on('answer', async data => {
-            if (!peerConnection || data.room !== currentRoom) return;
-            
-            try {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } catch (err) {
-                log(`Ошибка обработки ответа: ${err.message}`, 'error');
-            }
-        });
-        
-        socket.on('ice_candidate', async data => {
-            if (!peerConnection || data.room !== currentRoom) return;
-            
-            try {
-                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-            } catch (err) {
-                log(`Ошибка обработки ICE кандидата: ${err.message}`, 'error');
-            }
-        });
-        
-        // Инициализация WebRTC соединения (для учителя)
-        async function initWebRTC(userId) {
-            try {
-                // Создаем RTCPeerConnection
-                peerConnection = new RTCPeerConnection({
-                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-                });
-                
-                // Добавляем локальный поток
-                if (localStream) {
-                    localStream.getTracks().forEach(track => {
-                        peerConnection.addTrack(track, localStream);
-                    });
-                }
-                
-                // Обработчик входящих треков
-                peerConnection.ontrack = event => {
-                    if (!remoteStream) {
-                        remoteStream = new MediaStream();
-                        conferenceVideo.srcObject = remoteStream;
-                    }
-                    event.streams[0].getTracks().forEach(track => {
-                        remoteStream.addTrack(track);
-                    });
-                };
-                
-                // Обработчик ICE кандидатов
-                peerConnection.onicecandidate = event => {
-                    if (event.candidate) {
-                        socket.emit('ice_candidate', {
-                            to: userId,
-                            candidate: event.candidate,
-                            room: currentRoom
-                        });
-                    }
-                };
-                
-                // Создаем оффер
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                
-                // Отправляем оффер ученику
-                socket.emit('offer', {
-                    to: userId,
-                    offer: offer,
-                    room: currentRoom
-                });
-                
-            } catch (err) {
-                log(`Ошибка инициализации WebRTC: ${err.message}`, 'error');
-            }
-        }
-        
         // Обработчики событий
+        startBtn.addEventListener('click', startAnimation);
+        stopBtn.addEventListener('click', stopAnimation);
+        blinkBtn.addEventListener('click', blink);
+        speakBtn.addEventListener('click', startSpeaking);
+        idleBtn.addEventListener('click', startIdle);
+        
+        mouthSelect.addEventListener('change', () => {
+            if (animationState.isSpeaking) {
+                startSpeaking(); // Обновляем анимацию, если в режиме речи
+            }
+        });
+        
+        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            log('Система AI учителя инициализирована', 'info');
-            updateAIStatus('offline', 'Урок не активен');
-            updateConferenceStatus('offline', 'Нет подключения');
-            
-            // Инициализация
-            setupUpload();
-            loadLessons();
-            loadAvatarFrames();
-            
-            // Скрываем кнопку "Начать урок" (теперь урок начинается автоматически при подключении)
-            startBtn.style.display = 'none';
-        });
-        
-        connectBtn.addEventListener('click', connectToConference);
-        disconnectBtn.addEventListener('click', disconnectFromConference);
-        saveLessonsBtn.addEventListener('click', saveLessonsToLocal);
-        loadLessonsBtn.addEventListener('click', loadLessonsFromLocal);
-        askBtn.addEventListener('click', askQuestion);
-        questionInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') askQuestion();
-        });
-        addMaterialBtn.addEventListener('click', addMaterial);
-        
-        // Очистка при закрытии страницы
-        window.addEventListener('beforeunload', () => {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            if (remoteStream) {
-                remoteStream.getTracks().forEach(track => track.stop());
-            }
-            if (peerConnection) {
-                peerConnection.close();
-            }
-            if (currentRoom) {
-                socket.emit('leave_room', { room: currentRoom });
-            }
+            log('Система анимации инициализирована');
+            loadFrames();
+            startIdle(); // Начинаем с нейтрального состояния
         });
     </script>
 </body>
