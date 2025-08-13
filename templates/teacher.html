@@ -72,6 +72,14 @@
             margin: 20px 0;
             font-size: 18px;
         }
+        #teacher-id {
+            font-weight: bold;
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: #e1f5fe;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +103,7 @@
             <button id="start-conference-btn">Начать конференцию</button>
         </div>
         
+        <div id="teacher-id" style="display: none;">Ваш ID: <span id="peer-id-display"></span></div>
         <a id="conference-link" href="/conference" target="_blank" style="display:none;">Присоединиться к конференции</a>
         
         <div id="debug"></div>
@@ -115,6 +124,8 @@
         const avatarSelect = document.getElementById('avatar-select');
         const startConferenceBtn = document.getElementById('start-conference-btn');
         const conferenceLink = document.getElementById('conference-link');
+        const teacherIdDiv = document.getElementById('teacher-id');
+        const peerIdDisplay = document.getElementById('peer-id-display');
         
         // Состояние
         let currentAvatar = '';
@@ -257,20 +268,6 @@
             }
             
             try {
-                // Создаем видео поток из анимации
-                const videoStream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: 400,
-                        height: 400,
-                        frameRate: FPS
-                    },
-                    audio: false
-                });
-                
-                // Заменяем видео поток на нашу анимацию
-                const videoTrack = videoStream.getVideoTracks()[0];
-                const animationStream = new MediaStream();
-                
                 // Создаем canvas для преобразования изображений в видео поток
                 const canvas = document.createElement('canvas');
                 canvas.width = 400;
@@ -291,49 +288,40 @@
                 
                 generateFrame();
                 
-                const stream = canvas.captureStream(FPS);
-                const animationTrack = stream.getVideoTracks()[0];
-                animationStream.addTrack(animationTrack);
+                // Создаем видео поток из canvas
+                const stream = canvas.captureStream(10); // 10 FPS
                 
-                // Получаем аудио поток с сервера
-                const audioStream = await navigator.mediaDevices.getUserMedia({
-                    video: false,
-                    audio: {
-                        autoGainControl: false,
-                        echoCancellation: false,
-                        noiseSuppression: false
-                    }
-                });
-                
-                // Подключаемся к PeerJS серверу
+                // Подключаемся к PeerJS (используем бесплатный сервер PeerJS)
                 peer = new Peer({
-                    host: 'localhost',
-                    port: 9000,
-                    path: '/peerjs'
+                    host: '0.peerjs.com',
+                    port: 443,
+                    secure: true,
+                    path: '/'
                 });
                 
                 peer.on('open', (id) => {
                     log(`Подключено к серверу конференции с ID: ${id}`);
                     conferenceLink.style.display = 'block';
+                    teacherIdDiv.style.display = 'block';
+                    peerIdDisplay.textContent = id;
                     
-                    // Создаем вызов
-                    call = peer.call('conference_host', animationStream);
-                    call.on('stream', (remoteStream) => {
-                        log("Удаленный поток получен");
+                    // Обработка входящих соединений
+                    peer.on('call', (incomingCall) => {
+                        log(`Входящее соединение от: ${incomingCall.peer}`);
+                        incomingCall.answer(stream);
+                        
+                        incomingCall.on('stream', (remoteStream) => {
+                            log(`Получен поток от участника: ${incomingCall.peer}`);
+                        });
                     });
                     
-                    // Подключаем аудио
-                    const audioContext = new AudioContext();
-                    const audioSource = audioContext.createMediaStreamSource(audioStream);
-                    audioSource.connect(audioContext.destination);
+                    startConferenceBtn.disabled = true;
+                    log("Готов к подключению участников...");
                 });
                 
                 peer.on('error', (err) => {
                     log(`Ошибка PeerJS: ${err}`);
                 });
-                
-                startConferenceBtn.disabled = true;
-                log("Конференция начата");
                 
             } catch (error) {
                 log(`Ошибка при запуске конференции: ${error}`);
