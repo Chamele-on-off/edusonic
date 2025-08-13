@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def animation_test():
-    return render_template('animation_test.html')
+    return render_template('teacher.html')
 
 @app.route('/api/avatar_frames')
 def get_avatar_frames():
