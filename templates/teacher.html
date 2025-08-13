@@ -34,7 +34,7 @@
             margin: 20px 0;
             flex-wrap: wrap;
         }
-        button, select {
+        button, select, input {
             padding: 10px 15px;
             border-radius: 4px;
         }
@@ -48,7 +48,7 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
-        select {
+        select, input {
             border: 1px solid #ddd;
             min-width: 150px;
         }
@@ -66,7 +66,12 @@
             max-height: 200px;
             overflow-y: auto;
         }
+        #conference-link {
+            margin-top: 20px;
+            text-align: center;
+        }
     </style>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -86,6 +91,16 @@
         <div class="controls">
             <button id="start-btn" disabled>Старт</button>
             <button id="stop-btn" disabled>Стоп</button>
+            <button id="stream-btn" disabled>Начать трансляцию</button>
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="speech-text" placeholder="Текст для озвучки">
+            <button id="speak-btn" disabled>Озвучить</button>
+        </div>
+        
+        <div id="conference-link">
+            <a href="/conference" target="_blank">Присоединиться к конференции</a>
         </div>
         
         <div id="debug"></div>
@@ -102,6 +117,9 @@
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
         const loadBtn = document.getElementById('load-btn');
+        const streamBtn = document.getElementById('stream-btn');
+        const speachBtn = document.getElementById('speak-btn');
+        const speechText = document.getElementById('speech-text');
         const avatarSelect = document.getElementById('avatar-select');
         
         // Состояние
@@ -110,6 +128,8 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
+        let socket = io();
+        let isStreaming = false;
         
         // Логирование
         function log(message) {
@@ -186,6 +206,8 @@
                 if (loadedImages.length > 0) {
                     statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
                     startBtn.disabled = false;
+                    streamBtn.disabled = false;
+                    speachBtn.disabled = false;
                     avatar.src = loadedImages[0].src;
                     currentFrame = 0;
                 } else {
@@ -205,6 +227,17 @@
             currentFrame = currentFrame % loadedImages.length;
             avatar.src = loadedImages[currentFrame].src;
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
+            
+            // Если идет трансляция, отправляем кадр
+            if (isStreaming) {
+                const frameData = {
+                    avatar: currentAvatar,
+                    frame: currentFrame,
+                    frameCount: loadedImages.length,
+                    imageSrc: loadedImages[currentFrame].src
+                };
+                socket.emit('stream_frame', frameData);
+            }
         }
         
         // Запуск анимации
@@ -234,6 +267,38 @@
             }
         }
         
+        // Начать трансляцию
+        function startStreaming() {
+            if (isStreaming) return;
+            
+            isStreaming = true;
+            streamBtn.textContent = 'Остановить трансляцию';
+            socket.emit('start_stream', { 
+                avatar: currentAvatar,
+                frameCount: loadedImages.length
+            });
+            log('Трансляция начата');
+        }
+        
+        // Остановить трансляцию
+        function stopStreaming() {
+            isStreaming = false;
+            streamBtn.textContent = 'Начать трансляцию';
+            log('Трансляция остановлена');
+        }
+        
+        // Озвучить текст
+        function speakText() {
+            const text = speechText.value.trim();
+            if (!text) return;
+            
+            socket.emit('text_to_speech', {
+                text: text,
+                lang: 'ru'
+            });
+            log(`Отправлен текст для озвучки: "${text}"`);
+        }
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             // Загрузка списка аватаров
@@ -248,12 +313,30 @@
             // Кнопка загрузки
             loadBtn.addEventListener('click', () => {
                 stopAnimation();
+                stopStreaming();
                 loadAvatarFrames(currentAvatar);
             });
             
             // Управление анимацией
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
+            
+            // Управление трансляцией
+            streamBtn.addEventListener('click', () => {
+                if (isStreaming) {
+                    stopStreaming();
+                } else {
+                    startStreaming();
+                }
+            });
+            
+            // Озвучка текста
+            speachBtn.addEventListener('click', speakText);
+            speechText.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    speakText();
+                }
+            });
         });
     </script>
 </body>
