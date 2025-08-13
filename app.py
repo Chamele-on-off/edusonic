@@ -42,7 +42,12 @@ for dir_path in [CONFIG["lessons_dir"], CONFIG["avatar_frames_dir"], CONFIG["aud
 # Инициализация Flask
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
-socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
+socketio = SocketIO(app, 
+                   async_mode='threading', 
+                   cors_allowed_origins="*",
+                   logger=True,
+                   engineio_logger=True)
+
 executor = ThreadPoolExecutor(max_workers=CONFIG["max_workers"])
 
 # Глобальные переменные для хранения комнат и пользователей
@@ -189,6 +194,25 @@ class SimpleTTS:
 knowledge_base = KnowledgeBase()
 tts_engine = SimpleTTS()
 
+def generate_default_avatar_frame():
+    """Генерирует дефолтный кадр аватара"""
+    img = Image.new('RGB', (640, 480), (240, 240, 240))
+    draw = ImageDraw.Draw(img)
+    
+    # Голова
+    draw.ellipse([(120, 50), (520, 430)], outline=(0, 0, 0), width=2, fill=(255, 255, 255))
+    
+    # Глаза
+    draw.ellipse([(220, 180), (280, 240)], fill=(0, 0, 0))
+    draw.ellipse([(360, 180), (420, 240)], fill=(0, 0, 0))
+    
+    # Рот (нейтральный)
+    draw.line([(270, 360), (370, 360)], fill=(0, 0, 0), width=2)
+    
+    buf = BytesIO()
+    img.save(buf, format='JPEG')
+    return buf.getvalue()
+
 # API Endpoints
 @app.route('/')
 def home():
@@ -200,11 +224,43 @@ def get_avatar_frames():
     frames = {}
     frames_dir = Path(CONFIG["avatar_frames_dir"])
     
+    # Создаем дефолтные кадры, если папка пуста
+    if not any(frames_dir.iterdir()):
+        try:
+            # Нейтральное выражение
+            img = Image.new('RGB', (640, 480), (240, 240, 240))
+            draw = ImageDraw.Draw(img)
+            draw.ellipse([(120, 50), (520, 430)], outline=(0, 0, 0), width=2, fill=(255, 255, 255))
+            draw.ellipse([(220, 180), (280, 240)], fill=(0, 0, 0))
+            draw.ellipse([(360, 180), (420, 240)], fill=(0, 0, 0))
+            draw.line([(270, 360), (370, 360)], fill=(0, 0, 0), width=2)
+            img.save(frames_dir / "mouth_neutral_001.jpg")
+            
+            # Открытый рот
+            img = Image.new('RGB', (640, 480), (240, 240, 240))
+            draw = ImageDraw.Draw(img)
+            draw.ellipse([(120, 50), (520, 430)], outline=(0, 0, 0), width=2, fill=(255, 255, 255))
+            draw.ellipse([(220, 180), (280, 240)], fill=(0, 0, 0))
+            draw.ellipse([(360, 180), (420, 240)], fill=(0, 0, 0))
+            draw.ellipse([(270, 320), (370, 400)], fill=(0, 0, 0))
+            img.save(frames_dir / "mouth_aa_001.jpg")
+            
+            # Моргание
+            img = Image.new('RGB', (640, 480), (240, 240, 240))
+            draw = ImageDraw.Draw(img)
+            draw.ellipse([(120, 50), (520, 430)], outline=(0, 0, 0), width=2, fill=(255, 255, 255))
+            draw.line([(220, 210), (280, 210)], fill=(0, 0, 0), width=2)
+            draw.line([(360, 210), (420, 210)], fill=(0, 0, 0), width=2)
+            draw.line([(270, 360), (370, 360)], fill=(0, 0, 0), width=2)
+            img.save(frames_dir / "blink_001.jpg")
+        except Exception as e:
+            logger.error(f"Ошибка создания дефолтных кадров: {str(e)}")
+    
     for group in ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink']:
-        frame_files = sorted(frames_dir.glob(f"{group}_*.jpg"))
+        frame_files = sorted(frames_dir.glob(f"{group}_*.jpg")) or sorted(frames_dir.glob(f"{group}_*.png"))
         frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
     
-    # Если нет кадров, возвращаем пустой список
+    # Если нет кадров, возвращаем дефолтный
     if not any(frames.values()):
         frames = {
             'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg'],
@@ -490,7 +546,11 @@ if __name__ == '__main__':
         host = os.getenv('HOST', '0.0.0.0')
         port = int(os.getenv('PORT', 5000))
         logger.info(f"Сервер запущен на {host}:{port}")
-        socketio.run(app, host=host, port=port, debug=True)
+        socketio.run(app, 
+                    host=host, 
+                    port=port, 
+                    debug=True,
+                    allow_unsafe_werkzeug=True)
     except Exception as e:
         logger.error(f"Ошибка сервера: {str(e)}")
     finally:
