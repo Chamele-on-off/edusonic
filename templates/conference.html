@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Конференция</title>
+    <title>Видеоконференция</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -21,40 +21,48 @@
         }
         h1 {
             text-align: center;
+            margin-bottom: 20px;
         }
         #video-container {
             display: flex;
             flex-wrap: wrap;
             gap: 20px;
             justify-content: center;
-            margin: 20px 0;
+            margin-bottom: 20px;
         }
         .video-box {
             width: 400px;
             border: 1px solid #ddd;
-            padding: 10px;
             border-radius: 4px;
-            background: #f9f9f9;
+            overflow: hidden;
+            background: #f0f0f0;
         }
         .video-box h3 {
-            margin-top: 0;
+            margin: 0;
+            padding: 10px;
+            background: #3498db;
+            color: white;
             text-align: center;
         }
-        video {
+        #teacher-video {
             width: 100%;
-            background: #000;
+            height: 400px;
+            display: block;
+            object-fit: contain;
+            background: black;
+        }
+        #user-video {
+            width: 100%;
+            height: 300px;
+            display: block;
+            object-fit: cover;
+            background: #eee;
         }
         #controls {
             display: flex;
-            flex-direction: column;
-            align-items: center;
             gap: 10px;
+            justify-content: center;
             margin: 20px 0;
-        }
-        #connection-controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
         }
         button {
             padding: 10px 15px;
@@ -68,178 +76,140 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
-        input {
-            padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            min-width: 300px;
-        }
         #status {
             text-align: center;
             margin: 10px 0;
             font-family: monospace;
+            color: #666;
         }
-        #my-peer-id {
-            font-weight: bold;
+        #audio-container {
+            margin-top: 20px;
             text-align: center;
-            margin: 10px 0;
-            padding: 10px;
-            background: #e1f5fe;
-            border-radius: 4px;
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <h1>Участник конференции</h1>
+        <h1>Видеоконференция</h1>
         
         <div id="video-container">
             <div class="video-box">
-                <h3>Мое видео</h3>
-                <video id="local-video" autoplay muted></video>
+                <h3>Учитель</h3>
+                <img id="teacher-video" src="" alt="Аватар учителя">
             </div>
+            
             <div class="video-box">
-                <h3>Анимация учителя</h3>
-                <video id="remote-video" autoplay></video>
+                <h3>Вы</h3>
+                <video id="user-video" autoplay muted></video>
+                <div id="controls">
+                    <button id="start-cam-btn">Включить камеру</button>
+                    <button id="start-mic-btn" disabled>Включить микрофон</button>
+                </div>
             </div>
         </div>
         
-        <div id="controls">
-            <div id="connection-controls">
-                <input type="text" id="peer-id-input" placeholder="Введите ID учителя">
-                <button id="join-btn">Присоединиться</button>
-                <button id="leave-btn" disabled>Покинуть</button>
-            </div>
-            <div id="my-peer-id">Ваш ID: <span id="peer-id-display"></span></div>
-        </div>
+        <div id="status">Ожидание подключения учителя...</div>
         
-        <div id="status">Готов к подключению</div>
+        <div id="audio-container">
+            <audio id="audio-player" controls></audio>
+        </div>
     </div>
 
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Элементы
-        const localVideo = document.getElementById('local-video');
-        const remoteVideo = document.getElementById('remote-video');
-        const joinBtn = document.getElementById('join-btn');
-        const leaveBtn = document.getElementById('leave-btn');
-        const peerIdInput = document.getElementById('peer-id-input');
+        const teacherVideo = document.getElementById('teacher-video');
+        const userVideo = document.getElementById('user-video');
+        const startCamBtn = document.getElementById('start-cam-btn');
+        const startMicBtn = document.getElementById('start-mic-btn');
         const statusDiv = document.getElementById('status');
-        const myPeerIdDiv = document.getElementById('my-peer-id');
-        const peerIdDisplay = document.getElementById('peer-id-display');
+        const audioPlayer = document.getElementById('audio-player');
         
-        // Переменные
-        let peer = null;
-        let localStream = null;
-        let call = null;
+        // Socket.io
+        const socket = io();
         
-        // Обновление статуса
-        function updateStatus(message) {
-            statusDiv.textContent = message;
-            console.log(message);
-        }
+        // Состояние
+        let userStream = null;
+        let teacherFrames = [];
+        let currentTeacherFrame = 0;
+        let animationInterval = null;
         
-        // Присоединение к конференции
-        async function joinConference() {
-            const teacherPeerId = peerIdInput.value.trim();
-            if (!teacherPeerId) {
-                updateStatus("Введите ID учителя");
-                return;
-            }
-            
-            try {
-                updateStatus("Подготовка к подключению...");
+        // Обработчики событий Socket.io
+        socket.on('connect', () => {
+            statusDiv.textContent = 'Подключено к серверу. Ожидание трансляции...';
+        });
+        
+        socket.on('animation_state', (state) => {
+            if (state.is_playing && state.frames && state.frames.length > 0) {
+                teacherFrames = state.frames.map(frame => `/frames/${state.avatar_name}/${frame}`);
+                currentTeacherFrame = state.current_frame;
                 
-                // Получаем доступ к камере и микрофону пользователя
-                localStream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
-                    audio: true
-                });
-                
-                localVideo.srcObject = localStream;
-                
-                // Подключаемся к PeerJS серверу
-                peer = new Peer({
-                    host: '0.peerjs.com',
-                    port: 443,
-                    secure: true,
-                    path: '/'
-                });
-                
-                peer.on('open', (id) => {
-                    updateStatus(`Подключено к серверу. Ваш ID: ${id}`);
-                    peerIdDisplay.textContent = id;
-                    
-                    // Подключаемся к учителю
-                    call = peer.call(teacherPeerId, localStream);
-                    
-                    call.on('stream', (remoteStream) => {
-                        updateStatus("Подключено к учителю");
-                        remoteVideo.srcObject = remoteStream;
-                    });
-                    
-                    call.on('close', () => {
-                        updateStatus("Соединение с учителем закрыто");
-                        remoteVideo.srcObject = null;
-                    });
-                    
-                    call.on('error', (err) => {
-                        updateStatus(`Ошибка соединения: ${err}`);
-                    });
-                    
-                    joinBtn.disabled = true;
-                    leaveBtn.disabled = false;
-                    peerIdInput.disabled = true;
-                });
-                
-                peer.on('error', (err) => {
-                    updateStatus(`Ошибка PeerJS: ${err}`);
-                });
-                
-            } catch (error) {
-                updateStatus(`Ошибка: ${error.message}`);
-                console.error(error);
-                
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                    localStream = null;
-                    localVideo.srcObject = null;
+                if (animationInterval) {
+                    clearInterval(animationInterval);
                 }
+                
+                const fps = state.fps || 10;
+                animationInterval = setInterval(() => {
+                    currentTeacherFrame = (currentTeacherFrame + 1) % teacherFrames.length;
+                    teacherVideo.src = teacherFrames[currentTeacherFrame];
+                }, 1000 / fps);
+                
+                statusDiv.textContent = `Трансляция анимации: ${state.avatar_name} (${fps} FPS)`;
+            } else {
+                if (animationInterval) {
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+                statusDiv.textContent = 'Трансляция анимации остановлена';
+            }
+        });
+        
+        socket.on('frame_update', (data) => {
+            teacherVideo.src = data.frame_url;
+        });
+        
+        socket.on('audio_stream', (data) => {
+            const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+            audioPlayer.src = audioSrc;
+            audioPlayer.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
+        });
+        
+        // Управление камерой и микрофоном
+        async function startCamera() {
+            try {
+                userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                userVideo.srcObject = userStream;
+                startCamBtn.disabled = true;
+                startMicBtn.disabled = false;
+                statusDiv.textContent = 'Камера включена. Вы можете включить микрофон.';
+            } catch (err) {
+                console.error('Ошибка доступа к камере:', err);
+                statusDiv.textContent = 'Ошибка доступа к камере: ' + err.message;
             }
         }
         
-        // Покинуть конференцию
-        function leaveConference() {
-            if (call) {
-                call.close();
-                call = null;
+        async function startMicrophone() {
+            try {
+                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Добавляем аудиопоток к видеопотоку
+                if (userStream) {
+                    audioStream.getAudioTracks().forEach(track => {
+                        userStream.addTrack(track);
+                    });
+                }
+                startMicBtn.disabled = true;
+                statusDiv.textContent = 'Микрофон включен. Вы в конференции!';
+            } catch (err) {
+                console.error('Ошибка доступа к микрофону:', err);
+                statusDiv.textContent = 'Ошибка доступа к микрофону: ' + err.message;
             }
-            
-            if (peer) {
-                peer.destroy();
-                peer = null;
-            }
-            
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-                localVideo.srcObject = null;
-            }
-            
-            remoteVideo.srcObject = null;
-            
-            joinBtn.disabled = false;
-            leaveBtn.disabled = true;
-            peerIdInput.disabled = false;
-            updateStatus("Отключено от конференции");
         }
         
-        // Обработчики событий
-        joinBtn.addEventListener('click', joinConference);
-        leaveBtn.addEventListener('click', leaveConference);
-        
-        // Очистка при закрытии страницы
-        window.addEventListener('beforeunload', leaveConference);
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            startCamBtn.addEventListener('click', startCamera);
+            startMicBtn.addEventListener('click', startMicrophone);
+        });
     </script>
 </body>
 </html>
