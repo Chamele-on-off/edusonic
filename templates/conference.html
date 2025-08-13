@@ -5,162 +5,237 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Видеоконференция</title>
     <style>
+        :root {
+            --primary-color: #4285f4;
+            --danger-color: #ea4335;
+            --success-color: #34a853;
+            --warning-color: #fbbc05;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
         body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        #container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        #video-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
-        .video-box {
-            width: 400px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            overflow: hidden;
-            background: #f0f0f0;
-        }
-        .video-box h3 {
-            margin: 0;
-            padding: 10px;
-            background: #3498db;
+            font-family: 'Roboto', Arial, sans-serif;
+            background-color: #202124;
             color: white;
-            text-align: center;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        #teacher-video-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: black;
+            position: relative;
+            overflow: hidden;
         }
         #teacher-video {
             width: 100%;
-            height: 400px;
-            display: block;
+            height: 100%;
             object-fit: contain;
+        }
+        #user-video-container {
+            position: absolute;
+            bottom: 80px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+            overflow: hidden;
             background: black;
+            z-index: 10;
         }
         #user-video {
             width: 100%;
-            height: 300px;
-            display: block;
+            height: 100%;
             object-fit: cover;
-            background: #eee;
         }
         #controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(32, 33, 36, 0.8);
+            padding: 10px;
             display: flex;
-            gap: 10px;
             justify-content: center;
-            margin: 20px 0;
+            gap: 15px;
+            z-index: 100;
         }
-        button {
-            padding: 10px 15px;
-            border-radius: 4px;
-            background: #3498db;
-            color: white;
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
             border: none;
+            background: #3c4043;
+            color: white;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s;
         }
-        button:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
+        .control-btn:hover {
+            background: #5f6368;
+            transform: translateY(-3px);
+        }
+        .control-btn.active {
+            background: var(--primary-color);
+        }
+        .control-btn.danger {
+            background: var(--danger-color);
+        }
+        .control-btn.success {
+            background: var(--success-color);
+        }
+        .control-btn.warning {
+            background: var(--warning-color);
+        }
+        .control-btn i {
+            pointer-events: none;
         }
         #status {
-            text-align: center;
-            margin: 10px 0;
-            font-family: monospace;
-            color: #666;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 10;
         }
-        #audio-container {
-            margin-top: 20px;
-            text-align: center;
+        #room-name {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 10;
+        }
+        #audio-player {
+            display: none;
+        }
+        .video-off-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #3c4043;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
         }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div id="container">
-        <h1>Видеоконференция</h1>
+    <div id="main-container">
+        <div id="teacher-video-container">
+            <img id="teacher-video" src="" alt="Аватар учителя">
+            <div id="status">Подключение к комнате...</div>
+            <div id="room-name"></div>
+        </div>
         
-        <div id="video-container">
-            <div class="video-box">
-                <h3>Учитель</h3>
-                <img id="teacher-video" src="" alt="Аватар учителя">
-            </div>
-            
-            <div class="video-box">
-                <h3>Вы</h3>
-                <video id="user-video" autoplay muted></video>
-                <div id="controls">
-                    <button id="start-cam-btn">Включить камеру</button>
-                    <button id="start-mic-btn" disabled>Включить микрофон</button>
-                </div>
+        <div id="user-video-container">
+            <video id="user-video" autoplay muted></video>
+            <div id="user-video-off" class="video-off-placeholder hidden">
+                <i class="fas fa-video-slash"></i> Камера выключена
             </div>
         </div>
         
-        <div id="status">Ожидание подключения учителя...</div>
-        
-        <div id="audio-container">
-            <audio id="audio-player" controls></audio>
+        <div id="controls">
+            <button id="mute-btn" class="control-btn" title="Отключить звук">
+                <i class="fas fa-microphone"></i>
+            </button>
+            <button id="video-btn" class="control-btn" title="Отключить видео">
+                <i class="fas fa-video"></i>
+            </button>
+            <button id="screen-btn" class="control-btn warning" title="Демонстрация экрана">
+                <i class="fas fa-desktop"></i>
+            </button>
+            <button id="leave-btn" class="control-btn danger" title="Покинуть конференцию">
+                <i class="fas fa-phone-slash"></i>
+            </button>
         </div>
     </div>
+    
+    <audio id="audio-player"></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const userVideo = document.getElementById('user-video');
-        const startCamBtn = document.getElementById('start-cam-btn');
-        const startMicBtn = document.getElementById('start-mic-btn');
+        const userVideoContainer = document.getElementById('user-video-container');
+        const userVideoOff = document.getElementById('user-video-off');
+        const muteBtn = document.getElementById('mute-btn');
+        const videoBtn = document.getElementById('video-btn');
+        const screenBtn = document.getElementById('screen-btn');
+        const leaveBtn = document.getElementById('leave-btn');
         const statusDiv = document.getElementById('status');
+        const roomNameSpan = document.getElementById('room-name');
         const audioPlayer = document.getElementById('audio-player');
+        
+        // Параметры URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomName = urlParams.get('room') || 'default';
+        roomNameSpan.textContent = `Комната: ${roomName}`;
         
         // Socket.io
         const socket = io();
         
         // Состояние
         let userStream = null;
+        let screenStream = null;
+        let isMuted = false;
+        let isVideoOff = false;
+        let isSharingScreen = false;
         let teacherFrames = [];
         let currentTeacherFrame = 0;
         let animationInterval = null;
         
+        // Подключение к комнате
+        socket.emit('join_room', {
+            room: roomName,
+            is_teacher: false
+        });
+        
         // Обработчики событий Socket.io
-        socket.on('connect', () => {
-            statusDiv.textContent = 'Подключено к серверу. Ожидание трансляции...';
+        socket.on('room_joined', (data) => {
+            statusDiv.textContent = 'Вы подключены к конференции';
+            if (data.animation_state && data.animation_state.is_playing) {
+                startAnimation(data.animation_state);
+            }
         });
         
         socket.on('animation_state', (state) => {
             if (state.is_playing && state.frames && state.frames.length > 0) {
-                teacherFrames = state.frames.map(frame => `/frames/${state.avatar_name}/${frame}`);
-                currentTeacherFrame = state.current_frame;
-                
-                if (animationInterval) {
-                    clearInterval(animationInterval);
-                }
-                
-                const fps = state.fps || 10;
-                animationInterval = setInterval(() => {
-                    currentTeacherFrame = (currentTeacherFrame + 1) % teacherFrames.length;
-                    teacherVideo.src = teacherFrames[currentTeacherFrame];
-                }, 1000 / fps);
-                
-                statusDiv.textContent = `Трансляция анимации: ${state.avatar_name} (${fps} FPS)`;
+                startAnimation(state);
+                statusDiv.textContent = `Анимация запущена: ${state.avatar_name}`;
             } else {
                 if (animationInterval) {
                     clearInterval(animationInterval);
                     animationInterval = null;
                 }
-                statusDiv.textContent = 'Трансляция анимации остановлена';
+                statusDiv.textContent = 'Анимация остановлена';
             }
         });
         
@@ -174,41 +249,201 @@
             audioPlayer.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
         });
         
+        // Запуск анимации
+        function startAnimation(state) {
+            teacherFrames = state.frames.map(frame => `/frames/${state.avatar_name}/${frame}`);
+            currentTeacherFrame = state.current_frame;
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            const fps = state.fps || 15;
+            animationInterval = setInterval(() => {
+                currentTeacherFrame = (currentTeacherFrame + 1) % teacherFrames.length;
+                teacherVideo.src = teacherFrames[currentTeacherFrame];
+            }, 1000 / fps);
+        }
+        
         // Управление камерой и микрофоном
         async function startCamera() {
             try {
-                userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                userStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: true 
+                });
+                
                 userVideo.srcObject = userStream;
-                startCamBtn.disabled = true;
-                startMicBtn.disabled = false;
-                statusDiv.textContent = 'Камера включена. Вы можете включить микрофон.';
+                
+                // Отслеживаем отключение микрофона в потоке
+                const audioTrack = userStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    audioTrack.onended = () => {
+                        if (!isMuted) {
+                            toggleMute();
+                        }
+                    };
+                }
+                
+                // Отслеживаем отключение видео в потоке
+                const videoTrack = userStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    videoTrack.onended = () => {
+                        if (!isVideoOff) {
+                            toggleVideo();
+                        }
+                    };
+                }
+                
             } catch (err) {
-                console.error('Ошибка доступа к камере:', err);
-                statusDiv.textContent = 'Ошибка доступа к камере: ' + err.message;
+                console.error('Ошибка доступа к медиаустройствам:', err);
+                statusDiv.textContent = 'Ошибка доступа к камере/микрофону: ' + err.message;
             }
         }
         
-        async function startMicrophone() {
+        // Демонстрация экрана
+        async function shareScreen() {
             try {
-                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                // Добавляем аудиопоток к видеопотоку
-                if (userStream) {
-                    audioStream.getAudioTracks().forEach(track => {
-                        userStream.addTrack(track);
-                    });
-                }
-                startMicBtn.disabled = true;
-                statusDiv.textContent = 'Микрофон включен. Вы в конференции!';
+                screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: true,
+                    audio: false
+                });
+                
+                // Заменяем видеопоток на экран
+                const videoTrack = screenStream.getVideoTracks()[0];
+                const sender = userStream.getVideoTracks()[0];
+                if (sender) sender.replaceTrack(videoTrack);
+                
+                screenStream.getVideoTracks()[0].onended = () => {
+                    if (isSharingScreen) {
+                        toggleScreenShare();
+                    }
+                };
+                
+                isSharingScreen = true;
+                screenBtn.classList.add('active');
+                statusDiv.textContent = 'Демонстрация экрана включена';
             } catch (err) {
-                console.error('Ошибка доступа к микрофону:', err);
-                statusDiv.textContent = 'Ошибка доступа к микрофону: ' + err.message;
+                console.error('Ошибка демонстрации экрана:', err);
+                statusDiv.textContent = 'Ошибка демонстрации экрана: ' + err.message;
             }
+        }
+        
+        // Остановка демонстрации экрана
+        function stopScreenShare() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+            
+            // Возвращаем камеру
+            if (userStream && !isVideoOff) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        const videoTrack = stream.getVideoTracks()[0];
+                        const sender = userStream.getVideoTracks()[0];
+                        if (sender) sender.replaceTrack(videoTrack);
+                        stream.getAudioTracks().forEach(track => track.stop()); // Останавливаем лишние треки
+                    });
+            }
+            
+            isSharingScreen = false;
+            screenBtn.classList.remove('active');
+            statusDiv.textContent = 'Демонстрация экрана отключена';
+        }
+        
+        // Переключение микрофона
+        function toggleMute() {
+            if (!userStream) return;
+            
+            isMuted = !isMuted;
+            userStream.getAudioTracks().forEach(track => {
+                track.enabled = !isMuted;
+            });
+            
+            // Отправляем состояние на сервер
+            socket.emit('toggle_mute', {
+                room: roomName,
+                is_muted: isMuted
+            });
+            
+            // Обновляем кнопку
+            if (isMuted) {
+                muteBtn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+                muteBtn.classList.add('danger');
+                statusDiv.textContent = 'Микрофон отключен';
+            } else {
+                muteBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                muteBtn.classList.remove('danger');
+                statusDiv.textContent = 'Микрофон включен';
+            }
+        }
+        
+        // Переключение видео
+        function toggleVideo() {
+            if (!userStream) return;
+            
+            isVideoOff = !isVideoOff;
+            userStream.getVideoTracks().forEach(track => {
+                track.enabled = !isVideoOff;
+            });
+            
+            // Отправляем состояние на сервер
+            socket.emit('toggle_video', {
+                room: roomName,
+                is_video_off: isVideoOff
+            });
+            
+            // Показываем/скрываем плейсхолдер
+            if (isVideoOff) {
+                userVideoOff.classList.remove('hidden');
+                videoBtn.innerHTML = '<i class="fas fa-video-slash"></i>';
+                videoBtn.classList.add('danger');
+                statusDiv.textContent = 'Камера отключена';
+            } else {
+                userVideoOff.classList.add('hidden');
+                videoBtn.innerHTML = '<i class="fas fa-video"></i>';
+                videoBtn.classList.remove('danger');
+                statusDiv.textContent = 'Камера включена';
+            }
+        }
+        
+        // Переключение демонстрации экрана
+        function toggleScreenShare() {
+            if (isSharingScreen) {
+                stopScreenShare();
+            } else {
+                shareScreen();
+            }
+        }
+        
+        // Покинуть конференцию
+        function leaveConference() {
+            // Останавливаем все потоки
+            if (userStream) {
+                userStream.getTracks().forEach(track => track.stop());
+            }
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Отправляем событие на сервер
+            socket.emit('leave_room', { room: roomName });
+            
+            // Перенаправляем на главную страницу
+            window.location.href = '/';
         }
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            startCamBtn.addEventListener('click', startCamera);
-            startMicBtn.addEventListener('click', startMicrophone);
+            // Запускаем камеру
+            startCamera();
+            
+            // Назначаем обработчики кнопок
+            muteBtn.addEventListener('click', toggleMute);
+            videoBtn.addEventListener('click', toggleVideo);
+            screenBtn.addEventListener('click', toggleScreenShare);
+            leaveBtn.addEventListener('click', leaveConference);
         });
     </script>
 </body>
