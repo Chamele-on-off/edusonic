@@ -88,11 +88,10 @@
             border-radius: 4px;
         }
         
-        video {
+        #remote-video {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            border-radius: 4px;
         }
         
         #controls {
@@ -288,7 +287,7 @@
                 </select>
                 <input type="text" id="room-name" placeholder="Название комнаты (например: math-lesson-1)">
                 <div id="controls">
-                    <button id="start-btn">Начать урок</button>
+                    <button id="start-btn" style="display: none;">Начать урок</button>
                     <button id="stop-btn" disabled>Остановить</button>
                     <button id="connect-btn" class="success">Подключиться</button>
                     <button id="disconnect-btn" class="danger" disabled>Отключиться</button>
@@ -319,7 +318,9 @@
             </div>
             <div class="video-wrapper">
                 <div class="video-title">Видеоконференция</div>
-                <div id="conference-video"></div>
+                <div id="conference-video">
+                    <video id="remote-video" autoplay playsinline></video>
+                </div>
             </div>
         </div>
         
@@ -346,6 +347,7 @@
     
     <!-- Библиотеки -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     
     <script>
         // Глобальные переменные
@@ -359,7 +361,7 @@
         const canvas = document.getElementById('avatar-canvas');
         const ctx = canvas.getContext('2d');
         const avatarAudio = document.getElementById('avatar-audio');
-        const conferenceVideo = document.getElementById('conference-video');
+        const remoteVideo = document.getElementById('remote-video');
         const lessonContent = document.getElementById('lesson-content');
         const logDiv = document.getElementById('log');
         const aiStatusIndicator = document.getElementById('ai-status');
@@ -379,23 +381,99 @@
         const addMaterialBtn = document.getElementById('add-material-btn');
         
         // Настройки
+        const PEERJS_CONFIG = {
+            host: window.location.hostname,
+            port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
+            path: '/peerjs',
+            secure: window.location.protocol === 'https:'
+        };
+        
         let currentSessionId = null;
         let currentRoom = null;
-        let mediaStream = null;
+        let peer = null;
         let peerConnection = null;
+        let mediaStream = null;
+        let currentPeerId = null;
         let avatarFrames = {};
         let currentPhoneme = 'mouth_neutral';
         let currentFrameIndex = 0;
         let lastFrameTime = 0;
         let animationFrameId = null;
         let isConnecting = false;
-        let localVideoElement = null;
         
         // Проверка допустимости имени комнаты
         function isValidRoomName(name) {
             return /^[a-z0-9-]{3,20}$/.test(name);
         }
 
+        // Инициализация PeerJS
+        function initPeerJS(roomName) {
+            // Уничтожаем предыдущее соединение, если оно есть
+            if (peer) {
+                peer.destroy();
+            }
+            
+            // Создаем Peer с ID, основанным на названии комнаты
+            currentPeerId = `room-${roomName}-teacher`;
+            peer = new Peer(currentPeerId, PEERJS_CONFIG);
+            
+            peer.on('open', (id) => {
+                log(`PeerJS подключен с ID: ${id}`, 'success');
+                updateConferenceStatus('online', 'Готов к подключению учеников');
+                isConnecting = false;
+            });
+            
+            peer.on('error', (err) => {
+                log(`Ошибка PeerJS: ${err.message}`, 'error');
+                updateConferenceStatus('offline', 'Ошибка подключения');
+                isConnecting = false;
+                
+                // Автоматически пересоздаем Peer при ошибке
+                setTimeout(() => initPeerJS(roomName), 1000);
+            });
+            
+            peer.on('call', (call) => {
+                log(`Входящий видеозвонок от ${call.peer}`, 'info');
+                
+                // Отвечаем на звонок с нашим потоком
+                call.answer(mediaStream);
+                
+                call.on('stream', (remoteStream) => {
+                    log(`Получен видеопоток от ${call.peer}`, 'success');
+                    remoteVideo.srcObject = remoteStream;
+                    addParticipant(call.peer);
+                });
+                
+                call.on('close', () => {
+                    log(`Звонок от ${call.peer} завершен`, 'info');
+                    removeParticipant(call.peer);
+                    remoteVideo.srcObject = null;
+                });
+                
+                call.on('error', (err) => {
+                    log(`Ошибка звонка: ${err.message}`, 'error');
+                    removeParticipant(call.peer);
+                    remoteVideo.srcObject = null;
+                });
+            });
+            
+            peer.on('connection', (conn) => {
+                log(`Входящее соединение от ${conn.peer}`, 'info');
+                peerConnection = conn;
+                addParticipant(conn.peer);
+                
+                conn.on('data', (data) => {
+                    log(`Сообщение от ${conn.peer}: ${data}`, 'info');
+                });
+                
+                conn.on('close', () => {
+                    log(`Соединение с ${conn.peer} закрыто`, 'info');
+                    removeParticipant(conn.peer);
+                    peerConnection = null;
+                });
+            });
+        }
+        
         // Подключение к конференции
         async function connectToConference() {
             if (isConnecting) {
@@ -418,27 +496,17 @@
                 isConnecting = true;
                 updateConferenceStatus('connecting', 'Подключение...');
                 
-                // Получаем медиапоток (видео + аудио)
+                // Получаем доступ к микрофону
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true,
-                    audio: true
+                    audio: true, 
+                    video: false 
                 });
                 
-                // Создаем элемент для отображения локального видео
-                localVideoElement = document.createElement('video');
-                localVideoElement.srcObject = mediaStream;
-                localVideoElement.autoplay = true;
-                localVideoElement.muted = true;
-                conferenceVideo.appendChild(localVideoElement);
+                // Инициализируем Peer с ID, соответствующим комнате
+                initPeerJS(currentRoom);
                 
-                // Создаем комнату на сервере
-                socket.emit('create_room', {
-                    room: currentRoom,
-                    userId: `teacher_${Date.now()}`
-                });
-                
-                updateConferenceStatus('online', 'Подключено к конференции');
-                isConnecting = false;
+                // Автоматически начинаем урок после подключения
+                startLesson();
                 
             } catch (err) {
                 log(`Ошибка подключения: ${err.message}`, 'error');
@@ -449,26 +517,32 @@
                     mediaStream.getTracks().forEach(track => track.stop());
                     mediaStream = null;
                 }
+                
+                if (peer) {
+                    peer.destroy();
+                    peer = null;
+                }
             }
         }
         
         // Отключение от конференции
         async function disconnectFromConference() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
             }
             
-            if (localVideoElement) {
-                localVideoElement.remove();
-                localVideoElement = null;
+            if (peer) {
+                peer.destroy();
+                peer = null;
             }
             
-            // Уведомляем сервер о выходе из комнаты
-            if (currentRoom) {
-                socket.emit('leave_room', { room: currentRoom });
-            }
-            
+            remoteVideo.srcObject = null;
             updateConferenceStatus('offline', 'Нет подключения');
             participantsList.innerHTML = '<li>Нет активных участников</li>';
             log(`Отключено от комнаты "${currentRoom}"`, 'info');
@@ -480,7 +554,7 @@
         }
         
         // Добавление участника в список
-        function addParticipant(userId) {
+        function addParticipant(peerId) {
             // Удаляем placeholder если он есть
             if (participantsList.children.length === 1 && 
                 participantsList.children[0].textContent === 'Нет активных участников') {
@@ -490,16 +564,16 @@
             const li = document.createElement('li');
             li.innerHTML = `
                 <span class="status-indicator status-online"></span>
-                <span>${userId}</span>
+                <span>${peerId}</span>
             `;
             participantsList.appendChild(li);
         }
         
         // Удаление участника из списка
-        function removeParticipant(userId) {
+        function removeParticipant(peerId) {
             const items = participantsList.getElementsByTagName('li');
             for (let i = 0; i < items.length; i++) {
-                if (items[i].textContent.includes(userId)) {
+                if (items[i].textContent.includes(peerId)) {
                     items[i].remove();
                     break;
                 }
@@ -555,40 +629,31 @@
                 });
         }
         
-        // Загрузка кадров аватара напрямую из папки
+        // Загрузка кадров аватара
         async function loadAvatarFrames() {
-            const frameGroups = ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink'];
-            avatarFrames = {};
-            
-            for (const group of frameGroups) {
-                avatarFrames[group] = [];
-                let i = 1;
-                while (true) {
-                    const framePath = `/static/avatar/frames/${group}_${i.toString().padStart(3, '0')}.jpg`;
-                    try {
-                        // Проверяем существование файла
-                        const response = await fetch(framePath, { method: 'HEAD' });
-                        if (response.ok) {
-                            avatarFrames[group].push(framePath);
-                            i++;
-                        } else {
-                            break;
-                        }
-                    } catch (err) {
-                        break;
-                    }
+            try {
+                const response = await fetch('/api/avatar_frames');
+                avatarFrames = await response.json();
+                
+                // Устанавливаем нейтральное выражение по умолчанию
+                currentPhoneme = 'mouth_neutral';
+                
+                // Если нет кадров для нейтрального выражения, создаем фолбэк
+                if (!avatarFrames['mouth_neutral'] || avatarFrames['mouth_neutral'].length === 0) {
+                    avatarFrames['mouth_neutral'] = ['/static/avatar/frames/mouth_neutral_001.jpg'];
                 }
-            }
-            
-            // Если нет ни одного кадра, создаем fallback
-            if (Object.values(avatarFrames).flat().length === 0) {
-                console.warn("No avatar frames found, using fallback");
+                
+                log('Кадры аватара загружены', 'success');
+                startAvatarAnimation();
+            } catch (err) {
+                log(`Ошибка загрузки кадров аватара: ${err.message}`, 'error');
+                
+                // Создаем фолбэк анимацию с нейтральным выражением
                 avatarFrames = {
-                    'mouth_neutral': ['/static/avatar/fallback.jpg']
+                    'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg']
                 };
+                startAvatarAnimation();
             }
-            
-            startAvatarAnimation();
         }
         
         // Анимация аватара
@@ -938,25 +1003,6 @@
             }
         });
         
-        socket.on('room_created', (data) => {
-            log(`Комната "${data.room}" создана`, 'success');
-            updateConferenceStatus('online', 'Комната активна');
-        });
-        
-        socket.on('user_joined', (data) => {
-            if (data.room === currentRoom) {
-                log(`Ученик присоединился: ${data.userId}`, 'info');
-                addParticipant(data.userId);
-            }
-        });
-        
-        socket.on('user_left', (data) => {
-            if (data.room === currentRoom) {
-                log(`Ученик вышел: ${data.userId}`, 'info');
-                removeParticipant(data.userId);
-            }
-        });
-        
         socket.on('error', data => {
             log(`Ошибка: ${data.message}`, 'error');
         });
@@ -971,14 +1017,15 @@
             setupUpload();
             loadLessons();
             loadAvatarFrames();
+            
+            // Скрываем кнопку "Начать урок" (теперь урок начинается автоматически при подключении)
+            startBtn.style.display = 'none';
         });
         
         connectBtn.addEventListener('click', connectToConference);
         disconnectBtn.addEventListener('click', disconnectFromConference);
         saveLessonsBtn.addEventListener('click', saveLessonsToLocal);
         loadLessonsBtn.addEventListener('click', loadLessonsFromLocal);
-        startBtn.addEventListener('click', startLesson);
-        stopBtn.addEventListener('click', stopLesson);
         askBtn.addEventListener('click', askQuestion);
         questionInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') askQuestion();
@@ -990,11 +1037,11 @@
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
             }
+            if (peer) {
+                peer.destroy();
+            }
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
-            }
-            if (currentRoom) {
-                socket.emit('leave_room', { room: currentRoom });
             }
         });
     </script>
