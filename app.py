@@ -1,5 +1,4 @@
 from flask import Flask, render_template, send_from_directory
-import os
 from pathlib import Path
 
 app = Flask(__name__, static_folder='static')
