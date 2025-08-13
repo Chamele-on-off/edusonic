@@ -19,10 +19,10 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        #avatar-canvas {
+        #avatar {
             width: 400px;
             height: 400px;
-            margin: 0 auto;
+            margin: 20px auto;
             display: block;
             border: 1px solid #ddd;
             background-color: #f0f0f0;
@@ -32,7 +32,6 @@
             gap: 10px;
             justify-content: center;
             margin: 20px 0;
-            flex-wrap: wrap;
         }
         button {
             padding: 10px 15px;
@@ -42,194 +41,100 @@
             border-radius: 4px;
             cursor: pointer;
         }
-        button:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
-        }
-        select, input {
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-        }
         #status {
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
-            margin: 10px 0;
             text-align: center;
-        }
-        #debug {
-            margin-top: 20px;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 4px;
+            margin: 10px 0;
             font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <h1 style="text-align: center;">Анимация цифрового аватара</h1>
+        <h1 style="text-align: center;">Анимация аватара</h1>
         
-        <div class="controls">
-            <select id="avatar-select">
-                <option value="alex">Alex</option>
-                <!-- Добавьте другие аватары -->
-            </select>
-            <input type="number" id="fps-input" value="10" min="1" max="30" style="width: 60px;">
-            <span>FPS</span>
-        </div>
+        <img id="avatar" src="" alt="Аватар">
         
-        <canvas id="avatar-canvas" width="400" height="400"></canvas>
-        
-        <div id="status">Инициализация...</div>
+        <div id="status">Загрузка...</div>
         
         <div class="controls">
             <button id="start-btn">Старт</button>
             <button id="stop-btn" disabled>Стоп</button>
-            <button id="blink-btn">Моргнуть</button>
-            <select id="animation-select">
-                <!-- Заполнится динамически -->
-            </select>
         </div>
-        
-        <div id="debug"></div>
     </div>
 
     <script>
+        // Конфигурация
+        const FPS = 10;
+        const FRAMES = [
+            '/static/avatar/frames/mouth_neutral_001.jpg',
+            '/static/avatar/frames/mouth_neutral_002.jpg',
+            '/static/avatar/frames/mouth_aa_001.jpg',
+            '/static/avatar/frames/mouth_aa_002.jpg',
+            '/static/avatar/frames/blink_01.jpg',
+            '/static/avatar/frames/blink_02.jpg'
+            // Добавьте все остальные кадры в нужном порядке
+        ];
+        
         // Элементы
-        const canvas = document.getElementById('avatar-canvas');
-        const ctx = canvas.getContext('2d');
+        const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
-        const debugDiv = document.getElementById('debug');
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
-        const blinkBtn = document.getElementById('blink-btn');
-        const animationSelect = document.getElementById('animation-select');
-        const avatarSelect = document.getElementById('avatar-select');
-        const fpsInput = document.getElementById('fps-input');
         
         // Состояние
-        let animationFrames = {};
-        let loadedImages = {};
-        let currentAnimation = '';
         let currentFrame = 0;
         let animationInterval = null;
-        let isBlinking = false;
-        let currentFPS = 10;
+        let loadedImages = [];
         
-        // Логирование
-        function log(message) {
-            const now = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += `[${now}] ${message}<br>`;
-            debugDiv.scrollTop = debugDiv.scrollHeight;
-        }
-        
-        // Загрузка изображения
-        function loadImage(url) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error(`Не удалось загрузить: ${url}`));
-                img.src = url;
-            });
-        }
-        
-        // Загрузка всех кадров для аватара
-        async function loadAvatarFrames(avatarName) {
+        // Загрузка всех кадров
+        async function loadAllFrames() {
+            statusDiv.textContent = "Загрузка кадров...";
+            
             try {
-                statusDiv.textContent = `Загрузка аватара ${avatarName}...`;
-                log(`Загрузка кадров для ${avatarName}`);
+                for (const frameUrl of FRAMES) {
+                    const img = await loadImage(frameUrl);
+                    loadedImages.push(img);
+                }
                 
-                const response = await fetch(`/api/avatar_frames/${avatarName}`);
-                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-                
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                animationFrames = data;
-                log(`Загружено ${Object.keys(data).length} типов анимации`);
-                
-                // Заполняем select с типами анимации
-                animationSelect.innerHTML = '';
-                Object.keys(data).forEach(animType => {
-                    const option = document.createElement('option');
-                    option.value = animType;
-                    option.textContent = animType;
-                    animationSelect.appendChild(option);
-                });
-                
-                currentAnimation = animationSelect.value;
-                await preloadAnimation(currentAnimation);
-                
+                statusDiv.textContent = `Загружено ${loadedImages.length} кадров`;
                 startBtn.disabled = false;
-                statusDiv.textContent = `Готово: ${avatarName}`;
                 
             } catch (error) {
                 statusDiv.textContent = `Ошибка: ${error.message}`;
-                log(`Ошибка загрузки: ${error.message}`);
                 console.error(error);
             }
         }
         
-        // Предзагрузка анимации
-        async function preloadAnimation(animType) {
-            if (!animationFrames[animType]) {
-                log(`Анимация ${animType} не найдена`);
-                return;
-            }
-            
-            loadedImages[animType] = [];
-            
-            for (const frameUrl of animationFrames[animType]) {
-                try {
-                    const img = await loadImage(frameUrl);
-                    loadedImages[animType].push(img);
-                    log(`Загружен кадр: ${frameUrl.split('/').pop()}`);
-                } catch (error) {
-                    log(error.message);
-                }
-            }
-            
-            log(`Загружено ${loadedImages[animType].length} кадров для ${animType}`);
-            showFrame(0);
+        // Загрузка одного изображения
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error(`Не удалось загрузить: ${src}`));
+                img.src = src;
+            });
         }
         
-        // Отображение кадра
-        function showFrame(frameIndex) {
-            const frames = loadedImages[currentAnimation];
-            if (!frames || !frames[frameIndex]) {
-                log(`Кадр не загружен: ${currentAnimation}[${frameIndex}]`);
-                return;
-            }
+        // Показать текущий кадр
+        function showFrame() {
+            if (loadedImages.length === 0) return;
             
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(frames[frameIndex], 0, 0, canvas.width, canvas.height);
-            statusDiv.textContent = `${currentAnimation} (${frameIndex + 1}/${frames.length})`;
-        }
-        
-        // Обновление анимации
-        function updateAnimation() {
-            const frames = loadedImages[currentAnimation];
-            if (!frames || frames.length === 0) return;
-            
-            currentFrame = (currentFrame + 1) % frames.length;
-            showFrame(currentFrame);
+            currentFrame = currentFrame % loadedImages.length;
+            avatar.src = loadedImages[currentFrame].src;
+            statusDiv.textContent = `Кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
         
         // Запуск анимации
         function startAnimation() {
             if (animationInterval) return;
             
-            currentFPS = parseInt(fpsInput.value) || 10;
-            const delay = 1000 / currentFPS;
+            animationInterval = setInterval(() => {
+                currentFrame++;
+                showFrame();
+            }, 1000 / FPS);
             
-            animationInterval = setInterval(updateAnimation, delay);
             startBtn.disabled = true;
             stopBtn.disabled = false;
-            log(`Анимация "${currentAnimation}" запущена (${currentFPS} FPS)`);
         }
         
         // Остановка анимации
@@ -238,68 +143,17 @@
                 clearInterval(animationInterval);
                 animationInterval = null;
                 currentFrame = 0;
-                showFrame(currentFrame);
+                showFrame();
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                log("Анимация остановлена");
             }
-        }
-        
-        // Моргание
-        async function doBlink() {
-            if (isBlinking || !loadedImages.blink || loadedImages.blink.length === 0) {
-                log("Невозможно выполнить моргание");
-                return;
-            }
-            
-            isBlinking = true;
-            const originalAnimation = currentAnimation;
-            currentAnimation = 'blink';
-            currentFrame = 0;
-            showFrame(currentFrame);
-            log("Начало моргания");
-            
-            setTimeout(() => {
-                currentAnimation = originalAnimation;
-                currentFrame = 0;
-                showFrame(currentFrame);
-                isBlinking = false;
-                log("Конец моргания");
-            }, 300);
         }
         
         // Инициализация
-        document.addEventListener('DOMContentLoaded', async () => {
-            log("Инициализация анимации");
-            
-            // Обработчики событий
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAllFrames();
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
-            blinkBtn.addEventListener('click', doBlink);
-            
-            animationSelect.addEventListener('change', async () => {
-                const newAnim = animationSelect.value;
-                if (newAnim !== currentAnimation) {
-                    currentAnimation = newAnim;
-                    currentFrame = 0;
-                    
-                    if (!loadedImages[currentAnimation]) {
-                        await preloadAnimation(currentAnimation);
-                    } else {
-                        showFrame(currentFrame);
-                    }
-                    
-                    log(`Выбрана анимация: ${currentAnimation}`);
-                }
-            });
-            
-            avatarSelect.addEventListener('change', async () => {
-                stopAnimation();
-                await loadAvatarFrames(avatarSelect.value);
-            });
-            
-            // Загрузка первого аватара
-            await loadAvatarFrames(avatarSelect.value);
         });
     </script>
 </body>
