@@ -66,6 +66,7 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
+            position: relative;
         }
         
         .video-title {
@@ -84,7 +85,7 @@
         #conference-video {
             width: 100%;
             height: 400px;
-            background: #f0f0f0;
+            background: #000;
             border-radius: 4px;
         }
         
@@ -251,10 +252,6 @@
             border-color: #3498db;
         }
         
-        .video-container {
-            position: relative;
-        }
-        
         @media (max-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
@@ -325,7 +322,7 @@
                 <canvas id="avatar-canvas" width="640" height="480"></canvas>
                 <audio id="avatar-audio" hidden></audio>
             </div>
-            <div class="video-wrapper video-container">
+            <div class="video-wrapper">
                 <div class="video-title">Видеоконференция</div>
                 <video id="conference-video" autoplay playsinline></video>
                 <video id="local-video" autoplay playsinline muted></video>
@@ -391,17 +388,15 @@
         // Настройки
         let currentSessionId = null;
         let currentRoom = null;
-        let currentPeerId = null;
         let avatarFrames = {};
         let currentPhoneme = 'mouth_neutral';
-        let currentFrameIndex = 0;
-        let lastFrameTime = 0;
         let animationFrameId = null;
         let isConnecting = false;
         let localStream = null;
         let remoteStream = null;
         let participants = {};
-        
+        let peerConnection = null;
+
         // Проверка допустимости имени комнаты
         function isValidRoomName(name) {
             return /^[a-z0-9-]{3,20}$/.test(name);
@@ -472,6 +467,11 @@
             if (remoteStream) {
                 remoteStream.getTracks().forEach(track => track.stop());
                 remoteStream = null;
+            }
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
             }
             
             conferenceVideo.srcObject = null;
@@ -580,74 +580,101 @@
                 const response = await fetch('/api/avatar_frames');
                 avatarFrames = await response.json();
                 
-                // Устанавливаем нейтральное выражение по умолчанию
-                currentPhoneme = 'mouth_neutral';
-                
-                // Если нет кадров для нейтрального выражения, создаем фолбэк
-                if (!avatarFrames['mouth_neutral'] || avatarFrames['mouth_neutral'].length === 0) {
-                    avatarFrames['mouth_neutral'] = ['/static/avatar/frames/mouth_neutral_001.jpg'];
+                // Проверяем, что кадры загружены
+                if (!avatarFrames.mouth_neutral || avatarFrames.mouth_neutral.length === 0) {
+                    throw new Error('No avatar frames loaded');
                 }
+                
+                // Предзагружаем все изображения
+                await preloadFrames(avatarFrames);
                 
                 log('Кадры аватара загружены', 'success');
                 startAvatarAnimation();
             } catch (err) {
                 log(`Ошибка загрузки кадров аватара: ${err.message}`, 'error');
-                
-                // Создаем фолбэк анимацию с нейтральным выражением
+                // Создаем фолбэк анимацию
                 avatarFrames = {
-                    'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg']
+                    'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg'],
+                    'blink': ['/static/avatar/frames/mouth_neutral_001.jpg']
                 };
                 startAvatarAnimation();
             }
         }
-        
+
+        // Предзагрузка изображений
+        function preloadFrames(frames) {
+            const promises = [];
+            for (const group in frames) {
+                frames[group].forEach(src => {
+                    promises.push(new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = resolve;
+                        img.onerror = resolve;
+                        img.src = src;
+                    }));
+                });
+            }
+            return Promise.all(promises);
+        }
+
         // Анимация аватара
         function startAvatarAnimation() {
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
             }
             
-            // Сразу показываем первый кадр
-            const showFirstFrame = () => {
-                if (!avatarFrames[currentPhoneme] || avatarFrames[currentPhoneme].length === 0) {
-                    currentPhoneme = 'mouth_neutral';
-                }
-                
-                const frames = avatarFrames[currentPhoneme];
-                const img = new Image();
-                img.onload = function() {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                };
-                img.src = frames[0];
-            };
+            // Проверяем наличие кадров
+            if (!avatarFrames.mouth_neutral || avatarFrames.mouth_neutral.length === 0) {
+                log('Нет доступных кадров для анимации', 'error');
+                return;
+            }
             
-            showFirstFrame();
+            // Показываем первый кадр сразу
+            showFrame(avatarFrames.mouth_neutral[0]);
             
-            const animate = (timestamp) => {
-                if (!avatarFrames[currentPhoneme] || avatarFrames[currentPhoneme].length === 0) {
-                    currentPhoneme = 'mouth_neutral';
-                }
+            // Запускаем анимацию
+            let lastBlinkTime = Date.now();
+            const blinkInterval = 3000 + Math.random() * 4000; // 3-7 секунд
+            
+            function animate() {
+                const now = Date.now();
+                const frameDuration = 100; // 10 FPS
                 
-                const frames = avatarFrames[currentPhoneme];
-                const frameDuration = 100; // ms per frame
-                
-                if (timestamp - lastFrameTime > frameDuration) {
-                    currentFrameIndex = (currentFrameIndex + 1) % frames.length;
-                    lastFrameTime = timestamp;
+                // Моргание
+                if (now - lastBlinkTime > blinkInterval) {
+                    const blinkFrames = avatarFrames.blink || avatarFrames.mouth_neutral;
+                    showFrame(blinkFrames[0]);
+                    lastBlinkTime = now;
                     
-                    const img = new Image();
-                    img.onload = function() {
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    };
-                    img.src = frames[currentFrameIndex];
+                    // Возвращаемся к обычному выражению через 200ms
+                    setTimeout(() => {
+                        showFrame(avatarFrames.mouth_neutral[0]);
+                    }, 200);
+                }
+                
+                // Анимация рта (если есть текущая фонема)
+                if (currentPhoneme && avatarFrames[currentPhoneme]) {
+                    const frames = avatarFrames[currentPhoneme];
+                    const frameIndex = Math.floor(now / frameDuration) % frames.length;
+                    showFrame(frames[frameIndex]);
+                } else {
+                    // Нейтральное выражение
+                    showFrame(avatarFrames.mouth_neutral[0]);
                 }
                 
                 animationFrameId = requestAnimationFrame(animate);
-            };
+            }
             
             animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function showFrame(src) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = src;
         }
         
         // Настройка загрузки уроков
@@ -952,11 +979,23 @@
         socket.on('room_joined', data => {
             log(`Подключено к комнате "${data.room}" как ${data.role}`, 'success');
             addParticipant(socket.id, data.role === 'teacher');
+            
+            // Отображаем список участников
+            data.users.forEach(user => {
+                if (user.userId !== socket.id) {
+                    addParticipant(user.userId, user.role === 'teacher');
+                }
+            });
         });
         
         socket.on('user_joined', data => {
             log(`Участник ${data.userId} присоединился к комнате`, 'info');
             addParticipant(data.userId, data.role === 'teacher');
+            
+            // Если мы учитель, инициируем WebRTC соединение
+            if (users[socket.id]?.role === 'teacher') {
+                initWebRTC(data.userId);
+            }
         });
         
         socket.on('user_left', data => {
@@ -965,35 +1004,23 @@
         });
         
         socket.on('offer', async data => {
+            if (data.room !== currentRoom) return;
+            
             try {
-                // Получаем локальный поток
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-                localVideo.srcObject = stream;
-                
                 // Создаем RTCPeerConnection
-                const pc = new RTCPeerConnection({
+                peerConnection = new RTCPeerConnection({
                     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
                 });
                 
                 // Добавляем локальный поток
-                stream.getTracks().forEach(track => pc.addTrack(track, stream));
-                
-                // Устанавливаем удаленное описание
-                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-                
-                // Создаем ответ
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                
-                // Отправляем ответ обратно
-                socket.emit('answer', {
-                    to: data.from,
-                    answer: answer,
-                    room: currentRoom
-                });
+                if (localStream) {
+                    localStream.getTracks().forEach(track => {
+                        peerConnection.addTrack(track, localStream);
+                    });
+                }
                 
                 // Обработчик входящих треков
-                pc.ontrack = event => {
+                peerConnection.ontrack = event => {
                     if (!remoteStream) {
                         remoteStream = new MediaStream();
                         conferenceVideo.srcObject = remoteStream;
@@ -1004,7 +1031,7 @@
                 };
                 
                 // Обработчик ICE кандидатов
-                pc.onicecandidate = event => {
+                peerConnection.onicecandidate = event => {
                     if (event.candidate) {
                         socket.emit('ice_candidate', {
                             to: data.from,
@@ -1014,20 +1041,97 @@
                     }
                 };
                 
+                // Устанавливаем удаленное описание
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                
+                // Создаем ответ
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Отправляем ответ
+                socket.emit('answer', {
+                    to: data.from,
+                    answer: answer,
+                    room: currentRoom
+                });
+                
             } catch (err) {
                 log(`Ошибка обработки оффера: ${err.message}`, 'error');
             }
         });
         
         socket.on('answer', async data => {
-            // В текущей реализации учитель не ожидает ответа, так как инициирует соединение
-            log(`Получен answer от ${data.from}`, 'info');
+            if (!peerConnection || data.room !== currentRoom) return;
+            
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch (err) {
+                log(`Ошибка обработки ответа: ${err.message}`, 'error');
+            }
         });
         
         socket.on('ice_candidate', async data => {
-            // В текущей реализации учитель не обрабатывает ICE кандидаты от учеников
-            log(`Получен ICE кандидат от ${data.from}`, 'info');
+            if (!peerConnection || data.room !== currentRoom) return;
+            
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (err) {
+                log(`Ошибка обработки ICE кандидата: ${err.message}`, 'error');
+            }
         });
+        
+        // Инициализация WebRTC соединения (для учителя)
+        async function initWebRTC(userId) {
+            try {
+                // Создаем RTCPeerConnection
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                
+                // Добавляем локальный поток
+                if (localStream) {
+                    localStream.getTracks().forEach(track => {
+                        peerConnection.addTrack(track, localStream);
+                    });
+                }
+                
+                // Обработчик входящих треков
+                peerConnection.ontrack = event => {
+                    if (!remoteStream) {
+                        remoteStream = new MediaStream();
+                        conferenceVideo.srcObject = remoteStream;
+                    }
+                    event.streams[0].getTracks().forEach(track => {
+                        remoteStream.addTrack(track);
+                    });
+                };
+                
+                // Обработчик ICE кандидатов
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        socket.emit('ice_candidate', {
+                            to: userId,
+                            candidate: event.candidate,
+                            room: currentRoom
+                        });
+                    }
+                };
+                
+                // Создаем оффер
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                // Отправляем оффер ученику
+                socket.emit('offer', {
+                    to: userId,
+                    offer: offer,
+                    room: currentRoom
+                });
+                
+            } catch (err) {
+                log(`Ошибка инициализации WebRTC: ${err.message}`, 'error');
+            }
+        }
         
         // Обработчики событий
         document.addEventListener('DOMContentLoaded', () => {
@@ -1064,6 +1168,9 @@
             }
             if (remoteStream) {
                 remoteStream.getTracks().forEach(track => track.stop());
+            }
+            if (peerConnection) {
+                peerConnection.close();
             }
             if (currentRoom) {
                 socket.emit('leave_room', { room: currentRoom });
