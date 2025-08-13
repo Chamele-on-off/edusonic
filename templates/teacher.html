@@ -66,14 +66,14 @@
         // Конфигурация
         const FPS = 10;
         const FRAMES = [
-            '/static/avatar/frames/mouth_neutral_001.jpg',
-            '/static/avatar/frames/mouth_neutral_002.jpg',
-            '/static/avatar/frames/mouth_aa_001.jpg',
-            '/static/avatar/frames/mouth_aa_002.jpg',
-            '/static/avatar/frames/blink_01.jpg',
-            '/static/avatar/frames/blink_02.jpg'
-            // Добавьте все остальные кадры в нужном порядке
-        ];
+            'mouth_neutral_001.jpg',
+            'mouth_neutral_002.jpg',
+            'mouth_aa_001.jpg',
+            'mouth_aa_002.jpg',
+            'blink_01.jpg',
+            'blink_02.jpg'
+            // Добавьте все файлы из папки frames
+        ].map(f => `/frames/${f}`);
         
         // Элементы
         const avatar = document.getElementById('avatar');
@@ -86,31 +86,46 @@
         let animationInterval = null;
         let loadedImages = [];
         
-        // Загрузка всех кадров
+        // Загрузка всех кадров с повторными попытками
         async function loadAllFrames() {
             statusDiv.textContent = "Загрузка кадров...";
             
-            try {
-                for (const frameUrl of FRAMES) {
-                    const img = await loadImage(frameUrl);
+            for (let i = 0; i < FRAMES.length; i++) {
+                const frameUrl = FRAMES[i];
+                try {
+                    const img = await loadImageWithRetry(frameUrl, 3);
                     loadedImages.push(img);
+                    statusDiv.textContent = `Загружено ${i+1}/${FRAMES.length} кадров`;
+                } catch (error) {
+                    console.error(error);
                 }
-                
-                statusDiv.textContent = `Загружено ${loadedImages.length} кадров`;
+            }
+            
+            if (loadedImages.length > 0) {
+                statusDiv.textContent = `Готово (${loadedImages.length}/${FRAMES.length} кадров)`;
                 startBtn.disabled = false;
-                
-            } catch (error) {
-                statusDiv.textContent = `Ошибка: ${error.message}`;
-                console.error(error);
+                avatar.src = loadedImages[0].src;
+            } else {
+                statusDiv.textContent = "Не удалось загрузить ни одного кадра";
             }
         }
         
-        // Загрузка одного изображения
-        function loadImage(src) {
+        // Загрузка с повторными попытками
+        function loadImageWithRetry(src, retries) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error(`Не удалось загрузить: ${src}`));
+                img.onerror = () => {
+                    if (retries > 0) {
+                        setTimeout(() => {
+                            loadImageWithRetry(src, retries - 1)
+                                .then(resolve)
+                                .catch(reject);
+                        }, 300);
+                    } else {
+                        reject(new Error(`Не удалось загрузить: ${src}`));
+                    }
+                };
                 img.src = src;
             });
         }
@@ -126,7 +141,7 @@
         
         // Запуск анимации
         function startAnimation() {
-            if (animationInterval) return;
+            if (animationInterval || loadedImages.length === 0) return;
             
             animationInterval = setInterval(() => {
                 currentFrame++;
