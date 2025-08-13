@@ -7,378 +7,157 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
         }
-        
-        .container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            max-width: 800px;
-            width: 100%;
-        }
-        
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
         #avatar-container {
-            display: flex;
-            justify-content: center;
-            margin: 20px 0;
-        }
-        
-        #avatar-image {
             width: 400px;
             height: 400px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            object-fit: cover;
+            margin: 20px auto;
+            border: 2px solid #ddd;
             background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
-        
+        #avatar-image {
+            max-width: 100%;
+            max-height: 100%;
+        }
         .controls {
             display: flex;
             gap: 10px;
-            margin: 20px 0;
-            flex-wrap: wrap;
             justify-content: center;
+            margin: 20px 0;
         }
-        
         button {
             padding: 10px 15px;
-            background-color: #3498db;
+            background: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
         }
-        
-        button:hover {
-            background-color: #2980b9;
-        }
-        
-        button:disabled {
-            background-color: #95a5a6;
-            cursor: not-allowed;
-        }
-        
-        button.active {
-            background-color: #2ecc71;
-        }
-        
-        .status {
-            margin: 10px 0;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
+        #status {
             text-align: center;
-        }
-        
-        .animation-controls {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        
-        .animation-group {
-            margin-bottom: 15px;
-        }
-        
-        .animation-group h3 {
-            margin-bottom: 10px;
-            color: #2c3e50;
-        }
-        
-        select {
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            font-size: 16px;
-            width: 100%;
-            max-width: 300px;
-        }
-        
-        .debug-info {
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-radius: 4px;
+            margin: 10px 0;
             font-family: monospace;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Анимация цифрового аватара</h1>
-        
-        <div id="avatar-container">
-            <img id="avatar-image" src="/static/avatar/frames/mouth_neutral_001.jpg" alt="Аватар">
-        </div>
-        
-        <div class="status">
-            Текущее состояние: <span id="current-state">mouth_neutral</span>
-        </div>
-        
-        <div class="controls">
-            <button id="start-btn">Старт</button>
-            <button id="stop-btn" disabled>Стоп</button>
-            <button id="blink-btn">Моргнуть</button>
-        </div>
-        
-        <div class="animation-controls">
-            <div class="animation-group">
-                <h3>Выражение рта</h3>
-                <select id="mouth-select">
-                    <option value="mouth_neutral">Нейтральное</option>
-                    <option value="mouth_aa">AA</option>
-                    <option value="mouth_bb">BB</option>
-                    <option value="mouth_ch">CH</option>
-                    <option value="mouth_dd">DD</option>
-                    <option value="mouth_ee">EE</option>
-                    <option value="mouth_ff">FF</option>
-                    <option value="mouth_hh">HH</option>
-                    <option value="mouth_kk">KK</option>
-                    <option value="mouth_ll">LL</option>
-                    <option value="mouth_nn">NN</option>
-                    <option value="mouth_oo">OO</option>
-                    <option value="mouth_pp">PP</option>
-                    <option value="mouth_rr">RR</option>
-                    <option value="mouth_ss">SS</option>
-                    <option value="mouth_tt">TT</option>
-                    <option value="mouth_uu">UU</option>
-                    <option value="mouth_vv">VV</option>
-                    <option value="mouth_zh">ZH</option>
-                    <option value="mouth_zz">ZZ</option>
-                </select>
-            </div>
-            
-            <div class="controls">
-                <button id="speak-btn">Говорить</button>
-                <button id="idle-btn">Ожидание</button>
-            </div>
-        </div>
-        
-        <div class="debug-info">
-            <p>Отладка:</p>
-            <div id="log"></div>
-        </div>
+    <h1 style="text-align: center;">Анимация цифрового аватара</h1>
+    
+    <div id="avatar-container">
+        <img id="avatar-image" src="" alt="Аватар">
     </div>
     
+    <div id="status">Загрузка...</div>
+    
+    <div class="controls">
+        <button id="start-btn">Старт</button>
+        <button id="stop-btn" disabled>Стоп</button>
+        <button id="blink-btn">Моргнуть</button>
+    </div>
+
     <script>
-        // Конфигурация анимации
-        const ANIMATION_FPS = 10; // Кадров в секунду
-        const BLINK_DURATION = 200; // Длительность моргания в мс
-        const BASE_PATH = '/static/avatar/frames/';
+        // Конфигурация
+        const FPS = 10;
+        let animationFrames = {};
+        let currentAnimation = 'mouth_neutral';
+        let currentFrame = 0;
+        let animationInterval = null;
         
-        // Элементы DOM
+        // Элементы
         const avatarImage = document.getElementById('avatar-image');
-        const currentStateSpan = document.getElementById('current-state');
+        const statusDiv = document.getElementById('status');
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
         const blinkBtn = document.getElementById('blink-btn');
-        const speakBtn = document.getElementById('speak-btn');
-        const idleBtn = document.getElementById('idle-btn');
-        const mouthSelect = document.getElementById('mouth-select');
-        const logDiv = document.getElementById('log');
         
-        // Состояние анимации
-        let animationState = {
-            currentMouth: 'mouth_neutral',
-            isSpeaking: false,
-            isBlinking: false,
-            frameIndex: 0,
-            animationInterval: null,
-            frames: {
-                mouth_neutral: [],
-                blink: [],
-                // Все остальные группы кадров
-                mouth_aa: [],
-                mouth_bb: [],
-                mouth_ch: [],
-                mouth_dd: [],
-                mouth_ee: [],
-                mouth_ff: [],
-                mouth_hh: [],
-                mouth_kk: [],
-                mouth_ll: [],
-                mouth_nn: [],
-                mouth_oo: [],
-                mouth_pp: [],
-                mouth_rr: [],
-                mouth_ss: [],
-                mouth_tt: [],
-                mouth_uu: [],
-                mouth_vv: [],
-                mouth_zh: [],
-                mouth_zz: []
-            }
-        };
-        
-        // Загрузка списка кадров с сервера
+        // Загрузка кадров
         async function loadFrames() {
             try {
                 const response = await fetch('/api/avatar_frames');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
                 
-                // Заполняем кадры из ответа сервера
-                for (const group in data) {
-                    if (animationState.frames[group]) {
-                        animationState.frames[group] = data[group];
-                    }
+                if (data.error) {
+                    throw new Error(data.error);
                 }
                 
-                log('Кадры анимации загружены');
+                animationFrames = data;
+                statusDiv.textContent = `Загружено: ${Object.keys(data).length} групп анимации`;
                 
-                // Если нет кадров для текущего состояния, загружаем первый доступный
-                if (animationState.frames[animationState.currentMouth].length === 0) {
-                    for (const group in animationState.frames) {
-                        if (animationState.frames[group].length > 0) {
-                            animationState.currentMouth = group;
-                            break;
-                        }
-                    }
+                // Начинаем с нейтрального состояния
+                if (animationFrames.mouth_neutral.length > 0) {
+                    avatarImage.src = animationFrames.mouth_neutral[0];
+                    startBtn.disabled = false;
                 }
-                
-                updateAvatarImage();
                 
             } catch (error) {
-                log(`Ошибка загрузки кадров: ${error.message}`, 'error');
-                
-                // Фолбэк - используем только нейтральное выражение
-                animationState.frames.mouth_neutral = ['/static/avatar/frames/mouth_neutral_001.jpg'];
-                animationState.currentMouth = 'mouth_neutral';
-                updateAvatarImage();
+                statusDiv.textContent = `Ошибка: ${error.message}`;
+                console.error('Ошибка загрузки кадров:', error);
             }
         }
         
-        // Обновление изображения аватара
-        function updateAvatarImage() {
-            const frames = animationState.frames[animationState.currentMouth];
-            if (frames.length > 0) {
-                const frameIndex = animationState.frameIndex % frames.length;
-                avatarImage.src = frames[frameIndex];
-                currentStateSpan.textContent = `${animationState.currentMouth} (${frameIndex + 1}/${frames.length})`;
-            }
+        // Обновление кадра
+        function updateFrame() {
+            const frames = animationFrames[currentAnimation];
+            if (!frames || frames.length === 0) return;
+            
+            currentFrame = (currentFrame + 1) % frames.length;
+            avatarImage.src = frames[currentFrame];
+            statusDiv.textContent = `${currentAnimation} (${currentFrame + 1}/${frames.length})`;
         }
         
-        // Запуск циклической анимации
+        // Запуск анимации
         function startAnimation() {
-            if (animationState.animationInterval) return;
+            if (animationInterval) return;
             
-            const delay = 1000 / ANIMATION_FPS;
-            animationState.animationInterval = setInterval(() => {
-                animationState.frameIndex++;
-                updateAvatarImage();
-            }, delay);
-            
+            animationInterval = setInterval(updateFrame, 1000 / FPS);
             startBtn.disabled = true;
             stopBtn.disabled = false;
-            log('Анимация запущена');
         }
         
         // Остановка анимации
         function stopAnimation() {
-            if (animationState.animationInterval) {
-                clearInterval(animationState.animationInterval);
-                animationState.animationInterval = null;
-                animationState.frameIndex = 0;
-                updateAvatarImage();
-                
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+                currentFrame = 0;
+                avatarImage.src = animationFrames[currentAnimation][0];
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                log('Анимация остановлена');
             }
         }
         
         // Моргание
-        function blink() {
-            if (animationState.isBlinking) return;
+        function doBlink() {
+            if (!animationFrames.blink || animationFrames.blink.length === 0) return;
             
-            animationState.isBlinking = true;
-            const originalMouth = animationState.currentMouth;
+            const originalAnimation = currentAnimation;
+            currentAnimation = 'blink';
+            currentFrame = 0;
+            avatarImage.src = animationFrames.blink[0];
             
-            // Переключаемся на кадры моргания
-            if (animationState.frames.blink.length > 0) {
-                animationState.currentMouth = 'blink';
-                updateAvatarImage();
-                
-                // Возвращаем предыдущее состояние после задержки
-                setTimeout(() => {
-                    animationState.currentMouth = originalMouth;
-                    animationState.isBlinking = false;
-                    updateAvatarImage();
-                }, BLINK_DURATION);
-            }
-            
-            log('Моргание');
+            setTimeout(() => {
+                currentAnimation = originalAnimation;
+                currentFrame = 0;
+                avatarImage.src = animationFrames[currentAnimation][0];
+            }, 300);
         }
-        
-        // Режим "говорит"
-        function startSpeaking() {
-            animationState.isSpeaking = true;
-            const mouthType = mouthSelect.value;
-            
-            if (animationState.frames[mouthType].length > 0) {
-                animationState.currentMouth = mouthType;
-                updateAvatarImage();
-            }
-            
-            speakBtn.classList.add('active');
-            idleBtn.classList.remove('active');
-            log(`Режим "Говорит": ${mouthType}`);
-        }
-        
-        // Режим "ожидание"
-        function startIdle() {
-            animationState.isSpeaking = false;
-            animationState.currentMouth = 'mouth_neutral';
-            updateAvatarImage();
-            
-            speakBtn.classList.remove('active');
-            idleBtn.classList.add('active');
-            log('Режим "Ожидание"');
-        }
-        
-        // Логирование
-        function log(message, type = 'info') {
-            const now = new Date();
-            const timeString = now.toLocaleTimeString();
-            const entry = document.createElement('div');
-            entry.className = `log-entry`;
-            entry.textContent = `[${timeString}] ${message}`;
-            logDiv.appendChild(entry);
-            logDiv.scrollTop = logDiv.scrollHeight;
-        }
-        
-        // Обработчики событий
-        startBtn.addEventListener('click', startAnimation);
-        stopBtn.addEventListener('click', stopAnimation);
-        blinkBtn.addEventListener('click', blink);
-        speakBtn.addEventListener('click', startSpeaking);
-        idleBtn.addEventListener('click', startIdle);
-        
-        mouthSelect.addEventListener('change', () => {
-            if (animationState.isSpeaking) {
-                startSpeaking(); // Обновляем анимацию, если в режиме речи
-            }
-        });
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            log('Система анимации инициализирована');
             loadFrames();
-            startIdle(); // Начинаем с нейтрального состояния
+            
+            startBtn.addEventListener('click', startAnimation);
+            stopBtn.addEventListener('click', stopAnimation);
+            blinkBtn.addEventListener('click', doBlink);
         });
     </script>
 </body>
