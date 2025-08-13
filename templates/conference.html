@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конференция</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        #container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #remote-avatar {
+            width: 400px;
+            height: 400px;
+            margin: 20px auto;
+            display: block;
+            border: 1px solid #ddd;
+            background-color: #f0f0f0;
+        }
+        #status {
+            text-align: center;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        #debug {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        h1 {
+            text-align: center;
+        }
+    </style>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div id="container">
+        <h1>Участник конференции</h1>
+        <div id="status">Ожидание трансляции...</div>
+        <img id="remote-avatar" src="" alt="Удаленный аватар">
+        <audio id="audio-player" controls style="display: none;"></audio>
+        <div id="debug"></div>
+    </div>
+
+    <script>
+        // Элементы
+        const remoteAvatar = document.getElementById('remote-avatar');
+        const statusDiv = document.getElementById('status');
+        const debugDiv = document.getElementById('debug');
+        const audioPlayer = document.getElementById('audio-player');
+        
+        // Состояние
+        let currentStream = null;
+        let socket = io();
+        
+        // Логирование
+        function log(message) {
+            const now = new Date().toLocaleTimeString();
+            debugDiv.innerHTML += `[${now}] ${message}<br>`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        // Обработка входящих сообщений
+        socket.on('connect', () => {
+            log('Подключен к серверу');
+        });
+        
+        socket.on('disconnect', () => {
+            log('Отключен от сервера');
+        });
+        
+        socket.on('stream_started', (data) => {
+            statusDiv.textContent = `Трансляция начата: ${data.avatar}`;
+            log(`Начата трансляция аватара: ${data.avatar}`);
+        });
+        
+        socket.on('new_frame', (data) => {
+            remoteAvatar.src = data.imageSrc;
+            statusDiv.textContent = `${data.avatar}: кадр ${data.frame + 1}/${data.frameCount}`;
+        });
+        
+        socket.on('new_audio', (data) => {
+            const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+            audioPlayer.src = audioSrc;
+            audioPlayer.play().catch(e => log(`Ошибка воспроизведения: ${e}`));
+            log('Воспроизводится аудио');
+        });
+        
+        log('Готов к приему трансляции...');
+    </script>
+</body>
+</html>
