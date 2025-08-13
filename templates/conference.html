@@ -46,9 +46,15 @@
         }
         #controls {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
             gap: 10px;
             margin: 20px 0;
+        }
+        #connection-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
         }
         button {
             padding: 10px 15px;
@@ -62,10 +68,24 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
+        input {
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            min-width: 300px;
+        }
         #status {
             text-align: center;
             margin: 10px 0;
             font-family: monospace;
+        }
+        #my-peer-id {
+            font-weight: bold;
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: #e1f5fe;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -85,8 +105,12 @@
         </div>
         
         <div id="controls">
-            <button id="join-btn">Присоединиться</button>
-            <button id="leave-btn" disabled>Покинуть</button>
+            <div id="connection-controls">
+                <input type="text" id="peer-id-input" placeholder="Введите ID учителя">
+                <button id="join-btn">Присоединиться</button>
+                <button id="leave-btn" disabled>Покинуть</button>
+            </div>
+            <div id="my-peer-id">Ваш ID: <span id="peer-id-display"></span></div>
         </div>
         
         <div id="status">Готов к подключению</div>
@@ -99,7 +123,10 @@
         const remoteVideo = document.getElementById('remote-video');
         const joinBtn = document.getElementById('join-btn');
         const leaveBtn = document.getElementById('leave-btn');
+        const peerIdInput = document.getElementById('peer-id-input');
         const statusDiv = document.getElementById('status');
+        const myPeerIdDiv = document.getElementById('my-peer-id');
+        const peerIdDisplay = document.getElementById('peer-id-display');
         
         // Переменные
         let peer = null;
@@ -114,8 +141,14 @@
         
         // Присоединение к конференции
         async function joinConference() {
+            const teacherPeerId = peerIdInput.value.trim();
+            if (!teacherPeerId) {
+                updateStatus("Введите ID учителя");
+                return;
+            }
+            
             try {
-                updateStatus("Получение медиапотоков...");
+                updateStatus("Подготовка к подключению...");
                 
                 // Получаем доступ к камере и микрофону пользователя
                 localStream = await navigator.mediaDevices.getUserMedia({
@@ -127,29 +160,36 @@
                 
                 // Подключаемся к PeerJS серверу
                 peer = new Peer({
-                    host: 'localhost',
-                    port: 9000,
-                    path: '/peerjs'
+                    host: '0.peerjs.com',
+                    port: 443,
+                    secure: true,
+                    path: '/'
                 });
                 
                 peer.on('open', (id) => {
-                    updateStatus(`Подключено к серверу с ID: ${id}`);
+                    updateStatus(`Подключено к серверу. Ваш ID: ${id}`);
+                    peerIdDisplay.textContent = id;
                     
-                    // Подключаемся к хосту конференции
-                    call = peer.call('conference_host', localStream);
+                    // Подключаемся к учителю
+                    call = peer.call(teacherPeerId, localStream);
                     
                     call.on('stream', (remoteStream) => {
-                        updateStatus("Получен удаленный поток");
+                        updateStatus("Подключено к учителю");
                         remoteVideo.srcObject = remoteStream;
                     });
                     
                     call.on('close', () => {
-                        updateStatus("Соединение закрыто");
+                        updateStatus("Соединение с учителем закрыто");
                         remoteVideo.srcObject = null;
+                    });
+                    
+                    call.on('error', (err) => {
+                        updateStatus(`Ошибка соединения: ${err}`);
                     });
                     
                     joinBtn.disabled = true;
                     leaveBtn.disabled = false;
+                    peerIdInput.disabled = true;
                 });
                 
                 peer.on('error', (err) => {
@@ -159,6 +199,12 @@
             } catch (error) {
                 updateStatus(`Ошибка: ${error.message}`);
                 console.error(error);
+                
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                    localStream = null;
+                    localVideo.srcObject = null;
+                }
             }
         }
         
@@ -184,6 +230,7 @@
             
             joinBtn.disabled = false;
             leaveBtn.disabled = true;
+            peerIdInput.disabled = false;
             updateStatus("Отключено от конференции");
         }
         
