@@ -46,6 +46,11 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
+        select, input {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
         #status {
             padding: 10px;
             background: #f8f9fa;
@@ -68,6 +73,15 @@
     <div id="container">
         <h1 style="text-align: center;">Анимация цифрового аватара</h1>
         
+        <div class="controls">
+            <select id="avatar-select">
+                <option value="alex">Alex</option>
+                <!-- Добавьте другие аватары -->
+            </select>
+            <input type="number" id="fps-input" value="10" min="1" max="30" style="width: 60px;">
+            <span>FPS</span>
+        </div>
+        
         <canvas id="avatar-canvas" width="400" height="400"></canvas>
         
         <div id="status">Инициализация...</div>
@@ -77,9 +91,7 @@
             <button id="stop-btn" disabled>Стоп</button>
             <button id="blink-btn">Моргнуть</button>
             <select id="animation-select">
-                <option value="mouth_neutral">Нейтральное</option>
-                <option value="mouth_aa">AA</option>
-                <option value="blink">Моргание</option>
+                <!-- Заполнится динамически -->
             </select>
         </div>
         
@@ -87,11 +99,6 @@
     </div>
 
     <script>
-        // Конфигурация
-        const FPS = 10;
-        const BLINK_DURATION = 300;
-        const USE_BASE64 = false; // Переключить на true если не работают обычные пути
-        
         // Элементы
         const canvas = document.getElementById('avatar-canvas');
         const ctx = canvas.getContext('2d');
@@ -101,14 +108,17 @@
         const stopBtn = document.getElementById('stop-btn');
         const blinkBtn = document.getElementById('blink-btn');
         const animationSelect = document.getElementById('animation-select');
+        const avatarSelect = document.getElementById('avatar-select');
+        const fpsInput = document.getElementById('fps-input');
         
         // Состояние
         let animationFrames = {};
         let loadedImages = {};
-        let currentAnimation = 'mouth_neutral';
+        let currentAnimation = '';
         let currentFrame = 0;
         let animationInterval = null;
         let isBlinking = false;
+        let currentFPS = 10;
         
         // Логирование
         function log(message) {
@@ -121,43 +131,41 @@
         function loadImage(url) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.onload = () => {
-                    log(`Изображение загружено: ${url.substring(0, 30)}...`);
-                    resolve(img);
-                };
-                img.onerror = () => {
-                    log(`Ошибка загрузки: ${url}`);
-                    reject(new Error(`Не удалось загрузить: ${url}`));
-                };
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error(`Не удалось загрузить: ${url}`));
                 img.src = url;
             });
         }
         
-        // Загрузка всех кадров
-        async function loadAllFrames() {
+        // Загрузка всех кадров для аватара
+        async function loadAvatarFrames(avatarName) {
             try {
-                statusDiv.textContent = "Загрузка кадров...";
+                statusDiv.textContent = `Загрузка аватара ${avatarName}...`;
+                log(`Загрузка кадров для ${avatarName}`);
                 
-                const apiEndpoint = USE_BASE64 
-                    ? '/api/avatar_frames_base64' 
-                    : '/api/avatar_frames';
-                
-                const response = await fetch(apiEndpoint);
+                const response = await fetch(`/api/avatar_frames/${avatarName}`);
                 if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
                 
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
                 
                 animationFrames = data;
-                log(`Загружено ${Object.keys(data).length} групп анимации`);
+                log(`Загружено ${Object.keys(data).length} типов анимации`);
                 
-                // Предзагрузка первой анимации
+                // Заполняем select с типами анимации
+                animationSelect.innerHTML = '';
+                Object.keys(data).forEach(animType => {
+                    const option = document.createElement('option');
+                    option.value = animType;
+                    option.textContent = animType;
+                    animationSelect.appendChild(option);
+                });
+                
+                currentAnimation = animationSelect.value;
                 await preloadAnimation(currentAnimation);
                 
-                // Показать первый кадр
-                showFrame(0);
                 startBtn.disabled = false;
-                statusDiv.textContent = "Готово к работе";
+                statusDiv.textContent = `Готово: ${avatarName}`;
                 
             } catch (error) {
                 statusDiv.textContent = `Ошибка: ${error.message}`;
@@ -179,12 +187,14 @@
                 try {
                     const img = await loadImage(frameUrl);
                     loadedImages[animType].push(img);
+                    log(`Загружен кадр: ${frameUrl.split('/').pop()}`);
                 } catch (error) {
                     log(error.message);
                 }
             }
             
             log(`Загружено ${loadedImages[animType].length} кадров для ${animType}`);
+            showFrame(0);
         }
         
         // Отображение кадра
@@ -213,10 +223,13 @@
         function startAnimation() {
             if (animationInterval) return;
             
-            animationInterval = setInterval(updateAnimation, 1000 / FPS);
+            currentFPS = parseInt(fpsInput.value) || 10;
+            const delay = 1000 / currentFPS;
+            
+            animationInterval = setInterval(updateAnimation, delay);
             startBtn.disabled = true;
             stopBtn.disabled = false;
-            log(`Анимация "${currentAnimation}" запущена`);
+            log(`Анимация "${currentAnimation}" запущена (${currentFPS} FPS)`);
         }
         
         // Остановка анимации
@@ -234,7 +247,10 @@
         
         // Моргание
         async function doBlink() {
-            if (isBlinking || !loadedImages.blink) return;
+            if (isBlinking || !loadedImages.blink || loadedImages.blink.length === 0) {
+                log("Невозможно выполнить моргание");
+                return;
+            }
             
             isBlinking = true;
             const originalAnimation = currentAnimation;
@@ -249,7 +265,7 @@
                 showFrame(currentFrame);
                 isBlinking = false;
                 log("Конец моргания");
-            }, BLINK_DURATION);
+            }, 300);
         }
         
         // Инициализация
@@ -269,15 +285,21 @@
                     
                     if (!loadedImages[currentAnimation]) {
                         await preloadAnimation(currentAnimation);
+                    } else {
+                        showFrame(currentFrame);
                     }
                     
-                    showFrame(currentFrame);
                     log(`Выбрана анимация: ${currentAnimation}`);
                 }
             });
             
-            // Загрузка кадров
-            await loadAllFrames();
+            avatarSelect.addEventListener('change', async () => {
+                stopAnimation();
+                await loadAvatarFrames(avatarSelect.value);
+            });
+            
+            // Загрузка первого аватара
+            await loadAvatarFrames(avatarSelect.value);
         });
     </script>
 </body>
