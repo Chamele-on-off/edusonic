@@ -4,9 +4,21 @@ from pathlib import Path
 
 app = Flask(__name__)
 
-# Абсолютные пути к директориям
-BASE_DIR = Path(__file__).parent
-AVATAR_FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
+# Жестко прописываем доступные кадры для теста
+TEST_FRAMES = {
+    "mouth_neutral": [
+        "/static/avatar/frames/mouth_neutral_001.jpg",
+        "/static/avatar/frames/mouth_neutral_002.jpg"
+    ],
+    "blink": [
+        "/static/avatar/frames/blink_01.jpg",
+        "/static/avatar/frames/blink_02.jpg"
+    ],
+    "mouth_aa": [
+        "/static/avatar/frames/mouth_aa_001.jpg",
+        "/static/avatar/frames/mouth_aa_002.jpg"
+    ]
+}
 
 @app.route('/')
 def home():
@@ -15,42 +27,25 @@ def home():
 @app.route('/api/avatar_frames')
 def get_avatar_frames():
     try:
-        # Проверяем существование директории
-        if not AVATAR_FRAMES_DIR.exists():
-            raise Exception(f"Directory not found: {AVATAR_FRAMES_DIR}")
+        # Проверка существования файлов
+        base_dir = Path(__file__).parent
+        existing_frames = {k: [] for k in TEST_FRAMES.keys()}
+        
+        for anim_type, frames in TEST_FRAMES.items():
+            for frame in frames:
+                frame_path = base_dir / frame.lstrip('/')
+                if frame_path.exists():
+                    existing_frames[anim_type].append(frame)
+                else:
+                    print(f"File not found: {frame_path}")
 
-        frames = {
-            'mouth_neutral': [],
-            'blink': [],
-            'mouth_aa': [],
-            'mouth_bb': []
-            # Добавьте другие группы
-        }
-
-        # Собираем файлы с разными расширениями
-        extensions = ['.jpg', '.jpeg', '.png']
-        for prefix in frames.keys():
-            for ext in extensions:
-                for i in range(1, 10):  # Проверяем до 9 кадров каждого типа
-                    frame_name = f"{prefix}_{str(i).zfill(2)}{ext}"
-                    frame_path = AVATAR_FRAMES_DIR / frame_name
-                    if frame_path.exists():
-                        frames[prefix].append(f"/static/avatar/frames/{frame_name}")
-
-        # Проверяем, что есть хотя бы нейтральные кадры
-        if not frames['mouth_neutral']:
-            available_files = os.listdir(AVATAR_FRAMES_DIR)
-            raise Exception(f"No neutral frames found. Available files: {available_files}")
-
-        return jsonify(frames)
-
+        return jsonify(existing_frames)
     except Exception as e:
-        app.logger.error(f"Error loading frames: {str(e)}")
-        return jsonify({"error": str(e), "available_files": os.listdir(AVATAR_FRAMES_DIR) if AVATAR_FRAMES_DIR.exists() else "Directory not found"}), 500
+        return jsonify({"error": str(e), "test": "using hardcoded frames"}), 200
 
 @app.route('/static/avatar/frames/<path:filename>')
 def serve_frame(filename):
-    return send_from_directory(AVATAR_FRAMES_DIR, filename)
+    return send_from_directory('static/avatar/frames', filename)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
