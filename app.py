@@ -2,15 +2,19 @@ import os
 import json
 import uuid
 import time
+import random
 import logging
-from pathlib import Path
-from typing import Dict, List
-from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, request, jsonify, render_template
-from flask_socketio import SocketIO, emit
 import base64
+from pathlib import Path
 from io import BytesIO
-from gtts import gTTS
+from typing import Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from flask import Flask, request, jsonify, render_template, send_file
+from flask_socketio import SocketIO
+from PIL import Image, ImageDraw
+import numpy as np
+import asyncio
+from aiortc import RTCPeerConnection, RTCSessionDescription
 
 # Настройка логирования
 logging.basicConfig(
@@ -43,61 +47,211 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET', 'dev-secret-key-123')
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 executor = ThreadPoolExecutor(max_workers=CONFIG["max_workers"])
 
-# Глобальные переменные для управления комнатами и сессиями
-rooms = {}  # {room_id: {participants: [user_ids], teacher: user_id}}
-active_sessions = {}  # {session_id: {room_id, lesson_id, participants}}
+class AvatarGenerator:
+    """Генератор 2D аватара с анимацией рта и морганием"""
+    def __init__(self, frames_dir: str = CONFIG["avatar_frames_dir"]):
+        self.frames_dir = frames_dir
+        self.frames = self._load_frames()
+        self.current_frame_index = 0
+        self.last_phoneme = None
+        self.last_update = 0
+        self.last_blink = time.time()
+        self.blink_interval = random.uniform(3, 5)
+        
+        self.phoneme_groups = {
+            'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
+            'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
+            'е': 'mouth_ee', 'ё': 'mouth_oo', 'ю': 'mouth_uu',
+            'я': 'mouth_aa', 'м': 'mouth_mm', 'п': 'mouth_pp',
+            'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
+            'ш': 'mouth_sh', 'ж': 'mouth_zh', 'с': 'mouth_ss',
+            'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
+            'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
+            'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
+            'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
+            'й': 'mouth_ee'
+        }
+
+    def _load_frames(self) -> Dict[str, List[bytes]]:
+        """Загружает и группирует кадры анимации"""
+        frames = {}
+        
+        if not os.path.exists(self.frames_dir):
+            logger.warning(f"Директория {self.frames_dir} не найдена!")
+            return frames
+
+        for filename in sorted(os.listdir(self.frames_dir)):
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                try:
+                    group = self._get_frame_group(filename)
+                    with open(os.path.join(self.frames_dir, filename), 'rb') as f:
+                        if group not in frames:
+                            frames[group] = []
+                        frames[group].append(f.read())
+                except Exception as e:
+                    logger.error(f"Ошибка загрузки {filename}: {str(e)}")
+
+        if not frames:
+            logger.warning("Созданы дефолтные кадры аватара")
+            frames = {
+                'mouth_neutral': [self._generate_default_frame(True, False)],
+                'mouth_open': [self._generate_default_frame(True, True)],
+                'blink': [self._generate_default_frame(False, False)]
+            }
+
+        logger.info(f"Загружено {sum(len(v) for v in frames.values())} кадров")
+        return frames
+
+    def _get_frame_group(self, filename: str) -> str:
+        """Определяет группу кадра по имени файла"""
+        base = os.path.splitext(filename)[0].rsplit('_', 1)[0]
+        return base if base in self.phoneme_groups.values() else 'mouth_neutral'
+
+    def _generate_default_frame(self, eyes_open: bool, mouth_open: bool) -> bytes:
+        """Генерирует фолбек-кадр SVG"""
+        img = Image.new('RGB', (640, 480), (240, 240, 240))
+        draw = ImageDraw.Draw(img)
+        
+        # Голова
+        draw.ellipse([(120, 50), (520, 430)], outline=(0, 0, 0), width=2, fill=(255, 255, 255))
+        
+        # Глаза
+        eye_y = 180
+        if eyes_open:
+            draw.ellipse([(220, eye_y), (280, eye_y+60)], fill=(0, 0, 0))
+            draw.ellipse([(360, eye_y), (420, eye_y+60)], fill=(0, 0, 0))
+        else:
+            draw.line([(220, eye_y+30), (280, eye_y+30)], fill=(0, 0, 0), width=2)
+            draw.line([(360, eye_y+30), (420, eye_y+30)], fill=(0, 0, 0), width=2)
+        
+        # Рот
+        mouth_y = 320
+        if mouth_open:
+            draw.ellipse([(270, mouth_y), (370, mouth_y+80)], fill=(0, 0, 0))
+        else:
+            draw.line([(270, mouth_y+40), (370, mouth_y+40)], fill=(0, 0, 0), width=2)
+        
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        return buf.getvalue()
+
+    def get_available_frames(self) -> Dict[str, List[str]]:
+        """Возвращает список доступных кадров для фронтенда"""
+        frames = {}
+        for group in ['mouth_neutral', 'mouth_aa', 'mouth_oo', 'mouth_ee', 'blink']:
+            frame_files = sorted(Path(self.frames_dir).glob(f"{group}_*.jpg"))
+            frames[group] = [f"/static/avatar/frames/{f.name}" for f in frame_files]
+        return frames
 
 class KnowledgeBase:
-    """База знаний для учебных материалов"""
+    """База знаний для ответов на вопросы (JSON-based)"""
     def __init__(self, data_dir: str = CONFIG["materials_dir"]):
         self.data_dir = Path(data_dir)
-        self.data_file = self.data_dir / "materials.json"
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.materials_file = self.data_dir / "materials.json"
         self._init_data()
-
+    
     def _init_data(self):
-        if not self.data_file.exists():
-            with open(self.data_file, 'w', encoding='utf-8') as f:
-                json.dump({"materials": []}, f, ensure_ascii=False, indent=2)
-
+        """Инициализирует данные, если файла нет"""
+        if not self.materials_file.exists():
+            with open(self.materials_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    "materials": [
+                        {
+                            "id": "1",
+                            "subject": "обществознание",
+                            "title": "Понятие общества",
+                            "content": "Общество — это совокупность людей, объединенных исторически сложившимися формами взаимодействия."
+                        },
+                        {
+                            "id": "2",
+                            "subject": "обществознание",
+                            "title": "Государство",
+                            "content": "Государство — политическая организация общества, обладающая суверенитетом."
+                        }
+                    ]
+                }, f, ensure_ascii=False, indent=2)
+    
+    def _load_materials(self) -> List[Dict]:
+        """Загружает материалы из JSON файла"""
+        try:
+            with open(self.materials_file, 'r', encoding='utf-8') as f:
+                return json.load(f).get("materials", [])
+        except Exception as e:
+            logger.error(f"Ошибка загрузки материалов: {str(e)}")
+            return []
+    
+    def _save_materials(self, materials: List[Dict]):
+        """Сохраняет материалы в JSON файл"""
+        with open(self.materials_file, 'w', encoding='utf-8') as f:
+            json.dump({"materials": materials}, f, ensure_ascii=False, indent=2)
+    
     def add_material(self, subject: str, title: str, content: str):
-        with open(self.data_file, 'r+', encoding='utf-8') as f:
-            data = json.load(f)
-            data["materials"].append({
-                "id": str(uuid.uuid4()),
-                "subject": subject,
-                "title": title,
-                "content": content
-            })
-            f.seek(0)
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        """Добавляет учебный материал"""
+        materials = self._load_materials()
+        materials.append({
+            "id": str(uuid.uuid4()),
+            "subject": subject,
+            "title": title,
+            "content": content
+        })
+        self._save_materials(materials)
         logger.info(f"Добавлен материал: {title} ({subject})")
-
-    def find_materials(self, query: str, subject: str, limit: int = 3) -> List[Dict]:
-        with open(self.data_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        materials = [m for m in data["materials"] if m["subject"].lower() == subject.lower()]
+    
+    def find_similar(self, query: str, subject: str, top_k: int = 3) -> List[Dict]:
+        """Находит релевантные материалы (простая реализация)"""
+        materials = self._load_materials()
+        filtered = [m for m in materials if m.get("subject") == subject]
         
         if not query:
-            return materials[:limit]
+            return filtered[:top_k]
         
-        # Простой поиск по ключевым словам
+        # Простая фильтрация по вхождению слов запроса
         query_words = set(query.lower().split())
-        for m in materials:
+        for m in filtered:
             content_words = set(m["content"].lower().split())
             m["score"] = len(query_words & content_words)
         
-        return sorted(materials, key=lambda x: x.get("score", 0), reverse=True)[:limit]
+        return sorted(filtered, key=lambda x: x.get("score", 0), reverse=True)[:top_k]
 
-class TTSEngine:
+class SimpleTTS:
     """Синтезатор речи с кэшированием"""
-    def __init__(self, cache_dir: str):
+    def __init__(self, cache_dir: str = CONFIG["audio_cache"]):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
+        
+        self.phoneme_map = {
+            'а': ('mouth_aa', 0.3), 'о': ('mouth_oo', 0.3),
+            'у': ('mouth_uu', 0.3), 'и': ('mouth_ee', 0.3),
+            'э': ('mouth_ee', 0.3), 'ы': ('mouth_aa', 0.3),
+            'е': ('mouth_ee', 0.3), 'ё': ('mouth_oo', 0.3),
+            'ю': ('mouth_uu', 0.3), 'я': ('mouth_aa', 0.3),
+            'м': ('mouth_mm', 0.15), 'п': ('mouth_pp', 0.15),
+            'б': ('mouth_bb', 0.15), 'ф': ('mouth_ff', 0.15),
+            'в': ('mouth_vv', 0.15), 'ш': ('mouth_sh', 0.15),
+            'ж': ('mouth_zh', 0.15), 'с': ('mouth_ss', 0.15),
+            'з': ('mouth_zz', 0.15), 'р': ('mouth_rr', 0.15),
+            'л': ('mouth_ll', 0.15), 'н': ('mouth_nn', 0.15),
+            'т': ('mouth_tt', 0.15), 'д': ('mouth_dd', 0.15),
+            'к': ('mouth_kk', 0.15), 'г': ('mouth_gg', 0.15),
+            'х': ('mouth_hh', 0.15), 'ч': ('mouth_ch', 0.15),
+            'щ': ('mouth_sh', 0.15), 'ц': ('mouth_ss', 0.15),
+            'й': ('mouth_ee', 0.15)
+        }
+
+    def text_to_phonemes(self, text: str) -> List[Tuple[str, float]]:
+        """Конвертирует текст в последовательность фонем"""
+        return [
+            self.phoneme_map.get(char, ('mouth_neutral', 0.15))
+            for char in text.lower() if char in self.phoneme_map
+        ][:100]
 
     def synthesize(self, text: str, lang: str = 'ru') -> Dict:
+        """Синтезирует речь и возвращает аудио + фонемы"""
+        from gtts import gTTS
+        
         cache_key = f"{lang}_{hash(text)}"
-        cache_file = self.cache_dir / f"{cache_key}.mp3"
+        cache_file = self.cache_dir / f"{cache_key}.wav"
         
         try:
             if cache_file.exists():
@@ -115,19 +269,88 @@ class TTSEngine:
 
             return {
                 "audio": base64.b64encode(audio_data).decode('utf-8'),
+                "phonemes": self.text_to_phonemes(text),
                 "text": text
             }
         except Exception as e:
             logger.error(f"TTS error: {str(e)}")
-            return {"error": str(e)}
+            return {
+                "error": str(e),
+                "phonemes": [('mouth_neutral', 0.2)] * 3
+            }
+
+class WebRTCHandler:
+    """Обработчик WebRTC соединений"""
+    def __init__(self, socketio):
+        self.socketio = socketio
+        self.pcs = set()
+        self.logger = logging.getLogger(__name__)
+    
+    def handle_offer(self, offer: dict, room: str, sid: str):
+        """Обработка WebRTC оффера в отдельном потоке"""
+        executor.submit(self._async_handle_offer, offer, room, sid)
+    
+    def _async_handle_offer(self, offer: dict, room: str, sid: str):
+        """Асинхронная обработка оффера"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self._process_offer(offer, room, sid))
+        loop.close()
+    
+    async def _process_offer(self, offer: dict, room: str, sid: str):
+        """Основная логика обработки оффера"""
+        pc = RTCPeerConnection()
+        self.pcs.add(pc)
+
+        @pc.on("iceconnectionstatechange")
+        async def on_iceconnectionstatechange():
+            if pc.iceConnectionState == "failed":
+                await pc.close()
+                self.pcs.discard(pc)
+
+        try:
+            await pc.setRemoteDescription(
+                RTCSessionDescription(sdp=offer["sdp"], type=offer["type"])
+            )
+            answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
+
+            self.socketio.emit('webrtc_answer', {
+                "sdp": pc.localDescription.sdp,
+                "type": pc.localDescription.type,
+                "room": room
+            }, room=sid)
+            
+            self.logger.info(f"WebRTC соединение установлено для комнаты {room}")
+
+        except Exception as e:
+            self.logger.error(f"WebRTC ошибка: {str(e)}")
+            self.socketio.emit('webrtc_error', {
+                "error": str(e),
+                "room": room
+            }, room=sid)
+
+    async def cleanup(self):
+        """Очистка соединений"""
+        for pc in self.pcs:
+            await pc.close()
+        self.pcs.clear()
+        self.logger.info("Все WebRTC соединения закрыты")
 
 # Инициализация компонентов
+avatar_generator = AvatarGenerator()
 knowledge_base = KnowledgeBase()
-tts_engine = TTSEngine(CONFIG["audio_cache"])
+tts_engine = SimpleTTS()
+webrtc_handler = WebRTCHandler(socketio)
 
+# API Endpoints
 @app.route('/')
 def home():
     return render_template('teacher.html')
+
+@app.route('/api/avatar_frames')
+def get_avatar_frames():
+    return jsonify(avatar_generator.get_available_frames())
 
 @app.route('/api/lessons')
 def list_lessons():
@@ -137,7 +360,7 @@ def list_lessons():
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 lessons.append({
-                    'id': data.get('id', lesson_file.stem),
+                    'id': data.get('id', os.path.splitext(lesson_file.name)[0]),
                     'title': data.get('title', 'Без названия'),
                     'subject': data.get('subject', 'не указан'),
                     'description': data.get('description', '')
@@ -174,11 +397,6 @@ def start_lesson():
     
     try:
         session_id = f"{lesson_id}_{room_id}_{int(time.time())}"
-        active_sessions[session_id] = {
-            "lesson_id": lesson_id,
-            "room_id": room_id,
-            "start_time": time.time()
-        }
         return jsonify({
             "session_id": session_id,
             "status": "started"
@@ -188,12 +406,19 @@ def start_lesson():
 
 @app.route('/api/stop_lesson', methods=['POST'])
 def stop_lesson():
-    session_id = request.json.get('session_id')
-    if not session_id or session_id not in active_sessions:
-        return jsonify({"error": "Неверный ID сессии"}), 400
+    data = request.json
+    session_id = data.get('session_id')
     
-    del active_sessions[session_id]
-    return jsonify({"status": "stopped"})
+    if not session_id:
+        return jsonify({"error": "Не указан ID сессии"}), 400
+    
+    try:
+        return jsonify({
+            "status": "stopped",
+            "session_id": session_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/add_material', methods=['POST'])
 def add_material():
@@ -208,56 +433,17 @@ def add_material():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Socket.IO обработчики
+# WebSocket handlers
 @socketio.on('connect')
 def handle_connect():
     logger.info(f"Клиент подключен: {request.sid}")
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    for room_id, room_data in rooms.items():
-        if request.sid in room_data['participants']:
-            room_data['participants'].remove(request.sid)
-            emit('user_left', {'userId': request.sid}, room=room_id)
-            logger.info(f"Пользователь {request.sid} вышел из комнаты {room_id}")
-
-@socketio.on('create_room')
-def handle_create_room(data):
-    room_id = data['room']
-    user_id = data['userId']
-    
-    if room_id not in rooms:
-        rooms[room_id] = {
-            'participants': [user_id],
-            'teacher': user_id
-        }
-        emit('room_created', {'room': room_id}, room=request.sid)
-        logger.info(f"Комната {room_id} создана пользователем {user_id}")
-    else:
-        emit('error', {'message': 'Комната уже существует'}, room=request.sid)
-
-@socketio.on('join_room')
-def handle_join_room(data):
-    room_id = data['room']
-    user_id = data['userId']
-    
-    if room_id in rooms:
-        rooms[room_id]['participants'].append(user_id)
-        emit('user_joined', {'userId': user_id, 'room': room_id}, room=room_id)
-        emit('room_joined', {'room': room_id}, room=request.sid)
-        logger.info(f"Пользователь {user_id} присоединился к комнате {room_id}")
-    else:
-        emit('error', {'message': 'Комната не найдена'}, room=request.sid)
-
-@socketio.on('leave_room')
-def handle_leave_room(data):
-    room_id = data['room']
-    user_id = data.get('userId', request.sid)
-    
-    if room_id in rooms and user_id in rooms[room_id]['participants']:
-        rooms[room_id]['participants'].remove(user_id)
-        emit('user_left', {'userId': user_id}, room=room_id)
-        logger.info(f"Пользователь {user_id} вышел из комнаты {room_id}")
+@socketio.on('webrtc_offer')
+def handle_webrtc_offer(data):
+    room = data.get('room')
+    offer = data.get('offer')
+    sid = request.sid
+    webrtc_handler.handle_offer(offer, room, sid)
 
 @socketio.on('ask_question')
 def handle_question(data):
@@ -265,26 +451,51 @@ def handle_question(data):
         try:
             question = data.get('question', '')
             subject = data.get('subject', 'обществознание')
-            session_id = data.get('session_id')
             
-            # Поиск релевантных материалов
-            materials = knowledge_base.find_materials(question, subject)
+            materials = knowledge_base.find_similar(question, subject)
             response_text = "\n".join([m['content'] for m in materials])
             
-            # Синтез речи
             tts_result = tts_engine.synthesize(response_text)
             
-            # Отправка ответа
-            emit('ai_response', {
+            socketio.emit('ai_response', {
                 "text": response_text,
                 "audio": tts_result["audio"],
+                "phonemes": tts_result["phonemes"],
                 "materials": materials
             }, room=request.sid)
-            
-            logger.info(f"Обработан вопрос: {question[:50]}...")
         except Exception as e:
             logger.error(f"Ошибка обработки вопроса: {str(e)}")
-            emit('error', {"message": str(e)}, room=request.sid)
+            socketio.emit('error', {"message": str(e)}, room=request.sid)
+    
+    executor.submit(process)
+
+@socketio.on('audio_data')
+def handle_audio_data(data):
+    def process():
+        try:
+            from speech_recognition import Recognizer, AudioData
+            import wave
+            
+            audio_bytes = base64.b64decode(data['audio'])
+            
+            # Конвертируем в формат, понятный для speech_recognition
+            with wave.open(BytesIO(audio_bytes), 'rb') as wav_file:
+                audio_data = AudioData(
+                    wav_file.readframes(wav_file.getnframes()),
+                    wav_file.getframerate(),
+                    wav_file.getsampwidth()
+                )
+            
+            recognizer = Recognizer()
+            text = recognizer.recognize_google(audio_data, language="ru-RU")
+            
+            socketio.emit('transcription', {
+                "text": text,
+                "room": data['room']
+            }, room=request.sid)
+            
+        except Exception as e:
+            logger.error(f"Ошибка транскрипции: {str(e)}")
     
     executor.submit(process)
 
@@ -298,4 +509,5 @@ if __name__ == '__main__':
         logger.error(f"Ошибка сервера: {str(e)}")
     finally:
         executor.shutdown()
+        asyncio.get_event_loop().run_until_complete(webrtc_handler.cleanup())
         logger.info("Сервер остановлен")
