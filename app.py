@@ -8,8 +8,6 @@ from gtts import gTTS
 import threading
 import time
 from flask_socketio import SocketIO
-import peerjs_server
-from peerjs_server import PeerServer
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -17,14 +15,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Конфигурация путей
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
-
-# PeerJS сервер
-peer_server = PeerServer(port=9000)
-
-# Глобальные переменные для потоков
-animation_thread = None
-stop_threads = False
-current_clients = set()
 
 @app.route('/')
 def home():
@@ -70,11 +60,8 @@ def generate_video_frames(avatar_name):
     frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
     frames.sort()
     
-    while not stop_threads:
+    while True:
         for frame in frames:
-            if stop_threads:
-                break
-                
             frame_path = str(avatar_dir / frame)
             img = cv2.imread(frame_path)
             if img is None:
@@ -99,7 +86,7 @@ def audio_feed():
     audio_file = generate_audio(text)
     
     def generate():
-        while not stop_threads:
+        while True:
             data = audio_file.read(1024)
             if not data:
                 audio_file.seek(0)
@@ -109,24 +96,5 @@ def audio_feed():
     
     return Response(generate(), mimetype='audio/mpeg')
 
-@socketio.on('connect')
-def handle_connect():
-    current_clients.add(request.sid)
-    print(f"Client connected: {request.sid}")
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    current_clients.discard(request.sid)
-    print(f"Client disconnected: {request.sid}")
-
-def run_peer_server():
-    peer_server.run()
-
 if __name__ == '__main__':
-    # Запуск PeerJS сервера в отдельном потоке
-    peer_thread = threading.Thread(target=run_peer_server)
-    peer_thread.daemon = True
-    peer_thread.start()
-    
-    # Запуск Flask приложения
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
