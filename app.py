@@ -11,7 +11,7 @@ AVATAR_FRAMES_DIR = STATIC_DIR / 'avatar' / 'frames'
 
 @app.route('/')
 def home():
-    return render_template('animation_test.html')
+    return render_template('teacher.html')
 
 @app.route('/api/avatar_frames')
 def get_avatar_frames():
