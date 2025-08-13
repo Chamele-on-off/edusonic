@@ -1,20 +1,28 @@
-from flask import Flask, render_template, send_from_directory, jsonify, Response
+from flask import Flask, render_template, send_from_directory, jsonify
+from flask_socketio import SocketIO, emit
 import os
 from pathlib import Path
-import cv2
-import numpy as np
-from io import BytesIO
 from gtts import gTTS
-import threading
+import io
+import base64
 import time
-from flask_socketio import SocketIO
 
 app = Flask(__name__, static_folder='static')
+app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Конфигурация путей
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
+
+# Хранилище для текущего состояния анимации
+current_animation = {
+    'avatar_name': None,
+    'frames': [],
+    'current_frame': 0,
+    'is_playing': False,
+    'fps': 10
+}
 
 @app.route('/')
 def home():
@@ -48,53 +56,50 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-def generate_audio(text):
-    tts = gTTS(text=text, lang='ru')
-    audio_file = BytesIO()
-    tts.write_to_fp(audio_file)
-    audio_file.seek(0)
-    return audio_file
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected')
+    emit('animation_state', current_animation)
 
-def generate_video_frames(avatar_name):
-    avatar_dir = FRAMES_DIR / avatar_name
-    frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-    frames.sort()
-    
-    while True:
-        for frame in frames:
-            frame_path = str(avatar_dir / frame)
-            img = cv2.imread(frame_path)
-            if img is None:
-                continue
-                
-            ret, buffer = cv2.imencode('.jpg', img)
-            frame_bytes = buffer.tobytes()
-            
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            
-            time.sleep(0.1)  # 10 FPS
+@socketio.on('start_animation')
+def handle_start_animation(data):
+    current_animation.update({
+        'avatar_name': data['avatar_name'],
+        'frames': data['frames'],
+        'current_frame': 0,
+        'is_playing': True,
+        'fps': data.get('fps', 10)
+    })
+    emit('animation_state', current_animation, broadcast=True)
 
-@app.route('/video_feed/<avatar_name>')
-def video_feed(avatar_name):
-    return Response(generate_video_frames(avatar_name),
-                   mimetype='multipart/x-mixed-replace; boundary=frame')
+@socketio.on('stop_animation')
+def handle_stop_animation():
+    current_animation['is_playing'] = False
+    emit('animation_state', current_animation, broadcast=True)
 
-@app.route('/audio_feed')
-def audio_feed():
-    text = "Добро пожаловать на конференцию. Это тестовое аудио сообщение."
-    audio_file = generate_audio(text)
+@socketio.on('next_frame')
+def handle_next_frame():
+    if current_animation['is_playing'] and current_animation['frames']:
+        current_animation['current_frame'] = (current_animation['current_frame'] + 1) % len(current_animation['frames'])
+        emit('frame_update', {
+            'frame_index': current_animation['current_frame'],
+            'frame_url': f"/frames/{current_animation['avatar_name']}/{current_animation['frames'][current_animation['current_frame']]}"
+        }, broadcast=True)
+
+@socketio.on('text_to_speech')
+def handle_text_to_speech(data):
+    text = data['text']
+    lang = data.get('lang', 'ru')
     
-    def generate():
-        while True:
-            data = audio_file.read(1024)
-            if not data:
-                audio_file.seek(0)
-                continue
-            yield data
-            time.sleep(0.1)
+    # Создаем аудио с помощью gTTS
+    tts = gTTS(text=text, lang=lang, slow=False)
+    audio_bytes = io.BytesIO()
+    tts.write_to_fp(audio_bytes)
+    audio_bytes.seek(0)
     
-    return Response(generate(), mimetype='audio/mpeg')
+    # Отправляем base64-кодированный аудиопоток
+    audio_base64 = base64.b64encode(audio_bytes.read()).decode('utf-8')
+    emit('audio_stream', {'audio': audio_base64}, broadcast=True)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
