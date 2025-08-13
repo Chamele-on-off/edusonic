@@ -51,8 +51,7 @@
             background: #f8f9fa;
             border-radius: 4px;
             margin: 10px 0;
-            font-family: monospace;
-            white-space: pre-wrap;
+            text-align: center;
         }
         #debug {
             margin-top: 20px;
@@ -67,7 +66,7 @@
 </head>
 <body>
     <div id="container">
-        <h1 style="text-align: center;">Тест анимации аватара</h1>
+        <h1 style="text-align: center;">Анимация цифрового аватара</h1>
         
         <canvas id="avatar-canvas" width="400" height="400"></canvas>
         
@@ -80,8 +79,7 @@
             <select id="animation-select">
                 <option value="mouth_neutral">Нейтральное</option>
                 <option value="mouth_aa">AA</option>
-                <option value="mouth_bb">BB</option>
-                <!-- Добавьте другие варианты -->
+                <option value="blink">Моргание</option>
             </select>
         </div>
         
@@ -92,6 +90,7 @@
         // Конфигурация
         const FPS = 10;
         const BLINK_DURATION = 300;
+        const USE_BASE64 = false; // Переключить на true если не работают обычные пути
         
         // Элементы
         const canvas = document.getElementById('avatar-canvas');
@@ -114,31 +113,22 @@
         // Логирование
         function log(message) {
             const now = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += `[${now}] ${message}\n`;
+            debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
         }
         
-        // Загрузка изображения с повторами
-        function loadImage(url, retries = 3, delay = 100) {
+        // Загрузка изображения
+        function loadImage(url) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                
                 img.onload = () => {
-                    log(`Изображение загружено: ${url}`);
+                    log(`Изображение загружено: ${url.substring(0, 30)}...`);
                     resolve(img);
                 };
-                
-                img.onerror = (err) => {
-                    if (retries > 0) {
-                        log(`Ошибка загрузки ${url}, осталось попыток: ${retries}`);
-                        setTimeout(() => {
-                            loadImage(url, retries - 1, delay).then(resolve).catch(reject);
-                        }, delay);
-                    } else {
-                        reject(new Error(`Не удалось загрузить изображение: ${url}`));
-                    }
+                img.onerror = () => {
+                    log(`Ошибка загрузки: ${url}`);
+                    reject(new Error(`Не удалось загрузить: ${url}`));
                 };
-                
                 img.src = url;
             });
         }
@@ -146,35 +136,32 @@
         // Загрузка всех кадров
         async function loadAllFrames() {
             try {
-                statusDiv.textContent = "Загрузка списка кадров...";
-                log("Запрос к /api/avatar_frames");
+                statusDiv.textContent = "Загрузка кадров...";
                 
-                const response = await fetch('/api/avatar_frames');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                const apiEndpoint = USE_BASE64 
+                    ? '/api/avatar_frames_base64' 
+                    : '/api/avatar_frames';
+                
+                const response = await fetch(apiEndpoint);
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
                 
                 const data = await response.json();
-                log("Получены данные кадров:");
-                log(JSON.stringify(data, null, 2));
-                
-                if (data.error) {
-                    throw new Error(data.error);
-                }
+                if (data.error) throw new Error(data.error);
                 
                 animationFrames = data;
-                statusDiv.textContent = `Загружено ${Object.keys(data).length} групп анимации`;
+                log(`Загружено ${Object.keys(data).length} групп анимации`);
                 
-                // Предзагрузка изображений для первой анимации
-                await preloadAnimation('mouth_neutral');
+                // Предзагрузка первой анимации
+                await preloadAnimation(currentAnimation);
                 
                 // Показать первый кадр
-                showFrame(animationFrames.mouth_neutral[0]);
+                showFrame(0);
                 startBtn.disabled = false;
+                statusDiv.textContent = "Готово к работе";
                 
             } catch (error) {
                 statusDiv.textContent = `Ошибка: ${error.message}`;
-                log(`Ошибка загрузки кадров: ${error.message}`);
+                log(`Ошибка загрузки: ${error.message}`);
                 console.error(error);
             }
         }
@@ -193,35 +180,33 @@
                     const img = await loadImage(frameUrl);
                     loadedImages[animType].push(img);
                 } catch (error) {
-                    log(`Ошибка загрузки кадра: ${error.message}`);
+                    log(error.message);
                 }
             }
             
-            log(`Предзагружено ${loadedImages[animType].length} кадров для ${animType}`);
+            log(`Загружено ${loadedImages[animType].length} кадров для ${animType}`);
         }
         
         // Отображение кадра
-        function showFrame(frameUrl) {
-            const img = loadedImages[currentAnimation]?.[currentFrame];
-            if (!img) {
-                log(`Кадр не загружен: ${currentAnimation}[${currentFrame}]`);
+        function showFrame(frameIndex) {
+            const frames = loadedImages[currentAnimation];
+            if (!frames || !frames[frameIndex]) {
+                log(`Кадр не загружен: ${currentAnimation}[${frameIndex}]`);
                 return;
             }
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            statusDiv.textContent = `${currentAnimation} (${currentFrame + 1}/${animationFrames[currentAnimation]?.length || 0})`;
+            ctx.drawImage(frames[frameIndex], 0, 0, canvas.width, canvas.height);
+            statusDiv.textContent = `${currentAnimation} (${frameIndex + 1}/${frames.length})`;
         }
         
         // Обновление анимации
         function updateAnimation() {
-            if (!animationFrames[currentAnimation] || animationFrames[currentAnimation].length === 0) {
-                log(`Нет кадров для анимации: ${currentAnimation}`);
-                return;
-            }
+            const frames = loadedImages[currentAnimation];
+            if (!frames || frames.length === 0) return;
             
-            currentFrame = (currentFrame + 1) % animationFrames[currentAnimation].length;
-            showFrame(animationFrames[currentAnimation][currentFrame]);
+            currentFrame = (currentFrame + 1) % frames.length;
+            showFrame(currentFrame);
         }
         
         // Запуск анимации
@@ -240,7 +225,7 @@
                 clearInterval(animationInterval);
                 animationInterval = null;
                 currentFrame = 0;
-                showFrame(animationFrames[currentAnimation][0]);
+                showFrame(currentFrame);
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 log("Анимация остановлена");
@@ -249,25 +234,19 @@
         
         // Моргание
         async function doBlink() {
-            if (isBlinking || !animationFrames.blink || animationFrames.blink.length === 0) return;
+            if (isBlinking || !loadedImages.blink) return;
             
             isBlinking = true;
             const originalAnimation = currentAnimation;
-            
-            // Предзагружаем кадры моргания, если еще не загружены
-            if (!loadedImages.blink) {
-                await preloadAnimation('blink');
-            }
-            
             currentAnimation = 'blink';
             currentFrame = 0;
-            showFrame(animationFrames.blink[0]);
+            showFrame(currentFrame);
             log("Начало моргания");
             
             setTimeout(() => {
                 currentAnimation = originalAnimation;
                 currentFrame = 0;
-                showFrame(animationFrames[currentAnimation][0]);
+                showFrame(currentFrame);
                 isBlinking = false;
                 log("Конец моргания");
             }, BLINK_DURATION);
@@ -292,7 +271,7 @@
                         await preloadAnimation(currentAnimation);
                     }
                     
-                    showFrame(animationFrames[currentAnimation][0]);
+                    showFrame(currentFrame);
                     log(`Выбрана анимация: ${currentAnimation}`);
                 }
             });
