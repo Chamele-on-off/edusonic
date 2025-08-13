@@ -344,7 +344,13 @@
     
     <script>
         // Глобальные переменные
-        const socket = io();
+        const socket = io({
+            transports: ['websocket'],
+            upgrade: false,
+            query: {
+                room: new URLSearchParams(window.location.search).get('room')
+            }
+        });
         const lessonSelect = document.getElementById('lesson-select');
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
@@ -395,12 +401,10 @@
 
         // Инициализация PeerJS
         function initPeerJS(roomName) {
-            // Уничтожаем предыдущее соединение, если оно есть
             if (peer) {
                 peer.destroy();
             }
             
-            // Создаем Peer с ID, основанным на названии комнаты
             currentPeerId = `room-${roomName}-teacher`;
             peer = new Peer(currentPeerId);
             
@@ -408,6 +412,9 @@
                 log(`PeerJS подключен с ID: ${id}`, 'success');
                 updateConferenceStatus('online', 'Готов к подключению учеников');
                 isConnecting = false;
+                
+                // Присоединяемся к комнате WebSocket
+                socket.emit('join_room', { room: roomName });
             });
             
             peer.on('error', (err) => {
@@ -415,7 +422,6 @@
                 updateConferenceStatus('offline', 'Ошибка подключения');
                 isConnecting = false;
                 
-                // Автоматически пересоздаем Peer при ошибке
                 setTimeout(() => initPeerJS(roomName), 1000);
             });
             
@@ -454,16 +460,13 @@
                 isConnecting = true;
                 updateConferenceStatus('connecting', 'Подключение...');
                 
-                // Инициализируем Peer с ID, соответствующим комнате
                 initPeerJS(currentRoom);
                 
-                // Получаем доступ к микрофону
                 mediaStream = await navigator.mediaDevices.getUserMedia({ 
                     audio: true, 
                     video: false 
                 });
                 
-                // Ждем пока Peer будет готов
                 await new Promise((resolve, reject) => {
                     const checkReady = () => {
                         if (peer && peer.disconnected === false && !peer.destroyed) {
@@ -475,11 +478,9 @@
                     checkReady();
                 });
                 
-                // Открываем iframe с конференцией
                 conferenceIframe.src = `${CONFERENCE_SERVER}/?room=${encodeURIComponent(currentRoom)}&role=teacher`;
                 updateConferenceStatus('online', 'Подключено к конференции');
                 
-                // Автоматически начинаем урок после подключения
                 startLesson();
                 
             } catch (err) {
@@ -523,13 +524,11 @@
             currentRoom = null;
             isConnecting = false;
             
-            // Останавливаем урок при отключении
             stopLesson();
         }
         
         // Добавление участника в список
         function addParticipant(peerId) {
-            // Удаляем placeholder если он есть
             if (participantsList.children.length === 1 && 
                 participantsList.children[0].textContent === 'Нет активных участников') {
                 participantsList.innerHTML = '';
@@ -553,7 +552,6 @@
                 }
             }
             
-            // Если участников не осталось, показываем placeholder
             if (participantsList.children.length === 0) {
                 const li = document.createElement('li');
                 li.textContent = 'Нет активных участников';
@@ -609,22 +607,21 @@
                 const response = await fetch('/api/avatar_frames');
                 avatarFrames = await response.json();
                 
-                // Устанавливаем нейтральное выражение по умолчанию
-                currentPhoneme = 'mouth_neutral';
-                
-                // Если нет кадров для нейтрального выражения, создаем фолбэк
-                if (!avatarFrames['mouth_neutral'] || avatarFrames['mouth_neutral'].length === 0) {
-                    avatarFrames['mouth_neutral'] = ['/static/avatar/frames/mouth_neutral_001.jpg'];
+                // Преобразуем пути в полные URL
+                for (const group in avatarFrames) {
+                    avatarFrames[group] = avatarFrames[group].map(frame => 
+                        frame.startsWith('data:') ? frame : `${window.location.origin}${frame}`
+                    );
                 }
                 
+                currentPhoneme = 'mouth_neutral';
                 log('Кадры аватара загружены', 'success');
                 startAvatarAnimation();
             } catch (err) {
                 log(`Ошибка загрузки кадров аватара: ${err.message}`, 'error');
-                
-                // Создаем фолбэк анимацию с нейтральным выражением
+                // Фолбэк анимация
                 avatarFrames = {
-                    'mouth_neutral': ['/static/avatar/frames/mouth_neutral_001.jpg']
+                    'mouth_neutral': ['data:image/png;base64,' + btoa(String.fromCharCode(...new Uint8Array(await (await fetch('/api/avatar_frame')).arrayBuffer()))]
                 };
                 startAvatarAnimation();
             }
@@ -636,7 +633,6 @@
                 cancelAnimationFrame(animationFrameId);
             }
             
-            // Сразу показываем первый кадр
             const showFirstFrame = () => {
                 if (!avatarFrames[currentPhoneme] || avatarFrames[currentPhoneme].length === 0) {
                     currentPhoneme = 'mouth_neutral';
@@ -839,7 +835,6 @@
         
         // Воспроизведение аудио и анимация аватара
         function playAudioWithAnimation(audioData, phonemes) {
-            // Создаем Blob из base64 аудио
             const byteCharacters = atob(audioData);
             const byteNumbers = new Array(byteCharacters.length);
             for (let i = 0; i < byteCharacters.length; i++) {
@@ -848,15 +843,12 @@
             const byteArray = new Uint8Array(byteNumbers);
             const blob = new Blob([byteArray], { type: 'audio/wav' });
             
-            // Устанавливаем источник для аудио элемента
             avatarAudio.src = URL.createObjectURL(blob);
             
-            // Обновляем фонемы для анимации
             if (phonemes && phonemes.length > 0) {
-                currentPhoneme = phonemes[0][0]; // Берем первую фонему
+                currentPhoneme = phonemes[0][0];
             }
             
-            // Воспроизводим аудио
             avatarAudio.play().catch(e => {
                 log(`Ошибка воспроизведения аудио: ${e.message}`, 'error');
             });
@@ -910,7 +902,8 @@
             socket.emit('ask_question', {
                 session_id: currentSessionId,
                 question: question,
-                subject: lessonSelect.options[lessonSelect.selectedIndex]?.text.split('(')[1]?.replace(')', '') || 'обществознание'
+                subject: lessonSelect.options[lessonSelect.selectedIndex]?.text.split('(')[1]?.replace(')', '') || 'обществознание',
+                room: currentRoom
             });
             
             questionInput.value = '';
@@ -943,6 +936,13 @@
         socket.on('connect', () => {
             log('Подключено к серверу AI учителя', 'success');
             updateAIStatus('online', 'Сервер подключен');
+            
+            const urlRoom = new URLSearchParams(window.location.search).get('room');
+            if (urlRoom) {
+                roomNameInput.value = urlRoom;
+                connectToConference();
+            }
+            
             loadLessons();
             loadAvatarFrames();
         });
@@ -950,6 +950,10 @@
         socket.on('disconnect', () => {
             log('Отключено от сервера AI учителя', 'error');
             updateAIStatus('offline', 'Сервер отключен');
+        });
+        
+        socket.on('room_joined', data => {
+            log(`Присоединено к комнате: ${data.room}`, 'success');
         });
         
         socket.on('ai_response', data => {
@@ -968,11 +972,11 @@
         socket.on('transcription', data => {
             if (data.room === currentRoom) {
                 log(`Ученик: ${data.text}`, 'info');
-                // Автоматически отправляем вопрос учителю
                 socket.emit('ask_question', {
                     session_id: currentSessionId,
                     question: data.text,
-                    subject: getCurrentSubject()
+                    subject: getCurrentSubject(),
+                    room: currentRoom
                 });
             }
         });
@@ -1001,12 +1005,10 @@
             updateAIStatus('offline', 'Урок не активен');
             updateConferenceStatus('offline', 'Нет подключения');
             
-            // Инициализация
             setupUpload();
             loadLessons();
             loadAvatarFrames();
             
-            // Скрываем кнопку "Начать урок" (теперь урок начинается автоматически при подключении)
             startBtn.style.display = 'none';
         });
         
