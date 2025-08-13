@@ -1,18 +1,30 @@
-from flask import Flask, render_template, send_from_directory, jsonify
+from flask import Flask, render_template, send_from_directory, jsonify, Response
 import os
 from pathlib import Path
-from flask_socketio import SocketIO, emit
+import cv2
+import numpy as np
+from io import BytesIO
 from gtts import gTTS
-import base64
-import io
+import threading
+import time
+from flask_socketio import SocketIO
+import peerjs_server
+from peerjs_server import PeerServer
 
 app = Flask(__name__, static_folder='static')
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Конфигурация путей
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
+
+# PeerJS сервер
+peer_server = PeerServer(port=9000)
+
+# Глобальные переменные для потоков
+animation_thread = None
+stop_threads = False
+current_clients = set()
 
 @app.route('/')
 def home():
@@ -46,38 +58,75 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
+def generate_audio(text):
+    tts = gTTS(text=text, lang='ru')
+    audio_file = BytesIO()
+    tts.write_to_fp(audio_file)
+    audio_file.seek(0)
+    return audio_file
+
+def generate_video_frames(avatar_name):
+    avatar_dir = FRAMES_DIR / avatar_name
+    frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    frames.sort()
+    
+    while not stop_threads:
+        for frame in frames:
+            if stop_threads:
+                break
+                
+            frame_path = str(avatar_dir / frame)
+            img = cv2.imread(frame_path)
+            if img is None:
+                continue
+                
+            ret, buffer = cv2.imencode('.jpg', img)
+            frame_bytes = buffer.tobytes()
+            
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            
+            time.sleep(0.1)  # 10 FPS
+
+@app.route('/video_feed/<avatar_name>')
+def video_feed(avatar_name):
+    return Response(generate_video_frames(avatar_name),
+                   mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/audio_feed')
+def audio_feed():
+    text = "Добро пожаловать на конференцию. Это тестовое аудио сообщение."
+    audio_file = generate_audio(text)
+    
+    def generate():
+        while not stop_threads:
+            data = audio_file.read(1024)
+            if not data:
+                audio_file.seek(0)
+                continue
+            yield data
+            time.sleep(0.1)
+    
+    return Response(generate(), mimetype='audio/mpeg')
+
 @socketio.on('connect')
 def handle_connect():
-    print('Client connected')
+    current_clients.add(request.sid)
+    print(f"Client connected: {request.sid}")
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnected')
+    current_clients.discard(request.sid)
+    print(f"Client disconnected: {request.sid}")
 
-@socketio.on('start_stream')
-def handle_start_stream(data):
-    # Пересылаем всем клиентам, кроме отправителя
-    emit('stream_started', data, broadcast=True, include_self=False)
-
-@socketio.on('stream_frame')
-def handle_stream_frame(data):
-    # Пересылаем кадр всем клиентам, кроме отправителя
-    emit('new_frame', data, broadcast=True, include_self=False)
-
-@socketio.on('text_to_speech')
-def handle_text_to_speech(data):
-    text = data['text']
-    lang = data.get('lang', 'ru')
-    
-    # Генерируем аудио
-    tts = gTTS(text=text, lang=lang)
-    audio_buffer = io.BytesIO()
-    tts.write_to_fp(audio_buffer)
-    audio_buffer.seek(0)
-    
-    # Отправляем base64-кодированное аудио
-    audio_base64 = base64.b64encode(audio_buffer.read()).decode('utf-8')
-    emit('new_audio', {'audio': audio_base64}, broadcast=True)
+def run_peer_server():
+    peer_server.run()
 
 if __name__ == '__main__':
+    # Запуск PeerJS сервера в отдельном потоке
+    peer_thread = threading.Thread(target=run_peer_server)
+    peer_thread.daemon = True
+    peer_thread.start()
+    
+    # Запуск Flask приложения
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
