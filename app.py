@@ -12,16 +12,13 @@ from collections import defaultdict
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# Конфигурация путей
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
-# Глобальные переменные для управления потоком
 animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
-room_participants = defaultdict(set)  # Хранит socket_id участников по комнатам
-room_animations = defaultdict(dict)
+room_participants = defaultdict(set)
 
 @app.route('/')
 def home():
@@ -64,7 +61,6 @@ def text_to_speech(text, lang='ru'):
     return base64.b64encode(mp3_fp.read()).decode('utf-8')
 
 def animation_loop(room_id):
-    global current_frame_index, animation_running
     while animation_running[room_id]:
         if current_animation_frames[room_id]:
             current_frame_index[room_id] = (current_frame_index[room_id] + 1) % len(current_animation_frames[room_id])
@@ -74,7 +70,7 @@ def animation_loop(room_id):
                 'total': len(current_animation_frames[room_id])
             }
             socketio.emit('animation_frame', frame_data, room=room_id)
-        time.sleep(0.1)  # 10 FPS
+        time.sleep(0.1)
 
 @socketio.on('connect')
 def handle_connect():
@@ -82,11 +78,10 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnected:', request.sid)
-    # При отключении удаляем участника из всех комнат
     for room_id in list(room_participants.keys()):
         if request.sid in room_participants[room_id]:
             room_participants[room_id].remove(request.sid)
+            emit('participant_left', {'sid': request.sid}, room=room_id)
             emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
 
 @socketio.on('join_room')
@@ -95,18 +90,7 @@ def handle_join_room(data):
     join_room(room_id)
     room_participants[room_id].add(request.sid)
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-    
-    # Если в комнате уже идет анимация, отправить текущий кадр новому участнику
-    if room_id in room_animations and 'current_frame' in room_animations[room_id]:
-        emit('animation_frame', room_animations[room_id]['current_frame'], room=request.sid)
-
-@socketio.on('leave_room')
-def handle_leave_room(data):
-    room_id = data['room_id']
-    leave_room(room_id)
-    if request.sid in room_participants[room_id]:
-        room_participants[room_id].remove(request.sid)
-        emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
+    emit('new_participant', {'sid': request.sid}, room=room_id)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
@@ -127,14 +111,6 @@ def handle_generate_speech(data):
     text = data['text']
     audio_data = text_to_speech(text)
     emit('speech_audio', {'audio': audio_data}, room=room_id)
-
-@socketio.on('stream_video')
-def handle_stream_video(data):
-    # Пересылаем видео поток другим участникам комнаты
-    emit('remote_stream', {
-        'socket_id': request.sid,
-        'video_data': data['video_data']
-    }, room=data['room_id'], include_self=False)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
