@@ -2,6 +2,9 @@ from flask import Flask, render_template, send_from_directory, jsonify, request
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
+from gtts import gTTS
+import io
+import base64
 import time
 import threading
 from collections import defaultdict
@@ -12,16 +15,11 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
-# Состояние комнат
-rooms = {
-    'default': {
-        'animation_running': False,
-        'current_frames': [],
-        'current_index': 0,
-        'participants': set(),
-        'current_phoneme': 'neutral'
-    }
-}
+animation_running = defaultdict(bool)
+current_animation_frames = defaultdict(list)
+current_frame_index = defaultdict(int)
+room_participants = defaultdict(set)
+room_speech_data = defaultdict(list)
 
 @app.route('/')
 def home():
@@ -48,7 +46,7 @@ def get_frames(avatar_name):
         if not avatar_dir.exists():
             return jsonify({"error": "Avatar not found"}), 404
         
-        frames = sorted([f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
         return jsonify({"frames": frames})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -57,16 +55,21 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
+def text_to_speech(text, lang='ru'):
+    tts = gTTS(text=text, lang=lang)
+    mp3_fp = io.BytesIO()
+    tts.write_to_fp(mp3_fp)
+    mp3_fp.seek(0)
+    return base64.b64encode(mp3_fp.read()).decode('utf-8')
+
 def animation_loop(room_id):
-    while rooms[room_id]['animation_running']:
-        if rooms[room_id]['current_frames']:
-            rooms[room_id]['current_index'] = (rooms[room_id]['current_index'] + 1) % len(rooms[room_id]['current_frames'])
-            
+    while animation_running[room_id]:
+        if current_animation_frames[room_id]:
+            current_frame_index[room_id] = (current_frame_index[room_id] + 1) % len(current_animation_frames[room_id])
             frame_data = {
-                'frame': rooms[room_id]['current_frames'][rooms[room_id]['current_index']],
-                'phoneme': rooms[room_id]['current_phoneme'],
-                'index': rooms[room_id]['current_index'],
-                'total': len(rooms[room_id]['current_frames'])
+                'frame': current_animation_frames[room_id][current_frame_index[room_id]],
+                'index': current_frame_index[room_id],
+                'total': len(current_animation_frames[room_id])
             }
             socketio.emit('animation_frame', frame_data, room=room_id)
         time.sleep(0.1)
@@ -77,69 +80,68 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    for room_id, room_data in rooms.items():
-        if request.sid in room_data['participants']:
-            room_data['participants'].remove(request.sid)
+    for room_id in list(room_participants.keys()):
+        if request.sid in room_participants[room_id]:
+            room_participants[room_id].remove(request.sid)
             emit('participant_left', {'sid': request.sid}, room=room_id)
-            emit('participants_update', {'count': len(room_data['participants'])}, room=room_id)
+            emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
 
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data['room_id']
-    if room_id not in rooms:
-        rooms[room_id] = {
-            'animation_running': False,
-            'current_frames': [],
-            'current_index': 0,
-            'participants': set(),
-            'current_phoneme': 'neutral'
-        }
-    
     join_room(room_id)
-    rooms[room_id]['participants'].add(request.sid)
-    emit('participants_update', {'count': len(rooms[room_id]['participants'])}, room=room_id)
+    room_participants[room_id].add(request.sid)
+    emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
+    
+    # Отправляем историю сообщений новому участнику
+    if room_speech_data[room_id]:
+        emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
     room_id = data['room_id']
-    if not rooms[room_id]['animation_running']:
-        rooms[room_id]['current_frames'] = data['frames']
-        rooms[room_id]['animation_running'] = True
+    if not animation_running[room_id]:
+        current_animation_frames[room_id] = data['frames']
+        animation_running[room_id] = True
         threading.Thread(target=animation_loop, args=(room_id,)).start()
 
 @socketio.on('stop_animation')
 def handle_stop_animation(data):
     room_id = data['room_id']
-    rooms[room_id]['animation_running'] = False
-    rooms[room_id]['current_phoneme'] = 'neutral'
-
-@socketio.on('update_phoneme')
-def handle_update_phoneme(data):
-    room_id = data['room_id']
-    phoneme = data['phoneme']
-    rooms[room_id]['current_phoneme'] = phoneme
+    animation_running[room_id] = False
 
 @socketio.on('generate_speech')
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
-    emit('speech_text', {
+    audio_data = text_to_speech(text)
+    emit('speech_audio', {'audio': audio_data, 'text': text}, room=room_id)
+    
+    # Сохраняем историю сообщений
+    room_speech_data[room_id].append({
         'text': text,
-        'type': 'avatar',
-        'room_id': room_id
-    }, room=room_id)
+        'timestamp': time.time(),
+        'type': 'generated'
+    })
+    if len(room_speech_data[room_id]) > 50:  # Ограничиваем историю
+        room_speech_data[room_id].pop(0)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
     room_id = data['room_id']
     text = data['text']
-    emit('speech_text', {
+    emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
+    
+    # Сохраняем историю сообщений
+    room_speech_data[room_id].append({
         'text': text,
-        'sid': request.sid,
-        'type': 'human',
-        'room_id': room_id
-    }, room=room_id)
+        'timestamp': time.time(),
+        'type': 'recognized',
+        'sid': request.sid
+    })
+    if len(room_speech_data[room_id]) > 50:
+        room_speech_data[room_id].pop(0)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
