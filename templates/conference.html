@@ -146,6 +146,17 @@
             text-align: center;
             display: none;
         }
+        #speakers-list {
+            position: absolute;
+            top: 70px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+            max-width: 200px;
+        }
         /* Иконки (можно заменить на реальные) */
         .icon {
             font-family: Arial, sans-serif;
@@ -185,6 +196,7 @@
             <div id="status">Подключение к конференции...</div>
             <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
+            <div id="speakers-list"></div>
             <div id="speech-text"></div>
         </div>
     </div>
@@ -238,6 +250,7 @@
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
+        const speakersList = document.getElementById('speakers-list');
 
         // Состояние
         let userStream = null;
@@ -247,6 +260,10 @@
         let isFullscreen = false;
         let recognition = null;
         let speechHistory = [];
+        let isServerSpeaking = false;
+        let audioContext = null;
+        let analyser = null;
+        let scriptProcessor = null;
 
         // Инициализация Socket.io
         function initSocket() {
@@ -274,16 +291,24 @@
             });
             
             socket.on('speech_audio', (data) => {
+                isServerSpeaking = true;
                 const audioSrc = `data:audio/mp3;base64,${data.audio}`;
                 speechAudio.src = audioSrc;
                 speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
                 
                 // Показываем текст на экране
                 showSpeechText(data.text, 'teacher');
+                
+                // Когда аудио закончится
+                speechAudio.onended = () => {
+                    isServerSpeaking = false;
+                };
             });
             
             socket.on('speech_text', (data) => {
-                showSpeechText(data.text, data.sid);
+                if (data.is_human) {
+                    showSpeechText(data.text, data.sid);
+                }
             });
             
             socket.on('participants_update', (data) => {
@@ -292,8 +317,23 @@
             
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
-                // Можно отобразить историю сообщений
             });
+            
+            socket.on('active_speakers_update', (data) => {
+                updateSpeakersList(data.speakers);
+            });
+        }
+
+        // Обновление списка говорящих
+        function updateSpeakersList(speakers) {
+            speakersList.innerHTML = '<strong>Говорят:</strong><br>';
+            speakers.forEach(speaker => {
+                speakersList.innerHTML += `${speaker.name}<br>`;
+            });
+            
+            if (speakers.length === 0) {
+                speakersList.innerHTML = '';
+            }
         }
 
         // Инициализация распознавания речи
@@ -305,6 +345,9 @@
                 recognition.lang = 'ru-RU';
 
                 recognition.onresult = (event) => {
+                    // Игнорируем, если сервер говорит
+                    if (isServerSpeaking) return;
+                    
                     let interimTranscript = '';
                     let finalTranscript = '';
 
@@ -321,7 +364,8 @@
                         // Отправляем распознанный текст на сервер
                         socket.emit('recognized_speech', {
                             room_id: roomId,
-                            text: finalTranscript
+                            text: finalTranscript,
+                            is_human: true
                         });
                         
                         // Показываем текст на экране
@@ -334,6 +378,41 @@
                 };
             } else {
                 console.warn('Браузер не поддерживает распознавание речи');
+            }
+        }
+
+        // Инициализация анализа аудио
+        function initAudioAnalyser() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                
+                const microphone = audioContext.createMediaStreamSource(userStream);
+                microphone.connect(analyser);
+                
+                scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+                analyser.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+                
+                scriptProcessor.onaudioprocess = () => {
+                    if (isServerSpeaking) return;
+                    
+                    const array = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(array);
+                    
+                    let values = 0;
+                    for (let i = 0; i < array.length; i++) {
+                        values += array[i];
+                    }
+                    
+                    const average = values / array.length;
+                    if (average > 10) { // Порог для определения речи
+                        // Можно добавить визуализацию или обработку
+                    }
+                };
+            } catch (e) {
+                console.error('Ошибка инициализации анализатора аудио:', e);
             }
         }
 
@@ -364,6 +443,9 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
+                    // Инициализируем анализ аудио
+                    initAudioAnalyser();
+                    
                     // Запускаем распознавание речи
                     if (recognition) {
                         recognition.start();
@@ -383,6 +465,12 @@
                     // Останавливаем распознавание речи
                     if (recognition) {
                         recognition.stop();
+                    }
+                    
+                    // Останавливаем анализ аудио
+                    if (scriptProcessor) {
+                        scriptProcessor.disconnect();
+                        scriptProcessor = null;
                     }
                 }
             } catch (error) {
