@@ -130,6 +130,16 @@
             text-align: center;
             line-height: 1;
         }
+        #p2p-status {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -140,10 +150,11 @@
 
     <div id="main">
         <div id="video-container">
-            <img id="teacher-video" src="" alt="Анимация учителя">
+            <video id="teacher-video" autoplay></video>
             <video id="self-video" autoplay muted></video>
             
             <div id="status">Подключение к конференции...</div>
+            <div id="p2p-status">P2P: не активно</div>
             <div id="participants">Участников: 1</div>
         </div>
     </div>
@@ -174,6 +185,7 @@
     <audio id="speech-audio"></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
         // Элементы
         const teacherVideo = document.getElementById('teacher-video');
@@ -184,6 +196,7 @@
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
+        const p2pStatus = document.getElementById('p2p-status');
         const participantsDiv = document.getElementById('participants');
         const speechAudio = document.getElementById('speech-audio');
         const videoContainer = document.getElementById('video-container');
@@ -192,6 +205,8 @@
         // Состояние
         let userStream = null;
         let socket = null;
+        let peer = null;
+        let teacherPeerId = null;
         let isMicOn = false;
         let isCamOn = false;
         let isFullscreen = false;
@@ -209,7 +224,6 @@
             });
             
             socket.on('animation_frame', (data) => {
-                teacherVideo.src = data.frame;
                 statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
@@ -222,6 +236,55 @@
             socket.on('participants_update', (data) => {
                 participantsDiv.textContent = `Участников: ${data.count}`;
             });
+            
+            socket.on('peer_id', (data) => {
+                teacherPeerId = data.peer_id;
+                p2pStatus.textContent = `P2P: учитель найден (ID: ${teacherPeerId})`;
+                connectToTeacher();
+            });
+        }
+
+        // Инициализация PeerJS
+        function initPeerJS() {
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                p2pStatus.textContent = `P2P: мой ID ${id}`;
+            });
+            
+            peer.on('call', (call) => {
+                call.answer();
+                call.on('stream', (remoteStream) => {
+                    teacherVideo.srcObject = remoteStream;
+                    p2pStatus.textContent = 'P2P: получен поток от учителя';
+                });
+            });
+            
+            peer.on('error', (err) => {
+                p2pStatus.textContent = `P2P ошибка: ${err}`;
+            });
+        }
+
+        // Подключение к учителю
+        function connectToTeacher() {
+            if (!teacherPeerId || !peer) return;
+            
+            const conn = peer.connect(teacherPeerId);
+            
+            conn.on('open', () => {
+                p2pStatus.textContent = 'P2P: подключение к учителю установлено';
+                
+                // Запрашиваем поток
+                const call = peer.call(teacherPeerId, new MediaStream());
+                call.on('stream', (remoteStream) => {
+                    teacherVideo.srcObject = remoteStream;
+                    p2pStatus.textContent = 'P2P: получен видеопоток от учителя';
+                });
+            });
+            
+            conn.on('error', (err) => {
+                p2pStatus.textContent = `P2P ошибка соединения: ${err}`;
+            });
         }
 
         // Управление микрофоном
@@ -229,7 +292,12 @@
             try {
                 if (!isMicOn) {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    // Здесь можно добавить отправку аудио на сервер
+                    if (userStream) {
+                        userStream.getAudioTracks().forEach(track => track.stop());
+                        audioStream.getAudioTracks().forEach(track => userStream.addTrack(track));
+                    } else {
+                        userStream = audioStream;
+                    }
                     isMicOn = true;
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
@@ -308,12 +376,16 @@
             if (socket) {
                 socket.disconnect();
             }
+            if (peer) {
+                peer.destroy();
+            }
             window.location.href = '/';
         }
 
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
+            initPeerJS();
             
             // Обработчики кнопок
             micBtn.addEventListener('click', toggleMicrophone);
