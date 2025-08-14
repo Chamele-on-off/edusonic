@@ -167,10 +167,6 @@
             height: 40px;
             font-size: 12px;
         }
-        /* Анимация фонем */
-        .phoneme-animation {
-            transition: all 0.1s ease-in-out;
-        }
     </style>
 </head>
 <body class="{{ 'embedded' if embed else '' }}">
@@ -183,7 +179,7 @@
 
     <div id="main">
         <div id="video-container">
-            <img id="teacher-video" src="" alt="Анимация учителя" class="phoneme-animation">
+            <img id="teacher-video" src="" alt="Анимация учителя">
             <video id="self-video" autoplay muted></video>
             
             <div id="status">Подключение к конференции...</div>
@@ -218,8 +214,6 @@
         </button>
     </div>
 
-    <audio id="speech-audio"></audio>
-
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Получаем ID комнаты из URL
@@ -238,7 +232,6 @@
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
-        const speechAudio = document.getElementById('speech-audio');
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
@@ -251,9 +244,8 @@
         let isFullscreen = false;
         let recognition = null;
         let speechHistory = [];
-        let isServerSpeechPlaying = false;
-        let currentPhonemeFrames = [];
-        let phonemeAnimationInterval = null;
+        let currentPhoneme = null;
+        let phonemeTimeout = null;
 
         // Инициализация Socket.io
         function initSocket() {
@@ -276,57 +268,79 @@
             });
             
             socket.on('animation_frame', (data) => {
-                if (!isServerSpeechPlaying) {
-                    teacherVideo.src = data.frame;
-                }
+                teacherVideo.src = data.frame;
                 statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
             socket.on('speech_audio', (data) => {
-                isServerSpeechPlaying = true;
-                const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                speechAudio.src = audioSrc;
+                const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
                 
-                // Воспроизводим аудио
-                speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
+                // Обработка фонем для анимации рта
+                if (data.phonemes && data.phonemes.length > 0) {
+                    let phonemeIndex = 0;
+                    const phonemeInterval = setInterval(() => {
+                        if (phonemeIndex >= data.phonemes.length) {
+                            clearInterval(phonemeInterval);
+                            currentPhoneme = null;
+                            return;
+                        }
+                        
+                        currentPhoneme = data.phonemes[phonemeIndex];
+                        phonemeIndex++;
+                        
+                        // Очищаем предыдущий таймаут
+                        if (phonemeTimeout) {
+                            clearTimeout(phonemeTimeout);
+                        }
+                        
+                        // Возвращаем нейтральное положение через 200мс
+                        phonemeTimeout = setTimeout(() => {
+                            currentPhoneme = null;
+                        }, 200);
+                    }, 100);
+                }
+                
+                audio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
                 
                 // Показываем текст на экране
                 showSpeechText(data.text, 'teacher');
                 
-                // Когда аудио закончится, сбрасываем флаг
-                speechAudio.onended = () => {
-                    isServerSpeechPlaying = false;
+                // Сообщаем серверу, когда речь закончилась
+                audio.onended = () => {
+                    socket.emit('speech_ended', {
+                        room_id: roomId,
+                        speech_id: data.speech_id
+                    });
                 };
             });
             
-            socket.on('phoneme_frames', (data) => {
-                // Останавливаем предыдущую анимацию
-                if (phonemeAnimationInterval) {
-                    clearInterval(phonemeAnimationInterval);
+            socket.on('speech_text', (data) => {
+                // Обработка фонем для анимации рта пользователя
+                if (data.phonemes && data.phonemes.length > 0) {
+                    let phonemeIndex = 0;
+                    const phonemeInterval = setInterval(() => {
+                        if (phonemeIndex >= data.phonemes.length) {
+                            clearInterval(phonemeInterval);
+                            currentPhoneme = null;
+                            return;
+                        }
+                        
+                        currentPhoneme = data.phonemes[phonemeIndex];
+                        phonemeIndex++;
+                        
+                        // Очищаем предыдущий таймаут
+                        if (phonemeTimeout) {
+                            clearTimeout(phonemeTimeout);
+                        }
+                        
+                        // Возвращаем нейтральное положение через 200мс
+                        phonemeTimeout = setTimeout(() => {
+                            currentPhoneme = null;
+                        }, 200);
+                    }, 100);
                 }
                 
-                currentPhonemeFrames = data.frames;
-                if (currentPhonemeFrames.length > 0) {
-                    let frameIndex = 0;
-                    phonemeAnimationInterval = setInterval(() => {
-                        teacherVideo.src = currentPhonemeFrames[frameIndex];
-                        frameIndex = (frameIndex + 1) % currentPhonemeFrames.length;
-                    }, 100);
-                    
-                    // Останавливаем через 300 мс (примерная длительность фонемы)
-                    setTimeout(() => {
-                        if (phonemeAnimationInterval) {
-                            clearInterval(phonemeAnimationInterval);
-                            phonemeAnimationInterval = null;
-                        }
-                    }, 300);
-                }
-            });
-            
-            socket.on('speech_text', (data) => {
-                if (data.sid !== socket.id) { // Игнорируем свою речь
-                    showSpeechText(data.text, data.sid);
-                }
+                showSpeechText(data.text, data.sid);
             });
             
             socket.on('participants_update', (data) => {
@@ -347,9 +361,6 @@
                 recognition.lang = 'ru-RU';
 
                 recognition.onresult = (event) => {
-                    // Не обрабатываем речь, если воспроизводится серверная речь
-                    if (isServerSpeechPlaying) return;
-                    
                     let interimTranscript = '';
                     let finalTranscript = '';
 
