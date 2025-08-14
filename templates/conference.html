@@ -124,6 +124,16 @@
             font-size: 12px;
             z-index: 10;
         }
+        #room-info {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+        }
         /* Иконки (можно заменить на реальные) */
         .icon {
             font-family: Arial, sans-serif;
@@ -135,7 +145,7 @@
 <body>
     <div id="header">
         <div id="logo">Virtual Classroom</div>
-        <div id="meeting-id">Конференция #12345</div>
+        <div id="meeting-id">Конференция</div>
     </div>
 
     <div id="main">
@@ -144,6 +154,7 @@
             <video id="self-video" autoplay muted></video>
             
             <div id="status">Подключение к конференции...</div>
+            <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
         </div>
     </div>
@@ -175,6 +186,11 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
+        // Получаем ID комнаты из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room') || 'default';
+        document.getElementById('room-name').textContent = roomId;
+        
         // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
@@ -202,6 +218,8 @@
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
+                // Присоединяемся к комнате
+                socket.emit('join_room', { room_id: roomId });
             });
             
             socket.on('disconnect', () => {
@@ -315,6 +333,7 @@
                 userStream.getTracks().forEach(track => track.stop());
             }
             if (socket) {
+                socket.emit('leave_room', { room_id: roomId });
                 socket.disconnect();
             }
             window.location.href = '/';
