@@ -3,249 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Учитель - Анимация аватара</title>
+    <title>Анимация аватара</title>
     <style>
-        :root {
-            --primary-color: #4285f4;
-            --danger-color: #ea4335;
-            --success-color: #34a853;
-            --warning-color: #fbbc05;
-        }
-        * {
-            box-sizing: border-box;
-        }
         body {
-            font-family: 'Roboto', Arial, sans-serif;
+            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            background-color: #f8f9fa;
-            color: #333;
+            padding: 20px;
+            background-color: #f5f5f5;
         }
         #container {
-            max-width: 1000px;
-            margin: 20px auto;
+            max-width: 800px;
+            margin: 0 auto;
             background: white;
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 20px;
-            color: var(--primary-color);
-        }
-        .panel {
-            margin-bottom: 20px;
-            padding: 15px;
             border-radius: 8px;
-            background: #f8f9fa;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        .panel-title {
-            margin-top: 0;
-            color: var(--primary-color);
-            font-size: 1.2em;
-        }
-        #avatar-preview {
-            width: 100%;
+        #avatar {
+            width: 400px;
             height: 400px;
-            margin: 10px 0;
+            margin: 20px auto;
             display: block;
-            border: 2px solid #ddd;
-            border-radius: 8px;
+            border: 1px solid #ddd;
             background-color: #f0f0f0;
-            object-fit: contain;
         }
         .controls {
             display: flex;
-            flex-wrap: wrap;
             gap: 10px;
-            margin: 15px 0;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
         }
-        button, select, input, textarea {
+        button, select, input {
             padding: 10px 15px;
-            border-radius: 6px;
-            font-size: 14px;
-            border: 1px solid #ddd;
-            transition: all 0.2s;
+            border-radius: 4px;
         }
         button {
-            background: var(--primary-color);
+            background: #3498db;
             color: white;
             border: none;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        button:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
         }
         button:disabled {
             background: #95a5a6;
             cursor: not-allowed;
-            transform: none;
-        }
-        button.danger {
-            background: var(--danger-color);
-        }
-        button.success {
-            background: var(--success-color);
-        }
-        button.warning {
-            background: var(--warning-color);
         }
         select {
-            min-width: 200px;
-        }
-        textarea {
-            width: 100%;
-            min-height: 80px;
-            resize: vertical;
+            border: 1px solid #ddd;
+            min-width: 150px;
         }
         #status {
-            padding: 10px;
+            text-align: center;
             margin: 10px 0;
-            border-radius: 6px;
-            background: #e9f0fd;
-            color: var(--primary-color);
-            font-weight: 500;
+            font-family: monospace;
         }
-        #room-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        #room-name {
-            font-weight: bold;
-            color: var(--primary-color);
-            padding: 8px 12px;
-            background: #e9f0fd;
-            border-radius: 6px;
-        }
-        #copy-room-link {
-            background: #e9f0fd;
-            color: var(--primary-color);
-        }
-        .participants-count {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            background: #e9f0fd;
-            padding: 5px 10px;
-            border-radius: 20px;
-            font-size: 14px;
-        }
-        .icon {
-            width: 16px;
-            height: 16px;
-        }
-        .hidden {
-            display: none;
+        #debug {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
         }
         #conference-link {
             margin-top: 20px;
             text-align: center;
         }
-        #debug {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f0f0f0;
-            border-radius: 8px;
-            font-family: monospace;
-            max-height: 200px;
-            overflow-y: auto;
-            font-size: 13px;
-        }
     </style>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
-        <h1><i class="fas fa-chalkboard-teacher"></i> Управление анимацией аватара</h1>
+        <h1 style="text-align: center;">Анимация аватара</h1>
         
-        <div id="room-info">
-            <div>
-                <label for="room-input">Название комнаты:</label>
-                <input type="text" id="room-input" value="default">
-                <button id="join-room-btn"><i class="fas fa-door-open"></i> Войти в комнату</button>
-            </div>
-            <span id="room-name" class="hidden"></span>
-            <button id="copy-room-link" class="hidden"><i class="fas fa-copy"></i> Копировать ссылку</button>
-            <span id="participants-count" class="participants-count hidden">
-                <i class="fas fa-users"></i> <span id="participants-number">0</span>
-            </span>
+        <div class="controls">
+            <select id="avatar-select">
+                <option value="">Выберите аватар</option>
+            </select>
+            <button id="load-btn" disabled>Загрузить</button>
         </div>
         
-        <div id="status">Выберите аватар и войдите в комнату</div>
+        <img id="avatar" src="" alt="Аватар">
         
-        <div class="panel">
-            <h3 class="panel-title"><i class="fas fa-user-astronaut"></i> Выбор аватара</h3>
-            <div class="controls">
-                <select id="avatar-select">
-                    <option value="">Выберите аватар</option>
-                </select>
-                <button id="load-btn" disabled><i class="fas fa-download"></i> Загрузить</button>
-            </div>
-            
-            <img id="avatar-preview" src="" alt="Аватар">
+        <div id="status">Выберите аватар</div>
+        
+        <div class="controls">
+            <button id="start-btn" disabled>Старт</button>
+            <button id="stop-btn" disabled>Стоп</button>
         </div>
-        
-        <div class="panel">
-            <h3 class="panel-title"><i class="fas fa-play-circle"></i> Управление анимацией</h3>
-            <div class="controls">
-                <button id="start-btn" disabled class="success"><i class="fas fa-play"></i> Старт</button>
-                <button id="stop-btn" disabled class="danger"><i class="fas fa-stop"></i> Стоп</button>
-                <button id="broadcast-btn" disabled class="warning"><i class="fas fa-satellite-dish"></i> Транслировать</button>
-            </div>
-        </div>
-        
-        <div class="panel">
-            <h3 class="panel-title"><i class="fas fa-comment-dots"></i> Озвучка текста</h3>
-            <textarea id="tts-text" placeholder="Введите текст для синтеза речи..."></textarea>
-            <div class="controls">
-                <button id="speak-btn"><i class="fas fa-volume-up"></i> Озвучить</button>
-                <button id="auto-speak-btn" class="success"><i class="fas fa-robot"></i> Автоозвучка</button>
-            </div>
-        </div>
-        
-        <div id="conference-link" class="hidden">
-            <a id="conference-link-a" href="" target="_blank" class="success">
-                <i class="fas fa-external-link-alt"></i> Перейти в конференцию
-            </a>
+
+        <div class="controls">
+            <input type="text" id="speech-text" placeholder="Текст для озвучивания">
+            <button id="speak-btn" disabled>Озвучить</button>
         </div>
         
         <div id="debug"></div>
+
+        <div id="conference-link">
+            <a href="/conference" target="_blank">Перейти в конференцию</a>
+        </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Конфигурация
-        const FPS = 15;
+        const FPS = 10;
         
         // Элементы
-        const avatarPreview = document.getElementById('avatar-preview');
+        const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
         const debugDiv = document.getElementById('debug');
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
         const loadBtn = document.getElementById('load-btn');
-        const broadcastBtn = document.getElementById('broadcast-btn');
         const avatarSelect = document.getElementById('avatar-select');
-        const ttsText = document.getElementById('tts-text');
+        const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
-        const autoSpeakBtn = document.getElementById('auto-speak-btn');
-        const roomInput = document.getElementById('room-input');
-        const joinRoomBtn = document.getElementById('join-room-btn');
-        const roomNameSpan = document.getElementById('room-name');
-        const copyRoomLinkBtn = document.getElementById('copy-room-link');
-        const participantsCount = document.getElementById('participants-count');
-        const participantsNumber = document.getElementById('participants-number');
-        const conferenceLink = document.getElementById('conference-link');
-        const conferenceLinkA = document.getElementById('conference-link-a');
         
         // Socket.io
         const socket = io();
@@ -256,11 +129,6 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let broadcastInterval = null;
-        let currentRoom = '';
-        let isAutoSpeaking = false;
-        let autoSpeakInterval = null;
-        let participants = 0;
         
         // Логирование
         function log(message) {
@@ -337,8 +205,8 @@
                 if (loadedImages.length > 0) {
                     statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
                     startBtn.disabled = false;
-                    broadcastBtn.disabled = false;
-                    avatarPreview.src = loadedImages[0].src;
+                    speakBtn.disabled = false;
+                    avatar.src = loadedImages[0].src;
                     currentFrame = 0;
                 } else {
                     statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
@@ -355,13 +223,17 @@
             if (loadedImages.length === 0) return;
             
             currentFrame = currentFrame % loadedImages.length;
-            avatarPreview.src = loadedImages[currentFrame].src;
+            avatar.src = loadedImages[currentFrame].src;
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
         
         // Запуск анимации
         function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
+            
+            // Отправляем серверу информацию о кадрах для трансляции
+            const framePaths = loadedImages.map(img => img.src);
+            socket.emit('start_animation', { frames: framePaths });
             
             animationInterval = setInterval(() => {
                 currentFrame++;
@@ -382,116 +254,19 @@
                 showFrame();
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
+                socket.emit('stop_animation');
                 log("Анимация остановлена");
             }
         }
         
-        // Начать трансляцию
-        function startBroadcast() {
-            if (!currentRoom || broadcastInterval || loadedImages.length === 0) return;
-            
-            // Отправляем начальное состояние на сервер
-            socket.emit('start_animation', {
-                room: currentRoom,
-                avatar_name: currentAvatar,
-                frames: frames,
-                fps: FPS
-            });
-            
-            // Запускаем интервал для отправки кадров
-            broadcastInterval = setInterval(() => {
-                socket.emit('next_frame', { room: currentRoom });
-            }, 1000 / FPS);
-            
-            broadcastBtn.innerHTML = '<i class="fas fa-satellite-dish"></i> Остановить трансляцию';
-            broadcastBtn.classList.remove('warning');
-            broadcastBtn.classList.add('danger');
-            log(`Трансляция анимации начата в комнате "${currentRoom}"`);
-        }
-        
-        // Остановить трансляцию
-        function stopBroadcast() {
-            if (broadcastInterval) {
-                clearInterval(broadcastInterval);
-                broadcastInterval = null;
-                socket.emit('stop_animation', { room: currentRoom });
-                broadcastBtn.innerHTML = '<i class="fas fa-satellite-dish"></i> Транслировать';
-                broadcastBtn.classList.remove('danger');
-                broadcastBtn.classList.add('warning');
-                log(`Трансляция анимации остановлена в комнате "${currentRoom}"`);
+        // Генерация речи
+        function generateSpeech() {
+            const text = speechText.value.trim();
+            if (text) {
+                socket.emit('generate_speech', { text: text });
+                log(`Отправлен текст для озвучивания: "${text}"`);
             }
         }
-        
-        // Озвучить текст
-        function speakText() {
-            const text = ttsText.value.trim();
-            if (!text || !currentRoom) return;
-            
-            log(`Отправка текста для озвучки в комнату "${currentRoom}": "${text}"`);
-            socket.emit('text_to_speech', {
-                room: currentRoom,
-                text: text
-            });
-        }
-        
-        // Включить/выключить автоозвучку
-        function toggleAutoSpeak() {
-            isAutoSpeaking = !isAutoSpeaking;
-            
-            if (isAutoSpeaking) {
-                autoSpeakBtn.innerHTML = '<i class="fas fa-robot"></i> Остановить автоозвучку';
-                autoSpeakBtn.classList.remove('success');
-                autoSpeakBtn.classList.add('danger');
-                autoSpeakInterval = setInterval(speakText, 3000); // Озвучка каждые 3 секунды
-                log('Автоозвучка включена');
-            } else {
-                autoSpeakBtn.innerHTML = '<i class="fas fa-robot"></i> Автоозвучка';
-                autoSpeakBtn.classList.remove('danger');
-                autoSpeakBtn.classList.add('success');
-                if (autoSpeakInterval) clearInterval(autoSpeakInterval);
-                log('Автоозвучка выключена');
-            }
-        }
-        
-        // Войти в комнату
-        function joinRoom() {
-            const roomName = roomInput.value.trim() || 'default';
-            currentRoom = roomName;
-            
-            socket.emit('join_room', {
-                room: roomName,
-                is_teacher: true
-            });
-            
-            roomNameSpan.textContent = roomName;
-            roomNameSpan.classList.remove('hidden');
-            copyRoomLinkBtn.classList.remove('hidden');
-            conferenceLink.classList.remove('hidden');
-            conferenceLinkA.href = `/conference?room=${encodeURIComponent(roomName)}`;
-            
-            log(`Вы вошли в комнату "${roomName}" как учитель`);
-            statusDiv.textContent = `Вы в комнате: ${roomName}`;
-        }
-        
-        // Копировать ссылку на конференцию
-        function copyRoomLink() {
-            const link = `${window.location.origin}/conference?room=${encodeURIComponent(currentRoom)}`;
-            navigator.clipboard.writeText(link).then(() => {
-                const originalText = copyRoomLinkBtn.innerHTML;
-                copyRoomLinkBtn.innerHTML = '<i class="fas fa-check"></i> Ссылка скопирована!';
-                setTimeout(() => {
-                    copyRoomLinkBtn.innerHTML = originalText;
-                }, 2000);
-            });
-        }
-        
-        // Обработчики событий Socket.io
-        socket.on('new_participant', (data) => {
-            participants++;
-            participantsNumber.textContent = participants;
-            participantsCount.classList.remove('hidden');
-            log(`Новый участник подключился (ID: ${data.sid}). Всего участников: ${participants}`);
-        });
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
@@ -507,7 +282,6 @@
             // Кнопка загрузки
             loadBtn.addEventListener('click', () => {
                 stopAnimation();
-                stopBroadcast();
                 loadAvatarFrames(currentAvatar);
             });
             
@@ -515,38 +289,10 @@
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
             
-            // Управление трансляцией
-            broadcastBtn.addEventListener('click', () => {
-                if (broadcastInterval) {
-                    stopBroadcast();
-                } else {
-                    startBroadcast();
-                }
-            });
-            
-            // Озвучка текста
-            speakBtn.addEventListener('click', speakText);
-            
-            // Автоозвучка
-            autoSpeakBtn.addEventListener('click', toggleAutoSpeak);
-            
-            // Вход в комнату
-            joinRoomBtn.addEventListener('click', joinRoom);
-            
-            // Копирование ссылки
-            copyRoomLinkBtn.addEventListener('click', copyRoomLink);
-            
-            // Обработка нажатия Enter в поле комнаты
-            roomInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') joinRoom();
-            });
-            
-            // Обработка нажатия Enter в поле текста
-            ttsText.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    speakText();
-                }
+            // Генерация речи
+            speakBtn.addEventListener('click', generateSpeech);
+            speechText.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') generateSpeech();
             });
         });
     </script>
