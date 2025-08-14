@@ -214,6 +214,8 @@
         let currentFrame = 0;
         let animationInterval = null;
         let userStream = null;
+        let mediaStream = null;
+        let videoStreamInterval = null;
         let voices = [];
         let currentVoice = null;
         let currentRoom = 'default';
@@ -333,9 +335,35 @@
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
         
+        // Создание видео потока из изображений
+        async function createVideoStream() {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = loadedImages[0].width;
+                canvas.height = loadedImages[0].height;
+                const ctx = canvas.getContext('2d');
+                
+                const stream = canvas.captureStream(FPS);
+                videoPreview.srcObject = stream;
+                videoPreview.style.display = 'block';
+                
+                videoStreamInterval = setInterval(() => {
+                    ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
+                }, 1000 / FPS);
+                
+                return stream;
+            } catch (error) {
+                log(`Ошибка создания видео потока: ${error.message}`);
+                return null;
+            }
+        }
+        
         // Запуск анимации
-        function startAnimation() {
+        async function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
+            
+            // Создаем видео поток
+            mediaStream = await createVideoStream();
             
             // Включаем камеру пользователя
             enableCamera();
@@ -362,6 +390,17 @@
                 log("Анимация остановлена");
             }
             
+            if (videoStreamInterval) {
+                clearInterval(videoStreamInterval);
+                videoStreamInterval = null;
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+                videoPreview.style.display = 'none';
+            }
+            
             // Выключаем камеру
             disableCamera();
         }
@@ -372,8 +411,6 @@
                 if (userStream) return;
                 
                 userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                videoPreview.srcObject = userStream;
-                videoPreview.style.display = 'block';
                 log("Камера включена");
             } catch (error) {
                 log(`Ошибка доступа к камере: ${error.message}`);
@@ -385,8 +422,6 @@
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
                 userStream = null;
-                videoPreview.srcObject = null;
-                videoPreview.style.display = 'none';
                 log("Камера выключена");
             }
         }
@@ -458,8 +493,7 @@
         
         // Обработчик речи с сервера
         socket.on('speech_audio', (data) => {
-            const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-            const audio = new Audio(audioSrc);
+            const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
             
             // Обработка фонем для анимации рта
             if (data.phonemes && data.phonemes.length > 0) {
