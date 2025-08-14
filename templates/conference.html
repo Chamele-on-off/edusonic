@@ -40,9 +40,19 @@
             position: relative;
             overflow: hidden;
         }
+        #teacher-video-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
         #teacher-video {
             max-width: 100%;
             max-height: 100%;
+            width: auto;
+            height: auto;
             object-fit: contain;
         }
         #user-video-container {
@@ -61,7 +71,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transform: rotateY(180deg); /* Зеркальное отображение */
+            transform: rotateY(180deg);
         }
         #controls {
             position: fixed;
@@ -151,15 +161,17 @@
 <body>
     <div id="main-container">
         <div id="teacher-video-container">
-            <img id="teacher-video" src="" alt="Аватар учителя">
+            <div id="teacher-video-wrapper">
+                <img id="teacher-video" src="" alt="Аватар учителя">
+            </div>
             <div id="status">Подключение к комнате...</div>
             <div id="room-name"></div>
         </div>
         
         <div id="user-video-container">
-            <video id="user-video" autoplay playsinline></video>
-            <div id="user-video-off" class="video-off-placeholder hidden">
-                <i class="fas fa-video-slash"></i> Камера выключена
+            <video id="user-video" autoplay playsinline muted></video>
+            <div id="user-video-off" class="video-off-placeholder">
+                <i class="fas fa-video-slash"></i> Загрузка камеры...
             </div>
         </div>
         
@@ -186,7 +198,6 @@
         // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const userVideo = document.getElementById('user-video');
-        const userVideoContainer = document.getElementById('user-video-container');
         const userVideoOff = document.getElementById('user-video-off');
         const muteBtn = document.getElementById('mute-btn');
         const videoBtn = document.getElementById('video-btn');
@@ -219,6 +230,78 @@
             room: roomName,
             is_teacher: false
         });
+
+        // Функция для проверки поддержки медиаустройств
+        async function checkMediaAccess() {
+            try {
+                // Проверяем доступ к камере
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop());
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+        
+        // Управление камерой и микрофоном
+        async function startCamera() {
+            try {
+                // Проверяем разрешения
+                const hasCameraAccess = await checkMediaAccess();
+                
+                if (!hasCameraAccess) {
+                    userVideoOff.innerHTML = '<i class="fas fa-video-slash"></i> Нет доступа к камере';
+                    throw new Error('Нет доступа к камере');
+                }
+
+                userStream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "user"
+                    },
+                    audio: true
+                });
+
+                userVideo.srcObject = userStream;
+                userVideoOff.classList.add('hidden');
+                
+                // Включаем микрофон по умолчанию
+                isMuted = false;
+                userStream.getAudioTracks()[0].enabled = true;
+                muteBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+                muteBtn.classList.remove('danger');
+                
+                // Отслеживаем состояние треков
+                userStream.getVideoTracks()[0].onended = () => {
+                    if (!isVideoOff) toggleVideo();
+                };
+                
+                userStream.getAudioTracks()[0].onended = () => {
+                    if (!isMuted) toggleMute();
+                };
+                
+                statusDiv.textContent = 'Камера и микрофон подключены';
+                
+            } catch (err) {
+                console.error('Ошибка доступа к медиаустройствам:', err);
+                
+                // Пытаемся получить только аудио
+                try {
+                    userStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    isVideoOff = true;
+                    userVideoOff.innerHTML = '<i class="fas fa-video-slash"></i> Камера недоступна';
+                    userVideoOff.classList.remove('hidden');
+                    videoBtn.innerHTML = '<i class="fas fa-video-slash"></i>';
+                    videoBtn.classList.add('danger');
+                    statusDiv.textContent = 'Подключен только микрофон';
+                } catch (audioErr) {
+                    console.error('Не удалось получить доступ к микрофону:', audioErr);
+                    userVideoOff.innerHTML = '<i class="fas fa-video-slash"></i> Нет доступа к камере и микрофону';
+                    statusDiv.textContent = 'Не удалось подключить камеру и микрофон';
+                }
+            }
+        }
         
         // Обработчики событий Socket.io
         socket.on('room_joined', (data) => {
@@ -267,124 +350,6 @@
             }, 1000 / fps);
         }
         
-        // Управление камерой и микрофоном
-        async function startCamera() {
-            try {
-                userStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: {
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
-                        facingMode: "user"
-                    }, 
-                    audio: true 
-                });
-                
-                userVideo.srcObject = userStream;
-                
-                // Включаем микрофон по умолчанию
-                toggleMute(); // Выключаем, чтобы потом включить и обновить состояние
-                isMuted = true;
-                toggleMute();
-                
-                // Отслеживаем отключение микрофона в потоке
-                const audioTrack = userStream.getAudioTracks()[0];
-                if (audioTrack) {
-                    audioTrack.onended = () => {
-                        if (!isMuted) {
-                            toggleMute();
-                        }
-                    };
-                }
-                
-                // Отслеживаем отключение видео в потоке
-                const videoTrack = userStream.getVideoTracks()[0];
-                if (videoTrack) {
-                    videoTrack.onended = () => {
-                        if (!isVideoOff) {
-                            toggleVideo();
-                        }
-                    };
-                }
-                
-                statusDiv.textContent = 'Камера и микрофон подключены';
-                
-            } catch (err) {
-                console.error('Ошибка доступа к медиаустройствам:', err);
-                statusDiv.textContent = 'Ошибка доступа к камере/микрофону: ' + err.message;
-                
-                // Пытаемся получить только аудио, если видео недоступно
-                try {
-                    userStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    isVideoOff = true;
-                    userVideoOff.classList.remove('hidden');
-                    videoBtn.innerHTML = '<i class="fas fa-video-slash"></i>';
-                    videoBtn.classList.add('danger');
-                    statusDiv.textContent = 'Подключен только микрофон (камера недоступна)';
-                } catch (audioErr) {
-                    console.error('Не удалось получить доступ к микрофону:', audioErr);
-                }
-            }
-        }
-        
-        // Демонстрация экрана
-        async function shareScreen() {
-            try {
-                screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
-                    audio: false
-                });
-                
-                // Заменяем видеопоток на экран
-                const videoTrack = screenStream.getVideoTracks()[0];
-                const sender = userStream.getVideoTracks()[0];
-                if (sender) sender.replaceTrack(videoTrack);
-                
-                screenStream.getVideoTracks()[0].onended = () => {
-                    if (isSharingScreen) {
-                        toggleScreenShare();
-                    }
-                };
-                
-                isSharingScreen = true;
-                screenBtn.classList.add('active');
-                statusDiv.textContent = 'Демонстрация экрана включена';
-            } catch (err) {
-                console.error('Ошибка демонстрации экрана:', err);
-                statusDiv.textContent = 'Ошибка демонстрации экрана: ' + err.message;
-            }
-        }
-        
-        // Остановка демонстрации экрана
-        function stopScreenShare() {
-            if (screenStream) {
-                screenStream.getTracks().forEach(track => track.stop());
-                screenStream = null;
-            }
-            
-            // Возвращаем камеру
-            if (userStream && !isVideoOff) {
-                navigator.mediaDevices.getUserMedia({ 
-                    video: {
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
-                        facingMode: "user"
-                    }
-                }).then(stream => {
-                    const videoTrack = stream.getVideoTracks()[0];
-                    const sender = userStream.getVideoTracks()[0];
-                    if (sender) sender.replaceTrack(videoTrack);
-                    stream.getAudioTracks().forEach(track => track.stop());
-                });
-            }
-            
-            isSharingScreen = false;
-            screenBtn.classList.remove('active');
-            statusDiv.textContent = 'Демонстрация экрана отключена';
-        }
-        
         // Переключение микрофона
         function toggleMute() {
             if (!userStream) return;
@@ -394,13 +359,11 @@
                 track.enabled = !isMuted;
             });
             
-            // Отправляем состояние на сервер
             socket.emit('toggle_mute', {
                 room: roomName,
                 is_muted: isMuted
             });
             
-            // Обновляем кнопку
             if (isMuted) {
                 muteBtn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
                 muteBtn.classList.add('danger');
@@ -417,17 +380,16 @@
             if (!userStream) return;
             
             isVideoOff = !isVideoOff;
-            userStream.getVideoTracks().forEach(track => {
-                track.enabled = !isVideoOff;
-            });
             
-            // Отправляем состояние на сервер
+            if (userStream.getVideoTracks().length > 0) {
+                userStream.getVideoTracks()[0].enabled = !isVideoOff;
+            }
+            
             socket.emit('toggle_video', {
                 room: roomName,
                 is_video_off: isVideoOff
             });
             
-            // Показываем/скрываем плейсхолдер
             if (isVideoOff) {
                 userVideoOff.classList.remove('hidden');
                 videoBtn.innerHTML = '<i class="fas fa-video-slash"></i>';
@@ -441,6 +403,61 @@
             }
         }
         
+        // Демонстрация экрана
+        async function shareScreen() {
+            try {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: true,
+                    audio: false
+                });
+                
+                // Заменяем видеопоток
+                const videoTrack = screenStream.getVideoTracks()[0];
+                if (userStream.getVideoTracks().length > 0) {
+                    userStream.getVideoTracks()[0].replaceTrack(videoTrack);
+                }
+                
+                videoTrack.onended = () => {
+                    if (isSharingScreen) toggleScreenShare();
+                };
+                
+                isSharingScreen = true;
+                screenBtn.classList.add('active');
+                statusDiv.textContent = 'Демонстрация экрана включена';
+            } catch (err) {
+                console.error('Ошибка демонстрации экрана:', err);
+                statusDiv.textContent = 'Ошибка демонстрации экрана';
+            }
+        }
+        
+        // Остановка демонстрации экрана
+        function stopScreenShare() {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Возвращаем камеру
+            if (userStream && !isVideoOff) {
+                navigator.mediaDevices.getUserMedia({ 
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: "user"
+                    }
+                }).then(stream => {
+                    const videoTrack = stream.getVideoTracks()[0];
+                    if (userStream.getVideoTracks().length > 0) {
+                        userStream.getVideoTracks()[0].replaceTrack(videoTrack);
+                    }
+                    stream.getAudioTracks().forEach(track => track.stop());
+                });
+            }
+            
+            isSharingScreen = false;
+            screenBtn.classList.remove('active');
+            statusDiv.textContent = 'Демонстрация экрана отключена';
+        }
+        
         // Переключение демонстрации экрана
         function toggleScreenShare() {
             if (isSharingScreen) {
@@ -452,7 +469,6 @@
         
         // Покинуть конференцию
         function leaveConference() {
-            // Останавливаем все потоки
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
             }
@@ -460,16 +476,13 @@
                 screenStream.getTracks().forEach(track => track.stop());
             }
             
-            // Отправляем событие на сервер
             socket.emit('leave_room', { room: roomName });
-            
-            // Перенаправляем на главную страницу
             window.location.href = '/';
         }
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            // Запускаем камеру
+            // Запускаем камеру сразу при загрузке
             startCamera();
             
             // Назначаем обработчики кнопок
