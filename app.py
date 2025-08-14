@@ -19,6 +19,7 @@ animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
+room_speech_data = defaultdict(list)
 
 @app.route('/')
 def home():
@@ -27,7 +28,8 @@ def home():
 @app.route('/conference')
 def conference():
     room_id = request.args.get('room', 'default')
-    return render_template('conference.html', room_id=room_id)
+    embed = request.args.get('embed', 'false') == 'true'
+    return render_template('conference.html', room_id=room_id, embed=embed)
 
 @app.route('/api/avatars')
 def get_avatars():
@@ -91,6 +93,10 @@ def handle_join_room(data):
     room_participants[room_id].add(request.sid)
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
+    
+    # Отправляем историю сообщений новому участнику
+    if room_speech_data[room_id]:
+        emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
@@ -110,7 +116,32 @@ def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
     audio_data = text_to_speech(text)
-    emit('speech_audio', {'audio': audio_data}, room=room_id)
+    emit('speech_audio', {'audio': audio_data, 'text': text}, room=room_id)
+    
+    # Сохраняем историю сообщений
+    room_speech_data[room_id].append({
+        'text': text,
+        'timestamp': time.time(),
+        'type': 'generated'
+    })
+    if len(room_speech_data[room_id]) > 50:  # Ограничиваем историю
+        room_speech_data[room_id].pop(0)
+
+@socketio.on('recognized_speech')
+def handle_recognized_speech(data):
+    room_id = data['room_id']
+    text = data['text']
+    emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
+    
+    # Сохраняем историю сообщений
+    room_speech_data[room_id].append({
+        'text': text,
+        'timestamp': time.time(),
+        'type': 'recognized',
+        'sid': request.sid
+    })
+    if len(room_speech_data[room_id]) > 50:
+        room_speech_data[room_id].pop(0)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
