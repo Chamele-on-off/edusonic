@@ -70,13 +70,6 @@
             margin-top: 20px;
             text-align: center;
         }
-        #video-preview {
-            display: none;
-            width: 200px;
-            height: 200px;
-            margin: 20px auto;
-            border: 1px solid #ddd;
-        }
         #room-controls {
             margin-top: 20px;
             padding: 15px;
@@ -86,15 +79,6 @@
         #room-id {
             font-weight: bold;
             color: #2c3e50;
-        }
-        #embed-code {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            font-family: monospace;
-            background: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 4px;
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -109,10 +93,6 @@
                 <input type="text" id="room-input" placeholder="Имя комнаты">
                 <button id="change-room-btn">Сменить комнату</button>
             </div>
-            <div>
-                <label for="embed-code">Код для вставки на другой сайт:</label>
-                <textarea id="embed-code" rows="3" readonly></textarea>
-            </div>
         </div>
         
         <div class="controls">
@@ -123,7 +103,6 @@
         </div>
         
         <img id="avatar" src="" alt="Аватар">
-        <video id="video-preview" autoplay muted></video>
         
         <div id="status">Выберите аватар</div>
         
@@ -145,10 +124,7 @@
     </div>
 
     <script>
-        // Конфигурация
         const FPS = 10;
-        
-        // Элементы
         const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
         const debugDiv = document.getElementById('debug');
@@ -158,51 +134,34 @@
         const avatarSelect = document.getElementById('avatar-select');
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
-        const videoPreview = document.getElementById('video-preview');
         const roomIdSpan = document.getElementById('room-id');
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
-        const embedCodeTextarea = document.getElementById('embed-code');
         
-        // Socket.io
         const socket = io();
-        
-        // Состояние
         let currentAvatar = '';
         let frames = [];
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let mediaStream = null;
-        let videoStreamInterval = null;
         let currentRoom = 'default';
         
-        // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
             conferenceLink.href = `/conference?room=${roomId}`;
-            
-            // Генерируем код для вставки
-            const embedCode = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
-            embedCodeTextarea.value = embedCode;
-            
-            // Сообщаем серверу о смене комнаты
             socket.emit('join_room', { room_id: roomId });
-            
             log(`Переключено в комнату: ${roomId}`);
         }
         
-        // Логирование
         function log(message) {
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
         }
         
-        // Загрузка изображения с повторами
-        function loadImage(src, retries = 3) {
+        async function loadImage(src, retries = 3) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => resolve(img);
@@ -217,12 +176,10 @@
             });
         }
         
-        // Загрузка списка аватаров
         async function loadAvatars() {
             try {
                 const response = await fetch('/api/avatars');
                 if (!response.ok) throw new Error('Ошибка загрузки аватаров');
-                
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
                 
@@ -233,14 +190,12 @@
                     option.textContent = avatar;
                     avatarSelect.appendChild(option);
                 });
-                
                 log(`Загружено аватаров: ${data.avatars.length}`);
             } catch (error) {
                 log(error.message);
             }
         }
         
-        // Загрузка кадров аватара
         async function loadAvatarFrames(avatarName) {
             try {
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
@@ -248,14 +203,12 @@
                 
                 const response = await fetch(`/api/frames/${avatarName}`);
                 if (!response.ok) throw new Error('Ошибка загрузки кадров');
-                
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
                 
                 frames = data.frames;
                 log(`Найдено кадров: ${frames.length}`);
                 
-                // Загружаем все изображения
                 for (let i = 0; i < frames.length; i++) {
                     try {
                         const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
@@ -275,53 +228,22 @@
                 } else {
                     statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
                 }
-                
             } catch (error) {
                 statusDiv.textContent = `Ошибка: ${error.message}`;
                 log(error.message);
             }
         }
         
-        // Показать текущий кадр
         function showFrame() {
             if (loadedImages.length === 0) return;
-            
             currentFrame = currentFrame % loadedImages.length;
             avatar.src = loadedImages[currentFrame].src;
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
         
-        // Создание видео потока из изображений
-        async function createVideoStream() {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = loadedImages[0].width;
-                canvas.height = loadedImages[0].height;
-                const ctx = canvas.getContext('2d');
-                
-                const stream = canvas.captureStream(FPS);
-                videoPreview.srcObject = stream;
-                videoPreview.style.display = 'block';
-                
-                videoStreamInterval = setInterval(() => {
-                    ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
-                }, 1000 / FPS);
-                
-                return stream;
-            } catch (error) {
-                log(`Ошибка создания видео потока: ${error.message}`);
-                return null;
-            }
-        }
-        
-        // Запуск анимации
-        async function startAnimation() {
+        function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
             
-            // Создаем видео поток
-            mediaStream = await createVideoStream();
-            
-            // Отправляем серверу информацию о кадрах для трансляции
             const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { 
                 frames: framePaths,
@@ -338,7 +260,6 @@
             log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
         }
         
-        // Остановка анимации
         function stopAnimation() {
             if (animationInterval) {
                 clearInterval(animationInterval);
@@ -350,20 +271,8 @@
                 socket.emit('stop_animation', { room_id: currentRoom });
                 log("Анимация остановлена");
             }
-            
-            if (videoStreamInterval) {
-                clearInterval(videoStreamInterval);
-                videoStreamInterval = null;
-            }
-            
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
-                videoPreview.style.display = 'none';
-            }
         }
         
-        // Генерация речи
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
@@ -372,41 +281,30 @@
                     room_id: currentRoom
                 });
                 log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
-                speechText.value = '';
             }
         }
         
-        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            // Инициализация комнаты по умолчанию
             initRoom('default');
-            
-            // Загрузка списка аватаров
             loadAvatars();
             
-            // Выбор аватара
             avatarSelect.addEventListener('change', () => {
                 currentAvatar = avatarSelect.value;
                 loadBtn.disabled = !currentAvatar;
             });
             
-            // Кнопка загрузки
             loadBtn.addEventListener('click', () => {
                 stopAnimation();
                 loadAvatarFrames(currentAvatar);
             });
             
-            // Управление анимацией
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
-            
-            // Генерация речи
             speakBtn.addEventListener('click', generateSpeech);
             speechText.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') generateSpeech();
             });
             
-            // Смена комнаты
             changeRoomBtn.addEventListener('click', () => {
                 const newRoom = roomInput.value.trim() || 'default';
                 initRoom(newRoom);
