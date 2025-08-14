@@ -75,10 +75,12 @@ def animation_loop():
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
+    emit('participants_update', {'count': len(socketio.server.manager.rooms.get('/', {}))})
 
 @socketio.on('disconnect')
 def handle_disconnect():
     print('Client disconnected')
+    emit('participants_update', {'count': len(socketio.server.manager.rooms.get('/', {}))}, broadcast=True)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
@@ -98,6 +100,10 @@ def handle_generate_speech(data):
     text = data['text']
     audio_data = text_to_speech(text)
     emit('speech_audio', {'audio': audio_data}, broadcast=True)
+
+@socketio.on('peer_id')
+def handle_peer_id(data):
+    emit('peer_id', {'peer_id': data['peer_id']}, broadcast=True)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
