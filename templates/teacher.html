@@ -108,7 +108,6 @@
     <script>
         // Конфигурация
         const FPS = 10;
-        const ROOM_ID = 'classroom_1';
         
         // Элементы
         const avatar = document.getElementById('avatar');
@@ -123,7 +122,6 @@
         
         // Socket.io
         const socket = io();
-        socket.emit('join_room', { room: ROOM_ID });
         
         // Состояние
         let currentAvatar = '';
@@ -234,12 +232,8 @@
             if (animationInterval || loadedImages.length === 0) return;
             
             // Отправляем серверу информацию о кадрах для трансляции
-            const framePaths = frames.map(frame => `/frames/${currentAvatar}/${frame}`);
-            socket.emit('start_animation', { 
-                room: ROOM_ID,
-                avatar_name: currentAvatar,
-                frames: framePaths
-            });
+            const framePaths = loadedImages.map(img => img.src);
+            socket.emit('start_animation', { frames: framePaths });
             
             animationInterval = setInterval(() => {
                 currentFrame++;
@@ -260,7 +254,7 @@
                 showFrame();
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                socket.emit('stop_animation', { room: ROOM_ID });
+                socket.emit('stop_animation');
                 log("Анимация остановлена");
             }
         }
@@ -269,10 +263,7 @@
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
-                socket.emit('generate_speech', { 
-                    room: ROOM_ID,
-                    text: text 
-                });
+                socket.emit('generate_speech', { text: text });
                 log(`Отправлен текст для озвучивания: "${text}"`);
             }
         }
