@@ -96,6 +96,9 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+        #voice-select {
+            min-width: 200px;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -134,6 +137,9 @@
 
         <div class="controls">
             <input type="text" id="speech-text" placeholder="Текст для озвучивания">
+            <select id="voice-select" disabled>
+                <option value="">Выберите голос</option>
+            </select>
             <button id="speak-btn" disabled>Озвучить</button>
         </div>
         
@@ -158,6 +164,7 @@
         const avatarSelect = document.getElementById('avatar-select');
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
+        const voiceSelect = document.getElementById('voice-select');
         const videoPreview = document.getElementById('video-preview');
         const roomIdSpan = document.getElementById('room-id');
         const roomInput = document.getElementById('room-input');
@@ -177,6 +184,8 @@
         let mediaStream = null;
         let videoStreamInterval = null;
         let currentRoom = 'default';
+        let voices = [];
+        let selectedVoice = null;
         
         // Инициализация комнаты
         function initRoom(roomId) {
@@ -238,6 +247,32 @@
             } catch (error) {
                 log(error.message);
             }
+        }
+        
+        // Загрузка голосов для синтеза речи
+        function loadVoices() {
+            // Ждем, пока голоса станут доступны
+            let voicesReady = setInterval(() => {
+                voices = window.speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    clearInterval(voicesReady);
+                    
+                    voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
+                    voices.forEach(voice => {
+                        const option = document.createElement('option');
+                        option.value = voice.name;
+                        option.textContent = `${voice.name} (${voice.lang})`;
+                        if (voice.default) {
+                            option.textContent += ' — по умолчанию';
+                            selectedVoice = voice;
+                        }
+                        voiceSelect.appendChild(option);
+                    });
+                    
+                    voiceSelect.disabled = false;
+                    log(`Доступно голосов: ${voices.length}`);
+                }
+            }, 200);
         }
         
         // Загрузка кадров аватара
@@ -325,7 +360,8 @@
             const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { 
                 frames: framePaths,
-                room_id: currentRoom
+                room_id: currentRoom,
+                avatar_name: currentAvatar
             });
             
             animationInterval = setInterval(() => {
@@ -369,7 +405,8 @@
             if (text) {
                 socket.emit('generate_speech', { 
                     text: text,
-                    room_id: currentRoom
+                    room_id: currentRoom,
+                    avatar_name: currentAvatar
                 });
                 log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
                 speechText.value = '';
@@ -383,6 +420,21 @@
             
             // Загрузка списка аватаров
             loadAvatars();
+            
+            // Загрузка голосов для синтеза речи
+            if ('speechSynthesis' in window) {
+                loadVoices();
+                // Обновляем голоса при изменении
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            } else {
+                log('Браузер не поддерживает синтез речи');
+            }
+            
+            // Выбор голоса
+            voiceSelect.addEventListener('change', () => {
+                const voiceName = voiceSelect.value;
+                selectedVoice = voices.find(v => v.name === voiceName);
+            });
             
             // Выбор аватара
             avatarSelect.addEventListener('change', () => {
