@@ -70,8 +70,16 @@
             margin-top: 20px;
             text-align: center;
         }
+        #p2p-status {
+            margin-top: 10px;
+            padding: 5px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            text-align: center;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -98,6 +106,7 @@
             <button id="speak-btn" disabled>Озвучить</button>
         </div>
         
+        <div id="p2p-status">P2P соединение: не активно</div>
         <div id="debug"></div>
 
         <div id="conference-link">
@@ -119,9 +128,16 @@
         const avatarSelect = document.getElementById('avatar-select');
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
+        const p2pStatus = document.getElementById('p2p-status');
         
         // Socket.io
         const socket = io();
+        
+        // PeerJS
+        let peer = null;
+        let peerId = null;
+        let mediaStream = null;
+        let connections = {};
         
         // Состояние
         let currentAvatar = '';
@@ -135,6 +151,55 @@
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        // Инициализация PeerJS
+        function initPeerJS() {
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                peerId = id;
+                p2pStatus.textContent = `P2P соединение: ID ${id}`;
+                log(`PeerJS подключен с ID: ${id}`);
+                socket.emit('peer_id', { peer_id: id });
+            });
+            
+            peer.on('connection', (conn) => {
+                conn.on('open', () => {
+                    log(`P2P соединение установлено с ${conn.peer}`);
+                    connections[conn.peer] = conn;
+                });
+            });
+            
+            peer.on('error', (err) => {
+                log(`PeerJS ошибка: ${err}`);
+                p2pStatus.textContent = `P2P ошибка: ${err}`;
+            });
+        }
+        
+        // Создание медиапотока из анимации
+        function createMediaStreamFromAnimation() {
+            if (!loadedImages.length) return null;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = loadedImages[0].width;
+            canvas.height = loadedImages[0].height;
+            const ctx = canvas.getContext('2d');
+            
+            // Создаем MediaStream
+            const stream = canvas.captureStream(FPS);
+            
+            // Анимация на canvas
+            let frameIndex = 0;
+            const drawFrame = () => {
+                ctx.drawImage(loadedImages[frameIndex], 0, 0);
+                frameIndex = (frameIndex + 1) % loadedImages.length;
+            };
+            
+            // Запускаем анимацию
+            setInterval(drawFrame, 1000 / FPS);
+            
+            return stream;
         }
         
         // Загрузка изображения с повторами
@@ -235,6 +300,14 @@
             const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { frames: framePaths });
             
+            // Создаем медиапоток для P2P
+            if (peerId) {
+                mediaStream = createMediaStreamFromAnimation();
+                if (mediaStream) {
+                    log(`Создан медиапоток для P2P (${FPS} FPS)`);
+                }
+            }
+            
             animationInterval = setInterval(() => {
                 currentFrame++;
                 showFrame();
@@ -255,6 +328,14 @@
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 socket.emit('stop_animation');
+                
+                // Останавливаем медиапоток
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(track => track.stop());
+                    mediaStream = null;
+                    log("P2P медиапоток остановлен");
+                }
+                
                 log("Анимация остановлена");
             }
         }
@@ -270,6 +351,9 @@
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
+            // Инициализация PeerJS
+            initPeerJS();
+            
             // Загрузка списка аватаров
             loadAvatars();
             
