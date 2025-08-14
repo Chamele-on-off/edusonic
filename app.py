@@ -9,7 +9,7 @@ import time
 import threading
 
 app = Flask(__name__, static_folder='static')
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Конфигурация путей
 BASE_DIR = Path(__file__).parent
@@ -19,6 +19,7 @@ FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 animation_running = False
 current_animation_frames = []
 current_frame_index = 0
+participants_count = 0
 
 @app.route('/')
 def home():
@@ -74,13 +75,17 @@ def animation_loop():
 
 @socketio.on('connect')
 def handle_connect():
+    global participants_count
+    participants_count += 1
+    emit('participants_update', {'count': participants_count}, broadcast=True)
     print('Client connected')
-    emit('participants_update', {'count': len(socketio.server.manager.rooms.get('/', {}))})
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    global participants_count
+    participants_count -= 1
+    emit('participants_update', {'count': participants_count}, broadcast=True)
     print('Client disconnected')
-    emit('participants_update', {'count': len(socketio.server.manager.rooms.get('/', {}))}, broadcast=True)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
@@ -100,10 +105,6 @@ def handle_generate_speech(data):
     text = data['text']
     audio_data = text_to_speech(text)
     emit('speech_audio', {'audio': audio_data}, broadcast=True)
-
-@socketio.on('peer_id')
-def handle_peer_id(data):
-    emit('peer_id', {'peer_id': data['peer_id']}, broadcast=True)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
