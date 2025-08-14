@@ -7,18 +7,21 @@ import io
 import base64
 import time
 import threading
+from collections import defaultdict
 
 app = Flask(__name__, static_folder='static')
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Конфигурация путей
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
-# Глобальные переменные для управления потоком
+# Глобальные переменные
 animation_running = False
 current_animation_frames = []
 current_frame_index = 0
+participants = defaultdict(dict)
+rooms = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -59,9 +62,9 @@ def text_to_speech(text, lang='ru'):
     mp3_fp.seek(0)
     return base64.b64encode(mp3_fp.read()).decode('utf-8')
 
-def animation_loop():
+def animation_loop(room):
     global current_frame_index, animation_running
-    while animation_running:
+    while animation_running and room in rooms:
         if current_animation_frames:
             current_frame_index = (current_frame_index + 1) % len(current_animation_frames)
             frame_data = {
@@ -69,35 +72,62 @@ def animation_loop():
                 'index': current_frame_index,
                 'total': len(current_animation_frames)
             }
-            socketio.emit('animation_frame', frame_data)
+            socketio.emit('animation_frame', frame_data, room=room)
         time.sleep(0.1)  # 10 FPS
 
 @socketio.on('connect')
 def handle_connect():
-    print('Client connected')
+    print(f'Client connected: {request.sid}')
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnected')
+    sid = request.sid
+    for room, users in rooms.items():
+        if sid in users:
+            del users[sid]
+            socketio.emit('participants_update', {'count': len(users)}, room=room)
+            break
+    print(f'Client disconnected: {sid}')
+
+@socketio.on('join_room')
+def handle_join_room(data):
+    room = data.get('room', 'default')
+    sid = request.sid
+    rooms[room][sid] = {'sid': sid}
+    emit('participants_update', {'count': len(rooms[room])}, room=room)
+    print(f'Client {sid} joined room {room}')
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
     global animation_running, current_animation_frames
+    room = data.get('room', 'default')
     if not animation_running:
         current_animation_frames = data['frames']
         animation_running = True
-        threading.Thread(target=animation_loop).start()
+        threading.Thread(target=animation_loop, args=(room,)).start()
 
 @socketio.on('stop_animation')
-def handle_stop_animation():
+def handle_stop_animation(data):
     global animation_running
     animation_running = False
 
 @socketio.on('generate_speech')
 def handle_generate_speech(data):
     text = data['text']
+    room = data.get('room', 'default')
     audio_data = text_to_speech(text)
-    emit('speech_audio', {'audio': audio_data}, broadcast=True)
+    emit('speech_audio', {'audio': audio_data}, room=room)
+
+@socketio.on('user_media')
+def handle_user_media(data):
+    sid = request.sid
+    room = data.get('room', 'default')
+    if sid in rooms[room]:
+        rooms[room][sid]['media'] = data['media']
+        emit('user_media_update', {
+            'sid': sid,
+            'media': data['media']
+        }, room=room, include_self=False)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
