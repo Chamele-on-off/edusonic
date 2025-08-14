@@ -270,20 +270,20 @@
             
             socket.on('animation_frame', (data) => {
                 teacherVideo.src = data.frame;
-                statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
             socket.on('speech_audio', (data) => {
-                const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                speechAudio.src = audioSrc;
-                speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
-                
-                // Показываем текст на экране
-                showSpeechText(data.text, 'teacher');
+                if (data.type === 'avatar') {
+                    const audioSrc = `data:audio/mp3;base64,${data.audio}`;
+                    speechAudio.src = audioSrc;
+                    speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
+                }
             });
             
             socket.on('speech_text', (data) => {
-                showSpeechText(data.text, data.sid);
+                if (data.type === 'human') {
+                    showSpeechText(data.text, data.sid);
+                }
             });
             
             socket.on('participants_update', (data) => {
@@ -292,17 +292,44 @@
             
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
-                // Можно отобразить историю сообщений
             });
         }
 
-        // Инициализация распознавания речи
+        // Инициализация распознавания речи с улучшенными параметрами
         function initSpeechRecognition() {
             if ('webkitSpeechRecognition' in window) {
                 recognition = new webkitSpeechRecognition();
                 recognition.continuous = true;
                 recognition.interimResults = true;
                 recognition.lang = 'ru-RU';
+                recognition.maxAlternatives = 3; // Больше вариантов для лучшего распознавания
+                
+                // Улучшенные параметры для чувствительности
+                if ('webkitSpeechRecognition' in window) {
+                    const recognition = new webkitSpeechRecognition();
+                    recognition.continuous = true;
+                    recognition.interimResults = true;
+                    recognition.lang = 'ru-RU';
+                    
+                    // Настройки для улучшения чувствительности
+                    if (recognition.hasOwnProperty('onaudiostart')) {
+                        recognition.onaudiostart = () => {
+                            console.log('Аудиопоток начат');
+                        };
+                    }
+                    
+                    if (recognition.hasOwnProperty('onsoundstart')) {
+                        recognition.onsoundstart = () => {
+                            console.log('Обнаружен звук');
+                        };
+                    }
+                    
+                    if (recognition.hasOwnProperty('onspeechstart')) {
+                        recognition.onspeechstart = () => {
+                            console.log('Обнаружена речь');
+                        };
+                    }
+                }
 
                 recognition.onresult = (event) => {
                     let interimTranscript = '';
@@ -331,6 +358,25 @@
 
                 recognition.onerror = (event) => {
                     console.error('Ошибка распознавания речи:', event.error);
+                    // Перезапускаем распознавание при ошибках
+                    if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                        setTimeout(() => {
+                            if (recognition && isMicOn) {
+                                recognition.start();
+                            }
+                        }, 1000);
+                    }
+                };
+                
+                recognition.onend = () => {
+                    // Перезапускаем распознавание, если микрофон еще включен
+                    if (isMicOn) {
+                        setTimeout(() => {
+                            if (recognition) {
+                                recognition.start();
+                            }
+                        }, 100);
+                    }
                 };
             } else {
                 console.warn('Браузер не поддерживает распознавание речи');
@@ -353,12 +399,21 @@
         async function toggleMicrophone() {
             try {
                 if (!isMicOn) {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { 
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                            sampleRate: 44100
+                        } 
+                    });
+                    
                     if (userStream) {
                         userStream.getAudioTracks().forEach(track => userStream.addTrack(track));
                     } else {
                         userStream = audioStream;
                     }
+                    
                     isMicOn = true;
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
@@ -394,12 +449,20 @@
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
-                    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const videoStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            facingMode: 'user'
+                        } 
+                    });
+                    
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
                     } else {
                         userStream = videoStream;
                     }
+                    
                     selfVideo.srcObject = userStream;
                     isCamOn = true;
                     camBtn.classList.add('active');
