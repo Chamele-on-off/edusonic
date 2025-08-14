@@ -39,14 +39,17 @@
         #video-container {
             flex: 1;
             display: flex;
+            flex-wrap: wrap;
             justify-content: center;
             align-items: center;
             background: #000;
             position: relative;
+            gap: 10px;
+            padding: 10px;
         }
         #teacher-video {
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            max-height: 70vh;
             object-fit: contain;
         }
         #self-video {
@@ -59,6 +62,14 @@
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
             z-index: 10;
+        }
+        .participant-video {
+            width: 30%;
+            min-width: 200px;
+            max-height: 200px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #333;
         }
         #controls {
             background: #2d3035;
@@ -124,11 +135,18 @@
             font-size: 12px;
             z-index: 10;
         }
-        /* Иконки (можно заменить на реальные) */
         .icon {
             font-family: Arial, sans-serif;
             text-align: center;
             line-height: 1;
+        }
+        #participants-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
         }
     </style>
 </head>
@@ -140,7 +158,10 @@
 
     <div id="main">
         <div id="video-container">
-            <img id="teacher-video" src="" alt="Анимация учителя">
+            <div id="participants-container">
+                <img id="teacher-video" src="" alt="Анимация учителя">
+                <!-- Участники будут добавляться здесь динамически -->
+            </div>
             <video id="self-video" autoplay muted></video>
             
             <div id="status">Подключение к конференции...</div>
@@ -188,6 +209,7 @@
         const speechAudio = document.getElementById('speech-audio');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
+        const participantsContainer = document.getElementById('participants-container');
 
         // Состояние
         let userStream = null;
@@ -195,6 +217,9 @@
         let isMicOn = false;
         let isCamOn = false;
         let isFullscreen = false;
+        let currentRoom = 'default_room';
+        const peerConnections = {};
+        const participantsVideos = {};
 
         // Инициализация Socket.io
         function initSocket() {
@@ -202,6 +227,7 @@
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
+                socket.emit('join_room', { room: currentRoom });
             });
             
             socket.on('disconnect', () => {
@@ -222,6 +248,60 @@
             socket.on('participants_update', (data) => {
                 participantsDiv.textContent = `Участников: ${data.count}`;
             });
+
+            socket.on('user_media_update', (data) => {
+                updateParticipantVideo(data.sid, data.media);
+            });
+
+            // Инициализация WebRTC (упрощенная реализация)
+            initializeWebRTC();
+        }
+
+        // Упрощенная реализация WebRTC для демонстрации
+        function initializeWebRTC() {
+            // Здесь должна быть реализация WebRTC соединения между участниками
+            // Для простоты используем socket.io для передачи медиа-данных
+            
+            // При подключении нового участника
+            socket.on('new_participant', (sid) => {
+                addParticipantVideo(sid);
+            });
+            
+            // При отключении участника
+            socket.on('participant_left', (sid) => {
+                removeParticipantVideo(sid);
+            });
+        }
+
+        // Добавление видео участника
+        function addParticipantVideo(sid) {
+            if (!participantsVideos[sid]) {
+                const videoElement = document.createElement('video');
+                videoElement.id = `video-${sid}`;
+                videoElement.className = 'participant-video';
+                videoElement.autoplay = true;
+                videoElement.playsInline = true;
+                participantsContainer.appendChild(videoElement);
+                participantsVideos[sid] = videoElement;
+            }
+        }
+
+        // Обновление видео участника
+        function updateParticipantVideo(sid, mediaData) {
+            if (!participantsVideos[sid]) {
+                addParticipantVideo(sid);
+            }
+            // Здесь должна быть обработка медиа-данных
+            // Для демонстрации просто покажем текст
+            participantsVideos[sid].poster = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23333"/><text x="100" y="100" font-family="Arial" font-size="16" fill="white" text-anchor="middle">Участник ' + sid.slice(0, 6) + '</text></svg>';
+        }
+
+        // Удаление видео участника
+        function removeParticipantVideo(sid) {
+            if (participantsVideos[sid]) {
+                participantsVideos[sid].remove();
+                delete participantsVideos[sid];
+            }
         }
 
         // Управление микрофоном
@@ -229,14 +309,33 @@
             try {
                 if (!isMicOn) {
                     const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    // Здесь можно добавить отправку аудио на сервер
+                    if (userStream) {
+                        userStream.addTrack(audioStream.getAudioTracks()[0]);
+                    }
                     isMicOn = true;
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
+                    
+                    // Отправляем информацию о медиа на сервер
+                    socket.emit('user_media', {
+                        room: currentRoom,
+                        media: {
+                            audio: true,
+                            video: isCamOn
+                        }
+                    });
                 } else {
                     if (userStream) {
                         userStream.getAudioTracks().forEach(track => track.stop());
+                        // Отправляем информацию о медиа на сервер
+                        socket.emit('user_media', {
+                            room: currentRoom,
+                            media: {
+                                audio: false,
+                                video: isCamOn
+                            }
+                        });
                     }
                     isMicOn = false;
                     micBtn.classList.remove('active');
@@ -252,17 +351,39 @@
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
-                    userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    if (userStream) {
+                        userStream.addTrack(videoStream.getVideoTracks()[0]);
+                    } else {
+                        userStream = videoStream;
+                    }
                     selfVideo.srcObject = userStream;
                     isCamOn = true;
                     camBtn.classList.add('active');
                     camBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Камера включена';
                     selfVideo.style.display = 'block';
+                    
+                    // Отправляем информацию о медиа на сервер
+                    socket.emit('user_media', {
+                        room: currentRoom,
+                        media: {
+                            audio: isMicOn,
+                            video: true
+                        }
+                    });
                 } else {
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => track.stop());
                         selfVideo.srcObject = null;
+                        // Отправляем информацию о медиа на сервер
+                        socket.emit('user_media', {
+                            room: currentRoom,
+                            media: {
+                                audio: isMicOn,
+                                video: false
+                            }
+                        });
                     }
                     isCamOn = false;
                     camBtn.classList.remove('active');
