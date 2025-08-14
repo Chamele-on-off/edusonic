@@ -41,11 +41,11 @@
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
             background: #000;
-            position: relative;
             padding: 10px;
             gap: 10px;
+            overflow-y: auto;
         }
         .video-wrapper {
             position: relative;
@@ -70,8 +70,8 @@
             font-size: 12px;
         }
         #teacher-video {
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
         }
         #controls {
@@ -148,7 +148,6 @@
             font-size: 12px;
             z-index: 10;
         }
-        /* Иконки (можно заменить на реальные) */
         .icon {
             font-family: Arial, sans-serif;
             text-align: center;
@@ -164,7 +163,7 @@
 
     <div id="main">
         <div id="video-container">
-            <!-- Динамически добавляемые видео элементы будут здесь -->
+            <!-- Видео участников будут добавляться сюда -->
         </div>
     </div>
 
@@ -176,10 +175,6 @@
         <button class="control-btn" id="cam-btn" title="Камера">
             <div class="icon">📷</div>
             <span>Вкл</span>
-        </button>
-        <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
-            <div class="icon">🖥️</div>
-            <span>Экран</span>
         </button>
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
             <div class="icon">⛶</div>
@@ -195,47 +190,44 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Получаем ID комнаты из URL
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'default';
-        document.getElementById('room-info').textContent = `Комната: ${roomId}`;
         
-        // Элементы
         const videoContainer = document.getElementById('video-container');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
-        const screenBtn = document.getElementById('screen-btn');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
         const speechAudio = document.getElementById('speech-audio');
         const mainElement = document.getElementById('main');
-
-        // Состояние
-        let userStream = null;
+        const roomInfo = document.getElementById('room-info');
+        
+        roomInfo.textContent = `Комната: ${roomId}`;
+        
         let socket = null;
         let isMicOn = false;
         let isCamOn = false;
         let isFullscreen = false;
-        let peerConnections = {};
+        let userStream = null;
         let localVideoElement = null;
-        let localStream = null;
+        const remoteVideos = {};
 
-        // Создание видео элемента для участника
-        function createVideoElement(socketId, isLocal = false) {
+        function createVideoElement(sid, isLocal = false) {
             const wrapper = document.createElement('div');
             wrapper.className = 'video-wrapper';
-            wrapper.id = `video-${socketId}`;
+            wrapper.id = `video-${sid}`;
             
             const video = document.createElement(isLocal ? 'video' : 'img');
             video.className = 'video-element';
             video.autoplay = true;
             video.muted = isLocal;
+            video.playsInline = true;
             
             const label = document.createElement('div');
             label.className = 'video-label';
-            label.textContent = isLocal ? 'Вы' : `Участник ${socketId.substring(0, 5)}`;
+            label.textContent = isLocal ? 'Вы' : `Участник ${sid.substring(0, 5)}`;
             
             wrapper.appendChild(video);
             wrapper.appendChild(label);
@@ -244,25 +236,24 @@
             return video;
         }
 
-        // Удаление видео элемента участника
-        function removeVideoElement(socketId) {
-            const element = document.getElementById(`video-${socketId}`);
-            if (element) {
-                element.remove();
-            }
+        function removeVideoElement(sid) {
+            const element = document.getElementById(`video-${sid}`);
+            if (element) element.remove();
+            if (remoteVideos[sid]) delete remoteVideos[sid];
         }
 
-        // Инициализация Socket.io
-        function initSocket() {
+        async function initSocket() {
             socket = io();
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                // Присоединяемся к комнате
                 socket.emit('join_room', { room_id: roomId });
                 
-                // Создаем видео элемент для себя
+                // Создаем элемент для локального видео
                 localVideoElement = createVideoElement(socket.id, true);
+                if (userStream) {
+                    localVideoElement.srcObject = userStream;
+                }
             });
             
             socket.on('disconnect', () => {
@@ -270,12 +261,24 @@
             });
             
             socket.on('animation_frame', (data) => {
-                // Ищем видео элемент учителя (можно добавить специальный ID для учителя)
+                // Для анимации учителя
                 const teacherVideo = document.querySelector('.video-element[data-teacher="true"]');
-                if (teacherVideo) {
+                if (!teacherVideo) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'video-wrapper';
+                    const video = document.createElement('img');
+                    video.className = 'video-element';
+                    video.setAttribute('data-teacher', 'true');
+                    const label = document.createElement('div');
+                    label.className = 'video-label';
+                    label.textContent = 'Учитель';
+                    wrapper.appendChild(video);
+                    wrapper.appendChild(label);
+                    videoContainer.prepend(wrapper);
+                    video.src = data.frame;
+                } else {
                     teacherVideo.src = data.frame;
                 }
-                statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
             socket.on('speech_audio', (data) => {
@@ -288,17 +291,17 @@
                 participantsDiv.textContent = `Участников: ${data.count}`;
             });
             
-            socket.on('remote_stream', (data) => {
-                // Получаем видео от другого участника
-                let videoElement = document.querySelector(`#video-${data.socket_id} .video-element`);
-                if (!videoElement) {
-                    videoElement = createVideoElement(data.socket_id);
+            socket.on('new_participant', (data) => {
+                if (data.sid !== socket.id) {
+                    remoteVideos[data.sid] = createVideoElement(data.sid);
                 }
-                videoElement.src = data.video_data;
+            });
+            
+            socket.on('participant_left', (data) => {
+                removeVideoElement(data.sid);
             });
         }
 
-        // Управление микрофоном
         async function toggleMicrophone() {
             try {
                 if (!isMicOn) {
@@ -308,6 +311,11 @@
                     } else {
                         userStream = audioStream;
                     }
+                    
+                    if (localVideoElement) {
+                        localVideoElement.srcObject = userStream;
+                    }
+                    
                     isMicOn = true;
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
@@ -326,7 +334,6 @@
             }
         }
 
-        // Управление камерой
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
@@ -348,9 +355,6 @@
                 } else {
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => track.stop());
-                        if (localVideoElement) {
-                            localVideoElement.srcObject = null;
-                        }
                     }
                     isCamOn = false;
                     camBtn.classList.remove('active');
@@ -362,7 +366,6 @@
             }
         }
 
-        // Полноэкранный режим
         function toggleFullscreen() {
             if (!isFullscreen) {
                 if (mainElement.requestFullscreen) {
@@ -387,7 +390,6 @@
             }
         }
 
-        // Завершение вызова
         function endCall() {
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
@@ -399,26 +401,18 @@
             window.location.href = '/';
         }
 
-        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
             
-            // Обработчики кнопок
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
             fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
-            // Обработчик изменения размера окна
-            window.addEventListener('resize', () => {
-                // Можно добавить адаптацию интерфейса при изменении размера
+            document.addEventListener('fullscreenchange', () => {
+                isFullscreen = !!document.fullscreenElement;
+                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
             });
-        });
-
-        // Обработчик выхода из полноэкранного режима
-        document.addEventListener('fullscreenchange', () => {
-            isFullscreen = !!document.fullscreenElement;
-            fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
         });
     </script>
 </body>
