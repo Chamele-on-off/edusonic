@@ -77,12 +77,30 @@
             margin: 20px auto;
             border: 1px solid #ddd;
         }
+        #room-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eef;
+            border-radius: 4px;
+        }
+        #room-id {
+            font-weight: bold;
+            color: #2c3e50;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
         <h1 style="text-align: center;">Анимация аватара</h1>
+        
+        <div id="room-controls">
+            <h3>Комната: <span id="room-id">default</span></h3>
+            <div class="controls">
+                <input type="text" id="room-input" placeholder="Имя комнаты">
+                <button id="change-room-btn">Сменить комнату</button>
+            </div>
+        </div>
         
         <div class="controls">
             <select id="avatar-select">
@@ -109,7 +127,7 @@
         <div id="debug"></div>
 
         <div id="conference-link">
-            <a href="/conference" target="_blank">Перейти в конференцию</a>
+            <a id="conference-link-a" href="/conference?room=default" target="_blank">Перейти в конференцию</a>
         </div>
     </div>
 
@@ -128,6 +146,10 @@
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
         const videoPreview = document.getElementById('video-preview');
+        const roomIdSpan = document.getElementById('room-id');
+        const roomInput = document.getElementById('room-input');
+        const changeRoomBtn = document.getElementById('change-room-btn');
+        const conferenceLink = document.getElementById('conference-link-a');
         
         // Socket.io
         const socket = io();
@@ -140,6 +162,19 @@
         let animationInterval = null;
         let mediaStream = null;
         let videoStreamInterval = null;
+        let currentRoom = 'default';
+        
+        // Инициализация комнаты
+        function initRoom(roomId) {
+            currentRoom = roomId;
+            roomIdSpan.textContent = roomId;
+            conferenceLink.href = `/conference?room=${roomId}`;
+            
+            // Сообщаем серверу о смене комнаты
+            socket.emit('join_room', { room_id: roomId });
+            
+            log(`Переключено в комнату: ${roomId}`);
+        }
         
         // Логирование
         function log(message) {
@@ -270,7 +305,10 @@
             
             // Отправляем серверу информацию о кадрах для трансляции
             const framePaths = loadedImages.map(img => img.src);
-            socket.emit('start_animation', { frames: framePaths });
+            socket.emit('start_animation', { 
+                frames: framePaths,
+                room_id: currentRoom
+            });
             
             animationInterval = setInterval(() => {
                 currentFrame++;
@@ -279,7 +317,7 @@
             
             startBtn.disabled = true;
             stopBtn.disabled = false;
-            log(`Анимация запущена (${FPS} FPS)`);
+            log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
         }
         
         // Остановка анимации
@@ -291,7 +329,7 @@
                 showFrame();
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                socket.emit('stop_animation');
+                socket.emit('stop_animation', { room_id: currentRoom });
                 log("Анимация остановлена");
             }
             
@@ -311,13 +349,19 @@
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
-                socket.emit('generate_speech', { text: text });
-                log(`Отправлен текст для озвучивания: "${text}"`);
+                socket.emit('generate_speech', { 
+                    text: text,
+                    room_id: currentRoom
+                });
+                log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
             }
         }
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
+            // Инициализация комнаты по умолчанию
+            initRoom('default');
+            
             // Загрузка списка аватаров
             loadAvatars();
             
@@ -341,6 +385,13 @@
             speakBtn.addEventListener('click', generateSpeech);
             speechText.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') generateSpeech();
+            });
+            
+            // Смена комнаты
+            changeRoomBtn.addEventListener('click', () => {
+                const newRoom = roomInput.value.trim() || 'default';
+                initRoom(newRoom);
+                roomInput.value = '';
             });
         });
     </script>
