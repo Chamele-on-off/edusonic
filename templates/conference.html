@@ -469,4 +469,40 @@
         }
 
         // Инициализация
-        document.addEventListener('DOM
+        document.addEventListener('DOMContentLoaded', () => {
+            initSocket();
+            
+            // Обработчики кнопок
+            micBtn.addEventListener('click', toggleMicrophone);
+            camBtn.addEventListener('click', toggleCamera);
+            if (fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', toggleFullscreen);
+            }
+            endCallBtn.addEventListener('click', endCall);
+
+            // Скрыть свое видео по умолчанию
+            selfVideo.style.display = 'none';
+
+            // Для встроенного режима
+            if (isEmbedded) {
+                document.body.classList.add('embedded');
+            }
+
+            // Обработчик сообщений от родительского окна (если встроено в iframe)
+            window.addEventListener('message', (event) => {
+                if (event.data === 'end_conference') {
+                    endCall();
+                }
+            });
+        });
+
+        // Обработчик выхода из полноэкранного режима
+        document.addEventListener('fullscreenchange', () => {
+            isFullscreen = !!document.fullscreenElement;
+            if (fullscreenBtn) {
+                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
+            }
+        });
+    </script>
+</body>
+</html>
