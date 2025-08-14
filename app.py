@@ -116,28 +116,19 @@ def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
     audio_data = text_to_speech(text)
-    emit('speech_audio', {'audio': audio_data, 'text': text}, room=room_id)
-    
-    # Сохраняем историю сообщений
-    room_speech_data[room_id].append({
-        'text': text,
-        'timestamp': time.time(),
-        'type': 'generated'
-    })
-    if len(room_speech_data[room_id]) > 50:  # Ограничиваем историю
-        room_speech_data[room_id].pop(0)
+    emit('speech_audio', {'audio': audio_data, 'text': text, 'type': 'avatar'}, room=room_id)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
     room_id = data['room_id']
     text = data['text']
-    emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
+    emit('speech_text', {'text': text, 'sid': request.sid, 'type': 'human'}, room=room_id)
     
-    # Сохраняем историю сообщений
+    # Сохраняем историю сообщений только для человеческой речи
     room_speech_data[room_id].append({
         'text': text,
         'timestamp': time.time(),
-        'type': 'recognized',
+        'type': 'human',
         'sid': request.sid
     })
     if len(room_speech_data[room_id]) > 50:
