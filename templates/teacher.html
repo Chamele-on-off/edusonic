@@ -96,8 +96,15 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+        #voice-controls {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
         #voice-select {
-            min-width: 200px;
+            width: 100%;
+            margin-top: 10px;
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -137,10 +144,20 @@
 
         <div class="controls">
             <input type="text" id="speech-text" placeholder="Текст для озвучивания">
-            <select id="voice-select" disabled>
-                <option value="">Выберите голос</option>
-            </select>
             <button id="speak-btn" disabled>Озвучить</button>
+        </div>
+        
+        <div id="voice-controls">
+            <label for="language-select">Язык:</label>
+            <select id="language-select">
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+            </select>
+            
+            <label for="voice-select">Голос:</label>
+            <select id="voice-select" disabled>
+                <option value="">Загрузка голосов...</option>
+            </select>
         </div>
         
         <div id="debug"></div>
@@ -164,13 +181,14 @@
         const avatarSelect = document.getElementById('avatar-select');
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
-        const voiceSelect = document.getElementById('voice-select');
         const videoPreview = document.getElementById('video-preview');
         const roomIdSpan = document.getElementById('room-id');
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
         const embedCodeTextarea = document.getElementById('embed-code');
+        const languageSelect = document.getElementById('language-select');
+        const voiceSelect = document.getElementById('voice-select');
         
         // Socket.io
         const socket = io();
@@ -185,7 +203,7 @@
         let videoStreamInterval = null;
         let currentRoom = 'default';
         let voices = [];
-        let selectedVoice = null;
+        let currentVoice = null;
         
         // Инициализация комнаты
         function initRoom(roomId) {
@@ -247,32 +265,6 @@
             } catch (error) {
                 log(error.message);
             }
-        }
-        
-        // Загрузка голосов для синтеза речи
-        function loadVoices() {
-            // Ждем, пока голоса станут доступны
-            let voicesReady = setInterval(() => {
-                voices = window.speechSynthesis.getVoices();
-                if (voices.length > 0) {
-                    clearInterval(voicesReady);
-                    
-                    voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
-                    voices.forEach(voice => {
-                        const option = document.createElement('option');
-                        option.value = voice.name;
-                        option.textContent = `${voice.name} (${voice.lang})`;
-                        if (voice.default) {
-                            option.textContent += ' — по умолчанию';
-                            selectedVoice = voice;
-                        }
-                        voiceSelect.appendChild(option);
-                    });
-                    
-                    voiceSelect.disabled = false;
-                    log(`Доступно голосов: ${voices.length}`);
-                }
-            }, 200);
         }
         
         // Загрузка кадров аватара
@@ -360,8 +352,7 @@
             const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { 
                 frames: framePaths,
-                room_id: currentRoom,
-                avatar_name: currentAvatar
+                room_id: currentRoom
             });
             
             animationInterval = setInterval(() => {
@@ -399,14 +390,65 @@
             }
         }
         
+        // Загрузка доступных голосов
+        function loadVoices() {
+            return new Promise((resolve) => {
+                let voices = speechSynthesis.getVoices();
+                if (voices.length > 0) {
+                    resolve(voices);
+                    return;
+                }
+                
+                speechSynthesis.onvoiceschanged = () => {
+                    voices = speechSynthesis.getVoices();
+                    resolve(voices);
+                };
+            });
+        }
+        
+        // Обновление списка голосов
+        async function updateVoiceList() {
+            voices = await loadVoices();
+            voiceSelect.disabled = false;
+            voiceSelect.innerHTML = '';
+            
+            const lang = languageSelect.value;
+            const filteredVoices = voices.filter(voice => voice.lang.startsWith(lang));
+            
+            if (filteredVoices.length === 0) {
+                voiceSelect.innerHTML = '<option value="">Нет доступных голосов</option>';
+                return;
+            }
+            
+            filteredVoices.forEach((voice, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+            
+            // Выбираем первый голос по умолчанию
+            if (filteredVoices.length > 0) {
+                currentVoice = filteredVoices[0];
+            }
+        }
+        
         // Генерация речи
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
+                const lang = languageSelect.value;
+                const voiceIndex = voiceSelect.value;
+                
+                if (voiceIndex && voices[voiceIndex]) {
+                    currentVoice = voices[voiceIndex];
+                }
+                
                 socket.emit('generate_speech', { 
                     text: text,
                     room_id: currentRoom,
-                    avatar_name: currentAvatar
+                    lang: lang,
+                    voice: currentVoice ? currentVoice.name : null
                 });
                 log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
                 speechText.value = '';
@@ -420,21 +462,6 @@
             
             // Загрузка списка аватаров
             loadAvatars();
-            
-            // Загрузка голосов для синтеза речи
-            if ('speechSynthesis' in window) {
-                loadVoices();
-                // Обновляем голоса при изменении
-                window.speechSynthesis.onvoiceschanged = loadVoices;
-            } else {
-                log('Браузер не поддерживает синтез речи');
-            }
-            
-            // Выбор голоса
-            voiceSelect.addEventListener('change', () => {
-                const voiceName = voiceSelect.value;
-                selectedVoice = voices.find(v => v.name === voiceName);
-            });
             
             // Выбор аватара
             avatarSelect.addEventListener('change', () => {
@@ -464,6 +491,17 @@
                 initRoom(newRoom);
                 roomInput.value = '';
             });
+            
+            // Управление голосами
+            languageSelect.addEventListener('change', updateVoiceList);
+            voiceSelect.addEventListener('change', (e) => {
+                if (e.target.value && voices[e.target.value]) {
+                    currentVoice = voices[e.target.value];
+                }
+            });
+            
+            // Инициализация голосов
+            updateVoiceList();
         });
     </script>
 </body>
