@@ -1,12 +1,13 @@
-from flask import Flask, render_template, send_from_directory, jsonify
+from flask import Flask, render_template, send_from_directory, jsonify, request
 import os
 from pathlib import Path
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from gtts import gTTS
 import io
 import base64
 import time
 import threading
+from collections import defaultdict
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -16,10 +17,11 @@ BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
 # Глобальные переменные для управления потоком
-animation_running = False
-current_animation_frames = []
-current_frame_index = 0
-participants_count = 0
+animation_running = defaultdict(bool)
+current_animation_frames = defaultdict(list)
+current_frame_index = defaultdict(int)
+participants_count = defaultdict(int)
+room_animations = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -27,7 +29,8 @@ def home():
 
 @app.route('/conference')
 def conference():
-    return render_template('conference.html')
+    room_id = request.args.get('room', 'default')
+    return render_template('conference.html', room_id=room_id)
 
 @app.route('/api/avatars')
 def get_avatars():
@@ -60,51 +63,64 @@ def text_to_speech(text, lang='ru'):
     mp3_fp.seek(0)
     return base64.b64encode(mp3_fp.read()).decode('utf-8')
 
-def animation_loop():
+def animation_loop(room_id):
     global current_frame_index, animation_running
-    while animation_running:
-        if current_animation_frames:
-            current_frame_index = (current_frame_index + 1) % len(current_animation_frames)
+    while animation_running[room_id]:
+        if current_animation_frames[room_id]:
+            current_frame_index[room_id] = (current_frame_index[room_id] + 1) % len(current_animation_frames[room_id])
             frame_data = {
-                'frame': current_animation_frames[current_frame_index],
-                'index': current_frame_index,
-                'total': len(current_animation_frames)
+                'frame': current_animation_frames[room_id][current_frame_index[room_id]],
+                'index': current_frame_index[room_id],
+                'total': len(current_animation_frames[room_id])
             }
-            socketio.emit('animation_frame', frame_data)
+            socketio.emit('animation_frame', frame_data, room=room_id)
         time.sleep(0.1)  # 10 FPS
 
 @socketio.on('connect')
 def handle_connect():
-    global participants_count
-    participants_count += 1
-    emit('participants_update', {'count': participants_count}, broadcast=True)
     print('Client connected')
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    global participants_count
-    participants_count -= 1
-    emit('participants_update', {'count': participants_count}, broadcast=True)
     print('Client disconnected')
+
+@socketio.on('join_room')
+def handle_join_room(data):
+    room_id = data['room_id']
+    join_room(room_id)
+    participants_count[room_id] += 1
+    emit('participants_update', {'count': participants_count[room_id]}, room=room_id)
+    
+    # Если в комнате уже идет анимация, отправить текущий кадр новому участнику
+    if room_id in room_animations and 'current_frame' in room_animations[room_id]:
+        emit('animation_frame', room_animations[room_id]['current_frame'])
+
+@socketio.on('leave_room')
+def handle_leave_room(data):
+    room_id = data['room_id']
+    leave_room(room_id)
+    participants_count[room_id] -= 1
+    emit('participants_update', {'count': participants_count[room_id]}, room=room_id)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
-    global animation_running, current_animation_frames
-    if not animation_running:
-        current_animation_frames = data['frames']
-        animation_running = True
-        threading.Thread(target=animation_loop).start()
+    room_id = data['room_id']
+    if not animation_running[room_id]:
+        current_animation_frames[room_id] = data['frames']
+        animation_running[room_id] = True
+        threading.Thread(target=animation_loop, args=(room_id,)).start()
 
 @socketio.on('stop_animation')
-def handle_stop_animation():
-    global animation_running
-    animation_running = False
+def handle_stop_animation(data):
+    room_id = data['room_id']
+    animation_running[room_id] = False
 
 @socketio.on('generate_speech')
 def handle_generate_speech(data):
+    room_id = data['room_id']
     text = data['text']
     audio_data = text_to_speech(text)
-    emit('speech_audio', {'audio': audio_data}, broadcast=True)
+    emit('speech_audio', {'audio': audio_data}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
