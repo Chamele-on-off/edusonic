@@ -87,6 +87,15 @@
             font-weight: bold;
             color: #2c3e50;
         }
+        #embed-code {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -99,6 +108,10 @@
             <div class="controls">
                 <input type="text" id="room-input" placeholder="Имя комнаты">
                 <button id="change-room-btn">Сменить комнату</button>
+            </div>
+            <div>
+                <label for="embed-code">Код для вставки на другой сайт:</label>
+                <textarea id="embed-code" rows="3" readonly></textarea>
             </div>
         </div>
         
@@ -150,6 +163,7 @@
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
+        const embedCodeTextarea = document.getElementById('embed-code');
         
         // Socket.io
         const socket = io();
@@ -169,6 +183,10 @@
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
             conferenceLink.href = `/conference?room=${roomId}`;
+            
+            // Генерируем код для вставки
+            const embedCode = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
+            embedCodeTextarea.value = embedCode;
             
             // Сообщаем серверу о смене комнаты
             socket.emit('join_room', { room_id: roomId });
@@ -354,6 +372,7 @@
                     room_id: currentRoom
                 });
                 log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
+                speechText.value = '';
             }
         }
         
