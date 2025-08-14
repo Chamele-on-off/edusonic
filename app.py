@@ -1,37 +1,24 @@
-from flask import Flask, render_template, send_from_directory, jsonify, request
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask import Flask, render_template, send_from_directory, jsonify
 import os
 from pathlib import Path
+from flask_socketio import SocketIO, emit
 from gtts import gTTS
 import io
 import base64
 import time
-import uuid
+import threading
 
 app = Flask(__name__, static_folder='static')
-app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Конфигурация путей
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
-# Хранилище для комнат
-rooms = {}
-
-class Room:
-    def __init__(self, name):
-        self.name = name
-        self.teacher = None
-        self.participants = []
-        self.animation = {
-            'avatar_name': None,
-            'frames': [],
-            'current_frame': 0,
-            'is_playing': False,
-            'fps': 15
-        }
-        self.audio_queue = []
+# Глобальные переменные для управления потоком
+animation_running = False
+current_animation_frames = []
+current_frame_index = 0
 
 @app.route('/')
 def home():
@@ -39,8 +26,7 @@ def home():
 
 @app.route('/conference')
 def conference():
-    room = request.args.get('room', 'default')
-    return render_template('conference.html', room=room)
+    return render_template('conference.html')
 
 @app.route('/api/avatars')
 def get_avatars():
@@ -66,127 +52,52 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
+def text_to_speech(text, lang='ru'):
+    tts = gTTS(text=text, lang=lang)
+    mp3_fp = io.BytesIO()
+    tts.write_to_fp(mp3_fp)
+    mp3_fp.seek(0)
+    return base64.b64encode(mp3_fp.read()).decode('utf-8')
+
+def animation_loop():
+    global current_frame_index, animation_running
+    while animation_running:
+        if current_animation_frames:
+            current_frame_index = (current_frame_index + 1) % len(current_animation_frames)
+            frame_data = {
+                'frame': current_animation_frames[current_frame_index],
+                'index': current_frame_index,
+                'total': len(current_animation_frames)
+            }
+            socketio.emit('animation_frame', frame_data)
+        time.sleep(0.1)  # 10 FPS
+
 @socketio.on('connect')
 def handle_connect():
-    print('Client connected:', request.sid)
+    print('Client connected')
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    for room_name, room in rooms.items():
-        if request.sid == room.teacher:
-            room.teacher = None
-            emit('teacher_disconnected', room_name=room_name)
-        elif request.sid in room.participants:
-            room.participants.remove(request.sid)
-            emit('participant_left', {'sid': request.sid}, room=room_name)
-    
-    print('Client disconnected:', request.sid)
-
-@socketio.on('join_room')
-def handle_join_room(data):
-    room_name = data['room']
-    is_teacher = data.get('is_teacher', False)
-    
-    if room_name not in rooms:
-        rooms[room_name] = Room(room_name)
-    
-    room = rooms[room_name]
-    
-    if is_teacher:
-        room.teacher = request.sid
-        join_room(room_name)
-        emit('room_joined', {'is_teacher': True, 'room': room_name})
-    else:
-        room.participants.append(request.sid)
-        join_room(room_name)
-        emit('room_joined', {
-            'is_teacher': False,
-            'room': room_name,
-            'animation_state': room.animation,
-            'teacher_sid': room.teacher
-        })
-        
-        # Уведомляем учителя о новом участнике
-        if room.teacher:
-            emit('new_participant', {'sid': request.sid}, room=room.teacher)
+    print('Client disconnected')
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
-    room_name = data['room']
-    if room_name not in rooms:
-        return
-    
-    room = rooms[room_name]
-    room.animation.update({
-        'avatar_name': data['avatar_name'],
-        'frames': data['frames'],
-        'current_frame': 0,
-        'is_playing': True,
-        'fps': data.get('fps', 15)
-    })
-    
-    emit('animation_state', room.animation, room=room_name)
+    global animation_running, current_animation_frames
+    if not animation_running:
+        current_animation_frames = data['frames']
+        animation_running = True
+        threading.Thread(target=animation_loop).start()
 
 @socketio.on('stop_animation')
-def handle_stop_animation(data):
-    room_name = data['room']
-    if room_name not in rooms:
-        return
-    
-    room = rooms[room_name]
-    room.animation['is_playing'] = False
-    emit('animation_state', room.animation, room=room_name)
+def handle_stop_animation():
+    global animation_running
+    animation_running = False
 
-@socketio.on('next_frame')
-def handle_next_frame(data):
-    room_name = data['room']
-    if room_name not in rooms:
-        return
-    
-    room = rooms[room_name]
-    if room.animation['is_playing'] and room.animation['frames']:
-        room.animation['current_frame'] = (room.animation['current_frame'] + 1) % len(room.animation['frames'])
-        emit('frame_update', {
-            'frame_index': room.animation['current_frame'],
-            'frame_url': f"/frames/{room.animation['avatar_name']}/{room.animation['frames'][room.animation['current_frame']]}"
-        }, room=room_name)
-
-@socketio.on('text_to_speech')
-def handle_text_to_speech(data):
-    room_name = data['room']
+@socketio.on('generate_speech')
+def handle_generate_speech(data):
     text = data['text']
-    
-    if not text or room_name not in rooms:
-        return
-    
-    # Создаем аудио с помощью gTTS (мужской голос, быстрая скорость)
-    tts = gTTS(text=text, lang='ru', slow=False)
-    tts.lang = 'ru'  # Явно указываем русский язык
-    audio_bytes = io.BytesIO()
-    tts.write_to_fp(audio_bytes)
-    audio_bytes.seek(0)
-    
-    # Отправляем base64-кодированный аудиопоток
-    audio_base64 = base64.b64encode(audio_bytes.read()).decode('utf-8')
-    emit('audio_stream', {'audio': audio_base64}, room=room_name)
-
-@socketio.on('toggle_mute')
-def handle_toggle_mute(data):
-    room_name = data['room']
-    is_muted = data['is_muted']
-    emit('participant_muted', {'sid': request.sid, 'is_muted': is_muted}, room=room_name)
-
-@socketio.on('toggle_video')
-def handle_toggle_video(data):
-    room_name = data['room']
-    is_video_off = data['is_video_off']
-    emit('participant_video_off', {'sid': request.sid, 'is_video_off': is_video_off}, room=room_name)
-
-@socketio.on('share_screen')
-def handle_share_screen(data):
-    room_name = data['room']
-    is_sharing = data['is_sharing']
-    emit('screen_shared', {'sid': request.sid, 'is_sharing': is_sharing}, room=room_name)
+    audio_data = text_to_speech(text)
+    emit('speech_audio', {'audio': audio_data}, broadcast=True)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
