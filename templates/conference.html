@@ -124,6 +124,7 @@
             font-size: 12px;
             z-index: 10;
         }
+        /* Иконки (можно заменить на реальные) */
         .icon {
             font-family: Arial, sans-serif;
             text-align: center;
@@ -174,9 +175,6 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Конфигурация
-        const ROOM_ID = 'classroom_1';
-        
         // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
@@ -197,9 +195,6 @@
         let isMicOn = false;
         let isCamOn = false;
         let isFullscreen = false;
-        let animationInterval = null;
-        let currentAnimationFrames = [];
-        let currentFrameIndex = 0;
 
         // Инициализация Socket.io
         function initSocket() {
@@ -207,7 +202,6 @@
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                socket.emit('join_room', { room: ROOM_ID });
             });
             
             socket.on('disconnect', () => {
@@ -217,30 +211,6 @@
             socket.on('animation_frame', (data) => {
                 teacherVideo.src = data.frame;
                 statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
-            });
-            
-            socket.on('animation_started', (data) => {
-                currentAnimationFrames = data.frames;
-                currentFrameIndex = 0;
-                
-                if (animationInterval) {
-                    clearInterval(animationInterval);
-                }
-                
-                animationInterval = setInterval(() => {
-                    currentFrameIndex = (currentFrameIndex + 1) % currentAnimationFrames.length;
-                    teacherVideo.src = currentAnimationFrames[currentFrameIndex];
-                }, 100);
-                
-                statusDiv.textContent = `Анимация начата: ${data.avatar_name}`;
-            });
-            
-            socket.on('animation_stopped', () => {
-                if (animationInterval) {
-                    clearInterval(animationInterval);
-                    animationInterval = null;
-                }
-                statusDiv.textContent = 'Анимация остановлена';
             });
             
             socket.on('speech_audio', (data) => {
@@ -353,6 +323,11 @@
 
             // Скрыть свое видео по умолчанию
             selfVideo.style.display = 'none';
+
+            // Обработчик изменения размера окна
+            window.addEventListener('resize', () => {
+                // Можно добавить адаптацию интерфейса при изменении размера
+            });
         });
 
         // Обработчик выхода из полноэкранного режима
