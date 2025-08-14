@@ -9,6 +9,8 @@ import time
 import threading
 from collections import defaultdict
 import speech_recognition as sr
+from pydub import AudioSegment
+import numpy as np
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -22,16 +24,20 @@ current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 active_speeches = defaultdict(dict)
-phoneme_mapping = {
+recognizers = defaultdict(dict)
+
+# Фонемы для анимации рта
+PHONEME_MAP = {
     'aa': ['а', 'я'],
     'bb': ['б', 'п'],
     'ch': ['ч'],
     'dd': ['д', 'т'],
-    'ee': ['е', 'э', 'и'],
+    'ee': ['е', 'э'],
     'ff': ['ф', 'в'],
-    'hh': ['х', 'г'],
-    'kk': ['к'],
+    'hh': ['х'],
+    'kk': ['к', 'г'],
     'll': ['л'],
+    'mm': ['м'],
     'nn': ['н'],
     'oo': ['о', 'ё'],
     'pp': ['п'],
@@ -79,16 +85,31 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-def text_to_speech(text, lang='ru'):
-    tts = gTTS(text=text, lang=lang)
-    mp3_fp = io.BytesIO()
-    tts.write_to_fp(mp3_fp)
-    mp3_fp.seek(0)
-    return base64.b64encode(mp3_fp.read()).decode('utf-8')
+def get_voice_list(lang='ru-RU'):
+    voices = []
+    try:
+        # Для браузеров, поддерживающих speechSynthesis
+        import js
+        synth = js.window.speechSynthesis
+        voices = [{'name': v.name, 'lang': v.lang} for v in synth.getVoices() if lang in v.lang]
+    except:
+        pass
+    return voices
+
+def text_to_speech(text, lang='ru-RU', voice=None):
+    try:
+        tts = gTTS(text=text, lang=lang)
+        mp3_fp = io.BytesIO()
+        tts.write_to_fp(mp3_fp)
+        mp3_fp.seek(0)
+        return base64.b64encode(mp3_fp.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Error in TTS: {e}")
+        return None
 
 def get_phoneme_for_char(char):
     char_lower = char.lower()
-    for phoneme, chars in phoneme_mapping.items():
+    for phoneme, chars in PHONEME_MAP.items():
         if char_lower in chars:
             return phoneme
     return None
@@ -104,6 +125,25 @@ def animation_loop(room_id):
             }
             socketio.emit('animation_frame', frame_data, room=room_id)
         time.sleep(0.1)
+
+def speech_animation_loop(room_id, text):
+    words = text.split()
+    for word in words:
+        for char in word:
+            phoneme = get_phoneme_for_char(char)
+            if phoneme:
+                # Найти все кадры для этой фонемы
+                phoneme_frames = [f for f in current_animation_frames[room_id] if f'mouth_{phoneme}_' in f]
+                if phoneme_frames:
+                    # Отправить кадры для анимации рта
+                    socketio.emit('phoneme_frames', {'frames': phoneme_frames}, room=room_id)
+                    time.sleep(0.2)
+            else:
+                # Вернуться к нейтральному положению рта
+                neutral_frames = [f for f in current_animation_frames[room_id] if 'mouth_neutral_' in f]
+                if neutral_frames:
+                    socketio.emit('phoneme_frames', {'frames': neutral_frames}, room=room_id)
+                    time.sleep(0.1)
 
 @socketio.on('connect')
 def handle_connect():
@@ -125,6 +165,7 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
+    # Отправляем историю сообщений новому участнику
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
@@ -145,45 +186,37 @@ def handle_stop_animation(data):
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
-    lang = data.get('lang', 'ru')
+    lang = data.get('lang', 'ru-RU')
     voice = data.get('voice', None)
     
-    audio_data = text_to_speech(text, lang)
-    speech_id = f"speech_{time.time()}"
-    active_speeches[room_id][speech_id] = text
-    
-    emit('speech_audio', {
-        'audio': audio_data,
-        'text': text,
-        'speech_id': speech_id,
-        'phonemes': [get_phoneme_for_char(c) for c in text]
-    }, room=room_id)
-    
-    room_speech_data[room_id].append({
-        'text': text,
-        'timestamp': time.time(),
-        'type': 'generated',
-        'speech_id': speech_id
-    })
-    if len(room_speech_data[room_id]) > 50:
-        room_speech_data[room_id].pop(0)
+    audio_data = text_to_speech(text, lang, voice)
+    if audio_data:
+        emit('speech_audio', {
+            'audio': audio_data,
+            'text': text,
+            'lang': lang,
+            'voice': voice
+        }, room=room_id)
+        
+        # Запуск анимации рта
+        threading.Thread(target=speech_animation_loop, args=(room_id, text)).start()
+        
+        # Сохраняем историю сообщений
+        room_speech_data[room_id].append({
+            'text': text,
+            'timestamp': time.time(),
+            'type': 'generated'
+        })
+        if len(room_speech_data[room_id]) > 50:
+            room_speech_data[room_id].pop(0)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
     room_id = data['room_id']
     text = data['text']
+    emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
     
-    # Игнорируем речь, которая воспроизводится с сервера
-    for speech_id, speech_text in active_speeches[room_id].items():
-        if speech_text.lower() in text.lower():
-            return
-    
-    emit('speech_text', {
-        'text': text,
-        'sid': request.sid,
-        'phonemes': [get_phoneme_for_char(c) for c in text]
-    }, room=room_id)
-    
+    # Сохраняем историю сообщений
     room_speech_data[room_id].append({
         'text': text,
         'timestamp': time.time(),
@@ -193,12 +226,12 @@ def handle_recognized_speech(data):
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
 
-@socketio.on('speech_ended')
-def handle_speech_ended(data):
+@socketio.on('get_voices')
+def handle_get_voices(data):
     room_id = data['room_id']
-    speech_id = data['speech_id']
-    if speech_id in active_speeches[room_id]:
-        del active_speeches[room_id][speech_id]
+    lang = data.get('lang', 'ru-RU')
+    voices = get_voice_list(lang)
+    emit('voices_list', {'voices': voices}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
