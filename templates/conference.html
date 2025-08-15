@@ -234,6 +234,8 @@
         </button>
     </div>
 
+    <audio id="speech-audio"></audio>
+
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -250,6 +252,7 @@
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
+        const speechAudio = document.getElementById('speech-audio');
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
@@ -267,7 +270,6 @@
         let isCamOn = false;
         let isFullscreen = false;
         let recognition = null;
-        let speechHistory = [];
         let audioContext = null;
         let analyser = null;
         let scriptProcessor = null;
@@ -330,39 +332,20 @@
                 statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
-            socket.on('speech_request', (data) => {
-                if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance(data.text);
-                    utterance.lang = data.lang || 'ru-RU';
-                    
-                    if (data.voice) {
-                        const voices = speechSynthesis.getVoices();
-                        const selectedVoice = voices.find(v => v.name === data.voice);
-                        if (selectedVoice) {
-                            utterance.voice = selectedVoice;
-                        }
-                    }
-                    
-                    utterance.onstart = () => {
-                        isServerSpeechPlaying = true;
-                        showSpeechText(data.text, 'teacher');
-                        setupAudioAnalysis();
-                    };
-                    
-                    utterance.onend = () => {
-                        isServerSpeechPlaying = false;
-                        resetLipSync();
-                    };
-                    
-                    utterance.onboundary = (event) => {
-                        if (event.name === 'word') {
-                            const word = data.text.substring(event.charIndex, event.charIndex + event.charLength);
-                            animateLipsForSpeech(word.toLowerCase());
-                        }
-                    };
-                    
-                    speechSynthesis.speak(utterance);
-                }
+            socket.on('speech_audio', (data) => {
+                isServerSpeechPlaying = true;
+                const audioSrc = `data:audio/wav;base64,${data.audio}`;
+                speechAudio.src = audioSrc;
+                
+                setupAudioAnalysis();
+                speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
+                
+                showSpeechText(data.text, 'teacher');
+                
+                speechAudio.onended = () => {
+                    isServerSpeechPlaying = false;
+                    resetLipSync();
+                };
             });
             
             socket.on('speech_text', (data) => {
@@ -373,10 +356,6 @@
             
             socket.on('participants_update', (data) => {
                 participantsDiv.textContent = `Участников: ${data.count}`;
-            });
-            
-            socket.on('speech_history', (data) => {
-                speechHistory = data.history;
             });
         }
 
@@ -421,18 +400,6 @@
                     }, 50);
                 }
             });
-        }
-
-        function animateLipsForSpeech(text) {
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                if (phonemes[char]) {
-                    const frames = phonemes[char];
-                    const randomFrame = frames[Math.floor(Math.random() * frames.length)];
-                    // Здесь можно обновить изображение аватара
-                    break;
-                }
-            }
         }
 
         function resetLipSync() {
