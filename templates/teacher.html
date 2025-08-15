@@ -108,6 +108,23 @@
         #language-select {
             min-width: 100px;
         }
+        #lip-sync-container {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        .lip-sync-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.1);
+            transition: all 0.1s;
+        }
+        .lip-sync-active {
+            background: #3498db;
+            transform: scale(1.3);
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -142,6 +159,14 @@
         <div class="controls">
             <button id="start-btn" disabled>Старт</button>
             <button id="stop-btn" disabled>Стоп</button>
+        </div>
+
+        <div id="lip-sync-container">
+            <div class="lip-sync-indicator" id="lip-sync-1"></div>
+            <div class="lip-sync-indicator" id="lip-sync-2"></div>
+            <div class="lip-sync-indicator" id="lip-sync-3"></div>
+            <div class="lip-sync-indicator" id="lip-sync-4"></div>
+            <div class="lip-sync-indicator" id="lip-sync-5"></div>
         </div>
 
         <div id="speech-controls">
@@ -189,6 +214,13 @@
         const embedCodeTextarea = document.getElementById('embed-code');
         const languageSelect = document.getElementById('language-select');
         const voiceSelect = document.getElementById('voice-select');
+        const lipSyncIndicators = [
+            document.getElementById('lip-sync-1'),
+            document.getElementById('lip-sync-2'),
+            document.getElementById('lip-sync-3'),
+            document.getElementById('lip-sync-4'),
+            document.getElementById('lip-sync-5')
+        ];
 
         const socket = io();
         let currentAvatar = '';
@@ -201,6 +233,44 @@
         let currentRoom = 'default';
         let availableVoices = [];
         let currentVoice = null;
+        let audioContext = null;
+        let analyser = null;
+        let scriptProcessor = null;
+        let lipSyncInterval = null;
+        let lastSpeechTime = 0;
+
+        const phonemes = {
+            'а': ['mouth_aa_001.jpg', 'mouth_aa_002.jpg', 'mouth_aa_003.jpg'],
+            'б': ['mouth_bb_001.jpg', 'mouth_bb_002.jpg'],
+            'в': ['mouth_vv_001.jpg', 'mouth_vv_002.jpg'],
+            'г': ['mouth_kk_001.jpg'],
+            'д': ['mouth_dd_001.jpg'],
+            'е': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
+            'ж': ['mouth_zh_001.jpg', 'mouth_zh_002.jpg'],
+            'з': ['mouth_zz_001.jpg', 'mouth_zz_002.jpg'],
+            'и': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
+            'й': ['mouth_ee_001.jpg'],
+            'к': ['mouth_kk_001.jpg'],
+            'л': ['mouth_ll_001.jpg', 'mouth_ll_002.jpg'],
+            'м': ['mouth_bb_001.jpg'],
+            'н': ['mouth_nn_001.jpg'],
+            'о': ['mouth_oo_001.jpg', 'mouth_oo_002.jpg'],
+            'п': ['mouth_pp_001.jpg', 'mouth_pp_002.jpg'],
+            'р': ['mouth_rr_001.jpg'],
+            'с': ['mouth_ss_001.jpg', 'mouth_ss_002.jpg'],
+            'т': ['mouth_tt_001.jpg'],
+            'у': ['mouth_uu_001.jpg', 'mouth_uu_002.jpg'],
+            'ф': ['mouth_ff_001.jpg'],
+            'х': ['mouth_hh_001.jpg'],
+            'ц': ['mouth_ss_001.jpg'],
+            'ч': ['mouth_ch_001.jpg', 'mouth_ch_002.jpg'],
+            'ш': ['mouth_sh_001.jpg', 'mouth_sh_002.jpg'],
+            'щ': ['mouth_sh_001.jpg'],
+            'ы': ['mouth_uu_003.jpg', 'mouth_uu_004.jpg'],
+            'э': ['mouth_ee_003.jpg', 'mouth_ee_004.jpg'],
+            'ю': ['mouth_uu_001.jpg'],
+            'я': ['mouth_aa_004.jpg']
+        };
 
         function initRoom(roomId) {
             currentRoom = roomId;
@@ -369,6 +439,67 @@
             }
         }
 
+        function setupAudioAnalysis() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 32;
+                
+                scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+                scriptProcessor.onaudioprocess = processAudio;
+                analyser.connect(scriptProcessor);
+            }
+            
+            if (lipSyncInterval) clearInterval(lipSyncInterval);
+            lipSyncInterval = setInterval(updateLipSync, 50);
+        }
+
+        function processAudio() {
+            const array = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(array);
+            
+            const volume = array.reduce((a, b) => a + b, 0) / array.length;
+            if (volume > 10) {
+                lastSpeechTime = Date.now();
+            }
+        }
+
+        function updateLipSync() {
+            const timeSinceLastSpeech = Date.now() - lastSpeechTime;
+            const isSpeaking = timeSinceLastSpeech < 100;
+            
+            lipSyncIndicators.forEach((indicator, i) => {
+                if (isSpeaking && Math.random() > 0.7) {
+                    indicator.classList.add('lip-sync-active');
+                    setTimeout(() => {
+                        indicator.classList.remove('lip-sync-active');
+                    }, 50);
+                }
+            });
+        }
+
+        function resetLipSync() {
+            if (lipSyncInterval) {
+                clearInterval(lipSyncInterval);
+                lipSyncInterval = null;
+            }
+            lipSyncIndicators.forEach(indicator => {
+                indicator.classList.remove('lip-sync-active');
+            });
+        }
+
+        function animateLipsForSpeech(text) {
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (phonemes[char]) {
+                    const frames = phonemes[char];
+                    const randomFrame = frames[Math.floor(Math.random() * frames.length)];
+                    // Здесь можно обновить изображение аватара
+                    break;
+                }
+            }
+        }
+
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
@@ -382,6 +513,34 @@
                         lang: lang,
                         voice: voiceName
                     });
+                    
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = lang;
+                    
+                    if (voiceName) {
+                        const voices = speechSynthesis.getVoices();
+                        const selectedVoice = voices.find(v => v.name === voiceName);
+                        if (selectedVoice) {
+                            utterance.voice = selectedVoice;
+                        }
+                    }
+                    
+                    utterance.onstart = () => {
+                        setupAudioAnalysis();
+                    };
+                    
+                    utterance.onend = () => {
+                        resetLipSync();
+                    };
+                    
+                    utterance.onboundary = (event) => {
+                        if (event.name === 'word') {
+                            const word = text.substring(event.charIndex, event.charIndex + event.charLength);
+                            animateLipsForSpeech(word.toLowerCase());
+                        }
+                    };
+                    
+                    speechSynthesis.speak(utterance);
                     
                     log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
                     speechText.value = '';
