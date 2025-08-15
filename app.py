@@ -5,12 +5,16 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import time
 import threading
 from collections import defaultdict
+import base64
+import uuid
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
+MEDIA_DIR = BASE_DIR / 'media'
+MEDIA_DIR.mkdir(exist_ok=True)
 
 animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
@@ -18,6 +22,7 @@ current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_audio_data = defaultdict(dict)
+room_media_streams = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -53,6 +58,10 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
+@app.route('/media/<filename>')
+def serve_media(filename):
+    return send_from_directory(MEDIA_DIR, filename)
+
 def animation_loop(room_id):
     while animation_running[room_id]:
         if current_animation_frames[room_id]:
@@ -64,6 +73,15 @@ def animation_loop(room_id):
             }
             socketio.emit('animation_frame', frame_data, room=room_id)
         time.sleep(0.1)
+
+def save_media_stream(room_id, user_id, media_data):
+    filename = f"{room_id}_{user_id}_{int(time.time())}.webm"
+    filepath = MEDIA_DIR / filename
+    
+    with open(filepath, 'wb') as f:
+        f.write(base64.b64decode(media_data.split(',')[1]))
+    
+    return filename
 
 @socketio.on('connect')
 def handle_connect():
@@ -143,6 +161,16 @@ def handle_audio_data(data):
     audio_blob = data['audio']
     room_audio_data[room_id][request.sid] = audio_blob
     emit('audio_stream', {'audio': audio_blob, 'sid': request.sid}, room=room_id, include_self=False)
+
+@socketio.on('media_stream')
+def handle_media_stream(data):
+    room_id = data['room_id']
+    media_data = data['media']
+    filename = save_media_stream(room_id, request.sid, media_data)
+    emit('media_stream_update', {
+        'url': f'/media/{filename}',
+        'sid': request.sid
+    }, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
