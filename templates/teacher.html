@@ -105,13 +105,8 @@
         #voice-select {
             min-width: 200px;
         }
-        .voice-option {
-            display: flex;
-            justify-content: space-between;
-        }
-        .voice-gender {
-            color: #666;
-            font-size: 0.9em;
+        #language-select {
+            min-width: 100px;
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -151,6 +146,13 @@
 
         <div id="speech-controls">
             <div class="controls">
+                <select id="language-select">
+                    <option value="ru-RU">Русский</option>
+                    <option value="en-US">Английский</option>
+                    <option value="de-DE">Немецкий</option>
+                    <option value="fr-FR">Французский</option>
+                    <option value="es-ES">Испанский</option>
+                </select>
                 <select id="voice-select" disabled>
                     <option value="">Загрузка голосов...</option>
                 </select>
@@ -185,6 +187,7 @@
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
         const embedCodeTextarea = document.getElementById('embed-code');
+        const languageSelect = document.getElementById('language-select');
         const voiceSelect = document.getElementById('voice-select');
 
         const socket = io();
@@ -249,43 +252,6 @@
             } catch (error) {
                 log(error.message);
             }
-        }
-
-        async function loadVoices() {
-            try {
-                const response = await fetch('/api/voices');
-                if (!response.ok) throw new Error('Ошибка загрузки голосов');
-                
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                availableVoices = data.voices;
-                populateVoiceList();
-                log(`Загружено голосов: ${availableVoices.length}`);
-            } catch (error) {
-                log(error.message);
-            }
-        }
-
-        function populateVoiceList() {
-            voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
-            
-            availableVoices.forEach(voice => {
-                const option = document.createElement('option');
-                option.value = voice.id;
-                
-                const optionContent = document.createElement('div');
-                optionContent.className = 'voice-option';
-                optionContent.innerHTML = `
-                    <span>${voice.name}</span>
-                    <span class="voice-gender">${voice.gender === 'male' ? '♂ Мужской' : '♀ Женский'}</span>
-                `;
-                
-                option.appendChild(optionContent);
-                voiceSelect.appendChild(option);
-            });
-            
-            voiceSelect.disabled = false;
         }
 
         async function loadAvatarFrames(avatarName) {
@@ -406,21 +372,50 @@
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
-                const voiceId = voiceSelect.value;
-                socket.emit('generate_speech', { 
-                    text: text,
-                    room_id: currentRoom,
-                    voice: voiceId
-                });
-                log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
-                speechText.value = '';
+                if ('speechSynthesis' in window) {
+                    const lang = languageSelect.value;
+                    const voiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
+                    
+                    socket.emit('generate_speech', { 
+                        text: text,
+                        room_id: currentRoom,
+                        lang: lang,
+                        voice: voiceName
+                    });
+                    
+                    log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
+                    speechText.value = '';
+                } else {
+                    log('Браузер не поддерживает синтез речи');
+                }
             }
+        }
+
+        function populateVoiceList() {
+            const voices = window.speechSynthesis.getVoices();
+            voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
+            
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})${voice.default ? ' — DEFAULT' : ''}`;
+                option.setAttribute('data-lang', voice.lang);
+                option.setAttribute('data-name', voice.name);
+                voiceSelect.appendChild(option);
+            });
+            
+            voiceSelect.disabled = false;
         }
 
         document.addEventListener('DOMContentLoaded', () => {
             initRoom('default');
             loadAvatars();
-            loadVoices();
+            
+            if ('speechSynthesis' in window) {
+                speechSynthesis.onvoiceschanged = populateVoiceList;
+                populateVoiceList();
+            } else {
+                voiceSelect.innerHTML = '<option value="">Синтез речи не поддерживается</option>';
+            }
 
             avatarSelect.addEventListener('change', () => {
                 currentAvatar = avatarSelect.value;
@@ -444,6 +439,22 @@
                 const newRoom = roomInput.value.trim() || 'default';
                 initRoom(newRoom);
                 roomInput.value = '';
+            });
+            
+            languageSelect.addEventListener('change', () => {
+                const lang = languageSelect.value;
+                const voices = window.speechSynthesis.getVoices();
+                
+                voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
+                voices
+                    .filter(voice => voice.lang.startsWith(lang))
+                    .forEach(voice => {
+                        const option = document.createElement('option');
+                        option.textContent = `${voice.name} (${voice.lang})${voice.default ? ' — DEFAULT' : ''}`;
+                        option.setAttribute('data-lang', voice.lang);
+                        option.setAttribute('data-name', voice.name);
+                        voiceSelect.appendChild(option);
+                    });
             });
         });
     </script>
