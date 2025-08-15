@@ -172,8 +172,8 @@
 
     <div id="main">
         <div id="video-container">
-            <img id="teacher-video" src="" alt="Анимация учителя">
-            <video id="self-video" autoplay muted></video>
+            <video id="teacher-video" autoplay playsinline></video>
+            <video id="self-video" autoplay muted playsinline></video>
             
             <div id="status">Подключение к конференции...</div>
             <div id="room-info">Комната: <span id="room-name">default</span></div>
@@ -234,6 +234,17 @@
         let isFullscreen = false;
         let recognition = null;
         let speechHistory = [];
+        let peerConnection = null;
+        let dataChannel = null;
+
+        // Конфигурация WebRTC (STUN серверы)
+        const rtcConfiguration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        };
 
         function initSocket() {
             socket = io();
@@ -241,6 +252,9 @@
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
                 socket.emit('join_room', { room_id: roomId });
+                
+                // Инициализируем WebRTC соединение
+                initWebRTC();
                 
                 setTimeout(() => {
                     toggleMicrophone();
@@ -252,39 +266,35 @@
                 statusDiv.textContent = 'Отключено от сервера';
             });
             
-            socket.on('animation_frame', (data) => {
-                teacherVideo.src = data.frame;
-                statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
-            });
-            
-            socket.on('speech_request', (data) => {
-                if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance(data.text);
-                    utterance.lang = data.lang || 'ru-RU';
-                    
-                    if (data.voice) {
-                        const voices = speechSynthesis.getVoices();
-                        const selectedVoice = voices.find(v => v.name === data.voice);
-                        if (selectedVoice) {
-                            utterance.voice = selectedVoice;
-                        }
-                    }
-                    
-                    utterance.onstart = () => {
-                        showSpeechText(data.text, 'teacher');
-                    };
-                    
-                    utterance.onend = () => {
-                        speechTextDiv.style.display = 'none';
-                    };
-                    
-                    speechSynthesis.speak(utterance);
+            socket.on('offer', async (offer) => {
+                statusDiv.textContent = 'Получено предложение WebRTC';
+                try {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    socket.emit('answer', { answer, room_id: roomId });
+                    statusDiv.textContent = 'Отправлен ответ WebRTC';
+                } catch (error) {
+                    console.error('Ошибка обработки предложения:', error);
+                    statusDiv.textContent = 'Ошибка WebRTC соединения';
                 }
             });
             
-            socket.on('speech_text', (data) => {
-                if (data.sid !== socket.id) {
-                    showSpeechText(data.text, data.sid);
+            socket.on('answer', async (answer) => {
+                try {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                    statusDiv.textContent = 'WebRTC соединение установлено';
+                } catch (error) {
+                    console.error('Ошибка обработки ответа:', error);
+                    statusDiv.textContent = 'Ошибка WebRTC соединения';
+                }
+            });
+            
+            socket.on('ice-candidate', async (candidate) => {
+                try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (error) {
+                    console.error('Ошибка добавления ICE кандидата:', error);
                 }
             });
             
@@ -292,9 +302,51 @@
                 participantsDiv.textContent = `Участников: ${data.count}`;
             });
             
-            socket.on('speech_history', (data) => {
-                speechHistory = data.history;
+            socket.on('speech_text', (data) => {
+                if (data.sid !== socket.id) {
+                    showSpeechText(data.text, data.sid);
+                }
             });
+        }
+
+        function initWebRTC() {
+            peerConnection = new RTCPeerConnection(rtcConfiguration);
+            
+            // Обработка ICE кандидатов
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', { 
+                        candidate: event.candidate,
+                        room_id: roomId 
+                    });
+                }
+            };
+            
+            // Получение удаленного потока
+            peerConnection.ontrack = (event) => {
+                if (event.track.kind === 'video') {
+                    teacherVideo.srcObject = event.streams[0];
+                    statusDiv.textContent = 'Получен видеопоток учителя';
+                }
+            };
+            
+            // Создаем предложение для установки соединения
+            createOffer();
+        }
+
+        async function createOffer() {
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit('offer', { 
+                    offer: peerConnection.localDescription,
+                    room_id: roomId 
+                });
+                statusDiv.textContent = 'Отправлено предложение WebRTC';
+            } catch (error) {
+                console.error('Ошибка создания предложения:', error);
+                statusDiv.textContent = 'Ошибка инициализации WebRTC';
+            }
         }
 
         function showSpeechText(text, source) {
@@ -316,6 +368,14 @@
                     } else {
                         userStream = audioStream;
                     }
+                    
+                    // Добавляем аудиопоток в WebRTC соединение
+                    if (peerConnection) {
+                        userStream.getAudioTracks().forEach(track => {
+                            peerConnection.addTrack(track, userStream);
+                        });
+                    }
+                    
                     isMicOn = true;
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
@@ -384,6 +444,14 @@
                     } else {
                         userStream = videoStream;
                     }
+                    
+                    // Добавляем видеопоток в WebRTC соединение
+                    if (peerConnection) {
+                        userStream.getVideoTracks().forEach(track => {
+                            peerConnection.addTrack(track, userStream);
+                        });
+                    }
+                    
                     selfVideo.srcObject = userStream;
                     isCamOn = true;
                     camBtn.classList.add('active');
@@ -436,6 +504,9 @@
             }
             if (recognition) {
                 recognition.stop();
+            }
+            if (peerConnection) {
+                peerConnection.close();
             }
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
