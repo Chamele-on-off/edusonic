@@ -146,6 +146,14 @@
             text-align: center;
             display: none;
         }
+        #teacher-media {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
         body.embedded {
             height: auto;
         }
@@ -172,7 +180,7 @@
 
     <div id="main">
         <div id="video-container">
-            <img id="teacher-video" src="" alt="Анимация учителя">
+            <video id="teacher-media" autoplay></video>
             <video id="self-video" autoplay muted></video>
             
             <div id="status">Подключение к конференции...</div>
@@ -214,7 +222,7 @@
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
-        const teacherVideo = document.getElementById('teacher-video');
+        const teacherMedia = document.getElementById('teacher-media');
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
@@ -253,7 +261,7 @@
             });
             
             socket.on('animation_frame', (data) => {
-                teacherVideo.src = data.frame;
+                teacherMedia.src = data.frame;
                 statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
@@ -294,6 +302,12 @@
             
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
+            });
+            
+            socket.on('media_stream_update', (data) => {
+                teacherMedia.src = data.url;
+                teacherMedia.play().catch(e => console.error('Ошибка воспроизведения:', e));
+                statusDiv.textContent = 'Получен медиапоток от учителя';
             });
         }
 
