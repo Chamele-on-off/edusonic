@@ -125,6 +125,12 @@
             background: #3498db;
             transform: scale(1.3);
         }
+        #media-recorder-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff0f0;
+            border-radius: 4px;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -187,6 +193,15 @@
                 <button id="speak-btn" disabled>Озвучить</button>
             </div>
         </div>
+
+        <div id="media-recorder-controls">
+            <h3>Запись медиапотока</h3>
+            <div class="controls">
+                <button id="start-recording-btn" disabled>Начать запись</button>
+                <button id="stop-recording-btn" disabled>Остановить запись</button>
+            </div>
+            <div id="recording-status">Готово к записи</div>
+        </div>
         
         <div id="debug"></div>
 
@@ -214,6 +229,10 @@
         const embedCodeTextarea = document.getElementById('embed-code');
         const languageSelect = document.getElementById('language-select');
         const voiceSelect = document.getElementById('voice-select');
+        const startRecordingBtn = document.getElementById('start-recording-btn');
+        const stopRecordingBtn = document.getElementById('stop-recording-btn');
+        const recordingStatus = document.getElementById('recording-status');
+
         const lipSyncIndicators = [
             document.getElementById('lip-sync-1'),
             document.getElementById('lip-sync-2'),
@@ -238,6 +257,9 @@
         let scriptProcessor = null;
         let lipSyncInterval = null;
         let lastSpeechTime = 0;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecording = false;
 
         const phonemes = {
             'а': ['mouth_aa_001.jpg', 'mouth_aa_002.jpg', 'mouth_aa_003.jpg'],
@@ -352,6 +374,7 @@
                     statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
                     startBtn.disabled = false;
                     speakBtn.disabled = false;
+                    startRecordingBtn.disabled = false;
                     avatar.src = loadedImages[0].src;
                     currentFrame = 0;
                 } else {
@@ -565,6 +588,69 @@
             voiceSelect.disabled = false;
         }
 
+        async function startRecording() {
+            if (!mediaStream) {
+                log('Нет медиапотока для записи');
+                return;
+            }
+
+            try {
+                recordedChunks = [];
+                const audioContext = new AudioContext();
+                const destination = audioContext.createMediaStreamDestination();
+                
+                // Создаем медиапоток с видео и аудио
+                const combinedStream = new MediaStream([
+                    ...mediaStream.getVideoTracks(),
+                    ...destination.stream.getAudioTracks()
+                ]);
+
+                mediaRecorder = new MediaRecorder(combinedStream, {
+                    mimeType: 'video/webm;codecs=vp9,opus'
+                });
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const base64data = reader.result;
+                        socket.emit('media_stream', {
+                            room_id: currentRoom,
+                            media: base64data
+                        });
+                        log('Медиапоток отправлен в комнату');
+                    };
+                    reader.readAsDataURL(blob);
+                };
+
+                mediaRecorder.start(1000); // Собираем данные каждую секунду
+                isRecording = true;
+                startRecordingBtn.disabled = true;
+                stopRecordingBtn.disabled = false;
+                recordingStatus.textContent = 'Идет запись...';
+                log('Начата запись медиапотока');
+            } catch (error) {
+                log(`Ошибка при записи: ${error.message}`);
+            }
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                startRecordingBtn.disabled = false;
+                stopRecordingBtn.disabled = true;
+                recordingStatus.textContent = 'Запись завершена';
+                log('Запись медиапотока остановлена');
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             initRoom('default');
             loadAvatars();
@@ -615,6 +701,9 @@
                         voiceSelect.appendChild(option);
                     });
             });
+
+            startRecordingBtn.addEventListener('click', startRecording);
+            stopRecordingBtn.addEventListener('click', stopRecording);
         });
     </script>
 </body>
