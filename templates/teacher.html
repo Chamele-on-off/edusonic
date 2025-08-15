@@ -147,14 +147,14 @@
         <div id="speech-controls">
             <div class="controls">
                 <select id="language-select">
-                    <option value="ru">Русский</option>
-                    <option value="en">Английский</option>
-                    <option value="de">Немецкий</option>
-                    <option value="fr">Французский</option>
-                    <option value="es">Испанский</option>
+                    <option value="ru-RU">Русский</option>
+                    <option value="en-US">Английский</option>
+                    <option value="de-DE">Немецкий</option>
+                    <option value="fr-FR">Французский</option>
+                    <option value="es-ES">Испанский</option>
                 </select>
                 <select id="voice-select" disabled>
-                    <option value="">Выберите голос</option>
+                    <option value="">Загрузка голосов...</option>
                 </select>
             </div>
             <div class="controls">
@@ -171,10 +171,7 @@
     </div>
 
     <script>
-        // Конфигурация
         const FPS = 10;
-        
-        // Элементы
         const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
         const debugDiv = document.getElementById('debug');
@@ -192,11 +189,8 @@
         const embedCodeTextarea = document.getElementById('embed-code');
         const languageSelect = document.getElementById('language-select');
         const voiceSelect = document.getElementById('voice-select');
-        
-        // Socket.io
+
         const socket = io();
-        
-        // Состояние
         let currentAvatar = '';
         let frames = [];
         let loadedImages = [];
@@ -207,32 +201,23 @@
         let currentRoom = 'default';
         let availableVoices = [];
         let currentVoice = null;
-        
-        // Инициализация комнаты
+
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
             conferenceLink.href = `/conference?room=${roomId}`;
-            
-            // Генерируем код для вставки
-            const embedCode = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
-            embedCodeTextarea.value = embedCode;
-            
-            // Сообщаем серверу о смене комнаты
+            embedCodeTextarea.value = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
             socket.emit('join_room', { room_id: roomId });
-            
             log(`Переключено в комнату: ${roomId}`);
         }
-        
-        // Логирование
+
         function log(message) {
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
         }
-        
-        // Загрузка изображения с повторами
-        function loadImage(src, retries = 3) {
+
+        async function loadImage(src, retries = 3) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => resolve(img);
@@ -246,8 +231,7 @@
                 img.src = src;
             });
         }
-        
-        // Загрузка списка аватаров
+
         async function loadAvatars() {
             try {
                 const response = await fetch('/api/avatars');
@@ -269,8 +253,7 @@
                 log(error.message);
             }
         }
-        
-        // Загрузка кадров аватара
+
         async function loadAvatarFrames(avatarName) {
             try {
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
@@ -285,7 +268,6 @@
                 frames = data.frames;
                 log(`Найдено кадров: ${frames.length}`);
                 
-                // Загружаем все изображения
                 for (let i = 0; i < frames.length; i++) {
                     try {
                         const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
@@ -311,8 +293,7 @@
                 log(error.message);
             }
         }
-        
-        // Показать текущий кадр
+
         function showFrame() {
             if (loadedImages.length === 0) return;
             
@@ -320,8 +301,7 @@
             avatar.src = loadedImages[currentFrame].src;
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
-        
-        // Создание видео потока из изображений
+
         async function createVideoStream() {
             try {
                 const canvas = document.createElement('canvas');
@@ -343,15 +323,12 @@
                 return null;
             }
         }
-        
-        // Запуск анимации
+
         async function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
             
-            // Создаем видео поток
             mediaStream = await createVideoStream();
             
-            // Отправляем серверу информацию о кадрах для трансляции
             const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { 
                 frames: framePaths,
@@ -367,8 +344,7 @@
             stopBtn.disabled = false;
             log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
         }
-        
-        // Остановка анимации
+
         function stopAnimation() {
             if (animationInterval) {
                 clearInterval(animationInterval);
@@ -392,108 +368,85 @@
                 videoPreview.style.display = 'none';
             }
         }
-        
-        // Генерация речи
+
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
-                socket.emit('generate_speech', { 
-                    text: text,
-                    room_id: currentRoom,
-                    lang: languageSelect.value,
-                    voice: currentVoice
-                });
-                log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
-                speechText.value = '';
+                if ('speechSynthesis' in window) {
+                    const lang = languageSelect.value;
+                    const voiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
+                    
+                    socket.emit('generate_speech', { 
+                        text: text,
+                        room_id: currentRoom,
+                        lang: lang,
+                        voice: voiceName
+                    });
+                    
+                    log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
+                    speechText.value = '';
+                } else {
+                    log('Браузер не поддерживает синтез речи');
+                }
             }
         }
-        
-        // Загрузка доступных голосов
-        function loadVoices() {
-            // Для Web Speech API
-            function populateVoiceList() {
-                availableVoices = speechSynthesis.getVoices();
-                
-                voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
-                
-                availableVoices.forEach(voice => {
-                    const option = document.createElement('option');
-                    option.textContent = `${voice.name} (${voice.lang})${voice.default ? ' — DEFAULT' : ''}`;
-                    option.setAttribute('data-lang', voice.lang);
-                    option.setAttribute('data-name', voice.name);
-                    voiceSelect.appendChild(option);
-                });
-                
-                voiceSelect.disabled = false;
-            }
+
+        function populateVoiceList() {
+            const voices = window.speechSynthesis.getVoices();
+            voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
             
-            if (speechSynthesis.onvoiceschanged !== undefined) {
-                speechSynthesis.onvoiceschanged = populateVoiceList;
-            }
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})${voice.default ? ' — DEFAULT' : ''}`;
+                option.setAttribute('data-lang', voice.lang);
+                option.setAttribute('data-name', voice.name);
+                voiceSelect.appendChild(option);
+            });
             
-            populateVoiceList();
+            voiceSelect.disabled = false;
         }
-        
-        // Инициализация
+
         document.addEventListener('DOMContentLoaded', () => {
-            // Инициализация комнаты по умолчанию
             initRoom('default');
-            
-            // Загрузка списка аватаров
             loadAvatars();
             
-            // Загрузка голосов
             if ('speechSynthesis' in window) {
-                loadVoices();
+                speechSynthesis.onvoiceschanged = populateVoiceList;
+                populateVoiceList();
             } else {
-                log('Браузер не поддерживает Web Speech API');
+                voiceSelect.innerHTML = '<option value="">Синтез речи не поддерживается</option>';
             }
-            
-            // Выбор аватара
+
             avatarSelect.addEventListener('change', () => {
                 currentAvatar = avatarSelect.value;
                 loadBtn.disabled = !currentAvatar;
             });
             
-            // Кнопка загрузки
             loadBtn.addEventListener('click', () => {
                 stopAnimation();
                 loadAvatarFrames(currentAvatar);
             });
             
-            // Управление анимацией
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
             
-            // Генерация речи
             speakBtn.addEventListener('click', generateSpeech);
             speechText.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') generateSpeech();
             });
             
-            // Смена комнаты
             changeRoomBtn.addEventListener('click', () => {
                 const newRoom = roomInput.value.trim() || 'default';
                 initRoom(newRoom);
                 roomInput.value = '';
             });
             
-            // Выбор голоса
-            voiceSelect.addEventListener('change', () => {
-                const selectedOption = voiceSelect.selectedOptions[0];
-                if (selectedOption.value !== '') {
-                    currentVoice = selectedOption.getAttribute('data-name');
-                } else {
-                    currentVoice = null;
-                }
-            });
-            
-            // Выбор языка
             languageSelect.addEventListener('change', () => {
-                voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
                 const lang = languageSelect.value;
+                const voices = window.speechSynthesis.getVoices();
                 
-                availableVoices
+                voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
+                voices
                     .filter(voice => voice.lang.startsWith(lang))
                     .forEach(voice => {
                         const option = document.createElement('option');
