@@ -125,11 +125,10 @@
             background: #3498db;
             transform: scale(1.3);
         }
-        #media-recorder-controls {
-            margin-top: 20px;
-            padding: 15px;
-            background: #fff0f0;
-            border-radius: 4px;
+        #media-recorder-status {
+            margin-top: 10px;
+            text-align: center;
+            font-weight: bold;
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -159,6 +158,7 @@
         
         <img id="avatar" src="" alt="Аватар">
         <video id="video-preview" autoplay muted></video>
+        <div id="media-recorder-status"></div>
         
         <div id="status">Выберите аватар</div>
         
@@ -193,15 +193,6 @@
                 <button id="speak-btn" disabled>Озвучить</button>
             </div>
         </div>
-
-        <div id="media-recorder-controls">
-            <h3>Запись медиапотока</h3>
-            <div class="controls">
-                <button id="start-recording-btn" disabled>Начать запись</button>
-                <button id="stop-recording-btn" disabled>Остановить запись</button>
-            </div>
-            <div id="recording-status">Готово к записи</div>
-        </div>
         
         <div id="debug"></div>
 
@@ -229,10 +220,6 @@
         const embedCodeTextarea = document.getElementById('embed-code');
         const languageSelect = document.getElementById('language-select');
         const voiceSelect = document.getElementById('voice-select');
-        const startRecordingBtn = document.getElementById('start-recording-btn');
-        const stopRecordingBtn = document.getElementById('stop-recording-btn');
-        const recordingStatus = document.getElementById('recording-status');
-
         const lipSyncIndicators = [
             document.getElementById('lip-sync-1'),
             document.getElementById('lip-sync-2'),
@@ -240,6 +227,7 @@
             document.getElementById('lip-sync-4'),
             document.getElementById('lip-sync-5')
         ];
+        const mediaRecorderStatus = document.getElementById('media-recorder-status');
 
         const socket = io();
         let currentAvatar = '';
@@ -259,39 +247,41 @@
         let lastSpeechTime = 0;
         let mediaRecorder = null;
         let recordedChunks = [];
-        let isRecording = false;
+        let isSpeaking = false;
+        let neutralFrames = [];
+        let phonemeFrames = {};
 
         const phonemes = {
-            'а': ['mouth_aa_001.jpg', 'mouth_aa_002.jpg', 'mouth_aa_003.jpg'],
-            'б': ['mouth_bb_001.jpg', 'mouth_bb_002.jpg'],
-            'в': ['mouth_vv_001.jpg', 'mouth_vv_002.jpg'],
-            'г': ['mouth_kk_001.jpg'],
-            'д': ['mouth_dd_001.jpg'],
-            'е': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
-            'ж': ['mouth_zh_001.jpg', 'mouth_zh_002.jpg'],
-            'з': ['mouth_zz_001.jpg', 'mouth_zz_002.jpg'],
-            'и': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
-            'й': ['mouth_ee_001.jpg'],
-            'к': ['mouth_kk_001.jpg'],
-            'л': ['mouth_ll_001.jpg', 'mouth_ll_002.jpg'],
-            'м': ['mouth_bb_001.jpg'],
-            'н': ['mouth_nn_001.jpg'],
-            'о': ['mouth_oo_001.jpg', 'mouth_oo_002.jpg'],
-            'п': ['mouth_pp_001.jpg', 'mouth_pp_002.jpg'],
-            'р': ['mouth_rr_001.jpg'],
-            'с': ['mouth_ss_001.jpg', 'mouth_ss_002.jpg'],
-            'т': ['mouth_tt_001.jpg'],
-            'у': ['mouth_uu_001.jpg', 'mouth_uu_002.jpg'],
-            'ф': ['mouth_ff_001.jpg'],
-            'х': ['mouth_hh_001.jpg'],
-            'ц': ['mouth_ss_001.jpg'],
-            'ч': ['mouth_ch_001.jpg', 'mouth_ch_002.jpg'],
-            'ш': ['mouth_sh_001.jpg', 'mouth_sh_002.jpg'],
-            'щ': ['mouth_sh_001.jpg'],
-            'ы': ['mouth_uu_003.jpg', 'mouth_uu_004.jpg'],
-            'э': ['mouth_ee_003.jpg', 'mouth_ee_004.jpg'],
-            'ю': ['mouth_uu_001.jpg'],
-            'я': ['mouth_aa_004.jpg']
+            'а': 'mouth_aa',
+            'б': 'mouth_bb',
+            'в': 'mouth_vv',
+            'г': 'mouth_kk',
+            'д': 'mouth_dd',
+            'е': 'mouth_ee',
+            'ж': 'mouth_zh',
+            'з': 'mouth_zz',
+            'и': 'mouth_ee',
+            'й': 'mouth_ee',
+            'к': 'mouth_kk',
+            'л': 'mouth_ll',
+            'м': 'mouth_bb',
+            'н': 'mouth_nn',
+            'о': 'mouth_oo',
+            'п': 'mouth_pp',
+            'р': 'mouth_rr',
+            'с': 'mouth_ss',
+            'т': 'mouth_tt',
+            'у': 'mouth_uu',
+            'ф': 'mouth_ff',
+            'х': 'mouth_hh',
+            'ц': 'mouth_ss',
+            'ч': 'mouth_ch',
+            'ш': 'mouth_sh',
+            'щ': 'mouth_sh',
+            'ы': 'mouth_uu',
+            'э': 'mouth_ee',
+            'ю': 'mouth_uu',
+            'я': 'mouth_aa'
         };
 
         function initRoom(roomId) {
@@ -350,6 +340,8 @@
             try {
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
                 loadedImages = [];
+                neutralFrames = [];
+                phonemeFrames = {};
                 
                 const response = await fetch(`/api/frames/${avatarName}`);
                 if (!response.ok) throw new Error('Ошибка загрузки кадров');
@@ -360,11 +352,28 @@
                 frames = data.frames;
                 log(`Найдено кадров: ${frames.length}`);
                 
+                // Загружаем все кадры
                 for (let i = 0; i < frames.length; i++) {
                     try {
                         const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
                         loadedImages.push(img);
                         statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
+                        
+                        // Классифицируем кадры
+                        const frameName = frames[i].toLowerCase();
+                        if (frameName.includes('neutral')) {
+                            neutralFrames.push(img);
+                        } else {
+                            for (const [phoneme, prefix] of Object.entries(phonemes)) {
+                                if (frameName.startsWith(prefix)) {
+                                    if (!phonemeFrames[phoneme]) {
+                                        phonemeFrames[phoneme] = [];
+                                    }
+                                    phonemeFrames[phoneme].push(img);
+                                    break;
+                                }
+                            }
+                        }
                     } catch (error) {
                         log(error);
                     }
@@ -374,7 +383,6 @@
                     statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
                     startBtn.disabled = false;
                     speakBtn.disabled = false;
-                    startRecordingBtn.disabled = false;
                     avatar.src = loadedImages[0].src;
                     currentFrame = 0;
                 } else {
@@ -395,6 +403,23 @@
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
 
+        function showNeutralFrame() {
+            if (neutralFrames.length === 0) return;
+            
+            const randomIndex = Math.floor(Math.random() * neutralFrames.length);
+            avatar.src = neutralFrames[randomIndex].src;
+        }
+
+        function showPhonemeFrame(phoneme) {
+            if (!phonemeFrames[phoneme] || phonemeFrames[phoneme].length === 0) {
+                showNeutralFrame();
+                return;
+            }
+            
+            const randomIndex = Math.floor(Math.random() * phonemeFrames[phoneme].length);
+            avatar.src = phonemeFrames[phoneme][randomIndex].src;
+        }
+
         async function createVideoStream() {
             try {
                 const canvas = document.createElement('canvas');
@@ -409,6 +434,36 @@
                 videoStreamInterval = setInterval(() => {
                     ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
                 }, 1000 / FPS);
+                
+                // Инициализация MediaRecorder для записи видео с аудио
+                if (mediaRecorder) {
+                    mediaRecorder.stop();
+                }
+                
+                recordedChunks = [];
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm;codecs=vp9',
+                    audioBitsPerSecond: 128000,
+                    videoBitsPerSecond: 2500000
+                });
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    log(`Запись завершена, размер: ${blob.size} байт`);
+                    
+                    // Здесь можно отправить записанное видео на сервер или в конференцию
+                    // Например, через WebRTC или WebSocket
+                };
+                
+                mediaRecorder.start(100); // Собираем данные каждые 100 мс
+                mediaRecorderStatus.textContent = "Запись видео начата";
                 
                 return stream;
             } catch (error) {
@@ -428,9 +483,11 @@
                 room_id: currentRoom
             });
             
+            // Используем нейтральные кадры по умолчанию
             animationInterval = setInterval(() => {
-                currentFrame++;
-                showFrame();
+                if (!isSpeaking) {
+                    showNeutralFrame();
+                }
             }, 1000 / FPS);
             
             startBtn.disabled = true;
@@ -459,6 +516,12 @@
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
                 videoPreview.style.display = 'none';
+            }
+            
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder = null;
+                mediaRecorderStatus.textContent = "Запись видео остановлена";
             }
         }
 
@@ -489,7 +552,7 @@
 
         function updateLipSync() {
             const timeSinceLastSpeech = Date.now() - lastSpeechTime;
-            const isSpeaking = timeSinceLastSpeech < 100;
+            isSpeaking = timeSinceLastSpeech < 100;
             
             lipSyncIndicators.forEach((indicator, i) => {
                 if (isSpeaking && Math.random() > 0.7) {
@@ -509,15 +572,15 @@
             lipSyncIndicators.forEach(indicator => {
                 indicator.classList.remove('lip-sync-active');
             });
+            isSpeaking = false;
         }
 
         function animateLipsForSpeech(text) {
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
+            const lowerText = text.toLowerCase();
+            for (let i = 0; i < lowerText.length; i++) {
+                const char = lowerText[i];
                 if (phonemes[char]) {
-                    const frames = phonemes[char];
-                    const randomFrame = frames[Math.floor(Math.random() * frames.length)];
-                    // Здесь можно обновить изображение аватара
+                    showPhonemeFrame(char);
                     break;
                 }
             }
@@ -550,6 +613,7 @@
                     
                     utterance.onstart = () => {
                         setupAudioAnalysis();
+                        isSpeaking = true;
                     };
                     
                     utterance.onend = () => {
@@ -586,69 +650,6 @@
             });
             
             voiceSelect.disabled = false;
-        }
-
-        async function startRecording() {
-            if (!mediaStream) {
-                log('Нет медиапотока для записи');
-                return;
-            }
-
-            try {
-                recordedChunks = [];
-                const audioContext = new AudioContext();
-                const destination = audioContext.createMediaStreamDestination();
-                
-                // Создаем медиапоток с видео и аудио
-                const combinedStream = new MediaStream([
-                    ...mediaStream.getVideoTracks(),
-                    ...destination.stream.getAudioTracks()
-                ]);
-
-                mediaRecorder = new MediaRecorder(combinedStream, {
-                    mimeType: 'video/webm;codecs=vp9,opus'
-                });
-
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
-                };
-
-                mediaRecorder.onstop = async () => {
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const base64data = reader.result;
-                        socket.emit('media_stream', {
-                            room_id: currentRoom,
-                            media: base64data
-                        });
-                        log('Медиапоток отправлен в комнату');
-                    };
-                    reader.readAsDataURL(blob);
-                };
-
-                mediaRecorder.start(1000); // Собираем данные каждую секунду
-                isRecording = true;
-                startRecordingBtn.disabled = true;
-                stopRecordingBtn.disabled = false;
-                recordingStatus.textContent = 'Идет запись...';
-                log('Начата запись медиапотока');
-            } catch (error) {
-                log(`Ошибка при записи: ${error.message}`);
-            }
-        }
-
-        function stopRecording() {
-            if (mediaRecorder && isRecording) {
-                mediaRecorder.stop();
-                isRecording = false;
-                startRecordingBtn.disabled = false;
-                stopRecordingBtn.disabled = true;
-                recordingStatus.textContent = 'Запись завершена';
-                log('Запись медиапотока остановлена');
-            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -701,9 +702,6 @@
                         voiceSelect.appendChild(option);
                     });
             });
-
-            startRecordingBtn.addEventListener('click', startRecording);
-            stopRecordingBtn.addEventListener('click', stopRecording);
         });
     </script>
 </body>
