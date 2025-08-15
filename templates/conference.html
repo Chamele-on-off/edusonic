@@ -146,26 +146,6 @@
             text-align: center;
             display: none;
         }
-        #lip-sync-container {
-            position: absolute;
-            bottom: 150px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 5px;
-            z-index: 10;
-        }
-        .lip-sync-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.3);
-            transition: all 0.1s;
-        }
-        .lip-sync-active {
-            background: rgba(255, 255, 255, 0.9);
-            transform: scale(1.3);
-        }
         body.embedded {
             height: auto;
         }
@@ -199,13 +179,6 @@
             <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
             <div id="speech-text"></div>
-            <div id="lip-sync-container">
-                <div class="lip-sync-indicator" id="lip-sync-1"></div>
-                <div class="lip-sync-indicator" id="lip-sync-2"></div>
-                <div class="lip-sync-indicator" id="lip-sync-3"></div>
-                <div class="lip-sync-indicator" id="lip-sync-4"></div>
-                <div class="lip-sync-indicator" id="lip-sync-5"></div>
-            </div>
         </div>
     </div>
 
@@ -253,13 +226,6 @@
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
-        const lipSyncIndicators = [
-            document.getElementById('lip-sync-1'),
-            document.getElementById('lip-sync-2'),
-            document.getElementById('lip-sync-3'),
-            document.getElementById('lip-sync-4'),
-            document.getElementById('lip-sync-5')
-        ];
 
         let userStream = null;
         let socket = null;
@@ -268,45 +234,6 @@
         let isFullscreen = false;
         let recognition = null;
         let speechHistory = [];
-        let audioContext = null;
-        let analyser = null;
-        let scriptProcessor = null;
-        let lipSyncInterval = null;
-        let lastSpeechTime = 0;
-        let isServerSpeechPlaying = false;
-
-        const phonemes = {
-            'а': ['mouth_aa_001.jpg', 'mouth_aa_002.jpg', 'mouth_aa_003.jpg'],
-            'б': ['mouth_bb_001.jpg', 'mouth_bb_002.jpg'],
-            'в': ['mouth_vv_001.jpg', 'mouth_vv_002.jpg'],
-            'г': ['mouth_kk_001.jpg'],
-            'д': ['mouth_dd_001.jpg'],
-            'е': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
-            'ж': ['mouth_zh_001.jpg', 'mouth_zh_002.jpg'],
-            'з': ['mouth_zz_001.jpg', 'mouth_zz_002.jpg'],
-            'и': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
-            'й': ['mouth_ee_001.jpg'],
-            'к': ['mouth_kk_001.jpg'],
-            'л': ['mouth_ll_001.jpg', 'mouth_ll_002.jpg'],
-            'м': ['mouth_bb_001.jpg'],
-            'н': ['mouth_nn_001.jpg'],
-            'о': ['mouth_oo_001.jpg', 'mouth_oo_002.jpg'],
-            'п': ['mouth_pp_001.jpg', 'mouth_pp_002.jpg'],
-            'р': ['mouth_rr_001.jpg'],
-            'с': ['mouth_ss_001.jpg', 'mouth_ss_002.jpg'],
-            'т': ['mouth_tt_001.jpg'],
-            'у': ['mouth_uu_001.jpg', 'mouth_uu_002.jpg'],
-            'ф': ['mouth_ff_001.jpg'],
-            'х': ['mouth_hh_001.jpg'],
-            'ц': ['mouth_ss_001.jpg'],
-            'ч': ['mouth_ch_001.jpg', 'mouth_ch_002.jpg'],
-            'ш': ['mouth_sh_001.jpg', 'mouth_sh_002.jpg'],
-            'щ': ['mouth_sh_001.jpg'],
-            'ы': ['mouth_uu_003.jpg', 'mouth_uu_004.jpg'],
-            'э': ['mouth_ee_003.jpg', 'mouth_ee_004.jpg'],
-            'ю': ['mouth_uu_001.jpg'],
-            'я': ['mouth_aa_004.jpg']
-        };
 
         function initSocket() {
             socket = io();
@@ -344,21 +271,11 @@
                     }
                     
                     utterance.onstart = () => {
-                        isServerSpeechPlaying = true;
                         showSpeechText(data.text, 'teacher');
-                        setupAudioAnalysis();
                     };
                     
                     utterance.onend = () => {
-                        isServerSpeechPlaying = false;
-                        resetLipSync();
-                    };
-                    
-                    utterance.onboundary = (event) => {
-                        if (event.name === 'word') {
-                            const word = data.text.substring(event.charIndex, event.charIndex + event.charLength);
-                            animateLipsForSpeech(word.toLowerCase());
-                        }
+                        speechTextDiv.style.display = 'none';
                     };
                     
                     speechSynthesis.speak(utterance);
@@ -377,71 +294,6 @@
             
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
-            });
-        }
-
-        function setupAudioAnalysis() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 32;
-                
-                const source = audioContext.createMediaElementSource(speechAudio);
-                source.connect(analyser);
-                analyser.connect(audioContext.destination);
-                
-                scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
-                scriptProcessor.onaudioprocess = processAudio;
-                analyser.connect(scriptProcessor);
-            }
-            
-            if (lipSyncInterval) clearInterval(lipSyncInterval);
-            lipSyncInterval = setInterval(updateLipSync, 50);
-        }
-
-        function processAudio() {
-            const array = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(array);
-            
-            const volume = array.reduce((a, b) => a + b, 0) / array.length;
-            if (volume > 10) {
-                lastSpeechTime = Date.now();
-            }
-        }
-
-        function updateLipSync() {
-            const timeSinceLastSpeech = Date.now() - lastSpeechTime;
-            const isSpeaking = timeSinceLastSpeech < 100;
-            
-            lipSyncIndicators.forEach((indicator, i) => {
-                if (isSpeaking && Math.random() > 0.7) {
-                    indicator.classList.add('lip-sync-active');
-                    setTimeout(() => {
-                        indicator.classList.remove('lip-sync-active');
-                    }, 50);
-                }
-            });
-        }
-
-        function animateLipsForSpeech(text) {
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                if (phonemes[char]) {
-                    const frames = phonemes[char];
-                    const randomFrame = frames[Math.floor(Math.random() * frames.length)];
-                    // Здесь можно обновить изображение аватара
-                    break;
-                }
-            }
-        }
-
-        function resetLipSync() {
-            if (lipSyncInterval) {
-                clearInterval(lipSyncInterval);
-                lipSyncInterval = null;
-            }
-            lipSyncIndicators.forEach(indicator => {
-                indicator.classList.remove('lip-sync-active');
             });
         }
 
@@ -501,8 +353,6 @@
                 recognition.lang = 'ru-RU';
 
                 recognition.onresult = (event) => {
-                    if (isServerSpeechPlaying) return;
-                    
                     let finalTranscript = '';
                     for (let i = event.resultIndex; i < event.results.length; i++) {
                         if (event.results[i].isFinal) {
@@ -586,12 +436,6 @@
             }
             if (recognition) {
                 recognition.stop();
-            }
-            if (audioContext) {
-                audioContext.close();
-            }
-            if (lipSyncInterval) {
-                clearInterval(lipSyncInterval);
             }
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
