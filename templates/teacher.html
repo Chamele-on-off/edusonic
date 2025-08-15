@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анимация аватара</title>
+    <title>Учитель - Аватар с синтезом речи</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -27,6 +27,14 @@
             border: 1px solid #ddd;
             background-color: #f0f0f0;
         }
+        #video-preview {
+            width: 400px;
+            height: 400px;
+            margin: 20px auto;
+            display: block;
+            border: 1px solid #ddd;
+            background-color: black;
+        }
         .controls {
             display: flex;
             gap: 10px;
@@ -48,10 +56,6 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
-        select {
-            border: 1px solid #ddd;
-            min-width: 150px;
-        }
         #status {
             text-align: center;
             margin: 10px 0;
@@ -66,71 +70,17 @@
             max-height: 200px;
             overflow-y: auto;
         }
-        #conference-link {
-            margin-top: 20px;
-            text-align: center;
-        }
-        #video-preview {
-            display: none;
-            width: 200px;
-            height: 200px;
-            margin: 20px auto;
-            border: 1px solid #ddd;
-        }
         #room-controls {
             margin-top: 20px;
             padding: 15px;
             background: #eef;
             border-radius: 4px;
         }
-        #room-id {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        #embed-code {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            font-family: monospace;
-            background: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        #speech-controls {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f0f8ff;
-            border-radius: 4px;
-        }
-        #voice-select {
-            min-width: 200px;
-        }
-        #language-select {
-            min-width: 100px;
-        }
-        #lip-sync-container {
-            display: flex;
-            gap: 5px;
-            justify-content: center;
-            margin: 10px 0;
-        }
-        .lip-sync-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, 0.1);
-            transition: all 0.1s;
-        }
-        .lip-sync-active {
-            background: #3498db;
-            transform: scale(1.3);
-        }
     </style>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
-        <h1 style="text-align: center;">Анимация аватара</h1>
+        <h1 style="text-align: center;">Аватар с синтезом речи</h1>
         
         <div id="room-controls">
             <h3>Комната: <span id="room-id">default</span></h3>
@@ -138,11 +88,12 @@
                 <input type="text" id="room-input" placeholder="Имя комнаты">
                 <button id="change-room-btn">Сменить комнату</button>
             </div>
-            <div>
-                <label for="embed-code">Код для вставки на другой сайт:</label>
-                <textarea id="embed-code" rows="3" readonly></textarea>
-            </div>
         </div>
+        
+        <img id="avatar" src="" alt="Аватар">
+        <video id="video-preview" autoplay muted></video>
+        
+        <div id="status">Выберите аватар и загрузите кадры</div>
         
         <div class="controls">
             <select id="avatar-select">
@@ -151,53 +102,24 @@
             <button id="load-btn" disabled>Загрузить</button>
         </div>
         
-        <img id="avatar" src="" alt="Аватар">
-        <video id="video-preview" autoplay muted></video>
-        
-        <div id="status">Выберите аватар</div>
-        
         <div class="controls">
-            <button id="start-btn" disabled>Старт</button>
+            <button id="start-btn" disabled>Старт трансляции</button>
             <button id="stop-btn" disabled>Стоп</button>
         </div>
 
-        <div id="lip-sync-container">
-            <div class="lip-sync-indicator" id="lip-sync-1"></div>
-            <div class="lip-sync-indicator" id="lip-sync-2"></div>
-            <div class="lip-sync-indicator" id="lip-sync-3"></div>
-            <div class="lip-sync-indicator" id="lip-sync-4"></div>
-            <div class="lip-sync-indicator" id="lip-sync-5"></div>
-        </div>
-
-        <div id="speech-controls">
-            <div class="controls">
-                <select id="language-select">
-                    <option value="ru-RU">Русский</option>
-                    <option value="en-US">Английский</option>
-                    <option value="de-DE">Немецкий</option>
-                    <option value="fr-FR">Французский</option>
-                    <option value="es-ES">Испанский</option>
-                </select>
-                <select id="voice-select" disabled>
-                    <option value="">Загрузка голосов...</option>
-                </select>
-            </div>
-            <div class="controls">
-                <input type="text" id="speech-text" placeholder="Текст для озвучивания">
-                <button id="speak-btn" disabled>Озвучить</button>
-            </div>
+        <div class="controls">
+            <input type="text" id="speech-text" placeholder="Текст для озвучивания">
+            <button id="speak-btn" disabled>Озвучить</button>
         </div>
         
         <div id="debug"></div>
-
-        <div id="conference-link">
-            <a id="conference-link-a" href="/conference?room=default" target="_blank">Перейти в конференцию</a>
-        </div>
     </div>
 
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        const FPS = 10;
+        // Элементы интерфейса
         const avatar = document.getElementById('avatar');
+        const videoPreview = document.getElementById('video-preview');
         const statusDiv = document.getElementById('status');
         const debugDiv = document.getElementById('debug');
         const startBtn = document.getElementById('start-btn');
@@ -206,109 +128,43 @@
         const avatarSelect = document.getElementById('avatar-select');
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
-        const videoPreview = document.getElementById('video-preview');
         const roomIdSpan = document.getElementById('room-id');
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
-        const conferenceLink = document.getElementById('conference-link-a');
-        const embedCodeTextarea = document.getElementById('embed-code');
-        const languageSelect = document.getElementById('language-select');
-        const voiceSelect = document.getElementById('voice-select');
-        const lipSyncIndicators = [
-            document.getElementById('lip-sync-1'),
-            document.getElementById('lip-sync-2'),
-            document.getElementById('lip-sync-3'),
-            document.getElementById('lip-sync-4'),
-            document.getElementById('lip-sync-5')
-        ];
 
+        // Состояние приложения
         const socket = io();
+        let currentRoom = 'default';
         let currentAvatar = '';
         let frames = [];
         let loadedImages = [];
         let currentFrame = 0;
-        let animationInterval = null;
         let mediaStream = null;
-        let videoStreamInterval = null;
-        let currentRoom = 'default';
-        let availableVoices = [];
-        let currentVoice = null;
         let audioContext = null;
-        let analyser = null;
-        let scriptProcessor = null;
-        let lipSyncInterval = null;
-        let lastSpeechTime = 0;
+        let isStreaming = false;
+        let animationInterval = null;
 
-        const phonemes = {
-            'а': ['mouth_aa_001.jpg', 'mouth_aa_002.jpg', 'mouth_aa_003.jpg'],
-            'б': ['mouth_bb_001.jpg', 'mouth_bb_002.jpg'],
-            'в': ['mouth_vv_001.jpg', 'mouth_vv_002.jpg'],
-            'г': ['mouth_kk_001.jpg'],
-            'д': ['mouth_dd_001.jpg'],
-            'е': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
-            'ж': ['mouth_zh_001.jpg', 'mouth_zh_002.jpg'],
-            'з': ['mouth_zz_001.jpg', 'mouth_zz_002.jpg'],
-            'и': ['mouth_ee_001.jpg', 'mouth_ee_002.jpg'],
-            'й': ['mouth_ee_001.jpg'],
-            'к': ['mouth_kk_001.jpg'],
-            'л': ['mouth_ll_001.jpg', 'mouth_ll_002.jpg'],
-            'м': ['mouth_bb_001.jpg'],
-            'н': ['mouth_nn_001.jpg'],
-            'о': ['mouth_oo_001.jpg', 'mouth_oo_002.jpg'],
-            'п': ['mouth_pp_001.jpg', 'mouth_pp_002.jpg'],
-            'р': ['mouth_rr_001.jpg'],
-            'с': ['mouth_ss_001.jpg', 'mouth_ss_002.jpg'],
-            'т': ['mouth_tt_001.jpg'],
-            'у': ['mouth_uu_001.jpg', 'mouth_uu_002.jpg'],
-            'ф': ['mouth_ff_001.jpg'],
-            'х': ['mouth_hh_001.jpg'],
-            'ц': ['mouth_ss_001.jpg'],
-            'ч': ['mouth_ch_001.jpg', 'mouth_ch_002.jpg'],
-            'ш': ['mouth_sh_001.jpg', 'mouth_sh_002.jpg'],
-            'щ': ['mouth_sh_001.jpg'],
-            'ы': ['mouth_uu_003.jpg', 'mouth_uu_004.jpg'],
-            'э': ['mouth_ee_003.jpg', 'mouth_ee_004.jpg'],
-            'ю': ['mouth_uu_001.jpg'],
-            'я': ['mouth_aa_004.jpg']
-        };
-
+        // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
-            conferenceLink.href = `/conference?room=${roomId}`;
-            embedCodeTextarea.value = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
             socket.emit('join_room', { room_id: roomId });
             log(`Переключено в комнату: ${roomId}`);
         }
 
+        // Логирование в консоль и интерфейс
         function log(message) {
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
+            console.log(message);
         }
 
-        async function loadImage(src, retries = 3) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => {
-                    if (retries > 0) {
-                        setTimeout(() => loadImage(src, retries - 1).then(resolve).catch(reject), 300);
-                    } else {
-                        reject(`Не удалось загрузить: ${src}`);
-                    }
-                };
-                img.src = src;
-            });
-        }
-
+        // Загрузка аватаров
         async function loadAvatars() {
             try {
                 const response = await fetch('/api/avatars');
-                if (!response.ok) throw new Error('Ошибка загрузки аватаров');
-                
                 const data = await response.json();
-                if (data.error) throw new Error(data.error);
                 
                 avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
                 data.avatars.forEach(avatar => {
@@ -320,278 +176,225 @@
                 
                 log(`Загружено аватаров: ${data.avatars.length}`);
             } catch (error) {
-                log(error.message);
+                log(`Ошибка загрузки аватаров: ${error.message}`);
             }
         }
 
+        // Загрузка кадров аватара
         async function loadAvatarFrames(avatarName) {
             try {
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
                 loadedImages = [];
                 
                 const response = await fetch(`/api/frames/${avatarName}`);
-                if (!response.ok) throw new Error('Ошибка загрузки кадров');
-                
                 const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
                 frames = data.frames;
-                log(`Найдено кадров: ${frames.length}`);
                 
                 for (let i = 0; i < frames.length; i++) {
-                    try {
-                        const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
-                        loadedImages.push(img);
-                        statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
-                    } catch (error) {
-                        log(error);
-                    }
+                    const img = new Image();
+                    img.src = `/frames/${avatarName}/${frames[i]}`;
+                    await new Promise(resolve => {
+                        img.onload = resolve;
+                        img.onerror = () => resolve();
+                    });
+                    loadedImages.push(img);
+                    statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
                 }
                 
                 if (loadedImages.length > 0) {
-                    statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
-                    startBtn.disabled = false;
-                    speakBtn.disabled = false;
                     avatar.src = loadedImages[0].src;
                     currentFrame = 0;
+                    startBtn.disabled = false;
+                    speakBtn.disabled = false;
+                    statusDiv.textContent = `${avatarName}: готово (${loadedImages.length} кадров)`;
                 } else {
                     statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
                 }
-                
             } catch (error) {
                 statusDiv.textContent = `Ошибка: ${error.message}`;
                 log(error.message);
             }
         }
 
-        function showFrame() {
-            if (loadedImages.length === 0) return;
-            
-            currentFrame = currentFrame % loadedImages.length;
-            avatar.src = loadedImages[currentFrame].src;
-            statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
+        // Синтез речи в аудио-блоб
+        async function synthesizeSpeech(text) {
+            return new Promise((resolve) => {
+                if (!window.SpeechSynthesisUtterance) {
+                    log("Синтез речи не поддерживается в этом браузере");
+                    return resolve(null);
+                }
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ru-RU';
+                
+                // Выбираем русский голос, если доступен
+                const voices = window.speechSynthesis.getVoices();
+                const russianVoice = voices.find(v => v.lang.includes('ru') || v.name.includes('Russian'));
+                if (russianVoice) {
+                    utterance.voice = russianVoice;
+                }
+
+                // Эмуляция записи аудио (в реальном приложении используйте MediaRecorder)
+                utterance.onend = () => {
+                    log(`Синтезирована речь: "${text}"`);
+                    resolve(new Blob([text], { type: 'text/plain' })); // Заглушка
+                };
+
+                window.speechSynthesis.speak(utterance);
+            });
         }
 
-        async function createVideoStream() {
+        // Создание видео-потока с аудио
+        async function createVideoStreamWithAudio(audioBlob) {
             try {
                 const canvas = document.createElement('canvas');
                 canvas.width = loadedImages[0].width;
                 canvas.height = loadedImages[0].height;
                 const ctx = canvas.getContext('2d');
-                
-                const stream = canvas.captureStream(FPS);
-                videoPreview.srcObject = stream;
-                videoPreview.style.display = 'block';
-                
-                videoStreamInterval = setInterval(() => {
-                    ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
-                }, 1000 / FPS);
+
+                // Создаем видео-поток с кадрами аватара
+                const stream = canvas.captureStream(25); // 25 FPS
+
+                // Добавляем аудио, если есть
+                if (audioBlob) {
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+
+                    const audioBuffer = await audioContext.decodeAudioData(await audioBlob.arrayBuffer());
+                    const audioSource = audioContext.createBufferSource();
+                    audioSource.buffer = audioBuffer;
+
+                    const audioDestination = audioContext.createMediaStreamDestination();
+                    audioSource.connect(audioDestination);
+                    audioSource.start();
+
+                    // Добавляем аудио-дорожку в поток
+                    audioDestination.stream.getAudioTracks().forEach(track => {
+                        stream.addTrack(track);
+                    });
+                }
+
+                // Анимация кадров
+                let frameIndex = 0;
+                function drawFrame() {
+                    if (loadedImages.length > 0) {
+                        frameIndex = (frameIndex + 1) % loadedImages.length;
+                        ctx.drawImage(loadedImages[frameIndex], 0, 0, canvas.width, canvas.height);
+                    }
+                }
+
+                // 25 кадров в секунду
+                animationInterval = setInterval(drawFrame, 40);
                 
                 return stream;
             } catch (error) {
-                log(`Ошибка создания видео потока: ${error.message}`);
+                log(`Ошибка создания потока: ${error.message}`);
                 return null;
             }
         }
 
-        async function startAnimation() {
-            if (animationInterval || loadedImages.length === 0) return;
-            
-            mediaStream = await createVideoStream();
-            
-            const framePaths = loadedImages.map(img => img.src);
-            socket.emit('start_animation', { 
-                frames: framePaths,
-                room_id: currentRoom
-            });
-            
-            animationInterval = setInterval(() => {
-                currentFrame++;
-                showFrame();
-            }, 1000 / FPS);
-            
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
+        // Запуск трансляции
+        async function startStreaming() {
+            if (isStreaming || loadedImages.length === 0) return;
+
+            try {
+                // Создаем начальный поток без аудио
+                mediaStream = await createVideoStreamWithAudio(null);
+                videoPreview.srcObject = mediaStream;
+                
+                // Отправляем идентификатор потока в комнату
+                socket.emit('start_stream', { 
+                    room_id: currentRoom,
+                    stream_id: 'teacher_stream' 
+                });
+                
+                isStreaming = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusDiv.textContent = "Трансляция запущена";
+                log(`Трансляция начата в комнате ${currentRoom}`);
+            } catch (error) {
+                log(`Ошибка запуска трансляции: ${error.message}`);
+            }
         }
 
-        function stopAnimation() {
+        // Остановка трансляции
+        function stopStreaming() {
+            if (!isStreaming) return;
+
             if (animationInterval) {
                 clearInterval(animationInterval);
                 animationInterval = null;
-                currentFrame = 0;
-                showFrame();
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                socket.emit('stop_animation', { room_id: currentRoom });
-                log("Анимация остановлена");
             }
-            
-            if (videoStreamInterval) {
-                clearInterval(videoStreamInterval);
-                videoStreamInterval = null;
-            }
-            
+
             if (mediaStream) {
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
-                videoPreview.style.display = 'none';
             }
+
+            videoPreview.srcObject = null;
+            isStreaming = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            statusDiv.textContent = "Трансляция остановлена";
+            socket.emit('stop_stream', { room_id: currentRoom });
+            log("Трансляция остановлена");
         }
 
-        function setupAudioAnalysis() {
-            if (!audioContext) {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 32;
-                
-                scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
-                scriptProcessor.onaudioprocess = processAudio;
-                analyser.connect(scriptProcessor);
-            }
-            
-            if (lipSyncInterval) clearInterval(lipSyncInterval);
-            lipSyncInterval = setInterval(updateLipSync, 50);
-        }
-
-        function processAudio() {
-            const array = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(array);
-            
-            const volume = array.reduce((a, b) => a + b, 0) / array.length;
-            if (volume > 10) {
-                lastSpeechTime = Date.now();
-            }
-        }
-
-        function updateLipSync() {
-            const timeSinceLastSpeech = Date.now() - lastSpeechTime;
-            const isSpeaking = timeSinceLastSpeech < 100;
-            
-            lipSyncIndicators.forEach((indicator, i) => {
-                if (isSpeaking && Math.random() > 0.7) {
-                    indicator.classList.add('lip-sync-active');
-                    setTimeout(() => {
-                        indicator.classList.remove('lip-sync-active');
-                    }, 50);
-                }
-            });
-        }
-
-        function resetLipSync() {
-            if (lipSyncInterval) {
-                clearInterval(lipSyncInterval);
-                lipSyncInterval = null;
-            }
-            lipSyncIndicators.forEach(indicator => {
-                indicator.classList.remove('lip-sync-active');
-            });
-        }
-
-        function animateLipsForSpeech(text) {
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                if (phonemes[char]) {
-                    const frames = phonemes[char];
-                    const randomFrame = frames[Math.floor(Math.random() * frames.length)];
-                    // Здесь можно обновить изображение аватара
-                    break;
-                }
-            }
-        }
-
-        function generateSpeech() {
+        // Озвучивание текста
+        async function speakText() {
             const text = speechText.value.trim();
-            if (text) {
-                if ('speechSynthesis' in window) {
-                    const lang = languageSelect.value;
-                    const voiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
-                    
-                    socket.emit('generate_speech', { 
-                        text: text,
-                        room_id: currentRoom,
-                        lang: lang,
-                        voice: voiceName
-                    });
-                    
-                    const utterance = new SpeechSynthesisUtterance(text);
-                    utterance.lang = lang;
-                    
-                    if (voiceName) {
-                        const voices = speechSynthesis.getVoices();
-                        const selectedVoice = voices.find(v => v.name === voiceName);
-                        if (selectedVoice) {
-                            utterance.voice = selectedVoice;
-                        }
-                    }
-                    
-                    utterance.onstart = () => {
-                        setupAudioAnalysis();
-                    };
-                    
-                    utterance.onend = () => {
-                        resetLipSync();
-                    };
-                    
-                    utterance.onboundary = (event) => {
-                        if (event.name === 'word') {
-                            const word = text.substring(event.charIndex, event.charIndex + event.charLength);
-                            animateLipsForSpeech(word.toLowerCase());
-                        }
-                    };
-                    
-                    speechSynthesis.speak(utterance);
-                    
-                    log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
-                    speechText.value = '';
-                } else {
-                    log('Браузер не поддерживает синтез речи');
-                }
+            if (!text || !isStreaming) return;
+
+            try {
+                // Синтезируем речь
+                const audioBlob = await synthesizeSpeech(text);
+                if (!audioBlob) return;
+
+                // Останавливаем текущий поток
+                stopStreaming();
+
+                // Создаем новый поток с аудио
+                mediaStream = await createVideoStreamWithAudio(audioBlob);
+                videoPreview.srcObject = mediaStream;
+                
+                isStreaming = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                statusDiv.textContent = `Озвучка: "${text}"`;
+                
+                socket.emit('stream_with_audio', { 
+                    room_id: currentRoom,
+                    text: text 
+                });
+            } catch (error) {
+                log(`Ошибка озвучивания: ${error.message}`);
             }
         }
 
-        function populateVoiceList() {
-            const voices = window.speechSynthesis.getVoices();
-            voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
-            
-            voices.forEach(voice => {
-                const option = document.createElement('option');
-                option.textContent = `${voice.name} (${voice.lang})${voice.default ? ' — DEFAULT' : ''}`;
-                option.setAttribute('data-lang', voice.lang);
-                option.setAttribute('data-name', voice.name);
-                voiceSelect.appendChild(option);
-            });
-            
-            voiceSelect.disabled = false;
-        }
-
+        // Инициализация при загрузке
         document.addEventListener('DOMContentLoaded', () => {
             initRoom('default');
             loadAvatars();
-            
-            if ('speechSynthesis' in window) {
-                speechSynthesis.onvoiceschanged = populateVoiceList;
-                populateVoiceList();
-            } else {
-                voiceSelect.innerHTML = '<option value="">Синтез речи не поддерживается</option>';
-            }
 
+            // Обработчики событий
             avatarSelect.addEventListener('change', () => {
                 currentAvatar = avatarSelect.value;
                 loadBtn.disabled = !currentAvatar;
             });
             
             loadBtn.addEventListener('click', () => {
-                stopAnimation();
+                stopStreaming();
                 loadAvatarFrames(currentAvatar);
             });
             
-            startBtn.addEventListener('click', startAnimation);
-            stopBtn.addEventListener('click', stopAnimation);
+            startBtn.addEventListener('click', startStreaming);
+            stopBtn.addEventListener('click', stopStreaming);
             
-            speakBtn.addEventListener('click', generateSpeech);
+            speakBtn.addEventListener('click', speakText);
             speechText.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') generateSpeech();
+                if (e.key === 'Enter') speakText();
             });
             
             changeRoomBtn.addEventListener('click', () => {
@@ -599,22 +402,17 @@
                 initRoom(newRoom);
                 roomInput.value = '';
             });
-            
-            languageSelect.addEventListener('change', () => {
-                const lang = languageSelect.value;
-                const voices = window.speechSynthesis.getVoices();
-                
-                voiceSelect.innerHTML = '<option value="">Выберите голос</option>';
-                voices
-                    .filter(voice => voice.lang.startsWith(lang))
-                    .forEach(voice => {
-                        const option = document.createElement('option');
-                        option.textContent = `${voice.name} (${voice.lang})${voice.default ? ' — DEFAULT' : ''}`;
-                        option.setAttribute('data-lang', voice.lang);
-                        option.setAttribute('data-name', voice.name);
-                        voiceSelect.appendChild(option);
-                    });
-            });
+
+            // Проверка поддержки API
+            if (!window.AudioContext && !window.webkitAudioContext) {
+                log("Ваш браузер не поддерживает Web Audio API");
+                speakBtn.disabled = true;
+            }
+
+            if (!window.speechSynthesis) {
+                log("Ваш браузер не поддерживает синтез речи");
+                speakBtn.disabled = true;
+            }
         });
     </script>
 </body>
