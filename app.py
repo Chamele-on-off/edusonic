@@ -2,6 +2,9 @@ from flask import Flask, render_template, send_from_directory, jsonify, request
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
+import pyttsx3
+import base64
+import io
 import time
 import threading
 from collections import defaultdict
@@ -12,11 +15,42 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
+# Инициализация движка синтеза речи
+engine = pyttsx3.init()
+engine.setProperty('rate', 150)  # Скорость речи
+voices = engine.getProperty('voices')
+
 animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
+
+def text_to_speech(text, voice_id=None):
+    try:
+        # Сохраняем текущие настройки голоса
+        current_voice = engine.getProperty('voice')
+        
+        # Устанавливаем выбранный голос если указан
+        if voice_id and any(v.id == voice_id for v in voices):
+            engine.setProperty('voice', voice_id)
+        
+        # Генерируем речь в буфер
+        engine.save_to_file(text, 'temp.wav')
+        engine.runAndWait()
+        
+        # Читаем сгенерированный файл
+        with open('temp.wav', 'rb') as f:
+            audio_data = f.read()
+        
+        # Восстанавливаем предыдущий голос
+        if voice_id:
+            engine.setProperty('voice', current_voice)
+        
+        return base64.b64encode(audio_data).decode('utf-8')
+    except Exception as e:
+        print(f"Ошибка синтеза речи: {e}")
+        return None
 
 @app.route('/')
 def home():
@@ -45,6 +79,15 @@ def get_frames(avatar_name):
         
         frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
         return jsonify({"frames": frames})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/voices')
+def get_voices():
+    try:
+        voices_list = [{'id': v.id, 'name': v.name, 'gender': 'male' if 'male' in v.name.lower() else 'female'} 
+                      for v in voices]
+        return jsonify({"voices": voices_list})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -104,22 +147,23 @@ def handle_stop_animation(data):
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
-    lang = data.get('lang', 'ru-RU')
-    voice_name = data.get('voice', None)
+    voice_id = data.get('voice', None)
     
-    emit('speech_request', {
-        'text': text,
-        'lang': lang,
-        'voice': voice_name
-    }, room=room_id)
-    
-    room_speech_data[room_id].append({
-        'text': text,
-        'timestamp': time.time(),
-        'type': 'generated'
-    })
-    if len(room_speech_data[room_id]) > 50:
-        room_speech_data[room_id].pop(0)
+    audio_data = text_to_speech(text, voice_id)
+    if audio_data:
+        emit('speech_audio', {
+            'audio': audio_data,
+            'text': text,
+            'format': 'wav'
+        }, room=room_id)
+        
+        room_speech_data[room_id].append({
+            'text': text,
+            'timestamp': time.time(),
+            'type': 'generated'
+        })
+        if len(room_speech_data[room_id]) > 50:
+            room_speech_data[room_id].pop(0)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -137,4 +181,12 @@ def handle_recognized_speech(data):
         room_speech_data[room_id].pop(0)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    try:
+        # Проверка доступности голосов
+        print("Доступные голоса:")
+        for voice in voices:
+            print(f"ID: {voice.id} | Имя: {voice.name} | Язык: {voice.languages}")
+        
+        socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    except Exception as e:
+        print(f"Ошибка запуска сервера: {e}")
