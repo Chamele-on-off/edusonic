@@ -125,6 +125,12 @@
             background: #3498db;
             transform: scale(1.3);
         }
+        #webrtc-status {
+            margin-top: 10px;
+            text-align: center;
+            font-weight: bold;
+            color: #2c3e50;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -153,6 +159,7 @@
         
         <img id="avatar" src="" alt="Аватар">
         <video id="video-preview" autoplay muted></video>
+        <div id="webrtc-status">Статус WebRTC: Не подключено</div>
         
         <div id="status">Выберите аватар</div>
         
@@ -221,6 +228,7 @@
             document.getElementById('lip-sync-4'),
             document.getElementById('lip-sync-5')
         ];
+        const webrtcStatus = document.getElementById('webrtc-status');
 
         const socket = io();
         let currentAvatar = '';
@@ -241,40 +249,16 @@
         let isSpeaking = false;
         let neutralFrames = [];
         let phonemeFrames = {};
-        let audioStream = null;
-        let combinedStream = null;
+        let peerConnection = null;
+        let dataChannel = null;
 
-        const phonemes = {
-            'а': 'mouth_aa',
-            'б': 'mouth_bb',
-            'в': 'mouth_vv',
-            'г': 'mouth_kk',
-            'д': 'mouth_dd',
-            'е': 'mouth_ee',
-            'ж': 'mouth_zh',
-            'з': 'mouth_zz',
-            'и': 'mouth_ee',
-            'й': 'mouth_ee',
-            'к': 'mouth_kk',
-            'л': 'mouth_ll',
-            'м': 'mouth_bb',
-            'н': 'mouth_nn',
-            'о': 'mouth_oo',
-            'п': 'mouth_pp',
-            'р': 'mouth_rr',
-            'с': 'mouth_ss',
-            'т': 'mouth_tt',
-            'у': 'mouth_uu',
-            'ф': 'mouth_ff',
-            'х': 'mouth_hh',
-            'ц': 'mouth_ss',
-            'ч': 'mouth_ch',
-            'ш': 'mouth_sh',
-            'щ': 'mouth_sh',
-            'ы': 'mouth_uu',
-            'э': 'mouth_ee',
-            'ю': 'mouth_uu',
-            'я': 'mouth_aa'
+        // Конфигурация WebRTC
+        const rtcConfiguration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
         };
 
         function initRoom(roomId) {
@@ -345,14 +329,12 @@
                 frames = data.frames;
                 log(`Найдено кадров: ${frames.length}`);
                 
-                // Загружаем все кадры и классифицируем их
                 for (let i = 0; i < frames.length; i++) {
                     try {
                         const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
                         loadedImages.push(img);
                         statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
                         
-                        // Классифицируем кадры
                         const frameName = frames[i].toLowerCase();
                         if (frameName.includes('neutral')) {
                             neutralFrames.push(img);
@@ -412,33 +394,104 @@
                 canvas.height = loadedImages[0].height;
                 const ctx = canvas.getContext('2d');
                 
-                // Создаем видеопоток из canvas
                 const videoStream = canvas.captureStream(FPS);
                 videoPreview.srcObject = videoStream;
                 videoPreview.style.display = 'block';
                 
-                // Обновляем canvas с текущим кадром анимации
                 videoStreamInterval = setInterval(() => {
                     ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
                 }, 1000 / FPS);
                 
-                // Создаем аудиопоток из синтеза речи
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const destination = audioContext.createMediaStreamDestination();
-                audioStream = destination.stream;
-                
-                // Комбинируем видеопоток и аудиопоток
-                combinedStream = new MediaStream([...videoStream.getVideoTracks(), ...audioStream.getAudioTracks()]);
-                
-                return combinedStream;
+                return videoStream;
             } catch (error) {
                 log(`Ошибка создания видео потока: ${error.message}`);
                 return null;
             }
         }
 
+        function initWebRTC() {
+            try {
+                peerConnection = new RTCPeerConnection(rtcConfiguration);
+                
+                // Обработка ICE кандидатов
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        socket.emit('webrtc_ice_candidate', {
+                            room_id: currentRoom,
+                            target_sid: Array.from(room_participants[currentRoom]).find(sid => sid !== socket.id),
+                            candidate: event.candidate
+                        });
+                    }
+                };
+                
+                // Обработка изменения состояния соединения
+                peerConnection.oniceconnectionstatechange = () => {
+                    webrtcStatus.textContent = `Статус WebRTC: ${peerConnection.iceConnectionState}`;
+                    log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
+                };
+                
+                // Создаем DataChannel для дополнительных данных
+                dataChannel = peerConnection.createDataChannel('avatarData');
+                dataChannel.onopen = () => log('DataChannel открыт');
+                dataChannel.onclose = () => log('DataChannel закрыт');
+                dataChannel.onmessage = (event) => log(`Получено сообщение: ${event.data}`);
+                
+                log('WebRTC инициализирован');
+                return true;
+            } catch (error) {
+                log(`Ошибка инициализации WebRTC: ${error.message}`);
+                return false;
+            }
+        }
+
+        async function startStreaming() {
+            if (!peerConnection || peerConnection.connectionState !== 'connected') {
+                if (!initWebRTC()) {
+                    log('Не удалось инициализировать WebRTC');
+                    return;
+                }
+            }
+            
+            try {
+                const videoStream = await createVideoStream();
+                if (!videoStream) {
+                    throw new Error('Не удалось создать видеопоток');
+                }
+                
+                // Добавляем видеопоток в соединение
+                videoStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, videoStream);
+                });
+                
+                // Создаем предложение для установки соединения
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                // Отправляем предложение другим участникам комнаты
+                const otherParticipants = Array.from(room_participants[currentRoom]).filter(sid => sid !== socket.id);
+                if (otherParticipants.length > 0) {
+                    socket.emit('webrtc_offer', {
+                        room_id: currentRoom,
+                        target_sid: otherParticipants[0],
+                        offer: peerConnection.localDescription
+                    });
+                    log('Отправлено WebRTC предложение');
+                }
+                
+                return true;
+            } catch (error) {
+                log(`Ошибка начала трансляции: ${error.message}`);
+                return false;
+            }
+        }
+
         async function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
+            
+            if (!await startStreaming()) {
+                log('Не удалось начать трансляцию');
+                return;
+            }
             
             mediaStream = await createVideoStream();
             
@@ -448,7 +501,6 @@
                 room_id: currentRoom
             });
             
-            // Используем нейтральные кадры по умолчанию, когда нет речи
             animationInterval = setInterval(() => {
                 if (!isSpeaking) {
                     showNeutralFrame();
@@ -481,6 +533,12 @@
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
                 videoPreview.style.display = 'none';
+            }
+            
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+                webrtcStatus.textContent = 'Статус WebRTC: Отключено';
             }
         }
 
@@ -610,6 +668,29 @@
             
             voiceSelect.disabled = false;
         }
+
+        // Обработчики WebRTC сообщений
+        socket.on('webrtc_answer', async (data) => {
+            if (peerConnection && peerConnection.signalingState !== 'closed') {
+                try {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    log('Получен и установлен WebRTC ответ');
+                } catch (error) {
+                    log(`Ошибка установки ответа: ${error.message}`);
+                }
+            }
+        });
+        
+        socket.on('webrtc_ice_candidate', async (data) => {
+            if (peerConnection && peerConnection.signalingState !== 'closed') {
+                try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    log('Добавлен ICE кандидат');
+                } catch (error) {
+                    log(`Ошибка добавления ICE кандидата: ${error.message}`);
+                }
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             initRoom('default');
