@@ -5,24 +5,21 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import time
 import threading
 from collections import defaultdict
-import base64
-import uuid
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
-MEDIA_DIR = BASE_DIR / 'media'
-MEDIA_DIR.mkdir(exist_ok=True)
 
+# Глобальные переменные для хранения состояния
 animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_audio_data = defaultdict(dict)
-room_media_streams = defaultdict(dict)
+peer_connections = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -58,10 +55,6 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-@app.route('/media/<filename>')
-def serve_media(filename):
-    return send_from_directory(MEDIA_DIR, filename)
-
 def animation_loop(room_id):
     while animation_running[room_id]:
         if current_animation_frames[room_id]:
@@ -74,15 +67,6 @@ def animation_loop(room_id):
             socketio.emit('animation_frame', frame_data, room=room_id)
         time.sleep(0.1)
 
-def save_media_stream(room_id, user_id, media_data):
-    filename = f"{room_id}_{user_id}_{int(time.time())}.webm"
-    filepath = MEDIA_DIR / filename
-    
-    with open(filepath, 'wb') as f:
-        f.write(base64.b64decode(media_data.split(',')[1]))
-    
-    return filename
-
 @socketio.on('connect')
 def handle_connect():
     print('Client connected:', request.sid)
@@ -94,6 +78,10 @@ def handle_disconnect():
             room_participants[room_id].remove(request.sid)
             emit('participant_left', {'sid': request.sid}, room=room_id)
             emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
+            
+            # Очищаем WebRTC соединения при отключении
+            if room_id in peer_connections and request.sid in peer_connections[room_id]:
+                del peer_connections[room_id][request.sid]
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -155,22 +143,33 @@ def handle_recognized_speech(data):
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
 
-@socketio.on('audio_data')
-def handle_audio_data(data):
+# WebRTC обработчики
+@socketio.on('webrtc_offer')
+def handle_webrtc_offer(data):
     room_id = data['room_id']
-    audio_blob = data['audio']
-    room_audio_data[room_id][request.sid] = audio_blob
-    emit('audio_stream', {'audio': audio_blob, 'sid': request.sid}, room=room_id, include_self=False)
+    target_sid = data['target_sid']
+    emit('webrtc_offer', {
+        'offer': data['offer'],
+        'sender_sid': request.sid
+    }, to=target_sid)
 
-@socketio.on('media_stream')
-def handle_media_stream(data):
+@socketio.on('webrtc_answer')
+def handle_webrtc_answer(data):
     room_id = data['room_id']
-    media_data = data['media']
-    filename = save_media_stream(room_id, request.sid, media_data)
-    emit('media_stream_update', {
-        'url': f'/media/{filename}',
-        'sid': request.sid
-    }, room=room_id)
+    target_sid = data['target_sid']
+    emit('webrtc_answer', {
+        'answer': data['answer'],
+        'sender_sid': request.sid
+    }, to=target_sid)
+
+@socketio.on('webrtc_ice_candidate')
+def handle_webrtc_ice_candidate(data):
+    room_id = data['room_id']
+    target_sid = data['target_sid']
+    emit('webrtc_ice_candidate', {
+        'candidate': data['candidate'],
+        'sender_sid': request.sid
+    }, to=target_sid)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
