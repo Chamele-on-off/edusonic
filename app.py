@@ -2,9 +2,6 @@ from flask import Flask, render_template, send_from_directory, jsonify, request
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from gtts import gTTS
-import io
-import base64
 import time
 import threading
 from collections import defaultdict
@@ -20,7 +17,6 @@ current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
-user_streams = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -56,13 +52,6 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-def text_to_speech(text, lang='ru'):
-    tts = gTTS(text=text, lang=lang)
-    mp3_fp = io.BytesIO()
-    tts.write_to_fp(mp3_fp)
-    mp3_fp.seek(0)
-    return base64.b64encode(mp3_fp.read()).decode('utf-8')
-
 def animation_loop(room_id):
     while animation_running[room_id]:
         if current_animation_frames[room_id]:
@@ -86,8 +75,6 @@ def handle_disconnect():
             room_participants[room_id].remove(request.sid)
             emit('participant_left', {'sid': request.sid}, room=room_id)
             emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-            if request.sid in user_streams[room_id]:
-                del user_streams[room_id][request.sid]
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -117,15 +104,13 @@ def handle_stop_animation(data):
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
-    lang = data.get('lang', 'ru')
-    voice = data.get('voice', None)
+    lang = data.get('lang', 'ru-RU')
+    voice_name = data.get('voice', None)
     
-    audio_data = text_to_speech(text, lang)
-    emit('speech_audio', {
-        'audio': audio_data, 
+    emit('speech_request', {
         'text': text,
         'lang': lang,
-        'voice': voice
+        'voice': voice_name
     }, room=room_id)
     
     room_speech_data[room_id].append({
@@ -150,12 +135,6 @@ def handle_recognized_speech(data):
     })
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
-
-@socketio.on('stream_ready')
-def handle_stream_ready(data):
-    room_id = data['room_id']
-    user_streams[room_id][request.sid] = True
-    emit('stream_started', {'sid': request.sid}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
