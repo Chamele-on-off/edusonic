@@ -146,27 +146,6 @@
             text-align: center;
             display: none;
         }
-        /* Иконки (можно заменить на реальные) */
-        .icon {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            line-height: 1;
-        }
-        /* Стили для встраивания */
-        body.embedded {
-            height: auto;
-        }
-        body.embedded #header {
-            display: none;
-        }
-        body.embedded #controls {
-            padding: 5px;
-        }
-        body.embedded .control-btn {
-            width: 40px;
-            height: 40px;
-            font-size: 12px;
-        }
         #lip-sync-container {
             position: absolute;
             bottom: 150px;
@@ -186,6 +165,20 @@
         .lip-sync-active {
             background: rgba(255, 255, 255, 0.9);
             transform: scale(1.3);
+        }
+        body.embedded {
+            height: auto;
+        }
+        body.embedded #header {
+            display: none;
+        }
+        body.embedded #controls {
+            padding: 5px;
+        }
+        body.embedded .control-btn {
+            width: 40px;
+            height: 40px;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -241,17 +234,13 @@
         </button>
     </div>
 
-    <audio id="speech-audio"></audio>
-
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Получаем ID комнаты из URL
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'default';
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
-        // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
@@ -261,7 +250,6 @@
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
-        const speechAudio = document.getElementById('speech-audio');
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
@@ -273,7 +261,6 @@
             document.getElementById('lip-sync-5')
         ];
 
-        // Состояние
         let userStream = null;
         let socket = null;
         let isMicOn = false;
@@ -288,7 +275,6 @@
         let lastSpeechTime = 0;
         let isServerSpeechPlaying = false;
 
-        // Фонемы для анимации губ
         const phonemes = {
             'а': ['mouth_aa_001.jpg', 'mouth_aa_002.jpg', 'mouth_aa_003.jpg'],
             'б': ['mouth_bb_001.jpg', 'mouth_bb_002.jpg'],
@@ -322,16 +308,13 @@
             'я': ['mouth_aa_004.jpg']
         };
 
-        // Инициализация Socket.io
         function initSocket() {
             socket = io();
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                // Присоединяемся к комнате
                 socket.emit('join_room', { room_id: roomId });
                 
-                // Автоматически включаем микрофон и камеру
                 setTimeout(() => {
                     toggleMicrophone();
                     toggleCamera();
@@ -347,28 +330,43 @@
                 statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
-            socket.on('speech_audio', (data) => {
-                isServerSpeechPlaying = true;
-                const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                speechAudio.src = audioSrc;
-                
-                // Анализ аудио для анимации губ
-                setupAudioAnalysis();
-                
-                speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
-                
-                // Показываем текст на экране
-                showSpeechText(data.text, 'teacher');
-                
-                // Сбрасываем флаг после окончания воспроизведения
-                speechAudio.onended = () => {
-                    isServerSpeechPlaying = false;
-                    resetLipSync();
-                };
+            socket.on('speech_request', (data) => {
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(data.text);
+                    utterance.lang = data.lang || 'ru-RU';
+                    
+                    if (data.voice) {
+                        const voices = speechSynthesis.getVoices();
+                        const selectedVoice = voices.find(v => v.name === data.voice);
+                        if (selectedVoice) {
+                            utterance.voice = selectedVoice;
+                        }
+                    }
+                    
+                    utterance.onstart = () => {
+                        isServerSpeechPlaying = true;
+                        showSpeechText(data.text, 'teacher');
+                        setupAudioAnalysis();
+                    };
+                    
+                    utterance.onend = () => {
+                        isServerSpeechPlaying = false;
+                        resetLipSync();
+                    };
+                    
+                    utterance.onboundary = (event) => {
+                        if (event.name === 'word') {
+                            const word = data.text.substring(event.charIndex, event.charIndex + event.charLength);
+                            animateLipsForSpeech(word.toLowerCase());
+                        }
+                    };
+                    
+                    speechSynthesis.speak(utterance);
+                }
             });
             
             socket.on('speech_text', (data) => {
-                if (data.sid !== socket.id) { // Игнорируем свою речь
+                if (data.sid !== socket.id) {
                     showSpeechText(data.text, data.sid);
                 }
             });
@@ -382,7 +380,6 @@
             });
         }
 
-        // Настройка анализа аудио для анимации губ
         function setupAudioAnalysis() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -398,29 +395,24 @@
                 analyser.connect(scriptProcessor);
             }
             
-            // Запускаем анимацию губ
             if (lipSyncInterval) clearInterval(lipSyncInterval);
             lipSyncInterval = setInterval(updateLipSync, 50);
         }
 
-        // Обработка аудио данных
         function processAudio() {
             const array = new Uint8Array(analyser.frequencyBinCount);
             analyser.getByteFrequencyData(array);
             
-            // Сохраняем время последней речевой активности
             const volume = array.reduce((a, b) => a + b, 0) / array.length;
             if (volume > 10) {
                 lastSpeechTime = Date.now();
             }
         }
 
-        // Обновление анимации губ
         function updateLipSync() {
             const timeSinceLastSpeech = Date.now() - lastSpeechTime;
-            const isSpeaking = timeSinceLastSpeech < 100; // Пороговое значение в мс
+            const isSpeaking = timeSinceLastSpeech < 100;
             
-            // Анимируем индикаторы
             lipSyncIndicators.forEach((indicator, i) => {
                 if (isSpeaking && Math.random() > 0.7) {
                     indicator.classList.add('lip-sync-active');
@@ -431,7 +423,18 @@
             });
         }
 
-        // Сброс анимации губ
+        function animateLipsForSpeech(text) {
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (phonemes[char]) {
+                    const frames = phonemes[char];
+                    const randomFrame = frames[Math.floor(Math.random() * frames.length)];
+                    // Здесь можно обновить изображение аватара
+                    break;
+                }
+            }
+        }
+
         function resetLipSync() {
             if (lipSyncInterval) {
                 clearInterval(lipSyncInterval);
@@ -442,62 +445,16 @@
             });
         }
 
-        // Инициализация распознавания речи
-        function initSpeechRecognition() {
-            if ('webkitSpeechRecognition' in window) {
-                recognition = new webkitSpeechRecognition();
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                recognition.lang = 'ru-RU';
-
-                recognition.onresult = (event) => {
-                    if (isServerSpeechPlaying) return; // Игнорируем речь с сервера
-                    
-                    let interimTranscript = '';
-                    let finalTranscript = '';
-
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const transcript = event.results[i][0].transcript;
-                        if (event.results[i].isFinal) {
-                            finalTranscript += transcript;
-                        } else {
-                            interimTranscript += transcript;
-                        }
-                    }
-
-                    if (finalTranscript) {
-                        // Отправляем распознанный текст на сервер
-                        socket.emit('recognized_speech', {
-                            room_id: roomId,
-                            text: finalTranscript
-                        });
-                        
-                        // Показываем текст на экране
-                        showSpeechText(finalTranscript, 'me');
-                    }
-                };
-
-                recognition.onerror = (event) => {
-                    console.error('Ошибка распознавания речи:', event.error);
-                };
-            } else {
-                console.warn('Браузер не поддерживает распознавание речи');
-            }
-        }
-
-        // Показать текст речи на экране
         function showSpeechText(text, source) {
             speechTextDiv.textContent = text;
             speechTextDiv.style.display = 'block';
             speechTextDiv.style.color = source === 'me' ? '#4CAF50' : '#3498db';
             
-            // Скрываем через 5 секунд
             setTimeout(() => {
                 speechTextDiv.style.display = 'none';
             }, 5000);
         }
 
-        // Управление микрофоном
         async function toggleMicrophone() {
             try {
                 if (!isMicOn) {
@@ -512,7 +469,6 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
-                    // Запускаем распознавание речи
                     if (recognition) {
                         recognition.start();
                     } else {
@@ -528,7 +484,6 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
-                    // Останавливаем распознавание речи
                     if (recognition) {
                         recognition.stop();
                     }
@@ -538,7 +493,38 @@
             }
         }
 
-        // Управление камерой
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'ru-RU';
+
+                recognition.onresult = (event) => {
+                    if (isServerSpeechPlaying) return;
+                    
+                    let finalTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        }
+                    }
+
+                    if (finalTranscript) {
+                        socket.emit('recognized_speech', {
+                            room_id: roomId,
+                            text: finalTranscript
+                        });
+                        showSpeechText(finalTranscript, 'me');
+                    }
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Ошибка распознавания речи:', event.error);
+                };
+            }
+        }
+
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
@@ -554,9 +540,6 @@
                     camBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Камера включена';
                     selfVideo.style.display = 'block';
-                    
-                    // Уведомляем сервер о готовности потока
-                    socket.emit('stream_ready', { room_id: roomId });
                 } else {
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => track.stop());
@@ -573,7 +556,6 @@
             }
         }
 
-        // Полноэкранный режим
         function toggleFullscreen() {
             if (!isFullscreen) {
                 if (mainElement.requestFullscreen) {
@@ -598,7 +580,6 @@
             }
         }
 
-        // Завершение вызова
         function endCall() {
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
@@ -618,18 +599,15 @@
             }
             
             if (isEmbedded) {
-                // Если встроено в iframe, просто останавливаем все
                 window.parent.postMessage('conference_ended', '*');
             } else {
                 window.location.href = '/';
             }
         }
 
-        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
             
-            // Обработчики кнопок
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
             if (fullscreenBtn) {
@@ -637,15 +615,12 @@
             }
             endCallBtn.addEventListener('click', endCall);
 
-            // Скрыть свое видео по умолчанию
             selfVideo.style.display = 'none';
 
-            // Для встроенного режима
             if (isEmbedded) {
                 document.body.classList.add('embedded');
             }
 
-            // Обработчик сообщений от родительского окна (если встроено в iframe)
             window.addEventListener('message', (event) => {
                 if (event.data === 'end_conference') {
                     endCall();
@@ -653,7 +628,6 @@
             });
         });
 
-        // Обработчик выхода из полноэкранного режима
         document.addEventListener('fullscreenchange', () => {
             isFullscreen = !!document.fullscreenElement;
             if (fullscreenBtn) {
