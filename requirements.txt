@@ -16,7 +16,7 @@ pydub==0.25.1
 SpeechRecognition==3.10.0
 
 # Работа с голосом
-pyttsx3==2.90
+gTTS==2.3.2
 
 # Дополнительные утилиты
 python-dotenv==1.0.0
