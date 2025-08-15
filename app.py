@@ -17,6 +17,7 @@ current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
+room_audio_data = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -135,6 +136,13 @@ def handle_recognized_speech(data):
     })
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
+
+@socketio.on('audio_data')
+def handle_audio_data(data):
+    room_id = data['room_id']
+    audio_blob = data['audio']
+    room_audio_data[room_id][request.sid] = audio_blob
+    emit('audio_stream', {'audio': audio_blob, 'sid': request.sid}, room=room_id, include_self=False)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
