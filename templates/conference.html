@@ -149,13 +149,32 @@
             color: white;
             z-index: 100;
         }
-        /* Иконки (можно заменить на реальные) */
+        #audio-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #audio-play-btn {
+            padding: 15px 30px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+        }
         .icon {
             font-family: Arial, sans-serif;
             text-align: center;
             line-height: 1;
         }
-        /* Стили для встраивания */
         body.embedded {
             height: auto;
         }
@@ -172,13 +191,11 @@
         }
     </style>
 </head>
-<body class="{{ 'embedded' if embed else '' }}">
-    {% if not embed %}
+<body>
     <div id="header">
         <div id="logo">Virtual Classroom</div>
         <div id="meeting-id">Конференция</div>
     </div>
-    {% endif %}
 
     <div id="main">
         <div id="video-container">
@@ -189,6 +206,10 @@
             <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
             <div id="speech-text"></div>
+            
+            <div id="audio-overlay">
+                <button id="audio-play-btn">Нажмите для воспроизведения</button>
+            </div>
         </div>
     </div>
 
@@ -205,19 +226,15 @@
             <div class="icon">🖥️</div>
             <span>Экран</span>
         </button>
-        {% if not embed %}
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
             <div class="icon">⛶</div>
             <span>Полный</span>
         </button>
-        {% endif %}
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <div class="icon">📞</div>
             <span>Выйти</span>
         </button>
     </div>
-
-    <audio id="speech-audio"></audio>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
@@ -237,10 +254,11 @@
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
-        const speechAudio = document.getElementById('speech-audio');
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
+        const audioOverlay = document.getElementById('audio-overlay');
+        const audioPlayBtn = document.getElementById('audio-play-btn');
 
         // Состояние
         let userStream = null;
@@ -250,6 +268,7 @@
         let isFullscreen = false;
         let recognition = null;
         let speechHistory = [];
+        let pendingAudio = null;
 
         // Инициализация Socket.io
         function initSocket() {
@@ -257,10 +276,8 @@
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                // Присоединяемся к комнате
                 socket.emit('join_room', { room_id: roomId });
                 
-                // Автоматически включаем микрофон и камеру
                 setTimeout(() => {
                     toggleMicrophone();
                     toggleCamera();
@@ -278,27 +295,28 @@
             
             socket.on('speech_audio', (data) => {
                 try {
-                    // Создаем URL для аудио
-                    const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                    speechAudio.src = audioSrc;
+                    const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
                     
-                    // Воспроизводим аудио
-                    speechAudio.play().catch(e => {
-                        console.log('Автовоспроизведение заблокировано:', e);
-                        // Показываем кнопку для ручного воспроизведения
-                        statusDiv.textContent = 'Нажмите для воспроизведения речи';
-                        videoContainer.style.cursor = 'pointer';
-                        videoContainer.onclick = () => {
-                            speechAudio.play();
-                            videoContainer.style.cursor = '';
-                            videoContainer.onclick = null;
-                        };
-                    });
+                    // Пытаемся воспроизвести автоматически
+                    const playPromise = audio.play();
                     
-                    // Показываем текст на экране
+                    if (playPromise !== undefined) {
+                        playPromise
+                            .then(() => {
+                                showSpeechText(data.text, 'teacher');
+                                audioOverlay.style.display = 'none';
+                            })
+                            .catch(error => {
+                                // Если автовоспроизведение запрещено
+                                pendingAudio = audio;
+                                audioOverlay.style.display = 'flex';
+                                showSpeechText(data.text, 'teacher');
+                                statusDiv.textContent = 'Нажмите кнопку для воспроизведения';
+                            });
+                    }
+                } catch (error) {
+                    console.error('Ошибка воспроизведения аудио:', error);
                     showSpeechText(data.text, 'teacher');
-                } catch (e) {
-                    console.error('Ошибка воспроизведения аудио:', e);
                 }
             });
             
@@ -312,8 +330,33 @@
             
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
-                // Можно отобразить историю сообщений
             });
+        }
+
+        // Обработчик кнопки воспроизведения
+        audioPlayBtn.addEventListener('click', () => {
+            if (pendingAudio) {
+                pendingAudio.play()
+                    .then(() => {
+                        audioOverlay.style.display = 'none';
+                        pendingAudio = null;
+                    })
+                    .catch(error => {
+                        console.error('Ошибка воспроизведения:', error);
+                        statusDiv.textContent = 'Ошибка воспроизведения';
+                    });
+            }
+        });
+
+        // Показать текст речи на экране
+        function showSpeechText(text, source) {
+            speechTextDiv.textContent = text;
+            speechTextDiv.style.display = 'block';
+            speechTextDiv.style.color = source === 'me' ? '#4CAF50' : '#3498db';
+            
+            setTimeout(() => {
+                speechTextDiv.style.display = 'none';
+            }, 5000);
         }
 
         // Инициализация распознавания речи
@@ -325,26 +368,18 @@
                 recognition.lang = 'ru-RU';
 
                 recognition.onresult = (event) => {
-                    let interimTranscript = '';
                     let finalTranscript = '';
-
                     for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const transcript = event.results[i][0].transcript;
                         if (event.results[i].isFinal) {
-                            finalTranscript += transcript;
-                        } else {
-                            interimTranscript += transcript;
+                            finalTranscript += event.results[i][0].transcript;
                         }
                     }
 
                     if (finalTranscript) {
-                        // Отправляем распознанный текст на сервер
                         socket.emit('recognized_speech', {
                             room_id: roomId,
                             text: finalTranscript
                         });
-                        
-                        // Показываем текст на экране
                         showSpeechText(finalTranscript, 'me');
                     }
                 };
@@ -355,18 +390,6 @@
             } else {
                 console.warn('Браузер не поддерживает распознавание речи');
             }
-        }
-
-        // Показать текст речи на экране
-        function showSpeechText(text, source) {
-            speechTextDiv.textContent = text;
-            speechTextDiv.style.display = 'block';
-            speechTextDiv.style.color = source === 'me' ? '#4CAF50' : '#3498db';
-            
-            // Скрываем через 5 секунд
-            setTimeout(() => {
-                speechTextDiv.style.display = 'none';
-            }, 5000);
         }
 
         // Управление микрофоном
@@ -384,7 +407,6 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
-                    // Запускаем распознавание речи
                     if (recognition) {
                         recognition.start();
                     } else {
@@ -400,7 +422,6 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
-                    // Останавливаем распознавание речи
                     if (recognition) {
                         recognition.stop();
                     }
@@ -481,7 +502,6 @@
             }
             
             if (isEmbedded) {
-                // Если встроено в iframe, просто останавливаем все
                 window.parent.postMessage('conference_ended', '*');
             } else {
                 window.location.href = '/';
@@ -492,23 +512,17 @@
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
             
-            // Обработчики кнопок
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            if (fullscreenBtn) {
-                fullscreenBtn.addEventListener('click', toggleFullscreen);
-            }
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
-            // Скрыть свое видео по умолчанию
             selfVideo.style.display = 'none';
 
-            // Для встроенного режима
             if (isEmbedded) {
                 document.body.classList.add('embedded');
             }
 
-            // Обработчик сообщений от родительского окна (если встроено в iframe)
             window.addEventListener('message', (event) => {
                 if (event.data === 'end_conference') {
                     endCall();
@@ -516,12 +530,9 @@
             });
         });
 
-        // Обработчик выхода из полноэкранного режима
         document.addEventListener('fullscreenchange', () => {
             isFullscreen = !!document.fullscreenElement;
-            if (fullscreenBtn) {
-                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
-            }
+            fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
         });
     </script>
 </body>
