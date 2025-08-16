@@ -288,32 +288,31 @@
                     console.log("AudioContext resumed");
                 }
 
-                const binaryString = atob(audioData);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                }
-                const arrayBuffer = bytes.buffer;
-
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer).catch(e => {
-                    audioDebug.textContent = "Аудио: ошибка декодирования";
-                    console.error("Error decoding audio:", e);
-                    throw e;
-                });
+                // Создаем новый аудио элемент для каждого фрагмента
+                const audioElement = new Audio();
+                audioElement.src = `data:audio/webm;base64,${audioData}`;
                 
-                const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
-                source.start();
+                audioElement.oncanplaythrough = () => {
+                    audioElement.play().catch(e => {
+                        audioDebug.textContent = "Аудио: ошибка воспроизведения";
+                        console.error("Audio play error:", e);
+                    });
+                };
                 
-                source.onended = () => {
+                audioElement.onended = () => {
                     audioDebug.textContent = "Аудио: воспроизведение завершено";
                     console.log("Audio playback finished");
                     processAudioQueue();
                 };
+                
+                audioElement.onerror = (e) => {
+                    audioDebug.textContent = "Аудио: ошибка воспроизведения";
+                    console.error("Audio element error:", e);
+                    processAudioQueue();
+                };
             } catch (error) {
-                audioDebug.textContent = "Аудио: ошибка воспроизведения";
-                console.error('Error playing audio:', error);
+                audioDebug.textContent = "Аудио: ошибка обработки";
+                console.error('Error processing audio:', error);
                 processAudioQueue();
             }
         }
@@ -341,8 +340,7 @@
             });
             
             socket.on('speech_audio', (data) => {
-                const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                const audioElement = new Audio(audioSrc);
+                const audioElement = new Audio(`data:audio/mp3;base64,${data.audio}`);
                 audioElement.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
                 showSpeechText(data.text, 'teacher');
             });
