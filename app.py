@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import time
-import threading
 from collections import defaultdict
 
 app = Flask(__name__, static_folder='static')
@@ -12,12 +11,8 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
-animation_running = defaultdict(bool)
-current_animation_frames = defaultdict(list)
-current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
-room_audio_data = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -111,11 +106,6 @@ def handle_recognized_speech(data):
     })
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
-
-@socketio.on('get_participants')
-def handle_get_participants(data):
-    room_id = data['room_id']
-    emit('get_participants', list(room_participants[room_id]), to=request.sid)
 
 @socketio.on('webrtc_offer')
 def handle_webrtc_offer(data):
