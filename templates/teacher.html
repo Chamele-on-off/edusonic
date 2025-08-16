@@ -203,6 +203,39 @@
     </div>
 
     <script>
+        const phonemes = {
+            'а': 'mouth_aa',
+            'б': 'mouth_bb',
+            'в': 'mouth_vv',
+            'г': 'mouth_kk',
+            'д': 'mouth_dd',
+            'е': 'mouth_ee',
+            'ж': 'mouth_zh',
+            'з': 'mouth_zz',
+            'и': 'mouth_ee',
+            'й': 'mouth_ee',
+            'к': 'mouth_kk',
+            'л': 'mouth_ll',
+            'м': 'mouth_bb',
+            'н': 'mouth_nn',
+            'о': 'mouth_oo',
+            'п': 'mouth_pp',
+            'р': 'mouth_rr',
+            'с': 'mouth_ss',
+            'т': 'mouth_tt',
+            'у': 'mouth_uu',
+            'ф': 'mouth_ff',
+            'х': 'mouth_hh',
+            'ц': 'mouth_ss',
+            'ч': 'mouth_ch',
+            'ш': 'mouth_sh',
+            'щ': 'mouth_sh',
+            'ы': 'mouth_uu',
+            'э': 'mouth_ee',
+            'ю': 'mouth_uu',
+            'я': 'mouth_aa'
+        };
+
         const FPS = 10;
         const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
@@ -252,7 +285,6 @@
         let peerConnection = null;
         let dataChannel = null;
 
-        // Конфигурация WebRTC
         const rtcConfiguration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -413,7 +445,6 @@
             try {
                 peerConnection = new RTCPeerConnection(rtcConfiguration);
                 
-                // Обработка ICE кандидатов
                 peerConnection.onicecandidate = (event) => {
                     if (event.candidate) {
                         socket.emit('webrtc_ice_candidate', {
@@ -424,13 +455,11 @@
                     }
                 };
                 
-                // Обработка изменения состояния соединения
                 peerConnection.oniceconnectionstatechange = () => {
                     webrtcStatus.textContent = `Статус WebRTC: ${peerConnection.iceConnectionState}`;
                     log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
                 };
                 
-                // Создаем DataChannel для дополнительных данных
                 dataChannel = peerConnection.createDataChannel('avatarData');
                 dataChannel.onopen = () => log('DataChannel открыт');
                 dataChannel.onclose = () => log('DataChannel закрыт');
@@ -458,17 +487,19 @@
                     throw new Error('Не удалось создать видеопоток');
                 }
                 
-                // Добавляем видеопоток в соединение
                 videoStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, videoStream);
                 });
                 
-                // Создаем предложение для установки соединения
+                const participants = await new Promise(resolve => {
+                    socket.emit('get_participants', { room_id: currentRoom }, resolve);
+                });
+                
+                const otherParticipants = participants.filter(sid => sid !== socket.id);
+                
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 
-                // Отправляем предложение другим участникам комнаты
-                const otherParticipants = Array.from(room_participants[currentRoom]).filter(sid => sid !== socket.id);
                 if (otherParticipants.length > 0) {
                     socket.emit('webrtc_offer', {
                         room_id: currentRoom,
@@ -669,7 +700,6 @@
             voiceSelect.disabled = false;
         }
 
-        // Обработчики WebRTC сообщений
         socket.on('webrtc_answer', async (data) => {
             if (peerConnection && peerConnection.signalingState !== 'closed') {
                 try {
