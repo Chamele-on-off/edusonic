@@ -278,11 +278,11 @@
         let lipSyncInterval = null;
         let lastSpeechTime = 0;
         let isSpeaking = false;
-        let peerConnection = null;
-        let dataChannel = null;
+        let peerConnections = {};
         let canvasStream = null;
         let canvasCtx = null;
         let roomParticipants = new Set();
+        let audioStream = null;
 
         const rtcConfiguration = {
             iceServers: [
@@ -458,101 +458,118 @@
 
         async function getAudioStream() {
             try {
-                return await navigator.mediaDevices.getUserMedia({ audio: true });
+                if (audioStream) {
+                    audioStream.getTracks().forEach(track => track.stop());
+                }
+                
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                setupAudioAnalysis();
+                return audioStream;
             } catch (error) {
                 log(`Ошибка получения аудио потока: ${error.message}`);
                 return null;
             }
         }
 
-        function initWebRTC() {
+        async function initPeerConnection(participantId) {
             try {
-                peerConnection = new RTCPeerConnection(rtcConfiguration);
+                if (peerConnections[participantId]) {
+                    return peerConnections[participantId];
+                }
                 
-                peerConnection.onicecandidate = (event) => {
+                const pc = new RTCPeerConnection(rtcConfiguration);
+                peerConnections[participantId] = pc;
+                
+                pc.onicecandidate = (event) => {
                     if (event.candidate) {
-                        const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
-                        if (otherParticipants.length > 0) {
-                            socket.emit('webrtc_ice_candidate', {
-                                room_id: currentRoom,
-                                target_sid: otherParticipants[0],
-                                candidate: event.candidate
-                            });
-                        }
+                        socket.emit('webrtc_ice_candidate', {
+                            room_id: currentRoom,
+                            target_sid: participantId,
+                            candidate: event.candidate
+                        });
                     }
                 };
                 
-                peerConnection.oniceconnectionstatechange = () => {
-                    webrtcStatus.textContent = `Статус WebRTC: ${peerConnection.iceConnectionState}`;
-                    log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
+                pc.oniceconnectionstatechange = () => {
+                    webrtcStatus.textContent = `Статус WebRTC: ${pc.iceConnectionState}`;
+                    log(`Состояние WebRTC с ${participantId}: ${pc.iceConnectionState}`);
+                    
+                    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                        pc.close();
+                        delete peerConnections[participantId];
+                    }
                 };
                 
-                dataChannel = peerConnection.createDataChannel('avatarData');
-                dataChannel.onopen = () => log('DataChannel открыт');
-                dataChannel.onclose = () => log('DataChannel закрыт');
-                dataChannel.onmessage = (event) => log(`Получено сообщение: ${event.data}`);
+                pc.ondatachannel = (event) => {
+                    const channel = event.channel;
+                    channel.onmessage = (event) => {
+                        log(`Получено сообщение от ${participantId}: ${event.data}`);
+                    };
+                };
                 
-                log('WebRTC инициализирован');
-                return true;
+                // Добавляем видеопоток
+                if (canvasStream) {
+                    canvasStream.getTracks().forEach(track => {
+                        pc.addTrack(track, canvasStream);
+                    });
+                }
+                
+                // Добавляем аудиопоток
+                if (audioStream) {
+                    audioStream.getTracks().forEach(track => {
+                        pc.addTrack(track, audioStream);
+                    });
+                }
+                
+                return pc;
             } catch (error) {
-                log(`Ошибка инициализации WebRTC: ${error.message}`);
-                return false;
+                log(`Ошибка инициализации соединения с ${participantId}: ${error.message}`);
+                return null;
+            }
+        }
+
+        async function createOffer(participantId) {
+            try {
+                const pc = await initPeerConnection(participantId);
+                if (!pc) throw new Error('Не удалось инициализировать соединение');
+                
+                const offer = await pc.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
+                
+                await pc.setLocalDescription(offer);
+                
+                socket.emit('webrtc_offer', {
+                    room_id: currentRoom,
+                    target_sid: participantId,
+                    offer: pc.localDescription
+                });
+                
+                log(`Отправлено предложение WebRTC для ${participantId}`);
+            } catch (error) {
+                log(`Ошибка создания предложения для ${participantId}: ${error.message}`);
             }
         }
 
         async function startStreaming() {
-            if (!peerConnection) {
-                if (!initWebRTC()) {
-                    log('Не удалось инициализировать WebRTC');
-                    return false;
-                }
-            }
-            
             try {
                 const videoStream = await createVideoStream();
-                if (!videoStream || videoStream.getVideoTracks().length === 0) {
+                if (!videoStream) {
                     throw new Error('Не удалось создать видеопоток');
                 }
                 
                 const audioStream = await getAudioStream();
-                if (!audioStream || audioStream.getAudioTracks().length === 0) {
+                if (!audioStream) {
                     throw new Error('Не удалось получить аудиопоток');
                 }
                 
-                // Удалить старые треки
-                peerConnection.getSenders().forEach(sender => {
-                    if (sender.track.kind === 'video' || sender.track.kind === 'audio') {
-                        peerConnection.removeTrack(sender);
+                // Создаем предложения для всех участников
+                roomParticipants.forEach(participantId => {
+                    if (participantId !== socket.id) {
+                        createOffer(participantId);
                     }
                 });
-                
-                // Добавить новые треки
-                videoStream.getVideoTracks().forEach(track => {
-                    peerConnection.addTrack(track, videoStream);
-                });
-                
-                audioStream.getAudioTracks().forEach(track => {
-                    peerConnection.addTrack(track, audioStream);
-                });
-                
-                const offer = await peerConnection.createOffer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: true
-                });
-                await peerConnection.setLocalDescription(offer);
-                
-                const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
-                
-                if (otherParticipants.length > 0) {
-                    socket.emit('webrtc_offer', {
-                        room_id: currentRoom,
-                        target_sid: otherParticipants[0],
-                        offer: peerConnection.localDescription
-                    });
-                    log('Отправлено WebRTC предложение');
-                } else {
-                    log('Нет других участников в комнате для подключения');
-                }
                 
                 return true;
             } catch (error) {
@@ -599,11 +616,18 @@
                 videoPreview.style.display = 'none';
             }
             
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-                webrtcStatus.textContent = 'Статус WebRTC: Отключено';
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
             }
+            
+            // Закрываем все соединения
+            Object.keys(peerConnections).forEach(participantId => {
+                peerConnections[participantId].close();
+                delete peerConnections[participantId];
+            });
+            
+            webrtcStatus.textContent = 'Статус WebRTC: Отключено';
         }
 
         function setupAudioAnalysis() {
@@ -615,6 +639,11 @@
                 scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
                 scriptProcessor.onaudioprocess = processAudio;
                 analyser.connect(scriptProcessor);
+                
+                const source = audioContext.createMediaStreamSource(audioStream);
+                source.connect(analyser);
+                analyser.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
             }
             
             if (lipSyncInterval) clearInterval(lipSyncInterval);
@@ -684,11 +713,9 @@
                     const lang = languageSelect.value;
                     const voiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
                     
-                    socket.emit('generate_speech', { 
+                    socket.emit('speech_text', { 
                         text: text,
-                        room_id: currentRoom,
-                        lang: lang,
-                        voice: voiceName
+                        room_id: currentRoom
                     });
                     
                     const utterance = new SpeechSynthesisUtterance(text);
@@ -739,33 +766,46 @@
         }
 
         socket.on('webrtc_answer', async (data) => {
-            if (peerConnection && peerConnection.signalingState !== 'closed') {
+            const pc = peerConnections[data.sender_sid];
+            if (pc && pc.signalingState !== 'closed') {
                 try {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    log('Получен и установлен WebRTC ответ');
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    log(`Получен и установлен WebRTC ответ от ${data.sender_sid}`);
                 } catch (error) {
-                    log(`Ошибка установки ответа: ${error.message}`);
+                    log(`Ошибка установки ответа от ${data.sender_sid}: ${error.message}`);
                 }
             }
         });
         
         socket.on('webrtc_ice_candidate', async (data) => {
-            if (peerConnection && peerConnection.signalingState !== 'closed') {
+            const pc = peerConnections[data.sender_sid];
+            if (pc && pc.signalingState !== 'closed') {
                 try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    log('Добавлен ICE кандидат');
+                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    log(`Добавлен ICE кандидат от ${data.sender_sid}`);
                 } catch (error) {
-                    log(`Ошибка добавления ICE кандидата: ${error.message}`);
+                    log(`Ошибка добавления ICE кандидата от ${data.sender_sid}: ${error.message}`);
                 }
             }
         });
 
         socket.on('new_participant', (data) => {
             roomParticipants.add(data.sid);
+            log(`Новый участник: ${data.sid}`);
+            
+            if (canvasStream && audioStream) {
+                createOffer(data.sid);
+            }
         });
 
         socket.on('participant_left', (data) => {
             roomParticipants.delete(data.sid);
+            log(`Участник вышел: ${data.sid}`);
+            
+            if (peerConnections[data.sid]) {
+                peerConnections[data.sid].close();
+                delete peerConnections[data.sid];
+            }
         });
 
         document.addEventListener('DOMContentLoaded', () => {
