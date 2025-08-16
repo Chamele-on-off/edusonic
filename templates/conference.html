@@ -146,6 +146,11 @@
             text-align: center;
             display: none;
         }
+        .icon {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            line-height: 1;
+        }
         body.embedded {
             height: auto;
         }
@@ -177,7 +182,7 @@
             
             <div id="status">Подключение к конференции...</div>
             <div id="room-info">Комната: <span id="room-name">default</span></div>
-            <div id="participants">Участников: 1</div>
+            <div id="participants">Участников: <span id="participants-count">1</span></div>
             <div id="speech-text"></div>
         </div>
     </div>
@@ -190,10 +195,6 @@
         <button class="control-btn" id="cam-btn" title="Камера">
             <div class="icon">📷</div>
             <span>Вкл</span>
-        </button>
-        <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
-            <div class="icon">🖥️</div>
-            <span>Экран</span>
         </button>
         {% if not embed %}
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
@@ -209,94 +210,121 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
+        // Получаем ID комнаты из URL
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'default';
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
+        // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
-        const screenBtn = document.getElementById('screen-btn');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
-        const participantsDiv = document.getElementById('participants');
+        const participantsCount = document.getElementById('participants-count');
         const speechTextDiv = document.getElementById('speech-text');
-        const videoContainer = document.getElementById('video-container');
-        const mainElement = document.getElementById('main');
-
+        
+        // Состояние
         let userStream = null;
         let socket = null;
         let isMicOn = false;
         let isCamOn = false;
-        let isFullscreen = false;
         let recognition = null;
-        let speechHistory = [];
+        let currentPhoneme = 'neutral';
+        let speechSynthesis = window.speechSynthesis || null;
+        let voices = [];
+        let maleVoice = null;
 
-        function initSocket() {
-            socket = io();
-            
-            socket.on('connect', () => {
-                statusDiv.textContent = 'Подключено к серверу';
-                socket.emit('join_room', { room_id: roomId });
+        // Инициализация медиаустройств
+        async function initMedia() {
+            try {
+                userStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 44100
+                    },
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }
+                });
                 
-                setTimeout(() => {
-                    toggleMicrophone();
-                    toggleCamera();
-                }, 500);
-            });
+                selfVideo.srcObject = userStream;
+                isCamOn = true;
+                camBtn.classList.add('active');
+                camBtn.querySelector('span').textContent = 'Выкл';
+                
+                isMicOn = true;
+                micBtn.classList.add('active');
+                micBtn.querySelector('span').textContent = 'Выкл';
+                
+                statusDiv.textContent = 'Камера и микрофон включены';
+                selfVideo.style.display = 'block';
+                
+                initSpeechRecognition();
+                initVoices();
+            } catch (error) {
+                statusDiv.textContent = 'Ошибка доступа к устройствам: ' + error.message;
+                console.error('Media init error:', error);
+            }
+        }
+
+        // Инициализация голосов
+        function initVoices() {
+            if (!speechSynthesis) return;
             
-            socket.on('disconnect', () => {
-                statusDiv.textContent = 'Отключено от сервера';
-            });
+            voices = speechSynthesis.getVoices();
+            maleVoice = voices.find(voice => 
+                voice.lang.includes('ru') && 
+                (voice.name.toLowerCase().includes('male') || 
+                 voice.name.toLowerCase().includes('муж') ||
+                 voice.name.toLowerCase().includes('yandex') ||
+                 voice.name.toLowerCase().includes('alex'))
+            );
             
-            socket.on('animation_frame', (data) => {
-                teacherVideo.src = data.frame;
-                statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
-            });
-            
-            socket.on('speech_request', (data) => {
-                if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance(data.text);
-                    utterance.lang = data.lang || 'ru-RU';
+            if (!maleVoice) {
+                maleVoice = voices.find(voice => voice.lang.includes('ru'));
+            }
+        }
+
+        // Инициализация распознавания речи
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window) {
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'ru-RU';
+                
+                recognition.onresult = (event) => {
+                    let finalTranscript = '';
                     
-                    if (data.voice) {
-                        const voices = speechSynthesis.getVoices();
-                        const selectedVoice = voices.find(v => v.name === data.voice);
-                        if (selectedVoice) {
-                            utterance.voice = selectedVoice;
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
                         }
                     }
                     
-                    utterance.onstart = () => {
-                        showSpeechText(data.text, 'teacher');
-                    };
-                    
-                    utterance.onend = () => {
-                        speechTextDiv.style.display = 'none';
-                    };
-                    
-                    speechSynthesis.speak(utterance);
-                }
-            });
-            
-            socket.on('speech_text', (data) => {
-                if (data.sid !== socket.id) {
-                    showSpeechText(data.text, data.sid);
-                }
-            });
-            
-            socket.on('participants_update', (data) => {
-                participantsDiv.textContent = `Участников: ${data.count}`;
-            });
-            
-            socket.on('speech_history', (data) => {
-                speechHistory = data.history;
-            });
+                    if (finalTranscript) {
+                        socket.emit('recognized_speech', {
+                            room_id: roomId,
+                            text: finalTranscript
+                        });
+                        showSpeechText(finalTranscript, 'me');
+                    }
+                };
+                
+                recognition.start();
+                recognition.onend = () => recognition.start();
+            }
         }
 
+        // Показать текст речи
         function showSpeechText(text, source) {
             speechTextDiv.textContent = text;
             speechTextDiv.style.display = 'block';
@@ -307,129 +335,123 @@
             }, 5000);
         }
 
-        async function toggleMicrophone() {
-            try {
-                if (!isMicOn) {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    if (userStream) {
-                        userStream.getAudioTracks().forEach(track => userStream.addTrack(track));
-                    } else {
-                        userStream = audioStream;
-                    }
-                    isMicOn = true;
-                    micBtn.classList.add('active');
-                    micBtn.querySelector('span').textContent = 'Выкл';
-                    statusDiv.textContent = 'Микрофон включен';
+        // Озвучивание текста
+        function speakText(text) {
+            if (!speechSynthesis || !maleVoice) return;
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.voice = maleVoice;
+            utterance.lang = 'ru-RU';
+            utterance.rate = 0.9;
+            utterance.pitch = 0.8;
+            
+            // Анализ фонем для анимации губ
+            utterance.onboundary = (event) => {
+                if (event.name === 'word') {
+                    const word = text.substring(event.charIndex, event.charIndex + event.charLength);
+                    analyzePhonemes(word);
+                }
+            };
+            
+            speechSynthesis.speak(utterance);
+        }
+
+        // Анализ фонем в слове
+        function analyzePhonemes(word) {
+            const vowels = {
+                'а': 'aa', 'е': 'ee', 'ё': 'oo', 'и': 'ih', 
+                'о': 'oh', 'у': 'uu', 'ы': 'ih', 'э': 'eh', 
+                'ю': 'yu', 'я': 'ya'
+            };
+            
+            for (let i = 0; i < word.length; i++) {
+                const char = word[i].toLowerCase();
+                if (vowels[char]) {
+                    currentPhoneme = vowels[char];
+                    setTimeout(() => {
+                        currentPhoneme = 'neutral';
+                    }, 200);
+                }
+            }
+        }
+
+        // Инициализация Socket.io
+        function initSocket() {
+            socket = io();
+            
+            socket.on('connect', () => {
+                statusDiv.textContent = 'Подключено к серверу';
+                socket.emit('join_room', { room_id: roomId });
+            });
+            
+            socket.on('animation_frame', (data) => {
+                teacherVideo.src = data.frame;
+                currentPhoneme = data.phoneme || 'neutral';
+            });
+            
+            socket.on('speech_text', (data) => {
+                if (data.type === 'avatar') {
+                    speakText(data.text);
+                    showSpeechText(data.text, 'teacher');
+                } else if (data.type === 'human') {
+                    showSpeechText(data.text, data.sid);
+                }
+            });
+            
+            socket.on('participants_update', (data) => {
+                participantsCount.textContent = data.count;
+            });
+            
+            socket.on('update_phoneme', (data) => {
+                currentPhoneme = data.phoneme;
+            });
+        }
+
+        // Переключение микрофона
+        function toggleMicrophone() {
+            if (userStream) {
+                const audioTracks = userStream.getAudioTracks();
+                if (audioTracks.length > 0) {
+                    isMicOn = !audioTracks[0].enabled;
+                    audioTracks[0].enabled = isMicOn;
+                    micBtn.classList.toggle('active', isMicOn);
+                    micBtn.querySelector('span').textContent = isMicOn ? 'Выкл' : 'Вкл';
                     
-                    if (recognition) {
+                    if (isMicOn && recognition) {
                         recognition.start();
-                    } else {
-                        initSpeechRecognition();
-                        if (recognition) recognition.start();
-                    }
-                } else {
-                    if (userStream) {
-                        userStream.getAudioTracks().forEach(track => track.stop());
-                    }
-                    isMicOn = false;
-                    micBtn.classList.remove('active');
-                    micBtn.querySelector('span').textContent = 'Вкл';
-                    statusDiv.textContent = 'Микрофон выключен';
-                    
-                    if (recognition) {
+                    } else if (recognition) {
                         recognition.stop();
                     }
                 }
-            } catch (error) {
-                statusDiv.textContent = 'Ошибка доступа к микрофону: ' + error.message;
             }
         }
 
-        function initSpeechRecognition() {
-            if ('webkitSpeechRecognition' in window) {
-                recognition = new webkitSpeechRecognition();
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                recognition.lang = 'ru-RU';
-
-                recognition.onresult = (event) => {
-                    let finalTranscript = '';
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i][0].transcript;
-                        }
-                    }
-
-                    if (finalTranscript) {
-                        socket.emit('recognized_speech', {
-                            room_id: roomId,
-                            text: finalTranscript
-                        });
-                        showSpeechText(finalTranscript, 'me');
-                    }
-                };
-
-                recognition.onerror = (event) => {
-                    console.error('Ошибка распознавания речи:', event.error);
-                };
-            }
-        }
-
-        async function toggleCamera() {
-            try {
-                if (!isCamOn) {
-                    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    if (userStream) {
-                        userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
-                    } else {
-                        userStream = videoStream;
-                    }
-                    selfVideo.srcObject = userStream;
-                    isCamOn = true;
-                    camBtn.classList.add('active');
-                    camBtn.querySelector('span').textContent = 'Выкл';
-                    statusDiv.textContent = 'Камера включена';
-                    selfVideo.style.display = 'block';
-                } else {
-                    if (userStream) {
-                        userStream.getVideoTracks().forEach(track => track.stop());
-                        selfVideo.srcObject = null;
-                    }
-                    isCamOn = false;
-                    camBtn.classList.remove('active');
-                    camBtn.querySelector('span').textContent = 'Вкл';
-                    statusDiv.textContent = 'Камера выключена';
-                    selfVideo.style.display = 'none';
+        // Переключение камеры
+        function toggleCamera() {
+            if (userStream) {
+                const videoTracks = userStream.getVideoTracks();
+                if (videoTracks.length > 0) {
+                    isCamOn = !videoTracks[0].enabled;
+                    videoTracks[0].enabled = isCamOn;
+                    camBtn.classList.toggle('active', isCamOn);
+                    camBtn.querySelector('span').textContent = isCamOn ? 'Выкл' : 'Вкл';
+                    selfVideo.style.display = isCamOn ? 'block' : 'none';
                 }
-            } catch (error) {
-                statusDiv.textContent = 'Ошибка доступа к камере: ' + error.message;
             }
         }
 
+        // Полноэкранный режим
         function toggleFullscreen() {
-            if (!isFullscreen) {
-                if (mainElement.requestFullscreen) {
-                    mainElement.requestFullscreen();
-                } else if (mainElement.webkitRequestFullscreen) {
-                    mainElement.webkitRequestFullscreen();
-                } else if (mainElement.msRequestFullscreen) {
-                    mainElement.msRequestFullscreen();
-                }
-                isFullscreen = true;
-                if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Обычный';
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
                 }
-                isFullscreen = false;
-                if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Полный';
             }
         }
 
+        // Завершение вызова
         function endCall() {
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
@@ -438,7 +460,6 @@
                 recognition.stop();
             }
             if (socket) {
-                socket.emit('leave_room', { room_id: roomId });
                 socket.disconnect();
             }
             
@@ -449,33 +470,28 @@
             }
         }
 
+        // Инициализация при загрузке
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
+            initMedia();
             
+            // Обработчики кнопок
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            if (fullscreenBtn) {
-                fullscreenBtn.addEventListener('click', toggleFullscreen);
-            }
+            if (fullscreenBtn) fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
-
-            selfVideo.style.display = 'none';
-
-            if (isEmbedded) {
-                document.body.classList.add('embedded');
+            
+            // Обработчик изменения голосов
+            if (speechSynthesis) {
+                speechSynthesis.onvoiceschanged = initVoices;
             }
-
-            window.addEventListener('message', (event) => {
-                if (event.data === 'end_conference') {
-                    endCall();
-                }
-            });
         });
 
+        // Обработчик выхода из полноэкранного режима
         document.addEventListener('fullscreenchange', () => {
-            isFullscreen = !!document.fullscreenElement;
             if (fullscreenBtn) {
-                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
+                fullscreenBtn.querySelector('span').textContent = 
+                    document.fullscreenElement ? 'Обычный' : 'Полный';
             }
         });
     </script>
