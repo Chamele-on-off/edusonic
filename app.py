@@ -7,7 +7,9 @@ import io
 import base64
 import time
 import threading
-from collections import defaultdict, deque
+from collections import defaultdict
+import pygame
+from io import BytesIO
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -20,8 +22,9 @@ current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
-audio_stream_buffers = defaultdict(deque)
-last_audio_time = defaultdict(float)
+
+# Инициализация pygame для работы со звуком
+pygame.mixer.init()
 
 @app.route('/')
 def home():
@@ -57,12 +60,22 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-def text_to_speech(text, lang='ru'):
-    tts = gTTS(text=text, lang=lang)
-    mp3_fp = io.BytesIO()
-    tts.write_to_fp(mp3_fp)
-    mp3_fp.seek(0)
-    return base64.b64encode(mp3_fp.read()).decode('utf-8')
+def text_to_speech(text, lang='ru', gender='male'):
+    try:
+        # Используем gTTS для генерации речи
+        tts = gTTS(text=text, lang=lang)
+        
+        # Сохраняем в BytesIO
+        mp3_fp = BytesIO()
+        tts.write_to_fp(mp3_fp)
+        mp3_fp.seek(0)
+        
+        # Конвертируем в WAV (здесь можно добавить конвертацию если нужно именно WAV)
+        # Пока оставляем как MP3 для простоты
+        return base64.b64encode(mp3_fp.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Error in text_to_speech: {e}")
+        return None
 
 def animation_loop(room_id):
     while animation_running[room_id]:
@@ -75,14 +88,6 @@ def animation_loop(room_id):
             }
             socketio.emit('animation_frame', frame_data, room=room_id)
         time.sleep(0.1)
-
-def cleanup_audio_buffers():
-    while True:
-        current_time = time.time()
-        for room_id in list(audio_stream_buffers.keys()):
-            if current_time - last_audio_time[room_id] > 30:
-                audio_stream_buffers[room_id].clear()
-        time.sleep(10)
 
 @socketio.on('connect')
 def handle_connect():
@@ -104,6 +109,7 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
+    # Отправляем историю сообщений новому участнику
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
@@ -124,16 +130,25 @@ def handle_stop_animation(data):
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
-    audio_data = text_to_speech(text)
-    emit('speech_audio', {'audio': audio_data, 'text': text}, room=room_id)
     
-    room_speech_data[room_id].append({
-        'text': text,
-        'timestamp': time.time(),
-        'type': 'generated'
-    })
-    if len(room_speech_data[room_id]) > 50:
-        room_speech_data[room_id].pop(0)
+    # Генерируем аудио с мужским голосом (можно изменить на female для женского)
+    audio_data = text_to_speech(text, lang='ru', gender='male')
+    
+    if audio_data:
+        emit('speech_audio', {
+            'audio': audio_data, 
+            'text': text,
+            'timestamp': time.time()
+        }, room=room_id)
+        
+        # Сохраняем историю сообщений
+        room_speech_data[room_id].append({
+            'text': text,
+            'timestamp': time.time(),
+            'type': 'generated'
+        })
+        if len(room_speech_data[room_id]) > 50:  # Ограничиваем историю
+            room_speech_data[room_id].pop(0)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -141,6 +156,7 @@ def handle_recognized_speech(data):
     text = data['text']
     emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
     
+    # Сохраняем историю сообщений
     room_speech_data[room_id].append({
         'text': text,
         'timestamp': time.time(),
@@ -150,27 +166,5 @@ def handle_recognized_speech(data):
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
 
-@socketio.on('speech_stream')
-def handle_speech_stream(data):
-    room_id = data['room_id']
-    audio_data = data['audio']
-    
-    audio_stream_buffers[room_id].append(audio_data)
-    last_audio_time[room_id] = time.time()
-    
-    while len(audio_stream_buffers[room_id]) > 10:
-        audio_stream_buffers[room_id].popleft()
-    
-    emit('speech_audio_chunk', {'audio': audio_data}, room=room_id)
-    
-    room_speech_data[room_id].append({
-        'type': 'audio_chunk',
-        'timestamp': time.time(),
-        'data': audio_data
-    })
-    if len(room_speech_data[room_id]) > 100:
-        room_speech_data[room_id].popleft()
-
 if __name__ == '__main__':
-    threading.Thread(target=cleanup_audio_buffers, daemon=True).start()
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
