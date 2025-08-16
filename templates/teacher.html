@@ -374,7 +374,8 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: 'audio/webm;codecs=opus'
+                    mimeType: 'audio/webm;codecs=opus',
+                    audioBitsPerSecond: 128000
                 });
                 audioChunks = [];
                 
@@ -393,7 +394,7 @@
                     }
                 };
                 
-                mediaRecorder.start(100);
+                mediaRecorder.start(100); // Отправляем данные каждые 100мс
                 speechStatus.textContent = "Запись речи начата";
                 return true;
             } catch (error) {
@@ -426,6 +427,8 @@
             
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'ru-RU';
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
             
             isSpeaking = true;
             const recordingStarted = await startSpeechRecording();
