@@ -8,8 +8,6 @@ import base64
 import time
 import threading
 from collections import defaultdict
-import pygame
-from io import BytesIO
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -22,9 +20,6 @@ current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
-
-# Инициализация pygame для работы со звуком
-pygame.mixer.init()
 
 @app.route('/')
 def home():
@@ -66,12 +61,11 @@ def text_to_speech(text, lang='ru', gender='male'):
         tts = gTTS(text=text, lang=lang)
         
         # Сохраняем в BytesIO
-        mp3_fp = BytesIO()
+        mp3_fp = io.BytesIO()
         tts.write_to_fp(mp3_fp)
         mp3_fp.seek(0)
         
-        # Конвертируем в WAV (здесь можно добавить конвертацию если нужно именно WAV)
-        # Пока оставляем как MP3 для простоты
+        # Конвертируем в base64 для передачи через socket.io
         return base64.b64encode(mp3_fp.read()).decode('utf-8')
     except Exception as e:
         print(f"Error in text_to_speech: {e}")
@@ -130,9 +124,10 @@ def handle_stop_animation(data):
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
+    voice_type = data.get('voice', 'male')  # По умолчанию мужской голос
     
-    # Генерируем аудио с мужским голосом (можно изменить на female для женского)
-    audio_data = text_to_speech(text, lang='ru', gender='male')
+    # Генерируем аудио
+    audio_data = text_to_speech(text, lang='ru', gender=voice_type)
     
     if audio_data:
         emit('speech_audio', {
@@ -145,7 +140,8 @@ def handle_generate_speech(data):
         room_speech_data[room_id].append({
             'text': text,
             'timestamp': time.time(),
-            'type': 'generated'
+            'type': 'generated',
+            'voice_type': voice_type
         })
         if len(room_speech_data[room_id]) > 50:  # Ограничиваем историю
             room_speech_data[room_id].pop(0)
