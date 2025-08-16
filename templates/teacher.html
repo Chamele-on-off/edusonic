@@ -269,11 +269,7 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let mediaStream = null;
-        let videoStreamInterval = null;
         let currentRoom = 'default';
-        let availableVoices = [];
-        let currentVoice = null;
         let audioContext = null;
         let analyser = null;
         let scriptProcessor = null;
@@ -285,6 +281,7 @@
         let peerConnection = null;
         let dataChannel = null;
         let canvasStream = null;
+        let mediaStream = null;
 
         const rtcConfiguration = {
             iceServers: [
@@ -431,13 +428,22 @@
                 videoPreview.srcObject = canvasStream;
                 videoPreview.style.display = 'block';
                 
-                videoStreamInterval = setInterval(() => {
+                setInterval(() => {
                     ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
                 }, 1000 / FPS);
                 
                 return canvasStream;
             } catch (error) {
                 log(`Ошибка создания видео потока: ${error.message}`);
+                return null;
+            }
+        }
+
+        async function getAudioStream() {
+            try {
+                return await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (error) {
+                log(`Ошибка получения аудио потока: ${error.message}`);
                 return null;
             }
         }
@@ -479,7 +485,7 @@
         }
 
         async function startStreaming() {
-            if (!peerConnection || peerConnection.connectionState !== 'connected') {
+            if (!peerConnection) {
                 if (!initWebRTC()) {
                     log('Не удалось инициализировать WebRTC');
                     return false;
@@ -492,21 +498,26 @@
                     throw new Error('Не удалось создать видеопоток');
                 }
                 
+                const audioStream = await getAudioStream();
+                if (!audioStream) {
+                    throw new Error('Не удалось получить аудиопоток');
+                }
+                
                 videoStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, videoStream);
                 });
                 
+                audioStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, audioStream);
+                });
+                
                 const offer = await peerConnection.createOffer({
                     offerToReceiveAudio: true,
-                    offerToReceiveVideo: false
+                    offerToReceiveVideo: true
                 });
                 await peerConnection.setLocalDescription(offer);
                 
-                const participants = await new Promise(resolve => {
-                    socket.emit('get_participants', { room_id: currentRoom }, resolve);
-                });
-                
-                const otherParticipants = participants.filter(sid => sid !== socket.id);
+                const otherParticipants = Array.from(room_participants[currentRoom] || []).filter(sid => sid !== socket.id);
                 
                 if (otherParticipants.length > 0) {
                     socket.emit('webrtc_offer', {
@@ -515,6 +526,8 @@
                         offer: peerConnection.localDescription
                     });
                     log('Отправлено WebRTC предложение');
+                } else {
+                    log('Нет других участников в комнате для подключения');
                 }
                 
                 return true;
@@ -533,6 +546,7 @@
             }
             
             animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % loadedImages.length;
                 if (!isSpeaking) {
                     showNeutralFrame();
                 }
@@ -552,11 +566,6 @@
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 log("Анимация остановлена");
-            }
-            
-            if (videoStreamInterval) {
-                clearInterval(videoStreamInterval);
-                videoStreamInterval = null;
             }
             
             if (canvasStream) {
