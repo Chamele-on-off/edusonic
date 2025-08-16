@@ -165,6 +165,17 @@
             height: 40px;
             font-size: 12px;
         }
+        #audio-debug {
+            position: absolute;
+            bottom: 150px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+            color: #4CAF50;
+        }
     </style>
 </head>
 <body class="{{ 'embedded' if embed else '' }}">
@@ -184,6 +195,7 @@
             <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
             <div id="speech-text"></div>
+            <div id="audio-debug">Аудио: ожидание данных...</div>
         </div>
     </div>
 
@@ -212,8 +224,6 @@
         </button>
     </div>
 
-    <audio id="speech-audio"></audio>
-
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -230,10 +240,10 @@
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
-        const speechAudio = document.getElementById('speech-audio');
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
+        const audioDebug = document.getElementById('audio-debug');
 
         let userStream = null;
         let socket = null;
@@ -243,9 +253,70 @@
         let recognition = null;
         let speechHistory = [];
         
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let audioContext;
         let audioQueue = [];
         let isPlaying = false;
+
+        function initAudioContext() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioDebug.textContent = "Аудио: контекст инициализирован";
+                console.log("AudioContext initialized");
+                return true;
+            } catch (e) {
+                audioDebug.textContent = "Аудио: ошибка инициализации";
+                console.error("Error initializing AudioContext:", e);
+                return false;
+            }
+        }
+
+        async function processAudioQueue() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                audioDebug.textContent = "Аудио: очередь пуста";
+                return;
+            }
+            
+            isPlaying = true;
+            const audioData = audioQueue.shift();
+            audioDebug.textContent = `Аудио: обработка фрагмента (${audioQueue.length} в очереди)`;
+            
+            try {
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    audioDebug.textContent = "Аудио: контекст активирован";
+                    console.log("AudioContext resumed");
+                }
+
+                const binaryString = atob(audioData);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const arrayBuffer = bytes.buffer;
+
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer).catch(e => {
+                    audioDebug.textContent = "Аудио: ошибка декодирования";
+                    console.error("Error decoding audio:", e);
+                    throw e;
+                });
+                
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start();
+                
+                source.onended = () => {
+                    audioDebug.textContent = "Аудио: воспроизведение завершено";
+                    console.log("Audio playback finished");
+                    processAudioQueue();
+                };
+            } catch (error) {
+                audioDebug.textContent = "Аудио: ошибка воспроизведения";
+                console.error('Error playing audio:', error);
+                processAudioQueue();
+            }
+        }
 
         function initSocket() {
             socket = io();
@@ -271,8 +342,8 @@
             
             socket.on('speech_audio', (data) => {
                 const audioSrc = `data:audio/mp3;base64,${data.audio}`;
-                speechAudio.src = audioSrc;
-                speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
+                const audioElement = new Audio(audioSrc);
+                audioElement.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
                 showSpeechText(data.text, 'teacher');
             });
             
@@ -289,39 +360,12 @@
             });
             
             socket.on('speech_audio_chunk', (data) => {
+                audioDebug.textContent = "Аудио: получен фрагмент";
                 audioQueue.push(data.audio);
                 if (!isPlaying) {
                     processAudioQueue();
                 }
             });
-        }
-
-        async function processAudioQueue() {
-            if (audioQueue.length === 0) {
-                isPlaying = false;
-                return;
-            }
-            
-            isPlaying = true;
-            const audioData = audioQueue.shift();
-            
-            try {
-                const response = await fetch(`data:audio/webm;base64,${audioData}`);
-                const arrayBuffer = await response.arrayBuffer();
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                
-                const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
-                source.start();
-                
-                source.onended = () => {
-                    processAudioQueue();
-                };
-            } catch (error) {
-                console.error('Ошибка воспроизведения аудио:', error);
-                processAudioQueue();
-            }
         }
 
         function initSpeechRecognition() {
@@ -480,6 +524,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            initAudioContext();
             initSocket();
             
             micBtn.addEventListener('click', toggleMicrophone);
@@ -501,10 +546,12 @@
                 }
             });
             
-            // Активируем аудио контекст при первом взаимодействии
             document.addEventListener('click', () => {
-                if (audioContext.state === 'suspended') {
-                    audioContext.resume();
+                if (audioContext && audioContext.state === 'suspended') {
+                    audioContext.resume().then(() => {
+                        audioDebug.textContent = "Аудио: контекст активирован после взаимодействия";
+                        console.log("AudioContext activated after user interaction");
+                    });
                 }
             }, { once: true });
         });
