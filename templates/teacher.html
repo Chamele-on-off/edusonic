@@ -281,8 +281,8 @@
         let peerConnection = null;
         let dataChannel = null;
         let canvasStream = null;
-        let mediaStream = null;
         let canvasCtx = null;
+        let roomParticipants = new Set();
 
         const rtcConfiguration = {
             iceServers: [
@@ -404,8 +404,10 @@
         function showNeutralFrame() {
             if (neutralFrames.length === 0) {
                 if (loadedImages.length > 0) {
-                    // Если нет специальных нейтральных кадров, используем первый кадр
                     avatar.src = loadedImages[0].src;
+                    if (canvasCtx) {
+                        canvasCtx.drawImage(loadedImages[0], 0, 0, canvasCtx.canvas.width, canvasCtx.canvas.height);
+                    }
                 }
                 return;
             }
@@ -413,10 +415,8 @@
             currentFrame = (currentFrame + 1) % neutralFrames.length;
             avatar.src = neutralFrames[currentFrame].src;
             
-            // Обновляем canvas для трансляции
-            if (canvasCtx && neutralFrames[currentFrame]) {
-                canvasCtx.drawImage(neutralFrames[currentFrame], 0, 0, 
-                                  canvasCtx.canvas.width, canvasCtx.canvas.height);
+            if (canvasCtx) {
+                canvasCtx.drawImage(neutralFrames[currentFrame], 0, 0, canvasCtx.canvas.width, canvasCtx.canvas.height);
             }
         }
 
@@ -426,14 +426,11 @@
                 return;
             }
             
-            const randomIndex = Math.floor(Math.random() * phonemeFrames[phoneme].length);
-            const frame = phonemeFrames[phoneme][randomIndex];
+            const frame = phonemeFrames[phoneme][Math.floor(Math.random() * phonemeFrames[phoneme].length)];
             avatar.src = frame.src;
             
-            // Обновляем canvas для трансляции
             if (canvasCtx) {
-                canvasCtx.drawImage(frame, 0, 0, 
-                                  canvasCtx.canvas.width, canvasCtx.canvas.height);
+                canvasCtx.drawImage(frame, 0, 0, canvasCtx.canvas.width, canvasCtx.canvas.height);
             }
         }
 
@@ -444,7 +441,6 @@
                 canvas.height = loadedImages[0].height;
                 canvasCtx = canvas.getContext('2d');
                 
-                // Начинаем с первого кадра
                 if (loadedImages.length > 0) {
                     canvasCtx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
                 }
@@ -475,7 +471,7 @@
                 
                 peerConnection.onicecandidate = (event) => {
                     if (event.candidate) {
-                        const otherParticipants = Array.from(room_participants[currentRoom] || []).filter(sid => sid !== socket.id);
+                        const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
                         if (otherParticipants.length > 0) {
                             socket.emit('webrtc_ice_candidate', {
                                 room_id: currentRoom,
@@ -537,7 +533,7 @@
                 });
                 await peerConnection.setLocalDescription(offer);
                 
-                const otherParticipants = Array.from(room_participants[currentRoom] || []).filter(sid => sid !== socket.id);
+                const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
                 
                 if (otherParticipants.length > 0) {
                     socket.emit('webrtc_offer', {
@@ -565,7 +561,6 @@
                 return;
             }
             
-            // Анимация нейтральных кадров
             animationInterval = setInterval(() => {
                 if (!isSpeaking) {
                     showNeutralFrame();
@@ -656,7 +651,6 @@
         function animateLipsForSpeech(text) {
             const lowerText = text.toLowerCase();
             let currentCharIndex = 0;
-            const speechDuration = text.length * 100; // Примерная длительность анимации
             
             const animateNextChar = () => {
                 if (currentCharIndex >= lowerText.length || !isSpeaking) {
@@ -756,6 +750,14 @@
                     log(`Ошибка добавления ICE кандидата: ${error.message}`);
                 }
             }
+        });
+
+        socket.on('new_participant', (data) => {
+            roomParticipants.add(data.sid);
+        });
+
+        socket.on('participant_left', (data) => {
+            roomParticipants.delete(data.sid);
         });
 
         document.addEventListener('DOMContentLoaded', () => {
