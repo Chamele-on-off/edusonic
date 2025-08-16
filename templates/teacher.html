@@ -284,14 +284,6 @@
         let canvasCtx = null;
         let roomParticipants = new Set();
 
-        const rtcConfiguration = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
-            ]
-        };
-
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
@@ -405,19 +397,24 @@
             if (neutralFrames.length === 0) {
                 if (loadedImages.length > 0) {
                     avatar.src = loadedImages[0].src;
-                    if (canvasCtx) {
-                        canvasCtx.drawImage(loadedImages[0], 0, 0, canvasCtx.canvas.width, canvasCtx.canvas.height);
-                    }
+                    socket.emit('animation_frame', {
+                        room_id: currentRoom,
+                        frame: loadedImages[0].src,
+                        index: 0,
+                        total: loadedImages.length
+                    });
                 }
                 return;
             }
             
             currentFrame = (currentFrame + 1) % neutralFrames.length;
             avatar.src = neutralFrames[currentFrame].src;
-            
-            if (canvasCtx) {
-                canvasCtx.drawImage(neutralFrames[currentFrame], 0, 0, canvasCtx.canvas.width, canvasCtx.canvas.height);
-            }
+            socket.emit('animation_frame', {
+                room_id: currentRoom,
+                frame: neutralFrames[currentFrame].src,
+                index: currentFrame,
+                total: neutralFrames.length
+            });
         }
 
         function showPhonemeFrame(phoneme) {
@@ -428,174 +425,12 @@
             
             const frame = phonemeFrames[phoneme][Math.floor(Math.random() * phonemeFrames[phoneme].length)];
             avatar.src = frame.src;
-            
-            if (canvasCtx) {
-                canvasCtx.drawImage(frame, 0, 0, canvasCtx.canvas.width, canvasCtx.canvas.height);
-            }
-        }
-
-        async function createVideoStream() {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = loadedImages[0].width;
-                canvas.height = loadedImages[0].height;
-                canvasCtx = canvas.getContext('2d');
-                
-                if (loadedImages.length > 0) {
-                    canvasCtx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
-                }
-                
-                canvasStream = canvas.captureStream(FPS);
-                videoPreview.srcObject = canvasStream;
-                videoPreview.style.display = 'block';
-                
-                return canvasStream;
-            } catch (error) {
-                log(`Ошибка создания видео потока: ${error.message}`);
-                return null;
-            }
-        }
-
-        async function getAudioStream() {
-            try {
-                return await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch (error) {
-                log(`Ошибка получения аудио потока: ${error.message}`);
-                return null;
-            }
-        }
-
-        function initWebRTC() {
-            try {
-                peerConnection = new RTCPeerConnection(rtcConfiguration);
-                
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
-                        if (otherParticipants.length > 0) {
-                            socket.emit('webrtc_ice_candidate', {
-                                room_id: currentRoom,
-                                target_sid: otherParticipants[0],
-                                candidate: event.candidate
-                            });
-                        }
-                    }
-                };
-                
-                peerConnection.oniceconnectionstatechange = () => {
-                    webrtcStatus.textContent = `Статус WebRTC: ${peerConnection.iceConnectionState}`;
-                    log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
-                };
-                
-                dataChannel = peerConnection.createDataChannel('avatarData');
-                dataChannel.onopen = () => log('DataChannel открыт');
-                dataChannel.onclose = () => log('DataChannel закрыт');
-                dataChannel.onmessage = (event) => log(`Получено сообщение: ${event.data}`);
-                
-                log('WebRTC инициализирован');
-                return true;
-            } catch (error) {
-                log(`Ошибка инициализации WebRTC: ${error.message}`);
-                return false;
-            }
-        }
-
-        async function startStreaming() {
-            if (!peerConnection) {
-                if (!initWebRTC()) {
-                    log('Не удалось инициализировать WebRTC');
-                    return false;
-                }
-            }
-            
-            try {
-                const videoStream = await createVideoStream();
-                if (!videoStream) {
-                    throw new Error('Не удалось создать видеопоток');
-                }
-                
-                const audioStream = await getAudioStream();
-                if (!audioStream) {
-                    throw new Error('Не удалось получить аудиопоток');
-                }
-                
-                videoStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, videoStream);
-                });
-                
-                audioStream.getTracks().forEach(track => {
-                    peerConnection.addTrack(track, audioStream);
-                });
-                
-                const offer = await peerConnection.createOffer({
-                    offerToReceiveAudio: true,
-                    offerToReceiveVideo: true
-                });
-                await peerConnection.setLocalDescription(offer);
-                
-                const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
-                
-                if (otherParticipants.length > 0) {
-                    socket.emit('webrtc_offer', {
-                        room_id: currentRoom,
-                        target_sid: otherParticipants[0],
-                        offer: peerConnection.localDescription
-                    });
-                    log('Отправлено WebRTC предложение');
-                } else {
-                    log('Нет других участников в комнате для подключения');
-                }
-                
-                return true;
-            } catch (error) {
-                log(`Ошибка начала трансляции: ${error.message}`);
-                return false;
-            }
-        }
-
-        async function startAnimation() {
-            if (animationInterval || loadedImages.length === 0) return;
-            
-            if (!await startStreaming()) {
-                log('Не удалось начать трансляцию');
-                return;
-            }
-            
-            animationInterval = setInterval(() => {
-                if (!isSpeaking) {
-                    showNeutralFrame();
-                }
-            }, 1000 / FPS);
-            
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
-        }
-
-        function stopAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-                animationInterval = null;
-                currentFrame = 0;
-                if (loadedImages.length > 0) {
-                    avatar.src = loadedImages[0].src;
-                }
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                log("Анимация остановлена");
-            }
-            
-            if (canvasStream) {
-                canvasStream.getTracks().forEach(track => track.stop());
-                canvasStream = null;
-                videoPreview.style.display = 'none';
-            }
-            
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-                webrtcStatus.textContent = 'Статус WebRTC: Отключено';
-            }
+            socket.emit('animation_frame', {
+                room_id: currentRoom,
+                frame: frame.src,
+                index: currentFrame,
+                total: phonemeFrames[phoneme].length
+            });
         }
 
         function setupAudioAnalysis() {
@@ -730,35 +565,33 @@
             voiceSelect.disabled = false;
         }
 
-        socket.on('webrtc_answer', async (data) => {
-            if (peerConnection && peerConnection.signalingState !== 'closed') {
-                try {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    log('Получен и установлен WebRTC ответ');
-                } catch (error) {
-                    log(`Ошибка установки ответа: ${error.message}`);
+        async function startAnimation() {
+            if (animationInterval || loadedImages.length === 0) return;
+            
+            animationInterval = setInterval(() => {
+                if (!isSpeaking) {
+                    showNeutralFrame();
                 }
-            }
-        });
-        
-        socket.on('webrtc_ice_candidate', async (data) => {
-            if (peerConnection && peerConnection.signalingState !== 'closed') {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-                    log('Добавлен ICE кандидат');
-                } catch (error) {
-                    log(`Ошибка добавления ICE кандидата: ${error.message}`);
+            }, 1000 / FPS);
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
+        }
+
+        function stopAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+                currentFrame = 0;
+                if (loadedImages.length > 0) {
+                    avatar.src = loadedImages[0].src;
                 }
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                log("Анимация остановлена");
             }
-        });
-
-        socket.on('new_participant', (data) => {
-            roomParticipants.add(data.sid);
-        });
-
-        socket.on('participant_left', (data) => {
-            roomParticipants.delete(data.sid);
-        });
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             initRoom('default');
@@ -812,5 +645,5 @@
             });
         });
     </script>
-</body> 
+</body>
 </html>
