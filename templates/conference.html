@@ -146,13 +146,11 @@
             text-align: center;
             display: none;
         }
-        /* Иконки (можно заменить на реальные) */
         .icon {
             font-family: Arial, sans-serif;
             text-align: center;
             line-height: 1;
         }
-        /* Стили для встраивания */
         body.embedded {
             height: auto;
         }
@@ -218,13 +216,11 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Получаем ID комнаты из URL
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'default';
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
-        // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
@@ -239,7 +235,6 @@
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
 
-        // Состояние
         let userStream = null;
         let socket = null;
         let isMicOn = false;
@@ -247,17 +242,18 @@
         let isFullscreen = false;
         let recognition = null;
         let speechHistory = [];
+        
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let audioQueue = [];
+        let isPlaying = false;
 
-        // Инициализация Socket.io
         function initSocket() {
             socket = io();
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                // Присоединяемся к комнате
                 socket.emit('join_room', { room_id: roomId });
                 
-                // Автоматически включаем микрофон и камеру
                 setTimeout(() => {
                     toggleMicrophone();
                     toggleCamera();
@@ -277,8 +273,6 @@
                 const audioSrc = `data:audio/mp3;base64,${data.audio}`;
                 speechAudio.src = audioSrc;
                 speechAudio.play().catch(e => console.log('Автовоспроизведение заблокировано', e));
-                
-                // Показываем текст на экране
                 showSpeechText(data.text, 'teacher');
             });
             
@@ -292,11 +286,44 @@
             
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
-                // Можно отобразить историю сообщений
+            });
+            
+            socket.on('speech_audio_chunk', (data) => {
+                audioQueue.push(data.audio);
+                if (!isPlaying) {
+                    processAudioQueue();
+                }
             });
         }
 
-        // Инициализация распознавания речи
+        async function processAudioQueue() {
+            if (audioQueue.length === 0) {
+                isPlaying = false;
+                return;
+            }
+            
+            isPlaying = true;
+            const audioData = audioQueue.shift();
+            
+            try {
+                const response = await fetch(`data:audio/webm;base64,${audioData}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                source.start();
+                
+                source.onended = () => {
+                    processAudioQueue();
+                };
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+                processAudioQueue();
+            }
+        }
+
         function initSpeechRecognition() {
             if ('webkitSpeechRecognition' in window) {
                 recognition = new webkitSpeechRecognition();
@@ -305,26 +332,19 @@
                 recognition.lang = 'ru-RU';
 
                 recognition.onresult = (event) => {
-                    let interimTranscript = '';
                     let finalTranscript = '';
 
                     for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const transcript = event.results[i][0].transcript;
                         if (event.results[i].isFinal) {
-                            finalTranscript += transcript;
-                        } else {
-                            interimTranscript += transcript;
+                            finalTranscript += event.results[i][0].transcript;
                         }
                     }
 
                     if (finalTranscript) {
-                        // Отправляем распознанный текст на сервер
                         socket.emit('recognized_speech', {
                             room_id: roomId,
                             text: finalTranscript
                         });
-                        
-                        // Показываем текст на экране
                         showSpeechText(finalTranscript, 'me');
                     }
                 };
@@ -337,19 +357,16 @@
             }
         }
 
-        // Показать текст речи на экране
         function showSpeechText(text, source) {
             speechTextDiv.textContent = text;
             speechTextDiv.style.display = 'block';
             speechTextDiv.style.color = source === 'me' ? '#4CAF50' : '#3498db';
             
-            // Скрываем через 5 секунд
             setTimeout(() => {
                 speechTextDiv.style.display = 'none';
             }, 5000);
         }
 
-        // Управление микрофоном
         async function toggleMicrophone() {
             try {
                 if (!isMicOn) {
@@ -364,7 +381,6 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
-                    // Запускаем распознавание речи
                     if (recognition) {
                         recognition.start();
                     } else {
@@ -380,7 +396,6 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
-                    // Останавливаем распознавание речи
                     if (recognition) {
                         recognition.stop();
                     }
@@ -390,7 +405,6 @@
             }
         }
 
-        // Управление камерой
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
@@ -422,7 +436,6 @@
             }
         }
 
-        // Полноэкранный режим
         function toggleFullscreen() {
             if (!isFullscreen) {
                 if (mainElement.requestFullscreen) {
@@ -447,7 +460,6 @@
             }
         }
 
-        // Завершение вызова
         function endCall() {
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
@@ -461,18 +473,15 @@
             }
             
             if (isEmbedded) {
-                // Если встроено в iframe, просто останавливаем все
                 window.parent.postMessage('conference_ended', '*');
             } else {
                 window.location.href = '/';
             }
         }
 
-        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
             
-            // Обработчики кнопок
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
             if (fullscreenBtn) {
@@ -480,23 +489,26 @@
             }
             endCallBtn.addEventListener('click', endCall);
 
-            // Скрыть свое видео по умолчанию
             selfVideo.style.display = 'none';
 
-            // Для встроенного режима
             if (isEmbedded) {
                 document.body.classList.add('embedded');
             }
 
-            // Обработчик сообщений от родительского окна (если встроено в iframe)
             window.addEventListener('message', (event) => {
                 if (event.data === 'end_conference') {
                     endCall();
                 }
             });
+            
+            // Активируем аудио контекст при первом взаимодействии
+            document.addEventListener('click', () => {
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+            }, { once: true });
         });
 
-        // Обработчик выхода из полноэкранного режима
         document.addEventListener('fullscreenchange', () => {
             isFullscreen = !!document.fullscreenElement;
             if (fullscreenBtn) {
