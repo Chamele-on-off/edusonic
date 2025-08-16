@@ -55,17 +55,12 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-def text_to_speech(text, lang='ru', gender='male'):
+def text_to_speech(text, lang='ru'):
     try:
-        # Используем gTTS для генерации речи
-        tts = gTTS(text=text, lang=lang)
-        
-        # Сохраняем в BytesIO
+        tts = gTTS(text=text, lang=lang, slow=False)
         mp3_fp = io.BytesIO()
         tts.write_to_fp(mp3_fp)
         mp3_fp.seek(0)
-        
-        # Конвертируем в base64 для передачи через socket.io
         return base64.b64encode(mp3_fp.read()).decode('utf-8')
     except Exception as e:
         print(f"Error in text_to_speech: {e}")
@@ -103,7 +98,6 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
-    # Отправляем историю сообщений новому участнику
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
@@ -124,26 +118,24 @@ def handle_stop_animation(data):
 def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
-    voice_type = data.get('voice', 'male')  # По умолчанию мужской голос
+    voice_type = data.get('voice', 'male')
     
-    # Генерируем аудио
-    audio_data = text_to_speech(text, lang='ru', gender=voice_type)
-    
+    audio_data = text_to_speech(text)
     if audio_data:
         emit('speech_audio', {
-            'audio': audio_data, 
+            'audio': audio_data,
             'text': text,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'voice_type': voice_type
         }, room=room_id)
         
-        # Сохраняем историю сообщений
         room_speech_data[room_id].append({
             'text': text,
             'timestamp': time.time(),
             'type': 'generated',
             'voice_type': voice_type
         })
-        if len(room_speech_data[room_id]) > 50:  # Ограничиваем историю
+        if len(room_speech_data[room_id]) > 50:
             room_speech_data[room_id].pop(0)
 
 @socketio.on('recognized_speech')
@@ -152,7 +144,6 @@ def handle_recognized_speech(data):
     text = data['text']
     emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
     
-    # Сохраняем историю сообщений
     room_speech_data[room_id].append({
         'text': text,
         'timestamp': time.time(),
