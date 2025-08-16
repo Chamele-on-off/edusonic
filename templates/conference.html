@@ -48,6 +48,7 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+            display: none;
         }
         #self-video {
             position: absolute;
@@ -146,6 +147,15 @@
             text-align: center;
             display: none;
         }
+        #no-stream {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #aaa;
+            font-size: 18px;
+            text-align: center;
+        }
         body.embedded {
             height: auto;
         }
@@ -174,6 +184,7 @@
         <div id="video-container">
             <video id="teacher-video" autoplay playsinline></video>
             <video id="self-video" autoplay muted playsinline></video>
+            <div id="no-stream">Ожидание трансляции от учителя...</div>
             
             <div id="status">Подключение к конференции...</div>
             <div id="room-info">Комната: <span id="room-name">default</span></div>
@@ -216,6 +227,7 @@
         
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
+        const noStreamMsg = document.getElementById('no-stream');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
         const screenBtn = document.getElementById('screen-btn');
@@ -233,9 +245,10 @@
         let isCamOn = false;
         let isFullscreen = false;
         let recognition = null;
-        let speechHistory = [];
         let peerConnection = null;
         let dataChannel = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
 
         // Конфигурация WebRTC (STUN серверы)
         const rtcConfiguration = {
@@ -250,29 +263,37 @@
             socket = io();
             
             socket.on('connect', () => {
+                reconnectAttempts = 0;
                 statusDiv.textContent = 'Подключено к серверу';
                 socket.emit('join_room', { room_id: roomId });
-                
-                // Инициализируем WebRTC соединение
                 initWebRTC();
-                
-                setTimeout(() => {
-                    toggleMicrophone();
-                    toggleCamera();
-                }, 500);
             });
             
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    setTimeout(() => {
+                        reconnectAttempts++;
+                        statusDiv.textContent = `Повторное подключение (${reconnectAttempts}/${maxReconnectAttempts})...`;
+                        initSocket();
+                    }, 2000);
+                }
             });
             
-            socket.on('offer', async (offer) => {
-                statusDiv.textContent = 'Получено предложение WebRTC';
+            socket.on('connect_error', (error) => {
+                statusDiv.textContent = 'Ошибка подключения: ' + error.message;
+            });
+            
+            socket.on('webrtc_offer', async (data) => {
                 try {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
-                    socket.emit('answer', { answer, room_id: roomId });
+                    socket.emit('webrtc_answer', {
+                        answer: peerConnection.localDescription,
+                        room_id: roomId,
+                        target_sid: data.sender_sid
+                    });
                     statusDiv.textContent = 'Отправлен ответ WebRTC';
                 } catch (error) {
                     console.error('Ошибка обработки предложения:', error);
@@ -280,9 +301,9 @@
                 }
             });
             
-            socket.on('answer', async (answer) => {
+            socket.on('webrtc_answer', async (data) => {
                 try {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                     statusDiv.textContent = 'WebRTC соединение установлено';
                 } catch (error) {
                     console.error('Ошибка обработки ответа:', error);
@@ -290,9 +311,11 @@
                 }
             });
             
-            socket.on('ice-candidate', async (candidate) => {
+            socket.on('webrtc_ice_candidate', async (data) => {
                 try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                    if (data.candidate) {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    }
                 } catch (error) {
                     console.error('Ошибка добавления ICE кандидата:', error);
                 }
@@ -312,41 +335,46 @@
         function initWebRTC() {
             peerConnection = new RTCPeerConnection(rtcConfiguration);
             
-            // Обработка ICE кандидатов
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    socket.emit('ice-candidate', { 
+                    socket.emit('webrtc_ice_candidate', {
                         candidate: event.candidate,
-                        room_id: roomId 
+                        room_id: roomId,
+                        target_sid: Array.from(roomParticipants).find(sid => sid !== socket.id)
                     });
                 }
             };
             
-            // Получение удаленного потока
             peerConnection.ontrack = (event) => {
                 if (event.track.kind === 'video') {
                     teacherVideo.srcObject = event.streams[0];
+                    teacherVideo.style.display = 'block';
+                    noStreamMsg.style.display = 'none';
                     statusDiv.textContent = 'Получен видеопоток учителя';
+                } else if (event.track.kind === 'audio') {
+                    if (!teacherVideo.srcObject) {
+                        teacherVideo.srcObject = new MediaStream();
+                    }
+                    teacherVideo.srcObject.addTrack(event.track);
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                switch (peerConnection.connectionState) {
+                    case 'connected':
+                        statusDiv.textContent = 'WebRTC соединение установлено';
+                        break;
+                    case 'disconnected':
+                    case 'failed':
+                        statusDiv.textContent = 'Ошибка соединения WebRTC';
+                        break;
                 }
             };
             
-            // Создаем предложение для установки соединения
-            createOffer();
-        }
-
-        async function createOffer() {
-            try {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                socket.emit('offer', { 
-                    offer: peerConnection.localDescription,
-                    room_id: roomId 
-                });
-                statusDiv.textContent = 'Отправлено предложение WebRTC';
-            } catch (error) {
-                console.error('Ошибка создания предложения:', error);
-                statusDiv.textContent = 'Ошибка инициализации WebRTC';
-            }
+            dataChannel = peerConnection.createDataChannel('avatarData');
+            dataChannel.onmessage = (event) => {
+                console.log('Получены данные:', event.data);
+            };
         }
 
         function showSpeechText(text, source) {
@@ -369,7 +397,6 @@
                         userStream = audioStream;
                     }
                     
-                    // Добавляем аудиопоток в WebRTC соединение
                     if (peerConnection) {
                         userStream.getAudioTracks().forEach(track => {
                             peerConnection.addTrack(track, userStream);
@@ -380,13 +407,6 @@
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
-                    
-                    if (recognition) {
-                        recognition.start();
-                    } else {
-                        initSpeechRecognition();
-                        if (recognition) recognition.start();
-                    }
                 } else {
                     if (userStream) {
                         userStream.getAudioTracks().forEach(track => track.stop());
@@ -395,57 +415,29 @@
                     micBtn.classList.remove('active');
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
-                    
-                    if (recognition) {
-                        recognition.stop();
-                    }
                 }
             } catch (error) {
                 statusDiv.textContent = 'Ошибка доступа к микрофону: ' + error.message;
             }
         }
 
-        function initSpeechRecognition() {
-            if ('webkitSpeechRecognition' in window) {
-                recognition = new webkitSpeechRecognition();
-                recognition.continuous = true;
-                recognition.interimResults = true;
-                recognition.lang = 'ru-RU';
-
-                recognition.onresult = (event) => {
-                    let finalTranscript = '';
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i][0].transcript;
-                        }
-                    }
-
-                    if (finalTranscript) {
-                        socket.emit('recognized_speech', {
-                            room_id: roomId,
-                            text: finalTranscript
-                        });
-                        showSpeechText(finalTranscript, 'me');
-                    }
-                };
-
-                recognition.onerror = (event) => {
-                    console.error('Ошибка распознавания речи:', event.error);
-                };
-            }
-        }
-
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
-                    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const videoStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            frameRate: { ideal: 30 }
+                        } 
+                    });
+                    
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
                     } else {
                         userStream = videoStream;
                     }
                     
-                    // Добавляем видеопоток в WebRTC соединение
                     if (peerConnection) {
                         userStream.getVideoTracks().forEach(track => {
                             peerConnection.addTrack(track, userStream);
@@ -476,12 +468,12 @@
 
         function toggleFullscreen() {
             if (!isFullscreen) {
-                if (mainElement.requestFullscreen) {
-                    mainElement.requestFullscreen();
-                } else if (mainElement.webkitRequestFullscreen) {
-                    mainElement.webkitRequestFullscreen();
-                } else if (mainElement.msRequestFullscreen) {
-                    mainElement.msRequestFullscreen();
+                if (videoContainer.requestFullscreen) {
+                    videoContainer.requestFullscreen();
+                } else if (videoContainer.webkitRequestFullscreen) {
+                    videoContainer.webkitRequestFullscreen();
+                } else if (videoContainer.msRequestFullscreen) {
+                    videoContainer.msRequestFullscreen();
                 }
                 isFullscreen = true;
                 if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Обычный';
@@ -501,9 +493,6 @@
         function endCall() {
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
-            }
-            if (recognition) {
-                recognition.stop();
             }
             if (peerConnection) {
                 peerConnection.close();
@@ -531,23 +520,22 @@
             endCallBtn.addEventListener('click', endCall);
 
             selfVideo.style.display = 'none';
+            teacherVideo.style.display = 'none';
 
             if (isEmbedded) {
                 document.body.classList.add('embedded');
             }
 
-            window.addEventListener('message', (event) => {
-                if (event.data === 'end_conference') {
-                    endCall();
+            document.addEventListener('fullscreenchange', () => {
+                isFullscreen = !!document.fullscreenElement;
+                if (fullscreenBtn) {
+                    fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
                 }
             });
-        });
 
-        document.addEventListener('fullscreenchange', () => {
-            isFullscreen = !!document.fullscreenElement;
-            if (fullscreenBtn) {
-                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
-            }
+            window.addEventListener('beforeunload', () => {
+                endCall();
+            });
         });
     </script>
 </body>
