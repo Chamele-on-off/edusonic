@@ -170,6 +170,25 @@
             font-size: 18px;
             cursor: pointer;
         }
+        #activate-ai-btn {
+            position: absolute;
+            bottom: 180px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: none;
+        }
+        #activate-ai-btn:hover {
+            background: linear-gradient(135deg, #5d7de8, #9666d8);
+        }
         .icon {
             font-family: Arial, sans-serif;
             text-align: center;
@@ -206,6 +225,7 @@
             <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
             <div id="speech-text"></div>
+            <button id="activate-ai-btn">Activate AI-Teacher</button>
             
             <div id="audio-overlay">
                 <button id="audio-play-btn">Нажмите для воспроизведения</button>
@@ -259,6 +279,7 @@
         const mainElement = document.getElementById('main');
         const audioOverlay = document.getElementById('audio-overlay');
         const audioPlayBtn = document.getElementById('audio-play-btn');
+        const activateAiBtn = document.getElementById('activate-ai-btn');
 
         // Состояние
         let userStream = null;
@@ -269,6 +290,7 @@
         let recognition = null;
         let speechHistory = [];
         let pendingAudio = null;
+        let aiTeacherActivated = false;
 
         // Инициализация Socket.io
         function initSocket() {
@@ -331,6 +353,24 @@
             socket.on('speech_history', (data) => {
                 speechHistory = data.history;
             });
+            
+            socket.on('ai_teacher_available', () => {
+                activateAiBtn.style.display = 'block';
+            });
+            
+            socket.on('ai_teacher_activated', () => {
+                aiTeacherActivated = true;
+                activateAiBtn.style.display = 'none';
+                statusDiv.textContent = 'AI-Teacher активирован';
+            });
+            
+            socket.on('speaking_state', (data) => {
+                if (data.speaking) {
+                    statusDiv.textContent = 'AI-Teacher говорит...';
+                } else {
+                    statusDiv.textContent = 'AI-Teacher готов';
+                }
+            });
         }
 
         // Обработчик кнопки воспроизведения
@@ -346,6 +386,11 @@
                         statusDiv.textContent = 'Ошибка воспроизведения';
                     });
             }
+        });
+
+        // Активация AI-Teacher
+        activateAiBtn.addEventListener('click', () => {
+            socket.emit('activate_ai_teacher', { room_id: roomId });
         });
 
         // Показать текст речи на экране
