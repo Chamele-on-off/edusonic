@@ -125,12 +125,6 @@
             background: #3498db;
             transform: scale(1.3);
         }
-        #webrtc-status {
-            margin-top: 10px;
-            text-align: center;
-            font-weight: bold;
-            color: #2c3e50;
-        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -158,9 +152,6 @@
         </div>
         
         <img id="avatar" src="" alt="Аватар">
-        <video id="video-preview" autoplay muted></video>
-        <div id="webrtc-status">Статус WebRTC: Не подключено</div>
-        
         <div id="status">Выберите аватар</div>
         
         <div class="controls">
@@ -246,7 +237,6 @@
         const avatarSelect = document.getElementById('avatar-select');
         const speechText = document.getElementById('speech-text');
         const speakBtn = document.getElementById('speak-btn');
-        const videoPreview = document.getElementById('video-preview');
         const roomIdSpan = document.getElementById('room-id');
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
@@ -261,7 +251,6 @@
             document.getElementById('lip-sync-4'),
             document.getElementById('lip-sync-5')
         ];
-        const webrtcStatus = document.getElementById('webrtc-status');
 
         const socket = io();
         let currentAvatar = '';
@@ -278,11 +267,6 @@
         let lipSyncInterval = null;
         let lastSpeechTime = 0;
         let isSpeaking = false;
-        let peerConnection = null;
-        let dataChannel = null;
-        let canvasStream = null;
-        let canvasCtx = null;
-        let roomParticipants = new Set();
 
         function initRoom(roomId) {
             currentRoom = roomId;
@@ -565,7 +549,7 @@
             voiceSelect.disabled = false;
         }
 
-        async function startAnimation() {
+        function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
             
             animationInterval = setInterval(() => {
