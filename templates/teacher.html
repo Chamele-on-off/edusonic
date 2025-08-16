@@ -373,13 +373,23 @@
         async function startSpeechRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm;codecs=opus'
+                });
                 audioChunks = [];
                 
                 mediaRecorder.ondataavailable = (event) => {
                     if (event.data.size > 0) {
-                        audioChunks.push(event.data);
-                        sendAudioChunk();
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const base64data = reader.result.split(',')[1];
+                            socket.emit('speech_stream', {
+                                audio: base64data,
+                                room_id: currentRoom
+                            });
+                            log("Отправлен аудио фрагмент");
+                        };
+                        reader.readAsDataURL(event.data);
                     }
                 };
                 
@@ -390,24 +400,6 @@
                 log(`Ошибка доступа к микрофону: ${error.message}`);
                 speechStatus.textContent = "Ошибка доступа к микрофону";
                 return false;
-            }
-        }
-        
-        function sendAudioChunk() {
-            if (audioChunks.length > 0) {
-                const blob = new Blob(audioChunks, { type: 'audio/webm' });
-                const reader = new FileReader();
-                
-                reader.onload = () => {
-                    const base64data = reader.result.split(',')[1];
-                    socket.emit('speech_stream', {
-                        audio: base64data,
-                        room_id: currentRoom
-                    });
-                    audioChunks = [];
-                };
-                
-                reader.readAsDataURL(blob);
             }
         }
         
@@ -503,7 +495,7 @@
                 roomInput.value = '';
             });
             
-            // Инициализация аудио при первом клике (из-за политики автовоспроизведения)
+            // Инициализация аудио при первом клике
             document.addEventListener('click', () => {
                 if (!audioContext) initAudio();
             }, { once: true });
