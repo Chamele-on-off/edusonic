@@ -510,20 +510,28 @@
             
             try {
                 const videoStream = await createVideoStream();
-                if (!videoStream) {
+                if (!videoStream || videoStream.getVideoTracks().length === 0) {
                     throw new Error('Не удалось создать видеопоток');
                 }
                 
                 const audioStream = await getAudioStream();
-                if (!audioStream) {
+                if (!audioStream || audioStream.getAudioTracks().length === 0) {
                     throw new Error('Не удалось получить аудиопоток');
                 }
                 
-                videoStream.getTracks().forEach(track => {
+                // Удалить старые треки
+                peerConnection.getSenders().forEach(sender => {
+                    if (sender.track.kind === 'video' || sender.track.kind === 'audio') {
+                        peerConnection.removeTrack(sender);
+                    }
+                });
+                
+                // Добавить новые треки
+                videoStream.getVideoTracks().forEach(track => {
                     peerConnection.addTrack(track, videoStream);
                 });
                 
-                audioStream.getTracks().forEach(track => {
+                audioStream.getAudioTracks().forEach(track => {
                     peerConnection.addTrack(track, audioStream);
                 });
                 
