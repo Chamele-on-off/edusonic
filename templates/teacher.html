@@ -131,9 +131,6 @@
             font-weight: bold;
             color: #2c3e50;
         }
-        #remote-audio {
-            display: none;
-        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -162,7 +159,6 @@
         
         <img id="avatar" src="" alt="Аватар">
         <video id="video-preview" autoplay muted></video>
-        <audio id="remote-audio" autoplay></audio>
         <div id="webrtc-status">Статус WebRTC: Не подключено</div>
         
         <div id="status">Выберите аватар</div>
@@ -266,7 +262,6 @@
             document.getElementById('lip-sync-5')
         ];
         const webrtcStatus = document.getElementById('webrtc-status');
-        const remoteAudio = document.getElementById('remote-audio');
 
         const socket = io();
         let currentAvatar = '';
@@ -288,7 +283,6 @@
         let canvasStream = null;
         let canvasCtx = null;
         let roomParticipants = new Set();
-        let remoteStream = new MediaStream();
 
         const rtcConfiguration = {
             iceServers: [
@@ -462,6 +456,15 @@
             }
         }
 
+        async function getAudioStream() {
+            try {
+                return await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (error) {
+                log(`Ошибка получения аудио потока: ${error.message}`);
+                return null;
+            }
+        }
+
         function initWebRTC() {
             try {
                 peerConnection = new RTCPeerConnection(rtcConfiguration);
@@ -482,14 +485,6 @@
                 peerConnection.oniceconnectionstatechange = () => {
                     webrtcStatus.textContent = `Статус WebRTC: ${peerConnection.iceConnectionState}`;
                     log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
-                };
-                
-                peerConnection.ontrack = (event) => {
-                    if (event.track.kind === 'audio') {
-                        remoteStream.addTrack(event.track);
-                        remoteAudio.srcObject = remoteStream;
-                        log('Получен удаленный аудиопоток');
-                    }
                 };
                 
                 dataChannel = peerConnection.createDataChannel('avatarData');
@@ -519,13 +514,22 @@
                     throw new Error('Не удалось создать видеопоток');
                 }
                 
+                const audioStream = await getAudioStream();
+                if (!audioStream) {
+                    throw new Error('Не удалось получить аудиопоток');
+                }
+                
                 videoStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, videoStream);
                 });
                 
+                audioStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, audioStream);
+                });
+                
                 const offer = await peerConnection.createOffer({
                     offerToReceiveAudio: true,
-                    offerToReceiveVideo: false
+                    offerToReceiveVideo: true
                 });
                 await peerConnection.setLocalDescription(offer);
                 
@@ -591,11 +595,6 @@
                 peerConnection.close();
                 peerConnection = null;
                 webrtcStatus.textContent = 'Статус WebRTC: Отключено';
-            }
-            
-            if (remoteStream) {
-                remoteStream.getTracks().forEach(track => track.stop());
-                remoteAudio.srcObject = null;
             }
         }
 
@@ -755,17 +754,10 @@
 
         socket.on('new_participant', (data) => {
             roomParticipants.add(data.sid);
-            log(`Новый участник: ${data.sid}`);
-            
-            // Если это первый участник, инициируем подключение
-            if (roomParticipants.size === 1 && peerConnection && peerConnection.signalingState === 'stable') {
-                startStreaming();
-            }
         });
 
         socket.on('participant_left', (data) => {
             roomParticipants.delete(data.sid);
-            log(`Участник вышел: ${data.sid}`);
         });
 
         document.addEventListener('DOMContentLoaded', () => {
