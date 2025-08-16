@@ -172,13 +172,11 @@
         }
     </style>
 </head>
-<body class="{{ 'embedded' if embed else '' }}">
-    {% if not embed %}
+<body>
     <div id="header">
         <div id="logo">Virtual Classroom</div>
         <div id="meeting-id">Конференция</div>
     </div>
-    {% endif %}
 
     <div id="main">
         <div id="video-container">
@@ -206,12 +204,10 @@
             <div class="icon">🖥️</div>
             <span>Экран</span>
         </button>
-        {% if not embed %}
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
             <div class="icon">⛶</div>
             <span>Полный</span>
         </button>
-        {% endif %}
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <div class="icon">📞</div>
             <span>Выйти</span>
@@ -237,19 +233,15 @@
         const participantsDiv = document.getElementById('participants');
         const speechTextDiv = document.getElementById('speech-text');
         const videoContainer = document.getElementById('video-container');
-        const mainElement = document.getElementById('main');
 
         let userStream = null;
         let socket = null;
         let isMicOn = false;
         let isCamOn = false;
         let isFullscreen = false;
-        let recognition = null;
         let peerConnection = null;
-        let dataChannel = null;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
-        let roomParticipants = new Set();
 
         const rtcConfiguration = {
             iceServers: [
@@ -266,7 +258,6 @@
                 reconnectAttempts = 0;
                 statusDiv.textContent = 'Подключено к серверу';
                 socket.emit('join_room', { room_id: roomId });
-                initWebRTC();
             });
             
             socket.on('disconnect', () => {
@@ -286,7 +277,7 @@
             
             socket.on('webrtc_offer', async (data) => {
                 try {
-                    if (!peerConnection || peerConnection.signalingState === 'closed') {
+                    if (!peerConnection) {
                         initWebRTC();
                     }
                     
@@ -307,19 +298,9 @@
                 }
             });
             
-            socket.on('webrtc_answer', async (data) => {
-                try {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    statusDiv.textContent = 'WebRTC соединение установлено';
-                } catch (error) {
-                    console.error('Ошибка обработки ответа:', error);
-                    statusDiv.textContent = 'Ошибка WebRTC соединения';
-                }
-            });
-            
             socket.on('webrtc_ice_candidate', async (data) => {
                 try {
-                    if (data.candidate && peerConnection && peerConnection.remoteDescription) {
+                    if (peerConnection && peerConnection.remoteDescription) {
                         await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
                     }
                 } catch (error) {
@@ -328,86 +309,59 @@
             });
             
             socket.on('participants_update', (data) => {
-                roomParticipants = new Set(data.participants);
-                participantsDiv.textContent = `Участников: ${roomParticipants.size}`;
+                participantsDiv.textContent = `Участников: ${data.count}`;
             });
             
             socket.on('speech_text', (data) => {
-                if (data.sid !== socket.id) {
-                    showSpeechText(data.text, 'teacher');
-                }
+                showSpeechText(data.text);
             });
         }
 
         function initWebRTC() {
-            try {
-                if (peerConnection) {
-                    peerConnection.close();
-                }
-                
-                peerConnection = new RTCPeerConnection(rtcConfiguration);
-                
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        const otherParticipants = Array.from(roomParticipants).filter(sid => sid !== socket.id);
-                        if (otherParticipants.length > 0) {
-                            socket.emit('webrtc_ice_candidate', {
-                                candidate: event.candidate,
-                                room_id: roomId,
-                                target_sid: otherParticipants[0]
-                            });
-                        }
-                    }
-                };
-                
-                peerConnection.ontrack = (event) => {
-                    if (event.track.kind === 'video') {
-                        if (!teacherVideo.srcObject) {
-                            teacherVideo.srcObject = new MediaStream();
-                        }
-                        teacherVideo.srcObject.addTrack(event.track);
-                        teacherVideo.style.display = 'block';
-                        noStreamMsg.style.display = 'none';
-                        statusDiv.textContent = 'Получен видеопоток учителя';
-                    } else if (event.track.kind === 'audio') {
-                        if (!teacherVideo.srcObject) {
-                            teacherVideo.srcObject = new MediaStream();
-                        }
-                        teacherVideo.srcObject.addTrack(event.track);
-                    }
-                };
-
-                peerConnection.onconnectionstatechange = () => {
-                    switch (peerConnection.connectionState) {
-                        case 'connected':
-                            statusDiv.textContent = 'WebRTC соединение установлено';
-                            break;
-                        case 'disconnected':
-                        case 'failed':
-                            statusDiv.textContent = 'Ошибка соединения WebRTC';
-                            setTimeout(() => initWebRTC(), 2000);
-                            break;
-                    }
-                };
-                
-                if (userStream) {
-                    userStream.getTracks().forEach(track => {
-                        peerConnection.addTrack(track, userStream);
+            peerConnection = new RTCPeerConnection(rtcConfiguration);
+            
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('webrtc_ice_candidate', {
+                        candidate: event.candidate,
+                        room_id: roomId,
+                        target_sid: socket.id
                     });
                 }
-                
-                return true;
-            } catch (error) {
-                console.error('Ошибка инициализации WebRTC:', error);
-                statusDiv.textContent = 'Ошибка WebRTC соединения';
-                return false;
-            }
+            };
+            
+            peerConnection.ontrack = (event) => {
+                if (event.track.kind === 'video') {
+                    teacherVideo.srcObject = event.streams[0];
+                    teacherVideo.style.display = 'block';
+                    noStreamMsg.style.display = 'none';
+                    statusDiv.textContent = 'Получен видеопоток учителя';
+                } else if (event.track.kind === 'audio') {
+                    if (!teacherVideo.srcObject) {
+                        teacherVideo.srcObject = new MediaStream();
+                    }
+                    teacherVideo.srcObject.addTrack(event.track);
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                switch (peerConnection.connectionState) {
+                    case 'connected':
+                        statusDiv.textContent = 'WebRTC соединение установлено';
+                        break;
+                    case 'disconnected':
+                    case 'failed':
+                        statusDiv.textContent = 'Ошибка соединения WebRTC';
+                        teacherVideo.style.display = 'none';
+                        noStreamMsg.style.display = 'block';
+                        break;
+                }
+            };
         }
 
-        function showSpeechText(text, source) {
+        function showSpeechText(text) {
             speechTextDiv.textContent = text;
             speechTextDiv.style.display = 'block';
-            speechTextDiv.style.color = source === 'me' ? '#4CAF50' : '#3498db';
             
             setTimeout(() => {
                 speechTextDiv.style.display = 'none';
@@ -425,14 +379,9 @@
                     }
                     
                     if (peerConnection) {
-                        const senders = peerConnection.getSenders();
-                        const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-                        
-                        if (audioSender) {
-                            audioSender.replaceTrack(audioStream.getAudioTracks()[0]);
-                        } else {
-                            peerConnection.addTrack(audioStream.getAudioTracks()[0], audioStream);
-                        }
+                        userStream.getAudioTracks().forEach(track => {
+                            peerConnection.addTrack(track, userStream);
+                        });
                     }
                     
                     isMicOn = true;
@@ -471,14 +420,9 @@
                     }
                     
                     if (peerConnection) {
-                        const senders = peerConnection.getSenders();
-                        const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                        
-                        if (videoSender) {
-                            videoSender.replaceTrack(videoStream.getVideoTracks()[0]);
-                        } else {
-                            peerConnection.addTrack(videoStream.getVideoTracks()[0], videoStream);
-                        }
+                        userStream.getVideoTracks().forEach(track => {
+                            peerConnection.addTrack(track, userStream);
+                        });
                     }
                     
                     selfVideo.srcObject = userStream;
@@ -513,7 +457,7 @@
                     videoContainer.msRequestFullscreen();
                 }
                 isFullscreen = true;
-                if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Обычный';
+                fullscreenBtn.querySelector('span').textContent = 'Обычный';
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
@@ -523,7 +467,7 @@
                     document.msExitFullscreen();
                 }
                 isFullscreen = false;
-                if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Полный';
+                fullscreenBtn.querySelector('span').textContent = 'Полный';
             }
         }
 
@@ -551,9 +495,7 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            if (fullscreenBtn) {
-                fullscreenBtn.addEventListener('click', toggleFullscreen);
-            }
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
             selfVideo.style.display = 'none';
@@ -565,9 +507,7 @@
 
             document.addEventListener('fullscreenchange', () => {
                 isFullscreen = !!document.fullscreenElement;
-                if (fullscreenBtn) {
-                    fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
-                }
+                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
             });
 
             window.addEventListener('beforeunload', () => {
