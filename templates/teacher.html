@@ -96,6 +96,13 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+        #speech-status {
+            margin-top: 10px;
+            padding: 5px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -137,6 +144,7 @@
             <button id="speak-btn" disabled>Озвучить</button>
         </div>
         
+        <div id="speech-status"></div>
         <div id="debug"></div>
 
         <div id="conference-link">
@@ -145,10 +153,8 @@
     </div>
 
     <script>
-        // Конфигурация
         const FPS = 10;
         
-        // Элементы
         const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
         const debugDiv = document.getElementById('debug');
@@ -164,11 +170,10 @@
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
         const embedCodeTextarea = document.getElementById('embed-code');
+        const speechStatus = document.getElementById('speech-status');
         
-        // Socket.io
         const socket = io();
         
-        // Состояние
         let currentAvatar = '';
         let frames = [];
         let loadedImages = [];
@@ -178,30 +183,30 @@
         let videoStreamInterval = null;
         let currentRoom = 'default';
         
-        // Инициализация комнаты
+        let audioContext;
+        let mediaRecorder;
+        let audioChunks = [];
+        let isSpeaking = false;
+        let speechSynthesis = window.speechSynthesis || null;
+        
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
             conferenceLink.href = `/conference?room=${roomId}`;
             
-            // Генерируем код для вставки
             const embedCode = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
             embedCodeTextarea.value = embedCode;
             
-            // Сообщаем серверу о смене комнаты
             socket.emit('join_room', { room_id: roomId });
-            
             log(`Переключено в комнату: ${roomId}`);
         }
         
-        // Логирование
         function log(message) {
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
         }
         
-        // Загрузка изображения с повторами
         function loadImage(src, retries = 3) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -217,7 +222,6 @@
             });
         }
         
-        // Загрузка списка аватаров
         async function loadAvatars() {
             try {
                 const response = await fetch('/api/avatars');
@@ -240,7 +244,6 @@
             }
         }
         
-        // Загрузка кадров аватара
         async function loadAvatarFrames(avatarName) {
             try {
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
@@ -255,7 +258,6 @@
                 frames = data.frames;
                 log(`Найдено кадров: ${frames.length}`);
                 
-                // Загружаем все изображения
                 for (let i = 0; i < frames.length; i++) {
                     try {
                         const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
@@ -282,7 +284,6 @@
             }
         }
         
-        // Показать текущий кадр
         function showFrame() {
             if (loadedImages.length === 0) return;
             
@@ -291,7 +292,6 @@
             statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
         }
         
-        // Создание видео потока из изображений
         async function createVideoStream() {
             try {
                 const canvas = document.createElement('canvas');
@@ -314,14 +314,11 @@
             }
         }
         
-        // Запуск анимации
         async function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
             
-            // Создаем видео поток
             mediaStream = await createVideoStream();
             
-            // Отправляем серверу информацию о кадрах для трансляции
             const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { 
                 frames: framePaths,
@@ -338,7 +335,6 @@
             log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
         }
         
-        // Остановка анимации
         function stopAnimation() {
             if (animationInterval) {
                 clearInterval(animationInterval);
@@ -363,55 +359,154 @@
             }
         }
         
-        // Генерация речи
+        function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                log("Аудио контекст инициализирован");
+                return true;
+            } catch (error) {
+                log(`Ошибка инициализации аудио: ${error.message}`);
+                return false;
+            }
+        }
+        
+        async function startSpeechRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        sendAudioChunk();
+                    }
+                };
+                
+                mediaRecorder.start(100);
+                speechStatus.textContent = "Запись речи начата";
+                return true;
+            } catch (error) {
+                log(`Ошибка доступа к микрофону: ${error.message}`);
+                speechStatus.textContent = "Ошибка доступа к микрофону";
+                return false;
+            }
+        }
+        
+        function sendAudioChunk() {
+            if (audioChunks.length > 0) {
+                const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                
+                reader.onload = () => {
+                    const base64data = reader.result.split(',')[1];
+                    socket.emit('speech_stream', {
+                        audio: base64data,
+                        room_id: currentRoom
+                    });
+                    audioChunks = [];
+                };
+                
+                reader.readAsDataURL(blob);
+            }
+        }
+        
+        function stopSpeechRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                speechStatus.textContent = "Запись речи остановлена";
+            }
+        }
+        
+        async function speakText(text) {
+            if (!text) return;
+            
+            if (!speechSynthesis) {
+                log("Браузер не поддерживает синтез речи");
+                return;
+            }
+            
+            if (!audioContext && !initAudio()) {
+                log("Не удалось инициализировать аудио");
+                return;
+            }
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ru-RU';
+            
+            isSpeaking = true;
+            const recordingStarted = await startSpeechRecording();
+            
+            if (!recordingStarted) {
+                log('Не удалось начать запись речи');
+                return;
+            }
+            
+            utterance.onend = () => {
+                stopSpeechRecording();
+                isSpeaking = false;
+                speechStatus.textContent = "Озвучивание завершено";
+            };
+            
+            utterance.onerror = (event) => {
+                log(`Ошибка синтеза речи: ${event.error}`);
+                stopSpeechRecording();
+                isSpeaking = false;
+                speechStatus.textContent = "Ошибка озвучивания";
+            };
+            
+            speechSynthesis.speak(utterance);
+            speechStatus.textContent = "Идет озвучивание...";
+            
+            socket.emit('speech_text', {
+                text: text,
+                room_id: currentRoom
+            });
+            
+            log(`Озвучивание текста: "${text}" в комнату ${currentRoom}`);
+        }
+        
         function generateSpeech() {
             const text = speechText.value.trim();
             if (text) {
-                socket.emit('generate_speech', { 
-                    text: text,
-                    room_id: currentRoom
-                });
-                log(`Отправлен текст для озвучивания: "${text}" в комнату ${currentRoom}`);
+                speakText(text);
                 speechText.value = '';
             }
         }
         
-        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            // Инициализация комнаты по умолчанию
             initRoom('default');
-            
-            // Загрузка списка аватаров
             loadAvatars();
             
-            // Выбор аватара
             avatarSelect.addEventListener('change', () => {
                 currentAvatar = avatarSelect.value;
                 loadBtn.disabled = !currentAvatar;
             });
             
-            // Кнопка загрузки
             loadBtn.addEventListener('click', () => {
                 stopAnimation();
                 loadAvatarFrames(currentAvatar);
             });
             
-            // Управление анимацией
             startBtn.addEventListener('click', startAnimation);
             stopBtn.addEventListener('click', stopAnimation);
             
-            // Генерация речи
             speakBtn.addEventListener('click', generateSpeech);
             speechText.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') generateSpeech();
             });
             
-            // Смена комнаты
             changeRoomBtn.addEventListener('click', () => {
                 const newRoom = roomInput.value.trim() || 'default';
                 initRoom(newRoom);
                 roomInput.value = '';
             });
+            
+            // Инициализация аудио при первом клике (из-за политики автовоспроизведения)
+            document.addEventListener('click', () => {
+                if (!audioContext) initAudio();
+            }, { once: true });
         });
     </script>
 </body>
