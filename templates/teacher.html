@@ -267,6 +267,8 @@
         let currentAvatar = '';
         let frames = [];
         let loadedImages = [];
+        let neutralFrames = [];
+        let phonemeFrames = {};
         let currentFrame = 0;
         let animationInterval = null;
         let currentRoom = 'default';
@@ -276,12 +278,11 @@
         let lipSyncInterval = null;
         let lastSpeechTime = 0;
         let isSpeaking = false;
-        let neutralFrames = [];
-        let phonemeFrames = {};
         let peerConnection = null;
         let dataChannel = null;
         let canvasStream = null;
         let mediaStream = null;
+        let canvasCtx = null;
 
         const rtcConfiguration = {
             iceServers: [
@@ -401,10 +402,22 @@
         }
 
         function showNeutralFrame() {
-            if (neutralFrames.length === 0) return;
+            if (neutralFrames.length === 0) {
+                if (loadedImages.length > 0) {
+                    // Если нет специальных нейтральных кадров, используем первый кадр
+                    avatar.src = loadedImages[0].src;
+                }
+                return;
+            }
             
-            const randomIndex = Math.floor(Math.random() * neutralFrames.length);
-            avatar.src = neutralFrames[randomIndex].src;
+            currentFrame = (currentFrame + 1) % neutralFrames.length;
+            avatar.src = neutralFrames[currentFrame].src;
+            
+            // Обновляем canvas для трансляции
+            if (canvasCtx && neutralFrames[currentFrame]) {
+                canvasCtx.drawImage(neutralFrames[currentFrame], 0, 0, 
+                                  canvasCtx.canvas.width, canvasCtx.canvas.height);
+            }
         }
 
         function showPhonemeFrame(phoneme) {
@@ -414,7 +427,14 @@
             }
             
             const randomIndex = Math.floor(Math.random() * phonemeFrames[phoneme].length);
-            avatar.src = phonemeFrames[phoneme][randomIndex].src;
+            const frame = phonemeFrames[phoneme][randomIndex];
+            avatar.src = frame.src;
+            
+            // Обновляем canvas для трансляции
+            if (canvasCtx) {
+                canvasCtx.drawImage(frame, 0, 0, 
+                                  canvasCtx.canvas.width, canvasCtx.canvas.height);
+            }
         }
 
         async function createVideoStream() {
@@ -422,15 +442,16 @@
                 const canvas = document.createElement('canvas');
                 canvas.width = loadedImages[0].width;
                 canvas.height = loadedImages[0].height;
-                const ctx = canvas.getContext('2d');
+                canvasCtx = canvas.getContext('2d');
+                
+                // Начинаем с первого кадра
+                if (loadedImages.length > 0) {
+                    canvasCtx.drawImage(loadedImages[0], 0, 0, canvas.width, canvas.height);
+                }
                 
                 canvasStream = canvas.captureStream(FPS);
                 videoPreview.srcObject = canvasStream;
                 videoPreview.style.display = 'block';
-                
-                setInterval(() => {
-                    ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
-                }, 1000 / FPS);
                 
                 return canvasStream;
             } catch (error) {
@@ -454,21 +475,20 @@
                 
                 peerConnection.onicecandidate = (event) => {
                     if (event.candidate) {
-                        socket.emit('webrtc_ice_candidate', {
-                            room_id: currentRoom,
-                            target_sid: Array.from(room_participants[currentRoom]).find(sid => sid !== socket.id),
-                            candidate: event.candidate
-                        });
+                        const otherParticipants = Array.from(room_participants[currentRoom] || []).filter(sid => sid !== socket.id);
+                        if (otherParticipants.length > 0) {
+                            socket.emit('webrtc_ice_candidate', {
+                                room_id: currentRoom,
+                                target_sid: otherParticipants[0],
+                                candidate: event.candidate
+                            });
+                        }
                     }
                 };
                 
                 peerConnection.oniceconnectionstatechange = () => {
                     webrtcStatus.textContent = `Статус WebRTC: ${peerConnection.iceConnectionState}`;
                     log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
-                };
-                
-                peerConnection.ontrack = (event) => {
-                    log('Получен трек от удаленного пира');
                 };
                 
                 dataChannel = peerConnection.createDataChannel('avatarData');
@@ -545,8 +565,8 @@
                 return;
             }
             
+            // Анимация нейтральных кадров
             animationInterval = setInterval(() => {
-                currentFrame = (currentFrame + 1) % loadedImages.length;
                 if (!isSpeaking) {
                     showNeutralFrame();
                 }
@@ -562,7 +582,9 @@
                 clearInterval(animationInterval);
                 animationInterval = null;
                 currentFrame = 0;
-                showNeutralFrame();
+                if (loadedImages.length > 0) {
+                    avatar.src = loadedImages[0].src;
+                }
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 log("Анимация остановлена");
@@ -633,13 +655,24 @@
 
         function animateLipsForSpeech(text) {
             const lowerText = text.toLowerCase();
-            for (let i = 0; i < lowerText.length; i++) {
-                const char = lowerText[i];
+            let currentCharIndex = 0;
+            const speechDuration = text.length * 100; // Примерная длительность анимации
+            
+            const animateNextChar = () => {
+                if (currentCharIndex >= lowerText.length || !isSpeaking) {
+                    return;
+                }
+                
+                const char = lowerText[currentCharIndex];
                 if (phonemes[char]) {
                     showPhonemeFrame(char);
-                    break;
                 }
-            }
+                
+                currentCharIndex++;
+                setTimeout(animateNextChar, 100);
+            };
+            
+            animateNextChar();
         }
 
         function generateSpeech() {
@@ -670,17 +703,12 @@
                     utterance.onstart = () => {
                         setupAudioAnalysis();
                         isSpeaking = true;
+                        animateLipsForSpeech(text);
                     };
                     
                     utterance.onend = () => {
                         resetLipSync();
-                    };
-                    
-                    utterance.onboundary = (event) => {
-                        if (event.name === 'word') {
-                            const word = text.substring(event.charIndex, event.charIndex + event.charLength);
-                            animateLipsForSpeech(word.toLowerCase());
-                        }
+                        isSpeaking = false;
                     };
                     
                     speechSynthesis.speak(utterance);
