@@ -12,14 +12,12 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
-# Глобальные переменные для хранения состояния
 animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_audio_data = defaultdict(dict)
-peer_connections = defaultdict(dict)
 
 @app.route('/')
 def home():
@@ -78,10 +76,6 @@ def handle_disconnect():
             room_participants[room_id].remove(request.sid)
             emit('participant_left', {'sid': request.sid}, room=room_id)
             emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-            
-            # Очищаем WebRTC соединения при отключении
-            if room_id in peer_connections and request.sid in peer_connections[room_id]:
-                del peer_connections[room_id][request.sid]
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -143,7 +137,11 @@ def handle_recognized_speech(data):
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
 
-# WebRTC обработчики
+@socketio.on('get_participants')
+def handle_get_participants(data):
+    room_id = data['room_id']
+    emit('get_participants', list(room_participants[room_id]), to=request.sid)
+
 @socketio.on('webrtc_offer')
 def handle_webrtc_offer(data):
     room_id = data['room_id']
