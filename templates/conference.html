@@ -147,6 +147,20 @@
             text-align: center;
             display: none;
         }
+        #subtitles {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 4px;
+            max-width: 80%;
+            text-align: center;
+            color: #4CAF50;
+            font-size: 16px;
+            display: none;
+        }
         #no-stream {
             position: absolute;
             top: 50%;
@@ -172,13 +186,11 @@
         }
     </style>
 </head>
-<body class="{{ 'embedded' if embed else '' }}">
-    {% if not embed %}
+<body>
     <div id="header">
         <div id="logo">Virtual Classroom</div>
         <div id="meeting-id">Конференция</div>
     </div>
-    {% endif %}
 
     <div id="main">
         <div id="video-container">
@@ -190,6 +202,7 @@
             <div id="room-info">Комната: <span id="room-name">default</span></div>
             <div id="participants">Участников: 1</div>
             <div id="speech-text"></div>
+            <div id="subtitles"></div>
         </div>
     </div>
 
@@ -206,12 +219,10 @@
             <div class="icon">🖥️</div>
             <span>Экран</span>
         </button>
-        {% if not embed %}
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
             <div class="icon">⛶</div>
             <span>Полный</span>
         </button>
-        {% endif %}
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <div class="icon">📞</div>
             <span>Выйти</span>
@@ -222,7 +233,7 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'default';
-        const isEmbedded = window.location.search.includes('embed=true');
+        const isEmbedded = urlParams.has('embed');
         document.getElementById('room-name').textContent = roomId;
         
         const teacherVideo = document.getElementById('teacher-video');
@@ -236,6 +247,7 @@
         const statusDiv = document.getElementById('status');
         const participantsDiv = document.getElementById('participants');
         const speechTextDiv = document.getElementById('speech-text');
+        const subtitlesDiv = document.getElementById('subtitles');
         const videoContainer = document.getElementById('video-container');
         const mainElement = document.getElementById('main');
 
@@ -340,8 +352,7 @@
                 if (event.candidate) {
                     socket.emit('webrtc_ice_candidate', {
                         candidate: event.candidate,
-                        room_id: roomId,
-                        target_sid: Array.from(roomParticipants).find(sid => sid !== socket.id)
+                        room_id: roomId
                     });
                 }
             };
@@ -404,16 +415,34 @@
                             room_id: roomId,
                             sid: socket.id
                         });
-                        showSpeechText(finalTranscript, 'me');
+                        showSubtitles(finalTranscript);
+                    } else if (interimTranscript) {
+                        showSubtitles(interimTranscript);
                     }
                 };
 
                 recognition.onerror = (event) => {
                     console.error('Ошибка распознавания речи:', event.error);
                 };
+
+                recognition.onend = () => {
+                    if (isMicOn) {
+                        recognition.start();
+                    }
+                };
             } else {
-                console.log('Браузер не поддерживает распознавание речи');
+                console.warn('Браузер не поддерживает распознавание речи');
             }
+        }
+
+        function showSubtitles(text) {
+            subtitlesDiv.textContent = text;
+            subtitlesDiv.style.display = 'block';
+            
+            clearTimeout(subtitlesDiv.timer);
+            subtitlesDiv.timer = setTimeout(() => {
+                subtitlesDiv.style.display = 'none';
+            }, 3000);
         }
 
         function showSpeechText(text, source) {
@@ -447,7 +476,6 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
-                    // Запуск распознавания речи
                     if (recognition) {
                         recognition.start();
                     }
@@ -460,7 +488,6 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
-                    // Остановка распознавания речи
                     if (recognition) {
                         recognition.stop();
                     }
@@ -525,7 +552,7 @@
                     videoContainer.msRequestFullscreen();
                 }
                 isFullscreen = true;
-                if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Обычный';
+                fullscreenBtn.querySelector('span').textContent = 'Обычный';
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
@@ -535,7 +562,7 @@
                     document.msExitFullscreen();
                 }
                 isFullscreen = false;
-                if (fullscreenBtn) fullscreenBtn.querySelector('span').textContent = 'Полный';
+                fullscreenBtn.querySelector('span').textContent = 'Полный';
             }
         }
 
@@ -550,9 +577,6 @@
                 socket.emit('leave_room', { room_id: roomId });
                 socket.disconnect();
             }
-            if (recognition) {
-                recognition.stop();
-            }
             
             if (isEmbedded) {
                 window.parent.postMessage('conference_ended', '*');
@@ -562,27 +586,23 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            if (isEmbedded) {
+                document.body.classList.add('embedded');
+            }
+
             initSocket();
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            if (fullscreenBtn) {
-                fullscreenBtn.addEventListener('click', toggleFullscreen);
-            }
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
             selfVideo.style.display = 'none';
             teacherVideo.style.display = 'none';
 
-            if (isEmbedded) {
-                document.body.classList.add('embedded');
-            }
-
             document.addEventListener('fullscreenchange', () => {
                 isFullscreen = !!document.fullscreenElement;
-                if (fullscreenBtn) {
-                    fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
-                }
+                fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
             });
 
             window.addEventListener('beforeunload', () => {
