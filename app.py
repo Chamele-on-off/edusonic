@@ -8,6 +8,7 @@ import base64
 import time
 import threading
 from collections import defaultdict
+import random
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -20,6 +21,23 @@ current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
+room_speaking = defaultdict(bool)
+room_ai_activated = defaultdict(bool)
+
+# Mapping of phonemes to mouth frames
+PHONEME_MAP = {
+    'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
+    'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
+    'е': 'mouth_ee', 'ё': 'mouth_oo', 'ю': 'mouth_uu',
+    'я': 'mouth_aa', 'м': 'mouth_mm', 'п': 'mouth_pp',
+    'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
+    'ш': 'mouth_sh', 'ж': 'mouth_zh', 'с': 'mouth_ss',
+    'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
+    'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
+    'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
+    'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
+    'й': 'mouth_ee'
+}
 
 @app.route('/')
 def home():
@@ -66,16 +84,46 @@ def text_to_speech(text, lang='ru'):
         print(f"Error in text_to_speech: {e}")
         return None
 
-def animation_loop(room_id):
+def get_neutral_frames(avatar_name):
+    return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith('mouth_neutral_')]
+
+def get_blink_frames(avatar_name):
+    return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith('blink_')]
+
+def get_speech_frames(avatar_name, phoneme):
+    base_name = PHONEME_MAP.get(phoneme, 'mouth_aa')
+    return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith(base_name)]
+
+def animation_loop(room_id, avatar_name):
+    blink_counter = 0
+    blink_frames = get_blink_frames(avatar_name)
+    neutral_frames = get_neutral_frames(avatar_name)
+    
     while animation_running[room_id]:
-        if current_animation_frames[room_id]:
-            current_frame_index[room_id] = (current_frame_index[room_id] + 1) % len(current_animation_frames[room_id])
-            frame_data = {
-                'frame': current_animation_frames[room_id][current_frame_index[room_id]],
-                'index': current_frame_index[room_id],
-                'total': len(current_animation_frames[room_id])
-            }
-            socketio.emit('animation_frame', frame_data, room=room_id)
+        if room_speaking[room_id]:
+            # Speech animation - alternate between random speech frames
+            current_char = random.choice(list(PHONEME_MAP.keys()))
+            speech_frames = get_speech_frames(avatar_name, current_char)
+            if speech_frames:
+                frame = random.choice(speech_frames)
+                frame_path = f'/frames/{avatar_name}/{frame}'
+                socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
+        else:
+            # Neutral animation with occasional blinking
+            blink_counter += 1
+            if blink_counter >= 30 and blink_frames:  # Blink every ~3 seconds
+                # Show blink animation
+                for frame in blink_frames:
+                    frame_path = f'/frames/{avatar_name}/{frame}'
+                    socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
+                    time.sleep(0.1)
+                blink_counter = 0
+            elif neutral_frames:
+                # Show neutral frame
+                frame = random.choice(neutral_frames)
+                frame_path = f'/frames/{avatar_name}/{frame}'
+                socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
+        
         time.sleep(0.1)
 
 @socketio.on('connect')
@@ -98,16 +146,29 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
+    # Send welcome message when second participant joins
+    if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
+        welcome_text = "Учитель с искусственным интеллектом активирован"
+        audio_data = text_to_speech(welcome_text)
+        if audio_data:
+            emit('speech_audio', {
+                'audio': audio_data,
+                'text': welcome_text,
+                'timestamp': time.time(),
+                'voice_type': 'female'
+            }, room=room_id)
+            emit('ai_teacher_available', {}, room=room_id)
+    
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
 @socketio.on('start_animation')
 def handle_start_animation(data):
     room_id = data['room_id']
+    avatar_name = data['avatar_name']
     if not animation_running[room_id]:
-        current_animation_frames[room_id] = data['frames']
         animation_running[room_id] = True
-        threading.Thread(target=animation_loop, args=(room_id,)).start()
+        threading.Thread(target=animation_loop, args=(room_id, avatar_name)).start()
 
 @socketio.on('stop_animation')
 def handle_stop_animation(data):
@@ -119,6 +180,10 @@ def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
     voice_type = data.get('voice', 'male')
+    
+    # Set speaking state to True
+    room_speaking[room_id] = True
+    socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
     audio_data = text_to_speech(text)
     if audio_data:
@@ -137,6 +202,14 @@ def handle_generate_speech(data):
         })
         if len(room_speech_data[room_id]) > 50:
             room_speech_data[room_id].pop(0)
+    
+    # Set speaking state back to False after a delay
+    def reset_speaking_state():
+        time.sleep(2)  # Add some delay after speech ends
+        room_speaking[room_id] = False
+        socketio.emit('speaking_state', {'speaking': False}, room=room_id)
+    
+    threading.Thread(target=reset_speaking_state).start()
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -152,6 +225,12 @@ def handle_recognized_speech(data):
     })
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
+
+@socketio.on('activate_ai_teacher')
+def handle_activate_ai_teacher(data):
+    room_id = data['room_id']
+    room_ai_activated[room_id] = True
+    emit('ai_teacher_activated', {}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
