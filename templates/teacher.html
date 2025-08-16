@@ -284,6 +284,7 @@
         let phonemeFrames = {};
         let peerConnection = null;
         let dataChannel = null;
+        let canvasStream = null;
 
         const rtcConfiguration = {
             iceServers: [
@@ -426,15 +427,15 @@
                 canvas.height = loadedImages[0].height;
                 const ctx = canvas.getContext('2d');
                 
-                const videoStream = canvas.captureStream(FPS);
-                videoPreview.srcObject = videoStream;
+                canvasStream = canvas.captureStream(FPS);
+                videoPreview.srcObject = canvasStream;
                 videoPreview.style.display = 'block';
                 
                 videoStreamInterval = setInterval(() => {
                     ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
                 }, 1000 / FPS);
                 
-                return videoStream;
+                return canvasStream;
             } catch (error) {
                 log(`Ошибка создания видео потока: ${error.message}`);
                 return null;
@@ -460,6 +461,10 @@
                     log(`Состояние WebRTC: ${peerConnection.iceConnectionState}`);
                 };
                 
+                peerConnection.ontrack = (event) => {
+                    log('Получен трек от удаленного пира');
+                };
+                
                 dataChannel = peerConnection.createDataChannel('avatarData');
                 dataChannel.onopen = () => log('DataChannel открыт');
                 dataChannel.onclose = () => log('DataChannel закрыт');
@@ -477,7 +482,7 @@
             if (!peerConnection || peerConnection.connectionState !== 'connected') {
                 if (!initWebRTC()) {
                     log('Не удалось инициализировать WebRTC');
-                    return;
+                    return false;
                 }
             }
             
@@ -491,14 +496,17 @@
                     peerConnection.addTrack(track, videoStream);
                 });
                 
+                const offer = await peerConnection.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: false
+                });
+                await peerConnection.setLocalDescription(offer);
+                
                 const participants = await new Promise(resolve => {
                     socket.emit('get_participants', { room_id: currentRoom }, resolve);
                 });
                 
                 const otherParticipants = participants.filter(sid => sid !== socket.id);
-                
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
                 
                 if (otherParticipants.length > 0) {
                     socket.emit('webrtc_offer', {
@@ -524,14 +532,6 @@
                 return;
             }
             
-            mediaStream = await createVideoStream();
-            
-            const framePaths = loadedImages.map(img => img.src);
-            socket.emit('start_animation', { 
-                frames: framePaths,
-                room_id: currentRoom
-            });
-            
             animationInterval = setInterval(() => {
                 if (!isSpeaking) {
                     showNeutralFrame();
@@ -551,7 +551,6 @@
                 showNeutralFrame();
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                socket.emit('stop_animation', { room_id: currentRoom });
                 log("Анимация остановлена");
             }
             
@@ -560,9 +559,9 @@
                 videoStreamInterval = null;
             }
             
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
-                mediaStream = null;
+            if (canvasStream) {
+                canvasStream.getTracks().forEach(track => track.stop());
+                canvasStream = null;
                 videoPreview.style.display = 'none';
             }
             
