@@ -327,10 +327,9 @@
             mediaStream = await createVideoStream();
             
             // Отправляем серверу информацию о кадрах для трансляции
-            const framePaths = loadedImages.map(img => img.src);
             socket.emit('start_animation', { 
-                frames: framePaths,
-                room_id: currentRoom
+                room_id: currentRoom,
+                avatar_name: currentAvatar
             });
             
             animationInterval = setInterval(() => {
