@@ -53,18 +53,6 @@ def get_frames(avatar_name):
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
-def animation_loop(room_id):
-    while animation_running[room_id]:
-        if current_animation_frames[room_id]:
-            current_frame_index[room_id] = (current_frame_index[room_id] + 1) % len(current_animation_frames[room_id])
-            frame_data = {
-                'frame': current_animation_frames[room_id][current_frame_index[room_id]],
-                'index': current_frame_index[room_id],
-                'total': len(current_animation_frames[room_id])
-            }
-            socketio.emit('animation_frame', frame_data, room=room_id)
-        time.sleep(0.1)
-
 @socketio.on('connect')
 def handle_connect():
     print('Client connected:', request.sid)
@@ -87,19 +75,6 @@ def handle_join_room(data):
     
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
-
-@socketio.on('start_animation')
-def handle_start_animation(data):
-    room_id = data['room_id']
-    if not animation_running[room_id]:
-        current_animation_frames[room_id] = data['frames']
-        animation_running[room_id] = True
-        threading.Thread(target=animation_loop, args=(room_id,)).start()
-
-@socketio.on('stop_animation')
-def handle_stop_animation(data):
-    room_id = data['room_id']
-    animation_running[room_id] = False
 
 @socketio.on('generate_speech')
 def handle_generate_speech(data):
