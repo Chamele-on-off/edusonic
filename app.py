@@ -9,6 +9,7 @@ import time
 import threading
 from collections import defaultdict
 import random
+from dialogue import DialogueManager  # Добавлен импорт DialogueManager
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -16,6 +17,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 
+# Глобальные состояния
 animation_running = defaultdict(bool)
 current_animation_frames = defaultdict(list)
 current_frame_index = defaultdict(int)
@@ -23,6 +25,7 @@ room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
+room_dialogue = defaultdict(DialogueManager)  # Добавлено управление диалогами для комнат
 
 # Mapping of phonemes to mouth frames
 PHONEME_MAP = {
@@ -143,6 +146,24 @@ def handle_join_room(data):
     room_id = data['room_id']
     join_room(room_id)
     room_participants[room_id].add(request.sid)
+    
+    # Инициализация диалога для комнаты (если еще не создан)
+    if room_id not in room_dialogue:
+        room_dialogue[room_id] = DialogueManager()
+    
+    # Автоматическое приветствие при первом подключении
+    if len(room_participants[room_id]) == 1:
+        greeting = "Привет! Я твой виртуальный учитель. Давай начнём урок."
+        audio_data = text_to_speech(greeting)
+        if audio_data:
+            emit('speech_audio', {
+                'audio': audio_data,
+                'text': greeting,
+                'timestamp': time.time(),
+                'voice_type': 'female',
+                'is_teacher': True
+            }, room=room_id)
+    
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
@@ -215,21 +236,70 @@ def handle_generate_speech(data):
 def handle_recognized_speech(data):
     room_id = data['room_id']
     text = data['text']
-    emit('speech_text', {'text': text, 'sid': request.sid}, room=room_id)
+    user_sid = request.sid
     
+    # Сохраняем в историю
     room_speech_data[room_id].append({
         'text': text,
         'timestamp': time.time(),
         'type': 'recognized',
-        'sid': request.sid
+        'sid': user_sid
     })
     if len(room_speech_data[room_id]) > 50:
         room_speech_data[room_id].pop(0)
+    
+    # Отправляем текст всем участникам
+    emit('speech_text', {'text': text, 'sid': user_sid}, room=room_id)
+    
+    # Если AI учитель активирован - обрабатываем сообщение
+    if room_ai_activated[room_id]:
+        dialogue = room_dialogue[room_id]
+        response = dialogue.process_input(text)
+        
+        if response:
+            # Отправляем ответ учителя
+            emit('speech_text', {
+                'text': f"Учитель: {response}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            
+            # Озвучиваем ответ
+            audio_data = text_to_speech(response)
+            if audio_data:
+                emit('speech_audio', {
+                    'audio': audio_data,
+                    'text': response,
+                    'timestamp': time.time(),
+                    'voice_type': 'female',
+                    'is_teacher': True
+                }, room=room_id)
+                
+                # Устанавливаем состояние "говорит"
+                room_speaking[room_id] = True
+                emit('speaking_state', {'speaking': True}, room=room_id)
+                
+                # Сбрасываем состояние через 2 секунды после окончания речи
+                threading.Timer(2, lambda: reset_speaking_state(room_id)).start()
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
+    room_dialogue[room_id] = DialogueManager()  # Инициализируем диалог
+    
+    # Приветственное сообщение от AI учителя
+    greeting = "Привет! Я ваш AI-учитель. Давайте начнём урок. Какой предмет вас интересует?"
+    audio_data = text_to_speech(greeting)
+    if audio_data:
+        emit('speech_audio', {
+            'audio': audio_data,
+            'text': greeting,
+            'timestamp': time.time(),
+            'voice_type': 'female',
+            'is_teacher': True
+        }, room=room_id)
+    
     emit('ai_teacher_activated', {}, room=room_id)
 
 if __name__ == '__main__':
