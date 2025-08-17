@@ -27,7 +27,7 @@ room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(DialogueManager)
 
-# Mapping of phonemes to mouth frames
+# Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
     'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
     'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
@@ -43,9 +43,44 @@ PHONEME_MAP = {
 }
 
 def reset_speaking_state(room_id):
-    """Сброс состояния речи для указанной комнаты"""
+    """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
+
+def speak_text(room_id, text, voice_type='female', is_teacher=False):
+    """Озвучивает текст с анимацией и добавляет его в историю"""
+    # Устанавливаем состояние "говорит"
+    room_speaking[room_id] = True
+    socketio.emit('speaking_state', {'speaking': True}, room=room_id)
+    
+    # Генерируем аудио
+    audio_data = text_to_speech(text, lang='ru')
+    if audio_data:
+        # Отправляем аудио клиентам
+        emit('speech_audio', {
+            'audio': audio_data,
+            'text': text,
+            'timestamp': time.time(),
+            'voice_type': voice_type,
+            'is_teacher': is_teacher
+        }, room=room_id)
+        
+        # Сохраняем в историю сообщений
+        room_speech_data[room_id].append({
+            'text': text,
+            'timestamp': time.time(),
+            'type': 'generated',
+            'voice_type': voice_type,
+            'is_teacher': is_teacher
+        })
+        if len(room_speech_data[room_id]) > 50:
+            room_speech_data[room_id].pop(0)
+    
+    # Рассчитываем продолжительность речи (примерно 0.1 сек на символ)
+    speech_duration = max(2, len(text) * 0.1)  # Минимум 2 секунды
+    
+    # Сбрасываем состояние после окончания речи
+    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
 
 @app.route('/')
 def home():
@@ -82,6 +117,7 @@ def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
 def text_to_speech(text, lang='ru'):
+    """Преобразует текст в аудио (base64)"""
     try:
         tts = gTTS(text=text, lang=lang, slow=False)
         mp3_fp = io.BytesIO()
@@ -93,20 +129,26 @@ def text_to_speech(text, lang='ru'):
         return None
 
 def get_neutral_frames(avatar_name):
-    return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith('mouth_neutral_')]
+    """Возвращает список нейтральных кадров для аватара"""
+    return sorted([f for f in os.listdir(FRAMES_DIR / avatar_name) 
+                  if f.startswith('mouth_neutral_')])
 
 def get_blink_frames(avatar_name):
-    return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith('blink_')]
+    """Возвращает список кадров моргания для аватара"""
+    return sorted([f for f in os.listdir(FRAMES_DIR / avatar_name) 
+                  if f.startswith('blink_')])
 
 def get_speech_frames(avatar_name, phoneme):
+    """Возвращает список речевых кадров для указанной фонемы"""
     base_name = PHONEME_MAP.get(phoneme, 'mouth_aa')
-    return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith(base_name)]
+    return [f for f in os.listdir(FRAMES_DIR / avatar_name) 
+            if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
     """Основной цикл анимации для комнаты"""
     blink_counter = 0
-    blink_frames = sorted(get_blink_frames(avatar_name))
-    neutral_frames = sorted(get_neutral_frames(avatar_name))
+    blink_frames = get_blink_frames(avatar_name)
+    neutral_frames = get_neutral_frames(avatar_name)
     
     while animation_running[room_id]:
         if room_speaking[room_id]:
@@ -153,38 +195,23 @@ def handle_join_room(data):
     join_room(room_id)
     room_participants[room_id].add(request.sid)
     
-    # Инициализация диалога для комнаты (если еще не создан)
+    # Инициализация диалога для комнаты
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager()
     
     # Автоматическое приветствие при первом подключении
     if len(room_participants[room_id]) == 1:
         greeting = "Привет! Я твой виртуальный учитель. Давай начнём урок."
-        audio_data = text_to_speech(greeting)
-        if audio_data:
-            emit('speech_audio', {
-                'audio': audio_data,
-                'text': greeting,
-                'timestamp': time.time(),
-                'voice_type': 'female',
-                'is_teacher': True
-            }, room=room_id)
+        speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
-    # Приветственное сообщение при подключении второго участника
+    # Активационное сообщение при подключении второго участника
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
         welcome_text = "Учитель с искусственным интеллектом активирован"
-        audio_data = text_to_speech(welcome_text)
-        if audio_data:
-            emit('speech_audio', {
-                'audio': audio_data,
-                'text': welcome_text,
-                'timestamp': time.time(),
-                'voice_type': 'female'
-            }, room=room_id)
-            emit('ai_teacher_available', {}, room=room_id)
+        speak_text(room_id, welcome_text, voice_type='female', is_teacher=True)
+        emit('ai_teacher_available', {}, room=room_id)
     
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
@@ -207,36 +234,7 @@ def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
     voice_type = data.get('voice', 'male')
-    
-    # Устанавливаем состояние "говорит"
-    room_speaking[room_id] = True
-    socketio.emit('speaking_state', {'speaking': True}, room=room_id)
-    
-    # Генерируем аудио
-    audio_data = text_to_speech(text)
-    if audio_data:
-        emit('speech_audio', {
-            'audio': audio_data,
-            'text': text,
-            'timestamp': time.time(),
-            'voice_type': voice_type
-        }, room=room_id)
-        
-        # Сохраняем в историю сообщений
-        room_speech_data[room_id].append({
-            'text': text,
-            'timestamp': time.time(),
-            'type': 'generated',
-            'voice_type': voice_type
-        })
-        if len(room_speech_data[room_id]) > 50:
-            room_speech_data[room_id].pop(0)
-    
-    # Рассчитываем продолжительность речи (примерно 0.1 сек на символ)
-    speech_duration = max(2, len(text) * 0.1)  # Минимум 2 секунды
-    
-    # Сбрасываем состояние после окончания речи
-    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
+    speak_text(room_id, text, voice_type)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -259,9 +257,7 @@ def handle_recognized_speech(data):
     
     # Если AI учитель активирован - обрабатываем сообщение
     if room_ai_activated[room_id]:
-        dialogue = room_dialogue[room_id]
-        response = dialogue.process_input(text)
-        
+        response = room_dialogue[room_id].process_input(text)
         if response:
             # Отправляем ответ учителя
             emit('speech_text', {
@@ -270,26 +266,8 @@ def handle_recognized_speech(data):
                 'is_teacher': True
             }, room=room_id)
             
-            # Озвучиваем ответ
-            audio_data = text_to_speech(response)
-            if audio_data:
-                emit('speech_audio', {
-                    'audio': audio_data,
-                    'text': response,
-                    'timestamp': time.time(),
-                    'voice_type': 'female',
-                    'is_teacher': True
-                }, room=room_id)
-                
-                # Устанавливаем состояние "говорит"
-                room_speaking[room_id] = True
-                emit('speaking_state', {'speaking': True}, room=room_id)
-                
-                # Рассчитываем продолжительность речи
-                speech_duration = max(2, len(response) * 0.1)
-                
-                # Сбрасываем состояние после окончания речи
-                threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
+            # Озвучиваем ответ с анимацией
+            speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
@@ -299,15 +277,7 @@ def handle_activate_ai_teacher(data):
     
     # Приветственное сообщение от AI учителя
     greeting = "Привет! Я ваш AI-учитель. Давайте начнём урок. Какой предмет вас интересует?"
-    audio_data = text_to_speech(greeting)
-    if audio_data:
-        emit('speech_audio', {
-            'audio': audio_data,
-            'text': greeting,
-            'timestamp': time.time(),
-            'voice_type': 'female',
-            'is_teacher': True
-        }, room=room_id)
+    speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
 
