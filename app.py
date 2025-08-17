@@ -9,7 +9,7 @@ import time
 import threading
 from collections import defaultdict
 import random
-from dialogue import DialogueManager  # Добавлен импорт DialogueManager
+from dialogue import DialogueManager
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -25,7 +25,7 @@ room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
-room_dialogue = defaultdict(DialogueManager)  # Добавлено управление диалогами для комнат
+room_dialogue = defaultdict(DialogueManager)
 
 # Mapping of phonemes to mouth frames
 PHONEME_MAP = {
@@ -41,6 +41,11 @@ PHONEME_MAP = {
     'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
     'й': 'mouth_ee'
 }
+
+def reset_speaking_state(room_id):
+    """Сброс состояния речи для указанной комнаты"""
+    room_speaking[room_id] = False
+    socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 @app.route('/')
 def home():
@@ -98,13 +103,14 @@ def get_speech_frames(avatar_name, phoneme):
     return [f for f in os.listdir(FRAMES_DIR / avatar_name) if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
+    """Основной цикл анимации для комнаты"""
     blink_counter = 0
-    blink_frames = get_blink_frames(avatar_name)
-    neutral_frames = get_neutral_frames(avatar_name)
+    blink_frames = sorted(get_blink_frames(avatar_name))
+    neutral_frames = sorted(get_neutral_frames(avatar_name))
     
     while animation_running[room_id]:
         if room_speaking[room_id]:
-            # Speech animation - alternate between random speech frames
+            # Режим речи - показываем случайные речевые кадры
             current_char = random.choice(list(PHONEME_MAP.keys()))
             speech_frames = get_speech_frames(avatar_name, current_char)
             if speech_frames:
@@ -112,17 +118,17 @@ def animation_loop(room_id, avatar_name):
                 frame_path = f'/frames/{avatar_name}/{frame}'
                 socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
         else:
-            # Neutral animation with occasional blinking
+            # Режим ожидания - нейтральные кадры с морганием
             blink_counter += 1
-            if blink_counter >= 30 and blink_frames:  # Blink every ~3 seconds
-                # Show blink animation
+            if blink_counter >= 30 and blink_frames:  # Моргаем каждые ~3 секунды
+                # Проигрываем анимацию моргания
                 for frame in blink_frames:
                     frame_path = f'/frames/{avatar_name}/{frame}'
                     socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
                     time.sleep(0.1)
                 blink_counter = 0
             elif neutral_frames:
-                # Show neutral frame
+                # Показываем случайный нейтральный кадр
                 frame = random.choice(neutral_frames)
                 frame_path = f'/frames/{avatar_name}/{frame}'
                 socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
@@ -167,7 +173,7 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
-    # Send welcome message when second participant joins
+    # Приветственное сообщение при подключении второго участника
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
         welcome_text = "Учитель с искусственным интеллектом активирован"
         audio_data = text_to_speech(welcome_text)
@@ -202,10 +208,11 @@ def handle_generate_speech(data):
     text = data['text']
     voice_type = data.get('voice', 'male')
     
-    # Set speaking state to True
+    # Устанавливаем состояние "говорит"
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
+    # Генерируем аудио
     audio_data = text_to_speech(text)
     if audio_data:
         emit('speech_audio', {
@@ -215,6 +222,7 @@ def handle_generate_speech(data):
             'voice_type': voice_type
         }, room=room_id)
         
+        # Сохраняем в историю сообщений
         room_speech_data[room_id].append({
             'text': text,
             'timestamp': time.time(),
@@ -224,13 +232,11 @@ def handle_generate_speech(data):
         if len(room_speech_data[room_id]) > 50:
             room_speech_data[room_id].pop(0)
     
-    # Set speaking state back to False after a delay
-    def reset_speaking_state():
-        time.sleep(2)  # Add some delay after speech ends
-        room_speaking[room_id] = False
-        socketio.emit('speaking_state', {'speaking': False}, room=room_id)
+    # Рассчитываем продолжительность речи (примерно 0.1 сек на символ)
+    speech_duration = max(2, len(text) * 0.1)  # Минимум 2 секунды
     
-    threading.Thread(target=reset_speaking_state).start()
+    # Сбрасываем состояние после окончания речи
+    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -279,8 +285,11 @@ def handle_recognized_speech(data):
                 room_speaking[room_id] = True
                 emit('speaking_state', {'speaking': True}, room=room_id)
                 
-                # Сбрасываем состояние через 2 секунды после окончания речи
-                threading.Timer(2, lambda: reset_speaking_state(room_id)).start()
+                # Рассчитываем продолжительность речи
+                speech_duration = max(2, len(response) * 0.1)
+                
+                # Сбрасываем состояние после окончания речи
+                threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
