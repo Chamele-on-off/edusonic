@@ -1,217 +1,113 @@
-import os
 import json
 import logging
-from dataclasses import dataclass
-from enum import Enum
-from typing import Dict, List, Optional
 from pathlib import Path
-import time
-from flask_socketio import emit
+from typing import Dict, List
+from knowledge.dialogue_knowledge import DialogueKnowledge
+from knowledge.society_knowledge import SocietyKnowledge
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('lesson_manager.log'),
-        logging.StreamHandler()
-    ]
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-class LessonPhaseType(Enum):
-    GREETING = "greeting"
-    EXPLANATION = "explanation"
-    PRACTICE = "practice"
-    QA = "qa"
-    FAREWELL = "farewell"
-
-@dataclass
-class LessonPhase:
-    type: LessonPhaseType
-    content: str
-    duration: int
-    options: Optional[Dict] = None
-
-@dataclass
-class LessonConfig:
-    id: str
-    title: str
-    description: str
-    subject: str
-    difficulty: str
-    phases: List[LessonPhase]
-    materials: List[str]
 
 class LessonManager:
     def __init__(self, socketio):
         self.socketio = socketio
-        self._active_lessons: Dict[str, dict] = {}
-        self.lessons_dir = Path("static/lessons")
-        self.lessons_dir.mkdir(parents=True, exist_ok=True)
+        self.lessons_dir = Path("lessons")
+        self.dialogue_kb = DialogueKnowledge()
+        self.society_kb = SocietyKnowledge()
+        self.active_lessons = {}
 
-    def start_lesson(self, lesson_id: str, room_id: str) -> str:
-        """Запуск нового урока"""
-        lesson_config = self._load_lesson_config(lesson_id)
-        session_id = f"{lesson_id}_{room_id}_{int(time.time())}"
-        
-        self._active_lessons[session_id] = {
-            'config': lesson_config,
-            'room_id': room_id,
-            'status': 'running',
-            'current_phase': None,
-            'start_time': time.time()
-        }
-
-        self.socketio.start_background_task(
-            self._run_lesson_session,
-            session_id
-        )
-
-        logger.info(f"Урок {lesson_id} запущен в комнате {room_id}")
-        return session_id
-
-    def _run_lesson_session(self, session_id: str):
-        """Фоновая задача для выполнения урока"""
-        session = self._active_lessons.get(session_id)
-        if not session:
-            return
-
+    def start_lesson(self, lesson_id: str, room_id: str):
+        """Запуск урока по указанному ID"""
         try:
-            for phase in session['config'].phases:
-                if session['status'] != 'running':
-                    break
-
-                session['current_phase'] = phase.type.value
-                self._send_phase_update(session_id, phase)
-
-                time.sleep(phase.duration)
-
-                if phase.type == LessonPhaseType.QA:
-                    self._handle_qa_session(session_id, phase)
-                elif phase.type == LessonPhaseType.PRACTICE:
-                    self._handle_practice_session(session_id, phase)
-
-            self.stop_lesson(session_id)
+            lesson = self._load_lesson(lesson_id)
+            session_id = f"{lesson_id}-{room_id}"
+            
+            self.active_lessons[session_id] = {
+                "lesson": lesson,
+                "room_id": room_id,
+                "current_phase": 0,
+                "is_active": True
+            }
+            
+            self._run_lesson(session_id)
+            return True
         except Exception as e:
-            logger.error(f"Ошибка в уроке {session_id}: {str(e)}")
+            logger.error(f"Ошибка запуска урока: {str(e)}")
+            return False
 
-    def _send_phase_update(self, session_id: str, phase: LessonPhase):
-        """Отправка обновления фазы урока"""
-        emit('lesson_update', {
-            'type': 'phase_start',
-            'session_id': session_id,
-            'phase': phase.type.value,
-            'content': phase.content,
-            'duration': phase.duration
-        }, room=self._active_lessons[session_id]['room_id'])
+    def _run_lesson(self, session_id: str):
+        """Основной цикл выполнения урока"""
+        session = self.active_lessons.get(session_id)
+        if not session:
+            return
 
-    def _handle_qa_session(self, session_id: str, phase: LessonPhase):
-        """Обработка сессии вопросов-ответов"""
-        timeout = phase.options.get("timeout", 300) if phase.options else 300
-        time.sleep(timeout)
-
-    def _handle_practice_session(self, session_id: str, phase: LessonPhase):
-        """Обработка практической сессии"""
-        for exercise in phase.options.get("exercises", []):
-            if self._active_lessons[session_id]['status'] != 'running':
+        lesson = session["lesson"]
+        
+        for phase in lesson["phases"]:
+            if not session["is_active"]:
                 break
+                
+            self._process_phase(session_id, phase)
 
-            emit('lesson_update', {
-                'type': 'exercise',
-                'session_id': session_id,
-                'exercise': exercise,
-                'time_limit': exercise.get("time_limit", 60)
-            }, room=self._active_lessons[session_id]['room_id'])
+    def _process_phase(self, session_id: str, phase: Dict):
+        """Обработка одной фазы урока"""
+        session = self.active_lessons[session_id]
+        
+        # Отправка информации о фазе
+        self.socketio.emit('lesson_phase', {
+            "type": phase["type"],
+            "content": phase["content"],
+            "duration": phase.get("duration", 60)
+        }, room=session["room_id"])
 
-            time.sleep(exercise.get("time_limit", 60))
+        # Обработка QA фазы
+        if phase["type"] == "qa":
+            self._handle_qa_session(session_id, phase.get("duration", 120))
 
-    def process_user_message(self, session_id: str, message: dict):
-        """Обработка сообщения от пользователя"""
-        if message['type'] == 'question':
-            self._process_question(session_id, message)
-        elif message['type'] == 'answer':
-            self._process_answer(session_id, message)
+    def _handle_qa_session(self, session_id: str, duration: int):
+        """Обработка сессии вопросов-ответов"""
+        # Реализация таймера и обработки вопросов
+        pass
 
-    def _process_question(self, session_id: str, message: dict):
-        """Обработка вопроса пользователя"""
-        session = self._active_lessons.get(session_id)
-        if not session:
-            return
-
-        emit('lesson_update', {
-            'type': 'user_question',
-            'session_id': session_id,
-            'question': message['text'],
-            'user_id': message.get('user_id')
-        }, room=session['room_id'])
-
-    def _process_answer(self, session_id: str, message: dict):
-        """Обработка ответа пользователя"""
-        is_correct = self._check_answer_correctness(message)
-        session = self._active_lessons.get(session_id)
-        if not session:
-            return
-
-        emit('lesson_update', {
-            'type': 'feedback',
-            'session_id': session_id,
-            'is_correct': is_correct,
-            'explanation': "Правильно!" if is_correct else "Попробуйте еще раз"
-        }, room=session['room_id'])
-
-    def _check_answer_correctness(self, message: dict) -> bool:
-        """Проверка правильности ответа (заглушка)"""
-        return True
+    def handle_question(self, room_id: str, question: str) -> str:
+        """Обработка вопроса от ученика"""
+        # 1. Проверка общих шаблонов
+        response = self.dialogue_kb.get_response(question)
+        if response:
+            return response
+            
+        # 2. Поиск в предметной базе
+        response = self.society_kb.find_answer(question)
+        if response:
+            return response
+            
+        # 3. Fallback
+        return "Я уточню этот вопрос и отвечу на следующем занятии."
 
     def stop_lesson(self, session_id: str):
-        """Остановка урока"""
-        if session_id in self._active_lessons:
-            self._active_lessons[session_id]['status'] = 'stopped'
-            del self._active_lessons[session_id]
-            logger.info(f"Урок {session_id} остановлен")
+        """Принудительная остановка урока"""
+        if session_id in self.active_lessons:
+            self.active_lessons[session_id]["is_active"] = False
+            del self.active_lessons[session_id]
 
-    def _load_lesson_config(self, lesson_id: str) -> LessonConfig:
-        """Загрузка конфигурации урока из JSON"""
-        lesson_file = self.lessons_dir / f"{lesson_id}.json"
-        
-        if not lesson_file.exists():
-            raise FileNotFoundError(f"Файл урока {lesson_file} не найден")
+    def _load_lesson(self, lesson_id: str) -> Dict:
+        """Загрузка урока из JSON файла"""
+        path = self.lessons_dir / f"{lesson_id}.json"
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
 
-        with open(lesson_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        phases = [
-            LessonPhase(
-                type=LessonPhaseType(phase["type"]),
-                content=phase["content"],
-                duration=phase["duration"],
-                options=phase.get("options")
-            ) for phase in data["phases"]
-        ]
-
-        return LessonConfig(
-            id=data["id"],
-            title=data["title"],
-            description=data["description"],
-            subject=data["subject"],
-            difficulty=data["difficulty"],
-            phases=phases,
-            materials=data.get("materials", [])
-        )
-
-    def list_available_lessons(self) -> List[dict]:
-        """Список доступных уроков"""
+    def list_lessons(self) -> List[Dict]:
+        """Получение списка доступных уроков"""
         lessons = []
         for lesson_file in self.lessons_dir.glob("*.json"):
-            try:
-                with open(lesson_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    lessons.append({
-                        'id': data['id'],
-                        'title': data['title'],
-                        'subject': data['subject'],
-                        'description': data['description']
-                    })
-            except Exception as e:
-                logger.error(f"Ошибка загрузки урока {lesson_file}: {str(e)}")
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                lessons.append({
+                    "id": data["id"],
+                    "title": data["title"],
+                    "subject": data["subject"]
+                })
         return lessons
