@@ -1,0 +1,24 @@
+{
+    "id": "social_general",
+    "title": "Основы обществознания",
+    "subject": "обществознание",
+    "description": "Вводный урок по обществознанию",
+    "phases": [
+        {
+            "type": "explanation",
+            "content": "Сегодня мы изучим базовые понятия обществознания.",
+            "duration": 300
+        },
+        {
+            "type": "practice",
+            "content": "Ответьте на вопросы по теме урока.",
+            "duration": 180
+        },
+        {
+            "type": "qa",
+            "content": "Задавайте вопросы по изученному материалу.",
+            "duration": 240
+        }
+    ],
+    "materials": ["basic_concepts.pdf"]
+}
