@@ -26,6 +26,7 @@ room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(DialogueManager)
+room_lessons = defaultdict(dict)  # Хранит состояние уроков для комнат
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -81,6 +82,16 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False):
     
     # Сбрасываем состояние после окончания речи
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
+
+def start_lesson(room_id, lesson_id):
+    """Запускает урок в указанной комнате"""
+    room_lessons[room_id] = {
+        'lesson_id': lesson_id,
+        'status': 'active',
+        'current_phase': 'explanation'
+    }
+    emit('lesson_started', {'lesson_id': lesson_id}, room=room_id)
+    speak_text(room_id, f"Начинаем урок {lesson_id}!", is_teacher=True)
 
 @app.route('/')
 def home():
@@ -207,7 +218,7 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
-    # Активационное сообщение при подключении второго участника
+    # Активация AI учителя при подключении второго участника
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
         welcome_text = "Учитель с искусственным интеллектом активирован"
         speak_text(room_id, welcome_text, voice_type='female', is_teacher=True)
@@ -257,7 +268,9 @@ def handle_recognized_speech(data):
     
     # Если AI учитель активирован - обрабатываем сообщение
     if room_ai_activated[room_id]:
-        response = room_dialogue[room_id].process_input(text)
+        dialogue = room_dialogue[room_id]
+        response = dialogue.process_input(text)
+        
         if response:
             # Отправляем ответ учителя
             emit('speech_text', {
@@ -266,8 +279,13 @@ def handle_recognized_speech(data):
                 'is_teacher': True
             }, room=room_id)
             
-            # Озвучиваем ответ с анимацией
+            # Озвучиваем ответ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
+            
+            # Если выбран урок - запускаем его
+            lesson_id = dialogue.get_selected_lesson()
+            if lesson_id and room_id not in room_lessons:
+                start_lesson(room_id, lesson_id)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
@@ -276,7 +294,7 @@ def handle_activate_ai_teacher(data):
     room_dialogue[room_id] = DialogueManager()  # Инициализируем диалог
     
     # Приветственное сообщение от AI учителя
-    greeting = "Привет! Я ваш AI-учитель. Давайте начнём урок. Какой предмет вас интересует?"
+    greeting = "Привет! Я ваш AI-учитель. Давайте начнём урок."
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
