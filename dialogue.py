@@ -1,11 +1,14 @@
 import random
 from typing import Dict, Optional, List
 from difflib import SequenceMatcher
+import json
+from pathlib import Path
 
 class DialogueManager:
     def __init__(self):
         self.dialogue_states = {
             "greeting": self._handle_greeting,
+            "subject_selection": self._handle_subject_selection,
             "lesson_selection": self._handle_lesson_selection,
             "lesson": self._handle_lesson,
             "practice": self._handle_practice,
@@ -14,55 +17,37 @@ class DialogueManager:
         }
         self.current_state = "greeting"
         self.current_subject = None
-        self.current_topic = None
-        
-        # База знаний для диалога
-        self.qa_knowledge = {
-            # Приветствия
-            "привет": ["Привет! Как твои дела?", "Здравствуй! Готов к уроку?"],
-            "здравствуй": ["Приветствую! Как настроение?", "Здравствуй! Как твои успехи в учебе?"],
-            
-            # Состояние
-            "как дела": ["Отлично! А у тебя как?", "Прекрасно, спасибо! Как твои успехи?"],
-            "настроение": ["Я всегда в хорошем настроении, когда учу! А ты как?", "Отличное! Готов учить и учиться."],
-            
-            # Урок
-            "начать урок": ["Отлично! Давай начнём.", "Хорошо, приступим к занятию."],
-            "закончить урок": ["Хорошо, давай подведём итоги.", "Понял, завершаем занятие."],
-            
-            # Темы
-            "обществознание": ["Отличный выбор! Какая тема тебя интересует: 1) Гражданское общество, 2) Права человека, 3) Экономика?", 
-                             "По обществознанию у нас есть несколько тем. Выбери: 1) Социальные нормы, 2) Политика, 3) Культура"],
-            "история": ["По истории можем обсудить: 1) Древний мир, 2) Средние века, 3) Новое время", 
-                       "История - это интересно! Какая эпоха тебя интересует?"],
-            
-            # Общие
-            "спасибо": ["Пожалуйста! Есть ещё вопросы?", "Всегда рад помочь! Что-то ещё?"],
-            "не знаю": ["Ничего страшного, давай разберёмся вместе.", "Это нормально не знать, главное - научиться!"],
-            "повтори": ["Конечно, повторяю...", "Давай ещё раз."]
-        }
+        self.selected_lesson = None
+        self.lessons_dir = Path("lessons")
+        self._load_lessons()
 
-        # Fallback-сценарии
-        self.fallback_responses = [
-            "Я не совсем понял. Можешь уточнить?",
-            "Извини, я не уверен, что правильно тебя понял. Переформулируй, пожалуйста.",
-            "Можешь сказать это другими словами?",
-            "Давай попробуем по-другому. О чём ты хотел спросить?",
-            "Я пока не могу ответить на этот вопрос. Может, спросишь что-то другое?"
-        ]
+    def _load_lessons(self):
+        """Загружает список доступных уроков"""
+        self.lessons = {}
+        for lesson_file in self.lessons_dir.glob("*.json"):
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                subject = data['subject']
+                if subject not in self.lessons:
+                    self.lessons[subject] = []
+                self.lessons[subject].append({
+                    'id': data['id'],
+                    'title': data['title'],
+                    'description': data['description']
+                })
 
     def _similarity(self, a: str, b: str) -> float:
         """Вычисление схожести строк"""
         return SequenceMatcher(None, a, b).ratio()
 
-    def _find_best_match(self, text: str, threshold: float = 0.6) -> Optional[str]:
+    def _find_best_match(self, text: str, patterns: List[str], threshold: float = 0.6) -> Optional[str]:
         """Поиск наиболее подходящего вопроса в базе знаний"""
         text_lower = text.lower()
         best_match = None
         highest_similarity = 0.0
         
-        for pattern in self.qa_knowledge.keys():
-            similarity = self._similarity(text_lower, pattern)
+        for pattern in patterns:
+            similarity = self._similarity(text_lower, pattern.lower())
             if similarity > highest_similarity and similarity >= threshold:
                 highest_similarity = similarity
                 best_match = pattern
@@ -73,54 +58,63 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа"""
         text_lower = text.lower().strip()
         
-        # 1. Попробовать найти точный ответ по текущему состоянию
+        # Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
         if handler:
             response = handler(text_lower)
             if response:
                 return response
         
-        # 2. Попробовать найти похожий вопрос в базе знаний
-        best_match = self._find_best_match(text_lower)
-        if best_match:
-            return random.choice(self.qa_knowledge[best_match])
-        
-        # 3. Fallback-ответ
-        return random.choice(self.fallback_responses)
+        # Fallback-ответ
+        return random.choice([
+            "Я не совсем понял. Можешь уточнить?",
+            "Извини, я не уверен, что правильно тебя понял.",
+            "Можешь сказать это другими словами?"
+        ])
 
     def _handle_greeting(self, text: str) -> Optional[str]:
         if any(word in text for word in ["привет", "здравствуй", "добрый", "начать", "старт"]):
-            self.current_state = "lesson_selection"
-            return random.choice([
-                "Привет! Давай начнём наш урок. Какой предмет будем изучать?",
-                "Здравствуй! Сегодня можем позаниматься обществознанием или историей. Что выберешь?"
-            ])
+            self.current_state = "subject_selection"
+            subjects = list(self.lessons.keys())
+            return (f"Привет! Давай начнём наш урок. Какой предмет будем изучать?\n" +
+                    "\n".join(f"{i+1}) {subj}" for i, subj in enumerate(subjects)))
+        return None
+
+    def _handle_subject_selection(self, text: str) -> Optional[str]:
+        subjects = list(self.lessons.keys())
+        for i, subject in enumerate(subjects):
+            if str(i+1) in text or subject.lower() in text.lower():
+                self.current_subject = subject
+                self.current_state = "lesson_selection"
+                lessons = self.lessons[subject]
+                return (f"Отлично! Выбран предмет: {subject}\n" +
+                        "Выбери урок:\n" +
+                        "\n".join(f"{i+1}) {lesson['title']}" 
+                                for i, lesson in enumerate(lessons)))
         return None
 
     def _handle_lesson_selection(self, text: str) -> Optional[str]:
-        if "обществ" in text:
-            self.current_subject = "обществознание"
-            self.current_state = "lesson"
-            return random.choice(self.qa_knowledge["обществознание"])
-        elif "истори" in text:
-            self.current_subject = "история"
-            self.current_state = "lesson"
-            return random.choice(self.qa_knowledge["история"])
-        elif any(word in text for word in ["1", "2", "3", "перв", "втор", "трет"]):
-            self.current_state = "lesson"
-            return "Хороший выбор! Давай начнём урок. Сначала я расскажу теорию, потом обсудим примеры."
+        if not self.current_subject:
+            return "Давай сначала выберем предмет."
+            
+        lessons = self.lessons[self.current_subject]
+        for i, lesson in enumerate(lessons):
+            if str(i+1) in text or lesson['title'].lower() in text.lower():
+                self.selected_lesson = lesson['id']
+                self.current_state = "lesson"
+                return (f"Отличный выбор! Начинаем урок: {lesson['title']}\n" +
+                        f"{lesson['description']}\n" +
+                        "Скажи 'готов', когда будешь готов начать.")
         return None
 
     def _handle_lesson(self, text: str) -> Optional[str]:
-        if any(word in text for word in ["понял", "ясно", "дальше", "продолжи"]):
-            return "Отлично! Давай перейдём к практике. Попробуй ответить на вопрос..."
-        elif any(word in text for word in ["не пон", "не яс", "повтор"]):
-            return "Хорошо, давай разберём ещё раз. Основная идея заключается в том, что..."
+        if "готов" in text.lower():
+            return f"Начинаем урок {self.selected_lesson}! Сейчас я объясню материал."
         return None
 
     def _handle_practice(self, text: str) -> Optional[str]:
         if any(word in text for word in ["ответ", "думаю", "считаю"]):
-            return "Интересный ответ! Давай проверим... Да, всё верно!" if random.random() > 0.3 else "Почти правильно, но давай уточним..."
+            return "Интересный ответ! Давай проверим..." if random.random() > 0.3 else "Почти правильно, но давай уточним..."
         return None
 
     def _handle_qa(self, text: str) -> Optional[str]:
@@ -133,8 +127,12 @@ class DialogueManager:
             return "Отлично поработали! До следующего урока!"
         return None
 
+    def get_selected_lesson(self) -> Optional[str]:
+        """Возвращает ID выбранного урока"""
+        return self.selected_lesson
+
     def reset(self):
         """Сброс состояния диалога"""
         self.current_state = "greeting"
         self.current_subject = None
-        self.current_topic = None
+        self.selected_lesson = None
