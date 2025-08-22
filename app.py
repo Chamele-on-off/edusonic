@@ -46,6 +46,9 @@ def reset_speaking_state(room_id):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False):
+    if not text.strip():
+        return
+        
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
@@ -77,6 +80,7 @@ def start_lesson(room_id, lesson_data):
     room_lessons[room_id] = {
         'lesson_id': lesson_data['id'],
         'title': lesson_data['title'],
+        'subject': lesson_data.get('subject', ''),
         'phases': lesson_data.get('phases', []),
         'current_phase': 0,
         'status': 'active',
@@ -85,7 +89,8 @@ def start_lesson(room_id, lesson_data):
     
     emit('lesson_started', {
         'lesson_id': lesson_data['id'],
-        'title': lesson_data['title']
+        'title': lesson_data['title'],
+        'subject': lesson_data.get('subject', '')
     }, room=room_id)
     
     # Запускаем выполнение урока в отдельном потоке
@@ -100,7 +105,7 @@ def run_lesson_phases(room_id):
     phases = lesson['phases']
     
     for phase_index, phase in enumerate(phases):
-        if lesson['status'] != 'active':
+        if room_lessons[room_id]['status'] != 'active':
             break
             
         # Обновляем текущую фазу
@@ -124,7 +129,7 @@ def run_lesson_phases(room_id):
     # Завершение урока
     if room_id in room_lessons:
         room_lessons[room_id]['status'] = 'completed'
-        speak_text(room_id, "Урок завершен! Отлично поработали!", is_teacher=True)
+        speak_text(room_id, "Урок завершен! Отлично поработали! 🎉", is_teacher=True)
 
 @app.route('/')
 def home():
@@ -288,10 +293,10 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # Если урок уже начат, пропускаем диалог
+        # Если урок уже начат
         if room_id in room_lessons and room_lessons[room_id]['status'] == 'active':
-            # Здесь будет обработка вопросов во время урока
-            response = "Хороший вопрос! Давай обсудим это после завершения текущего материала."
+            # Обработка вопросов во время урока
+            response = dialogue.handle_question_during_lesson(text)
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
