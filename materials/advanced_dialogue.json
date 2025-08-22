@@ -1,0 +1,30 @@
+{
+    "intents": {
+        "greeting": {
+            "patterns": ["привет", "здравствуй", "добрый день", "hello", "hi"],
+            "responses": ["Привет!", "Здравствуйте!", "Рад вас видеть!"],
+            "context": ["general", "start"]
+        },
+        "thanks": {
+            "patterns": ["спасибо", "благодарю", "thanks", "thank you"],
+            "responses": ["Пожалуйста!", "Всегда рад помочь!", "Обращайтесь!"],
+            "context": ["general", "positive"]
+        },
+        "help": {
+            "patterns": ["помоги", "помощь", "не понимаю", "затрудняюсь"],
+            "responses": ["Конечно, помогу!", "Расскажу подробнее.", "Объясню еще раз."],
+            "context": ["support", "learning"]
+        }
+    },
+    "contexts": {
+        "general": ["начало", "общение", "базовое"],
+        "learning": ["урок", "обучение", "материал"],
+        "support": ["помощь", "поддержка", "вопросы"]
+    },
+    "metadata": {
+        "version": "3.0",
+        "type": "advanced_dialogue",
+        "language": "ru",
+        "last_trained": "2024-01-01"
+    }
+}
