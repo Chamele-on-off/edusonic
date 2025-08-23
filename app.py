@@ -77,6 +77,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False):
 
 def start_lesson(room_id, lesson_data):
     """Запускает урок с передачей данных"""
+    print(f"Запуск урока в комнате {room_id}: {lesson_data['title']}")
+    
     room_lessons[room_id] = {
         'lesson_id': lesson_data['id'],
         'title': lesson_data['title'],
@@ -99,13 +101,17 @@ def start_lesson(room_id, lesson_data):
 def run_lesson_phases(room_id):
     """Выполняет фазы урока"""
     if room_id not in room_lessons:
+        print(f"Ошибка: урок не найден в комнате {room_id}")
         return
         
     lesson = room_lessons[room_id]
     phases = lesson['phases']
     
+    print(f"Начало выполнения {len(phases)} фаз урока в комнате {room_id}")
+    
     for phase_index, phase in enumerate(phases):
         if room_lessons[room_id]['status'] != 'active':
+            print(f"Урок прерван в фазе {phase_index}")
             break
             
         # Обновляем текущую фазу
@@ -120,16 +126,21 @@ def run_lesson_phases(room_id):
             'duration': phase.get('duration', 60)
         }, room=room_id)
         
+        print(f"Фаза {phase_index}: {phase.get('type', 'explanation')}")
+        
         # Озвучиваем содержание фазы
         speak_text(room_id, phase.get('content', ''), is_teacher=True)
         
         # Ждем продолжительность фазы
-        time.sleep(phase.get('duration', 60))
+        phase_duration = phase.get('duration', 60)
+        print(f"Ожидание фазы {phase_index}: {phase_duration} секунд")
+        time.sleep(phase_duration)
     
     # Завершение урока
     if room_id in room_lessons:
         room_lessons[room_id]['status'] = 'completed'
-        speak_text(room_id, "Урок завершен! Отлично поработали! 🎉", is_teacher=True)
+        print(f"Урок завершен в комнате {room_id}")
+        speak_text(room_id, "Урок завершен! Отлично поработали!", is_teacher=True)
 
 @app.route('/')
 def home():
@@ -239,7 +250,7 @@ def handle_join_room(data):
         room_dialogue[room_id] = DialogueManager(socketio)
     
     if len(room_participants[room_id]) == 1:
-        greeting = "Привет! Я твой виртуальный учитель. Давай начнём урок."
+        greeting = "Привет! Я твой виртуальный учитель. Давай начнем урок."
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
@@ -293,15 +304,38 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # Если урок уже начат
+        # Отладочная информация
+        print(f"Текущее состояние диалога: {dialogue.get_current_state()}")
+        print(f"Урок начат в диалоге: {dialogue.is_lesson_started()}")
+        print(f"Урок активен в комнате: {room_id in room_lessons and room_lessons[room_id]['status'] == 'active'}")
+        
+        # Проверяем, готов ли урок к запуску ДО обработки ввода
+        lesson_ready = dialogue.is_lesson_ready_to_start()
+        lesson_data = dialogue.get_selected_lesson() if lesson_ready else None
+        
+        # Обработка в зависимости от состояния
+        response = None
         if room_id in room_lessons and room_lessons[room_id]['status'] == 'active':
-            # Обработка вопросов во время урока
+            print("Обработка вопроса во время урока")
             response = dialogue.handle_question_during_lesson(text)
         else:
-            # Обработка диалога выбора урока
+            print("Обработка диалога выбора урока")
             response = dialogue.process_input(text)
+            
+            # Проверяем, был ли выбран и подтвержден урок ПОСЛЕ обработки ввода
+            lesson_ready_after = dialogue.is_lesson_ready_to_start()
+            lesson_data_after = dialogue.get_selected_lesson() if lesson_ready_after else None
+        
+        # Запускаем урок сразу, если он готов (решение проблемы задержки)
+        if lesson_data and room_id not in room_lessons:
+            print(f"Немедленный запуск урока: {lesson_data['title']}")
+            start_lesson(room_id, lesson_data)
+        elif lesson_data_after and room_id not in room_lessons:
+            print(f"Запуск урока после обработки: {lesson_data_after['title']}")
+            start_lesson(room_id, lesson_data_after)
         
         if response:
+            print(f"Ответ учителя: {response}")
             emit('speech_text', {
                 'text': f"Учитель: {response}",
                 'sid': 'teacher',
@@ -309,12 +343,6 @@ def handle_recognized_speech(data):
             }, room=room_id)
             
             speak_text(room_id, response, voice_type='female', is_teacher=True)
-            
-            # Если урок выбран и подтвержден
-            if dialogue.is_lesson_started():
-                lesson_data = dialogue.get_selected_lesson()
-                if lesson_data and room_id not in room_lessons:
-                    start_lesson(room_id, lesson_data)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
@@ -322,7 +350,7 @@ def handle_activate_ai_teacher(data):
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
     
-    greeting = "Привет! Я ваш AI-учитель. Давайте начнём урок."
+    greeting = "Привет! Я ваш AI-учитель. Давайте начнем урок."
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
