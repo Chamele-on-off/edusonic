@@ -207,7 +207,7 @@ def animation_loop(room_id, avatar_name):
     
     while animation_running[room_id]:
         if room_speaking[room_id]:
-            current_char = random.choice(list(PHONEME_MAP.keys())
+            current_char = random.choice(list(PHONEME_MAP.keys()))
             speech_frames = get_speech_frames(avatar_name, current_char)
             if speech_frames:
                 frame = random.choice(speech_frames)
@@ -310,11 +310,10 @@ def handle_recognized_speech(data):
         print(f"Урок начат в диалоге: {dialogue.is_lesson_started()}")
         print(f"Урок активен в комнате: {room_id in room_lessons and room_lessons[room_id]['status'] == 'active'}")
         
-        # Обработка в зависимости от состояния
-        response = None
-        
         # Проверяем, активен ли урок в комнате
         lesson_active = room_id in room_lessons and room_lessons[room_id]['status'] == 'active'
+        
+        response = None
         
         if lesson_active:
             print("Обработка вопроса во время урока")
@@ -323,6 +322,16 @@ def handle_recognized_speech(data):
             print("Обработка диалога выбора урока")
             response = dialogue.process_input(text)
             
+            # Проверяем специальный сигнал начала урока
+            if response == "LESSON_START_SIGNAL":
+                print("Получен сигнал начала урока")
+                lesson_data = dialogue.get_selected_lesson()
+                if lesson_data and room_id not in room_lessons:
+                    print(f"Запуск урока: {lesson_data['title']}")
+                    start_lesson(room_id, lesson_data)
+                    # Не отправляем сигнал как обычное сообщение
+                    return
+                
             # Проверяем, был ли выбран и подтвержден урок ПОСЛЕ обработки ввода
             lesson_ready_after = dialogue.is_lesson_ready_to_start()
             lesson_data_after = dialogue.get_selected_lesson() if lesson_ready_after else None
@@ -332,7 +341,7 @@ def handle_recognized_speech(data):
                 print(f"Запуск урока после обработки: {lesson_data_after['title']}")
                 start_lesson(room_id, lesson_data_after)
         
-        if response:
+        if response and response != "LESSON_START_SIGNAL":
             print(f"Ответ учителя: {response}")
             emit('speech_text', {
                 'text': f"Учитель: {response}",
