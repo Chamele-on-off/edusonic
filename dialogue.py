@@ -32,7 +32,7 @@ class DialogueManager:
             "как дела": ["Отлично! А у тебя как?", "Прекрасно! Как твои успехи?"],
             "спасибо": ["Пожалуйста! Всегда рад помочь!", "Не за что! Ты отлично справляешься!"],
             "не понимаю": ["Ничего страшного! Давай разберем вместе.", "Это нормально! Объясню еще раз."],
-            "повтори": ["Конечно, повторяю...", "Давай еще раз."],
+            "повтори": ["Конечно, повторяю.", "Давай еще раз."],
             "скучно": ["Давай сделаем урок интереснее!", "Предлагаю сменить активность!"],
             "трудно": ["Не переживай! Вместе разберемся.", "Сложности - это нормально! Я помогу."],
             "молодец": ["Спасибо! Стараюсь для вас", "Рад, что нравится!", "Вы тоже молодец!"],
@@ -117,11 +117,7 @@ class DialogueManager:
                 return "К сожалению, уроки еще не загружены. Попробуй позже!"
                 
             subject_list = "\n".join(f"{i+1}) {subj.capitalize()}" for i, subj in enumerate(subjects))
-            return random.choice([
-                f"Привет! Давай начнём урок. 🎓\nВыбери предмет:\n{subject_list}",
-                f"Здравствуй! Рад начать наше занятие! 📚\nВыбери предмет:\n{subject_list}",
-                f"Приветствую! Готов к увлекательному обучению! 🌟\nВыбери предмет:\n{subject_list}"
-            ])
+            return f"Привет! Давай начнем урок.\nВыбери предмет:\n{subject_list}"
         return None
 
     def _handle_subject_selection(self, text: str) -> Optional[str]:
@@ -158,11 +154,7 @@ class DialogueManager:
             for i, lesson in enumerate(lessons)
         )
         
-        return random.choice([
-            f"Отлично! Выбрал {self.current_subject.capitalize()}! 📖\nТеперь выбери урок:\n{lesson_list}",
-            f"Прекрасный выбор! {self.current_subject.capitalize()} - это интересно! 🌟\nВыбери урок:\n{lesson_list}",
-            f"Супер! {self.current_subject.capitalize()} - отличный предмет! 🎯\nКакой урок хочешь пройти?\n{lesson_list}"
-        ])
+        return f"Отлично! Выбрал {self.current_subject.capitalize()}!\nТеперь выбери урок:\n{lesson_list}"
 
     def _handle_lesson_selection(self, text: str) -> Optional[str]:
         if not self.current_subject:
@@ -196,43 +188,46 @@ class DialogueManager:
     def _get_lesson_confirmation_message(self, lesson: dict) -> str:
         """Формирует сообщение подтверждения выбора урока"""
         duration_min = lesson['duration'] // 60
-        return random.choice([
-            f"🎯 Отличный выбор! Ты выбрал: '{lesson['title']}'\n"
-            f"⏱ Длительность: {duration_min} минут\n"
-            f"📝 {lesson['description']}\n\n"
-            f"Скажи 'готов' чтобы начать урок!",
-            
-            f"🌟 Прекрасно! Выбрал урок: '{lesson['title']}'\n"
-            f"⏰ Время занятия: {duration_min} мин\n"
-            f"📚 {lesson['description']}\n\n"
-            f"Как будешь готов - скажи 'готов'!",
-            
-            f"🚀 Отлично! Начинаем: '{lesson['title']}'\n"
-            f"🕐 Продолжительность: {duration_min} минут\n"
-            f"📖 {lesson['description']}\n\n"
-            f"Скажи 'готов' чтобы начать урок!"
-        ])
+        return (f"Отличный выбор! Ты выбрал: '{lesson['title']}'\n"
+                f"Длительность: {duration_min} минут\n"
+                f"{lesson['description']}\n\n"
+                f"Скажи 'готов' чтобы начать урок!")
 
     def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
-        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "погнали"]
+        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "погнали", "yes", "да"]
         if any(word in text for word in ready_words):
             self.lesson_started = True
             # Инициализируем базу знаний для выбранного предмета
             self.knowledge_base = KnowledgeBase(self.current_subject)
-            return random.choice([
-                "🚀 Отлично! Начинаем урок! Сейчас я объясню материал...",
-                "🎓 Поехали! Приступаем к изучению материала...",
-                "📚 Отлично! Начинаем наш урок. Слушай внимательно...",
-                "🌟 Прекрасно! Запускаем урок. Готовься узнавать новое..."
-            ])
+            print(f"База знаний инициализирована для предмета: {self.current_subject}")
+            print(f"Урок готов к запуску: {self.is_lesson_ready_to_start()}")
             
+            # Получаем данные урока для возврата
+            lesson = None
+            for l in self.lessons.get(self.current_subject, []):
+                if l['id'] == self.selected_lesson:
+                    lesson = l
+                    break
+                    
+            if lesson:
+                return f"Отлично! Начинаем урок '{lesson['title']}'! Сейчас я объясню материал."
+            else:
+                return "Ошибка: урок не найден. Давайте выберем другой урок."
+                
         # Возврат к выбору урока
-        if any(word in text for word in ["назад", "вернуться", "другой урок"]):
+        if any(word in text for word in ["назад", "вернуться", "другой урок", "нет"]):
             self.current_state = "lesson_selection"
             self.selected_lesson = None
             return "Хорошо, давай выберем другой урок!"
             
         return None
+
+    def is_lesson_ready_to_start(self) -> bool:
+        """Проверяет, готов ли урок к запуску"""
+        return (self.lesson_started and 
+                self.current_subject is not None and 
+                self.selected_lesson is not None and
+                self.get_selected_lesson() is not None)
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока"""
@@ -240,28 +235,33 @@ class DialogueManager:
             return "Повтори, пожалуйста, вопрос. Я не расслышал."
             
         question_lower = question.lower().strip()
+        print(f"Обработка вопроса во время урока: '{question_lower}'")
         
         # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in question_lower:
+                print(f"Найден локальный шаблон: {pattern}")
                 return random.choice(responses)
         
         # 2. Проверка диалоговых шаблонов из базы знаний
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
             if dialogue_response:
+                print(f"Найден диалоговый шаблон: {dialogue_response}")
                 return dialogue_response
         
-        # 3. Поиск в предметной базе знаний
+        # 3. Поиск в предметной базе знаний (ПРИОРИТЕТ!)
         if self.knowledge_base:
             answer = self.knowledge_base.find_answer(question)
             if answer:
+                print(f"Ответ найден в базе знаний: {answer}")
                 return answer
         
-        # 4. Запрос к LLM
+        # 4. Запрос к LLM (только если не нашли в базе знаний)
+        print("Ответ не найден в базе знаний, обращаюсь к LLM")
         llm_response = self.llm.query(question, self.current_subject)
         if llm_response:
-            # Сохраняем в кэш и базу знаний
+            # Сохраняем в кэш и базу знаний для будущего использования
             self.llm.add_to_cache(question, llm_response, self.current_subject)
             if self.knowledge_base:
                 self.knowledge_base.add_knowledge(question=question, answer=llm_response)
