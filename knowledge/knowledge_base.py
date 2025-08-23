@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import random
+import string
 
 class KnowledgeBase:
     def __init__(self, subject: str = "general"):
@@ -108,36 +109,80 @@ class KnowledgeBase:
                 
         return None
 
-    def find_answer(self, question: str, threshold: float = 0.4) -> Optional[str]:
+    def _clean_text(self, text: str) -> str:
+        """Очистка текста от знаков препинания и лишних пробелов"""
+        if not text:
+            return ""
+            
+        # Удаляем знаки препинания
+        translator = str.maketrans('', '', string.punctuation + '«»„“"')
+        clean_text = text.translate(translator)
+        
+        # Удаляем лишние пробелы и приводим к нижнему регистру
+        return ' '.join(clean_text.lower().split())
+
+    def find_answer(self, question: str, threshold: float = 0.3) -> Optional[str]:
         """Поиск ответа на вопрос в базе знаний"""
         if not question.strip():
             return None
             
-        question_lower = question.lower().strip()
+        clean_question = self._clean_text(question)
+        print(f"Поиск ответа для вопроса: '{clean_question}'")
         
-        # 1. Точное совпадение
-        if question_lower in self.data["questions"]:
-            return self.data["questions"][question_lower]
+        # 1. Точное совпадение с вопросами
+        if clean_question in self.data["questions"]:
+            print(f"Найдено точное совпадение в вопросах")
+            return self.data["questions"][clean_question]
         
-        # 2. Поиск по терминам
+        # 2. Поиск по ключевым словам вопросов
+        question_keywords = ["что такое", "определение", "объясни", "расскажи", "поясни", "какие", "что значит"]
+        if any(keyword in clean_question for keyword in question_keywords):
+            # Ищем термины в вопросе
+            for term in self.data["terms"].keys():
+                clean_term = self._clean_text(term)
+                if clean_term and clean_term in clean_question:
+                    print(f"Найден термин '{term}' в вопросе")
+                    return self.data["terms"][term]
+        
+        # 3. Поиск по терминам (прямое вхождение)
         for term, definition in self.data["terms"].items():
-            if term.lower() in question_lower:
+            clean_term = self._clean_text(term)
+            if clean_term and clean_term in clean_question:
+                print(f"Найдено прямое вхождение термина '{term}'")
                 return definition
         
-        # 3. Поиск по схожести (TF-IDF + косинусная схожесть)
+        # 4. Поиск по частичному совпадению терминов
+        for term, definition in self.data["terms"].items():
+            clean_term = self._clean_text(term)
+            if clean_term:
+                # Разбиваем термин на слова и проверяем наличие каждого слова в вопросе
+                term_words = clean_term.split()
+                if len(term_words) > 1:
+                    matches = sum(1 for word in term_words if word in clean_question)
+                    if matches >= len(term_words) - 1:  # Допускаем одно несовпадение
+                        print(f"Найдено частичное совпадение термина '{term}'")
+                        return definition
+        
+        # 5. Поиск по схожести (TF-IDF + косинусная схожесть)
         if self.data["questions"]:
             questions = list(self.data["questions"].keys())
             try:
-                q_vec = self.vectorizer.transform([question_lower])
+                q_vec = self.vectorizer.transform([clean_question])
                 q_vecs = self.vectorizer.transform(questions)
                 similarities = cosine_similarity(q_vec, q_vecs)
                 max_idx = np.argmax(similarities)
                 
-                if similarities[0][max_idx] > threshold:
-                    return self.data["questions"][questions[max_idx]]
+                max_similarity = similarities[0][max_idx]
+                print(f"Максимальная схожесть с вопросом: {max_similarity:.3f}")
+                
+                if max_similarity > threshold:
+                    matched_question = questions[max_idx]
+                    print(f"Найден похожий вопрос: '{matched_question}'")
+                    return self.data["questions"][matched_question]
             except Exception as e:
                 print(f"Ошибка поиска по схожести: {e}")
         
+        print("Ответ не найден в базе знаний")
         return None
 
     def get_term(self, term: str) -> Optional[str]:
