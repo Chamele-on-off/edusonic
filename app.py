@@ -249,8 +249,9 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
     
+    # Приветствуем только первого участника
     if len(room_participants[room_id]) == 1:
-        greeting = "Привет! Я твой виртуальный учитель. Давай начнем урок."
+        greeting = "Привет! Я твой виртуальный учитель. Просто скажи название предмета, например 'математика' или 'обществознание', чтобы начать урок."
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
@@ -350,7 +351,7 @@ def handle_activate_ai_teacher(data):
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
     
-    greeting = "Привет! Я ваш AI-учитель. Давайте начнем урок."
+    greeting = "Привет! Я ваш AI-учитель. Просто скажите название предмета, чтобы начать урок."
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
