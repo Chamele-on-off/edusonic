@@ -28,16 +28,27 @@ class DialogueManager:
         
         # Локальные шаблоны для быстрого доступа
         self.local_patterns = {
-            "привет": ["Привет! Рад тебя видеть!", "Здравствуй! Готов к уроку?"],
-            "как дела": ["Отлично! А у тебя как?", "Прекрасно! Как твои успехи?"],
+            "привет": ["Привет! Какой предмет хочешь изучить?", "Здравствуй! Давай начнем урок. Просто скажи название предмета."],
+            "как дела": ["Отлично! Готов помочь тебе с уроками. Какой предмет интересует?", "Прекрасно! Какой урок хочешь начать?"],
             "спасибо": ["Пожалуйста! Всегда рад помочь!", "Не за что! Ты отлично справляешься!"],
             "не понимаю": ["Ничего страшного! Давай разберем вместе.", "Это нормально! Объясню еще раз."],
             "повтори": ["Конечно, повторяю.", "Давай еще раз."],
-            "скучно": ["Давай сделаем урок интереснее!", "Предлагаю сменить активность!"],
+            "скучно": ["Давай выберем интересный предмет! Что тебе нравится?", "Предлагаю сменить тему! Какой предмет хочешь?"],
             "трудно": ["Не переживай! Вместе разберемся.", "Сложности - это нормально! Я помогу."],
             "молодец": ["Спасибо! Стараюсь для вас", "Рад, что нравится!", "Вы тоже молодец!"],
             "хорошо": ["Отлично! Продолжаем!", "Супер! Двигаемся дальше!"],
-            "не знаю": ["Ничего страшного! Сейчас разберемся.", "Это повод узнать новое!"]
+            "не знаю": ["Ничего страшного! Сейчас разберемся.", "Это повод узнать новое!"],
+            "начать": ["Отлично! Какой предмет хочешь изучать?", "Давай начнем! Просто назови предмет."],
+            "урок": ["Какой урок хочешь начать?", "Отлично! Назови предмет для урока."],
+            "математика": ["Математика - отличный выбор! Начинаем урок по математике.", "Отлично! Запускаю урок математики."],
+            "обществознание": ["Обществознание - интересный предмет! Начинаем урок.", "Хорошо! Запускаю урок обществознания."],
+            "русский": ["Русский язык - важно знать! Начинаем урок.", "Отлично! Запускаю урок русского языка."],
+            "физика": ["Физика - увлекательная наука! Начинаем урок.", "Хорошо! Запускаю урок физики."],
+            "химия": ["Химия - это интересно! Начинаем урок.", "Отлично! Запускаю урок химии."],
+            "биология": ["Биология - изучаем живую природу! Начинаем урок.", "Хорошо! Запускаю урок биологии."],
+            "история": ["История - познаем прошлое! Начинаем урок.", "Отлично! Запускаю урок истории."],
+            "английский": ["Английский язык - полезно знать! Начинаем урок.", "Хорошо! Запускаю урок английского."],
+            "информатика": ["Информатика - современный предмет! Начинаем урок.", "Отлично! Запускаю урок информатики."]
         }
 
     def _load_lessons(self):
@@ -79,9 +90,15 @@ class DialogueManager:
             
         text_lower = text.lower().strip()
         
-        # 1. Быстрая проверка локальных шаблонов
+        # 1. Быстрая проверка локальных шаблонов (приоритет для предметов)
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
+                # Если это название предмета, сразу переходим к выбору урока
+                if pattern in ["математика", "обществознание", "русский", "физика", 
+                              "химия", "биология", "история", "английский", "информатика"]:
+                    self.current_subject = pattern
+                    self.current_state = "lesson_selection"
+                    return self._get_lesson_selection_message()
                 return random.choice(responses)
         
         # 2. Проверка диалоговых шаблонов из базы знаний (если есть)
@@ -99,8 +116,8 @@ class DialogueManager:
         
         # 4. Fallback с учетом состояния
         fallbacks = {
-            "greeting": ["Давай начнем урок! Скажи 'привет'", "Готов начать занятие?"],
-            "subject_selection": ["Выбери предмет из списка", "Какой предмет тебя интересует?"],
+            "greeting": ["Просто скажи название предмета, например 'математика' или 'обществознание'", "Какой предмет тебя интересует? Просто назови его."],
+            "subject_selection": ["Просто скажи название предмета", "Какой предмет хочешь изучать?"],
             "lesson_selection": ["Выбери урок из предложенных", "Какой урок хочешь пройти?"],
             "lesson_confirmation": ["Скажи 'готов' чтобы начать", "Жду твоего подтверждения"]
         }
@@ -109,28 +126,32 @@ class DialogueManager:
 
     def _handle_greeting(self, text: str) -> Optional[str]:
         greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "hello", "hi"]
+        subject_words = ["математика", "обществознание", "русский", "физика", "химия", 
+                        "биология", "история", "английский", "информатика", "урок"]
+        
+        # Если сразу назван предмет
+        for subject in self.lessons.keys():
+            if subject in text:
+                self.current_subject = subject
+                self.current_state = "lesson_selection"
+                return self._get_lesson_selection_message()
+                
+        # Если названо общее слово "урок"
+        if "урок" in text:
+            self.current_state = "subject_selection"
+            return "Отлично! Какой предмет хочешь изучать?"
+            
+        # Обычное приветствие
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
-            subjects = list(self.lessons.keys())
+            return "Привет! Просто скажи название предмета, который хочешь изучать, например 'математика' или 'обществознание'"
             
-            if not subjects:
-                return "К сожалению, уроки еще не загружены. Попробуй позже!"
-                
-            subject_list = "\n".join(f"{i+1}) {subj.capitalize()}" for i, subj in enumerate(subjects))
-            return f"Привет! Давай начнем урок.\nВыбери предмет:\n{subject_list}"
         return None
 
     def _handle_subject_selection(self, text: str) -> Optional[str]:
         subjects = list(self.lessons.keys())
         
-        # Поиск по номеру
-        for i, subject in enumerate(subjects):
-            if str(i+1) in text:
-                self.current_subject = subject
-                self.current_state = "lesson_selection"
-                return self._get_lesson_selection_message()
-        
-        # Поиск по названию
+        # Поиск по названию предмета
         for subject in subjects:
             if subject.lower() in text.lower():
                 self.current_subject = subject
@@ -147,14 +168,20 @@ class DialogueManager:
     def _get_lesson_selection_message(self) -> str:
         """Формирует сообщение для выбора урока"""
         lessons = self.lessons[self.current_subject]
+        
+        # Если есть только один урок, сразу его выбираем
+        if len(lessons) == 1:
+            self.selected_lesson = lessons[0]['id']
+            self.current_state = "lesson_confirmation"
+            return f"Отлично! Начинаем урок '{lessons[0]['title']}'. Скажи 'готов' чтобы начать!"
+        
+        # Если несколько уроков, предлагаем выбор
         lesson_list = "\n".join(
-            f"{i+1}) {lesson['title']} "
-            f"({'легкий' if lesson['difficulty'] == 'easy' else 'средний' if lesson['difficulty'] == 'medium' else 'сложный'}) - "
-            f"{lesson['duration'] // 60} мин"
+            f"{i+1}) {lesson['title']}"
             for i, lesson in enumerate(lessons)
         )
         
-        return f"Отлично! Выбрал {self.current_subject.capitalize()}!\nТеперь выбери урок:\n{lesson_list}"
+        return f"Отлично! Выбрал {self.current_subject.capitalize()}!\nТеперь выбери урок:\n{lesson_list}\nПросто скажи номер урока."
 
     def _handle_lesson_selection(self, text: str) -> Optional[str]:
         if not self.current_subject:
@@ -168,14 +195,14 @@ class DialogueManager:
             if str(i+1) in text:
                 self.selected_lesson = lesson['id']
                 self.current_state = "lesson_confirmation"
-                return self._get_lesson_confirmation_message(lesson)
+                return f"Отлично! Ты выбрал: '{lesson['title']}'. Скажи 'готов' чтобы начать урок!"
         
         # Поиск по названию
         for lesson in lessons:
             if lesson['title'].lower() in text.lower():
                 self.selected_lesson = lesson['id']
                 self.current_state = "lesson_confirmation"
-                return self._get_lesson_confirmation_message(lesson)
+                return f"Отлично! Ты выбрал: '{lesson['title']}'. Скажи 'готов' чтобы начать урок!"
                 
         # Возврат к выбору предмета
         if any(word in text for word in ["назад", "вернуться", "другой предмет"]):
@@ -184,14 +211,6 @@ class DialogueManager:
             return "Хорошо, давай выберем другой предмет!"
             
         return None
-
-    def _get_lesson_confirmation_message(self, lesson: dict) -> str:
-        """Формирует сообщение подтверждения выбора урока"""
-        duration_min = lesson['duration'] // 60
-        return (f"Отличный выбор! Ты выбрал: '{lesson['title']}'\n"
-                f"Длительность: {duration_min} минут\n"
-                f"{lesson['description']}\n\n"
-                f"Скажи 'готов' чтобы начать урок!")
 
     def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
         ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "погнали", "yes", "да"]
