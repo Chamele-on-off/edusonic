@@ -305,11 +305,6 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # Отладочная информация
-        print(f"Текущее состояние диалога: {dialogue.get_current_state()}")
-        print(f"Урок начат в диалоге: {dialogue.is_lesson_started()}")
-        print(f"Урок активен в комнате: {room_id in room_lessons and room_lessons[room_id]['status'] == 'active'}")
-        
         # Проверяем, активен ли урок в комнате
         lesson_active = room_id in room_lessons and room_lessons[room_id]['status'] == 'active'
         
@@ -322,25 +317,15 @@ def handle_recognized_speech(data):
             print("Обработка диалога выбора урока")
             response = dialogue.process_input(text)
             
-            # Проверяем специальный сигнал начала урока
+            # Если получен сигнал начала урока, запускаем урок и выходим
             if response == "LESSON_START_SIGNAL":
                 print("Получен сигнал начала урока")
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data and room_id not in room_lessons:
                     print(f"Запуск урока: {lesson_data['title']}")
                     start_lesson(room_id, lesson_data)
-                    # Не отправляем сигнал как обычное сообщение
-                    return
+                    return  # ВАЖНО: выходим после запуска урока
                 
-            # Проверяем, был ли выбран и подтвержден урок ПОСЛЕ обработки ввода
-            lesson_ready_after = dialogue.is_lesson_ready_to_start()
-            lesson_data_after = dialogue.get_selected_lesson() if lesson_ready_after else None
-            
-            # Запускаем урок сразу, если он готов
-            if lesson_data_after and room_id not in room_lessons:
-                print(f"Запуск урока после обработки: {lesson_data_after['title']}")
-                start_lesson(room_id, lesson_data_after)
-        
         if response and response != "LESSON_START_SIGNAL":
             print(f"Ответ учителя: {response}")
             emit('speech_text', {
