@@ -88,11 +88,23 @@ class DialogueManager:
 
     def process_input(self, text: str) -> str:
         """Обработка входящего текста и генерация ответа"""
+        text_lower = text.lower().strip()
+        
+        # Сначала обрабатываем текущее состояние, если это подтверждение урока
+        # Это позволяет вернуть LESSON_START_SIGNAL до проверки lesson_started
+        if self.current_state == "lesson_confirmation":
+            print(f"Обработка подтверждения урока: '{text_lower}'")
+            handler = self.dialogue_states.get(self.current_state)
+            if handler:
+                response = handler(text_lower)
+                if response == "LESSON_START_SIGNAL":
+                    print("ВОЗВРАЩАЕМ СИГНАЛ НАЧАЛА УРОКА")
+                    return response  # Возвращаем сигнал немедленно
+        
         # Если урок уже начат, обрабатываем как вопрос во время урока
         if self.lesson_started:
+            print("Урок уже начат, обрабатываем как вопрос")
             return self.handle_question_during_lesson(text)
-            
-        text_lower = text.lower().strip()
         
         # 1. Быстрая проверка локальных шаблонов (приоритет для предметов)
         for pattern, responses in self.local_patterns.items():
@@ -228,6 +240,7 @@ class DialogueManager:
     def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
         ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "погнали", "yes", "да"]
         if any(word in text for word in ready_words):
+            print("ПОЛЬЗОВАТЕЛЬ СКАЗАЛ 'ГОТОВ' - УСТАНАВЛИВАЕМ ФЛАГ И ВОЗВРАЩАЕМ СИГНАЛ")
             self.lesson_started = True
             self.current_state = "lesson_active"
             
