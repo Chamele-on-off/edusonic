@@ -16,6 +16,7 @@ class DialogueManager:
             "subject_selection": self._handle_subject_selection,
             "lesson_selection": self._handle_lesson_selection,
             "lesson_confirmation": self._handle_lesson_confirmation,
+            "lesson_active": self._handle_lesson_active
         }
         self.current_state = "greeting"
         self.current_subject = None
@@ -122,7 +123,8 @@ class DialogueManager:
             "greeting": ["Просто скажи название предмета, например 'математика' или 'обществознание'", "Какой предмет тебя интересует? Просто назови его."],
             "subject_selection": ["Просто скажи название предмета", "Какой предмет хочешь изучать?"],
             "lesson_selection": ["Выбери урок из предложенных", "Какой урок хочешь пройти?"],
-            "lesson_confirmation": ["Скажи 'готов' чтобы начать", "Жду твоего подтверждения"]
+            "lesson_confirmation": ["Скажи 'готов' чтобы начать", "Жду твоего подтверждения"],
+            "lesson_active": ["Задавайте вопросы по уроку!", "Что вас интересует из пройденного материала?"]
         }
         
         return random.choice(fallbacks.get(self.current_state, ["Давай продолжим наш урок."]))
@@ -170,7 +172,11 @@ class DialogueManager:
 
     def _get_lesson_selection_message(self) -> str:
         """Формирует сообщение для выбора урока"""
-        lessons = self.lessons[self.current_subject]
+        lessons = self.lessons.get(self.current_subject, [])
+        
+        if not lessons:
+            self.current_state = "subject_selection"
+            return f"К сожалению, для предмета '{self.current_subject}' нет доступных уроков. Выбери другой предмет."
         
         # Если есть только один урок, сразу его выбираем
         if len(lessons) == 1:
@@ -191,7 +197,11 @@ class DialogueManager:
             self.current_state = "subject_selection"
             return "Давай сначала выберем предмет. Какой тебе интересен?"
             
-        lessons = self.lessons[self.current_subject]
+        lessons = self.lessons.get(self.current_subject, [])
+        
+        if not lessons:
+            self.current_state = "subject_selection"
+            return f"Для предмета '{self.current_subject}' нет уроков. Выбери другой предмет."
         
         # Поиск по номеру
         for i, lesson in enumerate(lessons):
@@ -219,23 +229,22 @@ class DialogueManager:
         ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "погнали", "yes", "да"]
         if any(word in text for word in ready_words):
             self.lesson_started = True
+            self.current_state = "lesson_active"
+            
             # Инициализируем базу знаний для выбранного предмета
-            self.knowledge_base = KnowledgeBase(self.current_subject)
-            print(f"База знаний инициализирована для предмета: {self.current_subject}")
+            try:
+                self.knowledge_base = KnowledgeBase(self.current_subject)
+                print(f"База знаний инициализирована для предмета: {self.current_subject}")
+                if self.knowledge_base:
+                    print(f"Доступные термины: {list(self.knowledge_base.data['terms'].keys())}")
+            except Exception as e:
+                print(f"Ошибка инициализации базы знаний: {e}")
+                self.knowledge_base = None
+            
             print(f"Урок готов к запуску: {self.is_lesson_ready_to_start()}")
             
-            # Получаем данные урока для возврата
-            lesson = None
-            for l in self.lessons.get(self.current_subject, []):
-                if l['id'] == self.selected_lesson:
-                    lesson = l
-                    break
-                    
-            if lesson:
-                # Возвращаем сигнал для запуска урока
-                return "LESSON_START_SIGNAL"
-            else:
-                return "Ошибка: урок не найден. Давайте выберем другой урок."
+            # Возвращаем сигнал для запуска урока
+            return "LESSON_START_SIGNAL"
                 
         # Возврат к выбору урока
         if any(word in text for word in ["назад", "вернуться", "другой урок", "нет"]):
@@ -244,6 +253,11 @@ class DialogueManager:
             return "Хорошо, давай выберем другой урок!"
             
         return None
+
+    def _handle_lesson_active(self, text: str) -> Optional[str]:
+        """Обработка ввода во время активного урока"""
+        # Во время урока все вопросы обрабатываются как вопросы по материалу
+        return self.handle_question_during_lesson(text)
 
     def is_lesson_ready_to_start(self) -> bool:
         """Проверяет, готов ли урок к запуску"""
@@ -259,6 +273,11 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         print(f"Обработка вопроса во время урока: '{question_lower}'")
+        print(f"Текущий предмет: {self.current_subject}")
+        print(f"База знаний доступна: {self.knowledge_base is not None}")
+        
+        if self.knowledge_base:
+            print(f"Доступные термины в базе: {list(self.knowledge_base.data['terms'].keys())}")
         
         # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
@@ -300,7 +319,7 @@ class DialogueManager:
 
     def get_selected_lesson(self) -> Optional[dict]:
         """Возвращает данные выбранного урока"""
-        if not self.lesson_started or not self.selected_lesson or not self.current_subject:
+        if not self.current_subject or not self.selected_lesson:
             return None
             
         for lesson in self.lessons.get(self.current_subject, []):
