@@ -308,6 +308,11 @@ def handle_recognized_speech(data):
         # Проверяем, активен ли урок в комнате
         lesson_active = room_id in room_lessons and room_lessons[room_id]['status'] == 'active'
         
+        # Отладочная информация
+        print(f"Состояние урока в комнате: {lesson_active}")
+        print(f"Текущее состояние диалога: {dialogue.get_current_state()}")
+        print(f"Урок начат в диалоге: {dialogue.is_lesson_started()}")
+        
         response = None
         
         if lesson_active:
@@ -325,7 +330,11 @@ def handle_recognized_speech(data):
                     print(f"Запуск урока: {lesson_data['title']}")
                     start_lesson(room_id, lesson_data)
                     return  # ВАЖНО: выходим после запуска урока
+                else:
+                    print(f"Не удалось запустить урок: lesson_data={lesson_data}, room_lessons={room_id in room_lessons}")
                 
+        print(f"Получен ответ от диалога: {response}")
+        
         if response and response != "LESSON_START_SIGNAL":
             print(f"Ответ учителя: {response}")
             emit('speech_text', {
