@@ -377,12 +377,21 @@ def handle_recognized_speech(data):
                     }, room=room_id)
                     speak_text(room_id, confirmation_text, voice_type='female', is_teacher=True)
                     
-                    # Затем запускаем урок после небольшой паузы
-                    def delayed_lesson_start():
-                        start_lesson(room_id, lesson_data)
+                    # Сохраняем данные для отложенного запуска
+                    room_lessons[room_id] = {
+                        'pending_lesson': lesson_data,
+                        'status': 'pending'
+                    }
                     
-                    threading.Timer(2.0, delayed_lesson_start).start()
-                    return  # ВАЖНО: выходим после запуска урока
+                    # Запускаем урок через 2 секунды
+                    def start_delayed_lesson():
+                        if room_id in room_lessons and room_lessons[room_id].get('status') == 'pending':
+                            actual_lesson_data = room_lessons[room_id]['pending_lesson']
+                            del room_lessons[room_id]['pending_lesson']
+                            start_lesson(room_id, actual_lesson_data)
+                    
+                    threading.Timer(2.0, start_delayed_lesson).start()
+                    return  # ВАЖНО: выходим после запуска таймера
                 else:
                     print(f"Не удалось запустить урок: lesson_data={lesson_data}, room_lessons={room_id in room_lessons}")
                 
