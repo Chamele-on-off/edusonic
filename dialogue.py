@@ -51,8 +51,15 @@ class DialogueManager:
             "английский": ["Английский язык - полезно знать! Начинаем урок.", "Хорошо! Запускаю урок английского."],
             "информатика": ["Информатика - современный предмет! Начинаем урок.", "Отлично! Запускаю урок информатики."],
             "готов": ["Отлично! Начинаем урок!", "Супер! Приступаем к занятию!"],
-            "да": ["Хорошо, продолжаем!", "Отлично! Двигаемся дальше!"]
+            "да": ["Хорошо, продолжаем!", "Отлично! Двигаемся дальше!"],
+            "продолжи": ["Продолжаем урок!", "Возвращаемся к материалу!"],
+            "дальше": ["Переходим к следующей части!", "Идем дальше!"],
+            "стоп": ["Останавливаю урок.", "Пауза."],
+            "пауза": ["Ставлю на паузу.", "Приостанавливаю урок."]
         }
+
+        # Флаг для отслеживания подтверждения урока
+        self.lesson_confirmation_received = False
 
     def _load_lessons(self):
         """Загружает список доступных уроков"""
@@ -73,7 +80,7 @@ class DialogueManager:
                             'id': data.get('id', 'unknown'),
                             'title': data.get('title', 'Без названия'),
                             'description': data.get('description', ''),
-                            'phases': data.get('phases', []),
+                            'lecture_texts': data.get('lecture_texts', []),
                             'difficulty': data.get('difficulty', 'medium'),
                             'duration': data.get('duration', 1800)
                         })
@@ -89,16 +96,6 @@ class DialogueManager:
     def process_input(self, text: str) -> str:
         """Обработка входящего текста и генерация ответа"""
         text_lower = text.lower().strip()
-        
-        # Сначала обрабатываем текущее состояние, если это подтверждение урока
-        if self.current_state == "lesson_confirmation":
-            print(f"Обработка подтверждения урока: '{text_lower}'")
-            handler = self.dialogue_states.get(self.current_state)
-            if handler:
-                response = handler(text_lower)
-                if response == "LESSON_START_SIGNAL":
-                    print("ВОЗВРАЩАЕМ СИГНАЛ НАЧАЛА УРОКА")
-                    return response  # Возвращаем сигнал немедленно
         
         # Если урок уже начат, обрабатываем как вопрос во время урока
         if self.lesson_started:
@@ -238,8 +235,11 @@ class DialogueManager:
 
     def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
         ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "погнали", "yes", "да"]
-        if any(word in text for word in ready_words):
+        
+        # Проверяем только если это первое подтверждение
+        if not self.lesson_confirmation_received and any(word in text for word in ready_words):
             print("ПОЛЬЗОВАТЕЛЬ СКАЗАЛ 'ГОТОВ' - УСТАНАВЛИВАЕМ ФЛАГ И ВОЗВРАЩАЕМ СИГНАЛ")
+            self.lesson_confirmation_received = True
             self.lesson_started = True
             self.current_state = "lesson_active"
             
@@ -247,8 +247,6 @@ class DialogueManager:
             try:
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 print(f"База знаний инициализирована для предмета: {self.current_subject}")
-                if self.knowledge_base:
-                    print(f"Доступные термины: {list(self.knowledge_base.data['terms'].keys())}")
             except Exception as e:
                 print(f"Ошибка инициализации базы знаний: {e}")
                 self.knowledge_base = None
@@ -262,6 +260,7 @@ class DialogueManager:
         if any(word in text for word in ["назад", "вернуться", "другой урок", "нет"]):
             self.current_state = "lesson_selection"
             self.selected_lesson = None
+            self.lesson_confirmation_received = False
             return "Хорошо, давай выберем другой урок!"
             
         return None
@@ -285,6 +284,20 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         print(f"Обработка вопроса во время урока: '{question_lower}'")
+        
+        # Сначала проверяем команды управления уроком
+        control_commands = {
+            "продолжи": "Продолжаем урок!",
+            "дальше": "Переходим к следующей части!",
+            "стоп": "Останавливаю урок.",
+            "пауза": "Ставлю урок на паузу.",
+            "возобновить": "Возобновляю урок.",
+            "повтори": "Повторяю последний материал."
+        }
+        
+        for cmd, response in control_commands.items():
+            if cmd in question_lower:
+                return response
         
         # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
@@ -352,6 +365,7 @@ class DialogueManager:
         self.current_subject = None
         self.selected_lesson = None
         self.lesson_started = False
+        self.lesson_confirmation_received = False
         self.knowledge_base = None
 
     def get_available_subjects(self) -> List[str]:
