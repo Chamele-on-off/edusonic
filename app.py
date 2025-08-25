@@ -26,7 +26,8 @@ room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_lesson_threads = defaultdict(threading.Thread)
-room_last_processed = defaultdict(lambda: {'text': '', 'timestamp': 0})
+room_lesson_paused = defaultdict(bool)
+room_current_phase = defaultdict(int)
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -37,7 +38,7 @@ PHONEME_MAP = {
     'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
     'ш': 'mouth_sh', 'ж': 'mouth_zh', 'س': 'mouth_ss',
     'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
-    'н': 'mouth_nn', 'т': 'mouth_tt', 'د': 'mouth_dd',
+    'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
     'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
     'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
     'й': 'mouth_ee'
@@ -88,7 +89,8 @@ def start_lesson(room_id, lesson_data):
         'phases': lesson_data.get('phases', []),
         'current_phase': 0,
         'status': 'active',
-        'start_time': time.time()
+        'start_time': time.time(),
+        'paused': False
     }
     
     emit('lesson_started', {
@@ -98,15 +100,26 @@ def start_lesson(room_id, lesson_data):
     }, room=room_id)
     
     # Запускаем выполнение урока в отдельном потоке
-    if room_id in room_lesson_threads and room_lesson_threads[room_id].is_alive():
-        room_lesson_threads[room_id].join(timeout=1.0)
-    
     lesson_thread = threading.Thread(target=run_lesson_phases, args=(room_id,), daemon=True)
     room_lesson_threads[room_id] = lesson_thread
     lesson_thread.start()
 
+def pause_lesson(room_id):
+    """Приостанавливает урок"""
+    if room_id in room_lessons:
+        room_lessons[room_id]['paused'] = True
+        room_lesson_paused[room_id] = True
+        emit('lesson_paused', {}, room=room_id)
+
+def resume_lesson(room_id):
+    """Возобновляет урок"""
+    if room_id in room_lessons:
+        room_lessons[room_id]['paused'] = False
+        room_lesson_paused[room_id] = False
+        emit('lesson_resumed', {}, room=room_id)
+
 def run_lesson_phases(room_id):
-    """Выполняет фазы урока"""
+    """Выполняет фазы урока с возможностью паузы"""
     if room_id not in room_lessons:
         print(f"Ошибка: урок не найден в комнате {room_id}")
         return
@@ -117,12 +130,19 @@ def run_lesson_phases(room_id):
     print(f"Начало выполнения {len(phases)} фаз урока в комнате {room_id}")
     
     for phase_index, phase in enumerate(phases):
-        if room_id not in room_lessons or room_lessons[room_id]['status'] != 'active':
+        if room_lessons[room_id]['status'] != 'active':
             print(f"Урок прерван в фазе {phase_index}")
             break
             
+        # Проверяем паузу
+        while room_lessons[room_id].get('paused', False):
+            time.sleep(0.5)
+            if room_lessons[room_id]['status'] != 'active':
+                break
+        
         # Обновляем текущую фазу
         room_lessons[room_id]['current_phase'] = phase_index
+        room_current_phase[room_id] = phase_index
         
         # Отправляем информацию о фазе
         emit('lesson_phase', {
@@ -130,31 +150,42 @@ def run_lesson_phases(room_id):
             'total_phases': len(phases),
             'type': phase.get('type', 'explanation'),
             'content': phase.get('content', ''),
-            'duration': phase.get('duration', 60),
-            'allow_questions': phase.get('allow_questions', True)
+            'duration': phase.get('duration', 60)
         }, room=room_id)
         
         print(f"Фаза {phase_index}: {phase.get('type', 'explanation')}")
         
-        # Озвучиваем содержание фазы
-        speak_text(room_id, phase.get('content', ''), is_teacher=True)
-        
-        # Ждем продолжительность фазы
-        phase_duration = phase.get('duration', 60)
-        print(f"Ожидание фазы {phase_index}: {phase_duration} секунд")
-        
-        # Разбиваем ожидание на небольшие интервалы для проверки прерывания
-        for _ in range(phase_duration):
-            if room_id not in room_lessons or room_lessons[room_id]['status'] != 'active':
-                break
-            time.sleep(1)
+        # Озвучиваем содержание фазы (только для объяснительных фаз)
+        if phase.get('type') == 'explanation':
+            speak_text(room_id, phase.get('content', ''), is_teacher=True)
+            
+            # Ждем продолжительность фазы с проверкой паузы
+            phase_duration = phase.get('duration', 60)
+            print(f"Ожидание фазы {phase_index}: {phase_duration} секунд")
+            
+            elapsed = 0
+            while elapsed < phase_duration:
+                if room_lessons[room_id].get('paused', False):
+                    time.sleep(0.5)
+                    continue
+                if room_lessons[room_id]['status'] != 'active':
+                    break
+                time.sleep(1)
+                elapsed += 1
+                
+                # Проверяем каждую секунду на паузу
+                if room_lessons[room_id].get('paused', False):
+                    while room_lessons[room_id].get('paused', False):
+                        time.sleep(0.5)
+                        if room_lessons[room_id]['status'] != 'active':
+                            break
     
     # Завершение урока
     if room_id in room_lessons:
         room_lessons[room_id]['status'] = 'completed'
         print(f"Урок завершен в комнате {room_id}")
         speak_text(room_id, "Урок завершен! Отлично поработали!", is_teacher=True)
-        emit('lesson_completed', {'lesson_id': lesson['lesson_id']}, room=room_id)
+        emit('lesson_completed', {}, room=room_id)
 
 @app.route('/')
 def home():
@@ -305,21 +336,9 @@ def handle_recognized_speech(data):
     text = data['text']
     user_sid = request.sid
     
-    # Защита от дублирования обработки одного и того же текста
-    current_time = time.time()
-    last_processed = room_last_processed[room_id]
-    
-    # Если тот же текст был обработан менее 2 секунд назад - пропускаем
-    if (text == last_processed['text'] and 
-        current_time - last_processed['timestamp'] < 2.0):
-        print(f"Пропускаем дублирующее сообщение: '{text}'")
-        return
-    
-    room_last_processed[room_id] = {'text': text, 'timestamp': current_time}
-    
     room_speech_data[room_id].append({
         'text': text,
-        'timestamp': current_time,
+        'timestamp': time.time(),
         'type': 'recognized',
         'sid': user_sid
     })
@@ -343,6 +362,8 @@ def handle_recognized_speech(data):
         
         if lesson_active:
             print("Обработка вопроса во время урока")
+            # Ставим урок на паузу для ответа на вопрос
+            pause_lesson(room_id)
             response = dialogue.handle_question_during_lesson(text)
         else:
             print("Обработка диалога выбора урока")
@@ -352,12 +373,12 @@ def handle_recognized_speech(data):
             if response == "LESSON_START_SIGNAL":
                 print("Получен сигнал начала урока")
                 lesson_data = dialogue.get_selected_lesson()
-                if lesson_data:
+                if lesson_data and room_id not in room_lessons:
                     print(f"Запуск урока: {lesson_data['title']}")
                     start_lesson(room_id, lesson_data)
+                    return  # ВАЖНО: выходим после запуска урока
                 else:
-                    print("Ошибка: данные урока не найдены")
-                return  # ВАЖНО: выходим после запуска урока
+                    print(f"Не удалось запустить урок: lesson_data={lesson_data}, room_lessons={room_id in room_lessons}")
                 
         print(f"Получен ответ от диалога: {response}")
         
@@ -370,6 +391,11 @@ def handle_recognized_speech(data):
             }, room=room_id)
             
             speak_text(room_id, response, voice_type='female', is_teacher=True)
+            
+            # После ответа на вопрос возобновляем урок, если он был на паузе
+            if lesson_active and room_id in room_lessons and room_lessons[room_id].get('paused', False):
+                time.sleep(2)  # Даем немного времени после ответа
+                resume_lesson(room_id)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
@@ -382,13 +408,26 @@ def handle_activate_ai_teacher(data):
     
     emit('ai_teacher_activated', {}, room=room_id)
 
-@socketio.on('stop_lesson')
-def handle_stop_lesson(data):
+@socketio.on('pause_lesson')
+def handle_pause_lesson(data):
     room_id = data['room_id']
-    if room_id in room_lessons:
-        room_lessons[room_id]['status'] = 'stopped'
-        print(f"Урок остановлен в комнате {room_id}")
-        emit('lesson_stopped', {'lesson_id': room_lessons[room_id]['lesson_id']}, room=room_id)
+    pause_lesson(room_id)
+
+@socketio.on('resume_lesson')
+def handle_resume_lesson(data):
+    room_id = data['room_id']
+    resume_lesson(room_id)
+
+@socketio.on('skip_phase')
+def handle_skip_phase(data):
+    room_id = data['room_id']
+    if room_id in room_lessons and room_lessons[room_id]['status'] == 'active':
+        # Пропускаем текущую фазу, устанавливая флаг для выхода из ожидания
+        room_lessons[room_id]['paused'] = False  # Снимаем паузу если была
+        # Увеличиваем текущую фазу для перехода к следующей
+        if room_lessons[room_id]['current_phase'] < len(room_lessons[room_id]['phases']) - 1:
+            room_lessons[room_id]['current_phase'] += 1
+            emit('phase_skipped', {}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
