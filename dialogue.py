@@ -91,7 +91,6 @@ class DialogueManager:
         text_lower = text.lower().strip()
         
         # Сначала обрабатываем текущее состояние, если это подтверждение урока
-        # Это позволяет вернуть LESSON_START_SIGNAL до проверки lesson_started
         if self.current_state == "lesson_confirmation":
             print(f"Обработка подтверждения урока: '{text_lower}'")
             handler = self.dialogue_states.get(self.current_state)
@@ -286,11 +285,6 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         print(f"Обработка вопроса во время урока: '{question_lower}'")
-        print(f"Текущий предмет: {self.current_subject}")
-        print(f"База знаний доступна: {self.knowledge_base is not None}")
-        
-        if self.knowledge_base:
-            print(f"Доступные термины в базе: {list(self.knowledge_base.data['terms'].keys())}")
         
         # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
