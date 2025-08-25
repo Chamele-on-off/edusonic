@@ -367,7 +367,21 @@ def handle_recognized_speech(data):
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data and room_id not in room_lessons:
                     print(f"Запуск урока: {lesson_data['title']}")
-                    start_lesson(room_id, lesson_data)
+                    
+                    # Сначала говорим подтверждение
+                    confirmation_text = "Отлично! Начинаем урок!"
+                    emit('speech_text', {
+                        'text': f"Учитель: {confirmation_text}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, confirmation_text, voice_type='female', is_teacher=True)
+                    
+                    # Затем запускаем урок после небольшой паузы
+                    def delayed_lesson_start():
+                        start_lesson(room_id, lesson_data)
+                    
+                    threading.Timer(2.0, delayed_lesson_start).start()
                     return  # ВАЖНО: выходим после запуска урока
                 else:
                     print(f"Не удалось запустить урок: lesson_data={lesson_data}, room_lessons={room_id in room_lessons}")
