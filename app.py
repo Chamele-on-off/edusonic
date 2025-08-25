@@ -26,6 +26,7 @@ room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_lesson_threads = defaultdict(threading.Thread)
+room_last_processed = defaultdict(lambda: {'text': '', 'timestamp': 0})
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -36,7 +37,7 @@ PHONEME_MAP = {
     'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
     'ш': 'mouth_sh', 'ж': 'mouth_zh', 'س': 'mouth_ss',
     'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
-    'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
+    'н': 'mouth_nn', 'т': 'mouth_tt', 'د': 'mouth_dd',
     'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
     'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
     'й': 'mouth_ee'
@@ -304,9 +305,21 @@ def handle_recognized_speech(data):
     text = data['text']
     user_sid = request.sid
     
+    # Защита от дублирования обработки одного и того же текста
+    current_time = time.time()
+    last_processed = room_last_processed[room_id]
+    
+    # Если тот же текст был обработан менее 2 секунд назад - пропускаем
+    if (text == last_processed['text'] and 
+        current_time - last_processed['timestamp'] < 2.0):
+        print(f"Пропускаем дублирующее сообщение: '{text}'")
+        return
+    
+    room_last_processed[room_id] = {'text': text, 'timestamp': current_time}
+    
     room_speech_data[room_id].append({
         'text': text,
-        'timestamp': time.time(),
+        'timestamp': current_time,
         'type': 'recognized',
         'sid': user_sid
     })
@@ -339,12 +352,12 @@ def handle_recognized_speech(data):
             if response == "LESSON_START_SIGNAL":
                 print("Получен сигнал начала урока")
                 lesson_data = dialogue.get_selected_lesson()
-                if lesson_data and room_id not in room_lessons:
+                if lesson_data:
                     print(f"Запуск урока: {lesson_data['title']}")
                     start_lesson(room_id, lesson_data)
-                    return  # ВАЖНО: выходим после запуска урока
                 else:
-                    print(f"Не удалось запустить урок: lesson_data={lesson_data}, room_lessons={room_id in room_lessons}")
+                    print("Ошибка: данные урока не найдены")
+                return  # ВАЖНО: выходим после запуска урока
                 
         print(f"Получен ответ от диалога: {response}")
         
