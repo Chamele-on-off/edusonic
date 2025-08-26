@@ -23,9 +23,10 @@ class DialogueManager:
         self.selected_lesson_data = None
         self.lesson_started = False
         self.lessons_dir = Path("lessons")
-        self.knowledge_base = None
+        self.knowledge_base = KnowledgeBase("general")  # Всегда инициализируем базу знаний
         self.llm = LLMIntegration()
         self.available_lessons = self._load_lessons()
+        self.current_lessons_list = []  # Текущий список уроков для выбора
         
         # Локальные шаблоны для быстрого доступа
         self.local_patterns = {
@@ -99,19 +100,16 @@ class DialogueManager:
     def _load_lesson_data(self, subject: str, lesson_id: str) -> Optional[Dict]:
         """Загружает данные конкретного урока"""
         try:
-            # Пробуем найти по subject_lesson_id.json
-            lesson_filename = f"{subject}_{lesson_id}.json"
-            lesson_path = self.lessons_dir / lesson_filename
-            
-            if not lesson_path.exists():
-                # Ищем любой файл, содержащий lesson_id в названии
-                for lesson_file in self.lessons_dir.glob(f"*{lesson_id}*.json"):
-                    lesson_path = lesson_file
-                    break
-            
-            if lesson_path.exists():
-                with open(lesson_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+            # Пробуем найти файл
+            for lesson_file in self.lessons_dir.glob("*.json"):
+                try:
+                    with open(lesson_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if (data.get('subject', '').lower() == subject.lower() and 
+                            data.get('id', '') == lesson_id):
+                            return data
+                except:
+                    continue
                     
         except Exception as e:
             print(f"Ошибка загрузки урока {lesson_id}: {e}")
@@ -156,10 +154,9 @@ class DialogueManager:
                 return responses
         
         # 2. Проверка диалоговых шаблонов из базы знаний
-        if self.knowledge_base:
-            dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
-            if dialogue_response:
-                return dialogue_response
+        dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
+        if dialogue_response:
+            return dialogue_response
         
         # 3. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -168,16 +165,13 @@ class DialogueManager:
             if response:
                 return response
         
-        # 4. Fallback
-        fallbacks = {
-            "greeting": ["Просто скажи название предмета, например 'математика' или 'обществознание'"],
-            "subject_selection": ["Какой предмет хочешь изучать?"],
-            "lesson_selection": ["Выбери урок из предложенных"],
-            "lesson_confirmation": ["Скажи 'готов' чтобы начать"],
-            "lesson_active": ["Задавайте вопросы по уроку!"]
-        }
+        # 4. Fallback - используем LLM для любых других запросов
+        print("Используем LLM для обработки запроса")
+        llm_response = self.llm.query(text, self.current_subject or "общее")
+        if llm_response:
+            return llm_response
         
-        return random.choice(fallbacks.get(self.current_state, ["Давай продолжим наш урок."]))
+        return "Не совсем понял. Можешь повторить или задать вопрос по-другому?"
 
     def _handle_greeting(self, text: str) -> Optional[str]:
         greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали"]
@@ -220,6 +214,7 @@ class DialogueManager:
             return "Сначала выбери предмет."
             
         lessons = self.available_lessons[self.current_subject]
+        self.current_lessons_list = lessons  # Сохраняем текущий список уроков
         
         if not lessons:
             self.current_state = "subject_selection"
@@ -233,29 +228,34 @@ class DialogueManager:
         
         # Если несколько уроков, предлагаем выбор
         lesson_list = "\n".join(
-            f"{i+1}) {lesson['title']} - {lesson['description']}"
+            f"{i+1}) {lesson['title']} - {lesson.get('description', '')}"
             for i, lesson in enumerate(lessons[:5])  # Ограничиваем до 5 уроков
         )
         
-        return f"Отлично! Выбрал {self.current_subject}!\nТеперь выбери урок:\n{lesson_list}\nПросто скажи номер урока."
+        return f"Отлично! Выбрал {self.current_subject}!\nТеперь выбери урок:\n{lesson_list}\nПросто скажи номер урока или его название."
 
     def _handle_lesson_selection(self, text: str) -> Optional[str]:
-        if not self.current_subject or self.current_subject not in self.available_lessons:
+        if not self.current_subject or not self.current_lessons_list:
             self.current_state = "subject_selection"
             return "Давай сначала выберем предмет."
             
-        lessons = self.available_lessons[self.current_subject]
+        lessons = self.current_lessons_list
         
-        # Поиск по номеру
+        # Поиск по номеру (1, 2, 3...)
         for i, lesson in enumerate(lessons):
             if str(i+1) in text:
                 self.selected_lesson_id = lesson['id']
                 self.current_state = "lesson_confirmation"
                 return f"Отлично! Ты выбрал: '{lesson['title']}'. Скажи 'готов' чтобы начать урок!"
         
-        # Поиск по названию
+        # Поиск по названию (частичное совпадение)
         for lesson in lessons:
-            if lesson['title'].lower() in text.lower():
+            lesson_title_lower = lesson['title'].lower()
+            text_lower = text.lower()
+            
+            # Проверяем частичное совпадение названия
+            if (lesson_title_lower in text_lower or 
+                any(word in text_lower for word in lesson_title_lower.split())):
                 self.selected_lesson_id = lesson['id']
                 self.current_state = "lesson_confirmation"
                 return f"Отлично! Ты выбрал: '{lesson['title']}'. Скажи 'готов' чтобы начать урок!"
@@ -266,7 +266,7 @@ class DialogueManager:
             self.current_subject = None
             return "Хорошо, давай выберем другой предмет!"
             
-        return None
+        return f"Не понял, какой урок ты выбрал. Попробуй сказать номер (1, 2, 3) или название урока."
 
     def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
         ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "да"]
@@ -280,13 +280,13 @@ class DialogueManager:
                     self.lesson_started = True
                     self.current_state = "lesson_active"
                     
-                    # Инициализируем базу знаний
+                    # Инициализируем базу знаний для конкретного предмета
                     try:
                         self.knowledge_base = KnowledgeBase(self.current_subject)
                         print(f"База знаний инициализирована для предмета: {self.current_subject}")
                     except Exception as e:
                         print(f"Ошибка инициализации базы знаний: {e}")
-                        self.knowledge_base = None
+                        # Оставляем общую базу знаний
                     
                     return "LESSON_START_SIGNAL"
                 else:
@@ -312,6 +312,7 @@ class DialogueManager:
             return "Повтори, пожалуйста, вопрос. Я не расслышал."
             
         question_lower = question.lower().strip()
+        print(f"Обработка вопроса: '{question_lower}'")
         
         # Команды управления уроком
         control_commands = {
@@ -333,17 +334,18 @@ class DialogueManager:
                     return random.choice(responses)
                 return responses
         
-        # База знаний
-        if self.knowledge_base:
-            answer = self.knowledge_base.find_answer(question)
-            if answer:
-                return answer
+        # Всегда сначала ищем в базе знаний
+        answer = self.knowledge_base.find_answer(question)
+        if answer:
+            print(f"Ответ найден в базе знаний: {answer}")
+            return answer
         
-        # LLM
-        llm_response = self.llm.query(question, self.current_subject)
+        # Если не нашли в базе знаний, используем LLM
+        print("Используем LLM для ответа на вопрос")
+        llm_response = self.llm.query(question, self.current_subject or "общее")
         if llm_response:
-            if self.knowledge_base:
-                self.knowledge_base.add_knowledge(question=question, answer=llm_response)
+            # Сохраняем в базу знаний для будущего использования
+            self.knowledge_base.add_knowledge(question=question, answer=llm_response)
             return llm_response
         
         return "Интересный вопрос! Давайте обсудим его подробнее."
@@ -387,4 +389,5 @@ class DialogueManager:
         self.selected_lesson_id = None
         self.selected_lesson_data = None
         self.lesson_started = False
-        self.knowledge_base = None
+        self.current_lessons_list = []
+        # База знаний остается активной всегда
