@@ -10,6 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
+from lesson import LessonManager  # Импортируем новый менеджер уроков
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -24,7 +25,7 @@ room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
-room_lessons = defaultdict(dict)
+room_lesson_manager = defaultdict(lambda: LessonManager(socketio))  # Новый менеджер уроков
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -74,6 +75,54 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False):
     
     speech_duration = max(2, len(text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
+
+def start_lesson(room_id, lesson_data):
+    """Запускает урок с передачей данных"""
+    print(f"Запуск урока в комнате {room_id}: {lesson_data['title']}")
+    
+    # Используем новый менеджер уроков
+    lesson_manager = room_lesson_manager[room_id]
+    lesson_manager.start_lesson(lesson_data)
+    
+    emit('lesson_started', {
+        'lesson_id': lesson_data['id'],
+        'title': lesson_data['title'],
+        'subject': lesson_data.get('subject', '')
+    }, room=room_id)
+
+@app.route('/')
+def home():
+    return render_template('teacher.html')
+
+@app.route('/conference')
+def conference():
+    room_id = request.args.get('room', 'default')
+    embed = request.args.get('embed', 'false') == 'true'
+    return render_template('conference.html', room_id=room_id, embed=embed)
+
+@app.route('/api/avatars')
+def get_avatars():
+    try:
+        avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
+        return jsonify({"avatars": avatars})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/frames/<avatar_name>')
+def get_frames(avatar_name):
+    try:
+        avatar_dir = FRAMES_DIR / avatar_name
+        if not avatar_dir.exists():
+            return jsonify({"error": "Avatar not found"}), 404
+        
+        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        return jsonify({"frames": frames})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/frames/<avatar_name>/<path:filename>')
+def serve_frame(avatar_name, filename):
+    return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
 def text_to_speech(text, lang='ru'):
     try:
@@ -126,40 +175,6 @@ def animation_loop(room_id, avatar_name):
                 socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
         
         time.sleep(0.1)
-
-@app.route('/')
-def home():
-    return render_template('teacher.html')
-
-@app.route('/conference')
-def conference():
-    room_id = request.args.get('room', 'default')
-    embed = request.args.get('embed', 'false') == 'true'
-    return render_template('conference.html', room_id=room_id, embed=embed)
-
-@app.route('/api/avatars')
-def get_avatars():
-    try:
-        avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
-        return jsonify({"avatars": avatars})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/frames/<avatar_name>')
-def get_frames(avatar_name):
-    try:
-        avatar_dir = FRAMES_DIR / avatar_name
-        if not avatar_dir.exists():
-            return jsonify({"error": "Avatar not found"}), 404
-        
-        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-        return jsonify({"frames": frames})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/frames/<avatar_name>/<path:filename>')
-def serve_frame(avatar_name, filename):
-    return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
 @socketio.on('connect')
 def handle_connect():
@@ -230,62 +245,41 @@ def handle_recognized_speech(data):
         'type': 'recognized',
         'sid': user_sid
     })
+    if len(room_speech_data[room_id]) > 50:
+        room_speech_data[room_id].pop(0)
     
     emit('speech_text', {'text': text, 'sid': user_sid}, room=room_id)
     
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
+        lesson_manager = room_lesson_manager[room_id]
         
         # Проверяем, активен ли урок
-        lesson_active = dialogue.is_lesson_started()
+        lesson_active = lesson_manager.is_lesson_active()
+        
+        print(f"Состояние урока: {lesson_active}")
+        print(f"Текущее состояние диалога: {dialogue.get_current_state()}")
+        print(f"Урок начат в диалоге: {dialogue.is_lesson_started()}")
         
         response = None
         
         if lesson_active:
             print("Обработка вопроса во время урока")
-            # Ставим лекцию на паузу для ответа на вопрос
-            dialogue.pause_lecture()
             response = dialogue.handle_question_during_lesson(text)
         else:
             print("Обработка диалога выбора урока")
             response = dialogue.process_input(text)
             
-            # Если получен сигнал начала урока, запускаем лекцию
+            # Если получен сигнал начала урока, запускаем урок и выходим
             if response == "LESSON_START_SIGNAL":
                 print("Получен сигнал начала урока")
-                
-                # Сначала говорим подтверждение
-                confirmation_text = "Отлично! Начинаем урок!"
-                emit('speech_text', {
-                    'text': f"Учитель: {confirmation_text}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                speak_text(room_id, confirmation_text, voice_type='female', is_teacher=True)
-                
-                # НЕМЕДЛЕННО запускаем лекцию
-                success = dialogue.start_lecture(room_id, speak_text)
-                if success:
-                    print("Лекция успешно запущена")
-                    # Сохраняем информацию об уроке в комнате
-                    lesson_data = dialogue.get_selected_lesson()
-                    if lesson_data:
-                        room_lessons[room_id] = {
-                            'lesson_id': lesson_data.get('id', ''),
-                            'title': lesson_data.get('title', ''),
-                            'subject': lesson_data.get('subject', ''),
-                            'status': 'active'
-                        }
-                        emit('lesson_started', {
-                            'lesson_id': lesson_data.get('id', ''),
-                            'title': lesson_data.get('title', ''),
-                            'subject': lesson_data.get('subject', '')
-                        }, room=room_id)
+                lesson_data = dialogue.get_selected_lesson()
+                if lesson_data:
+                    print(f"Запуск урока: {lesson_data['title']}")
+                    start_lesson(room_id, lesson_data)
+                    return  # ВАЖНО: выходим после запуска урока
                 else:
-                    print("Ошибка запуска лекции")
-                    speak_text(room_id, "Извините, не удалось запустить урок. Попробуйте другой.", is_teacher=True)
-                
-                return  # Выходим после запуска урока
+                    print(f"Не удалось запустить урок: lesson_data={lesson_data}")
                 
         print(f"Получен ответ от диалога: {response}")
         
@@ -298,75 +292,18 @@ def handle_recognized_speech(data):
             }, room=room_id)
             
             speak_text(room_id, response, voice_type='female', is_teacher=True)
-            
-            # После ответа на вопрос возобновляем лекцию, если она была на паузе
-            if lesson_active:
-                # Даем немного времени после ответа
-                time.sleep(2)
-                dialogue.resume_lecture()
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
+    room_lesson_manager[room_id] = LessonManager(socketio)
     
     greeting = "Привет! Я ваш AI-учитель. Просто скажите название предмета, чтобы начать урок."
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
-
-@socketio.on('pause_lesson')
-def handle_pause_lesson(data):
-    room_id = data['room_id']
-    if room_id in room_dialogue:
-        room_dialogue[room_id].pause_lecture()
-        emit('lesson_paused', {}, room=room_id)
-
-@socketio.on('resume_lesson')
-def handle_resume_lesson(data):
-    room_id = data['room_id']
-    if room_id in room_dialogue:
-        room_dialogue[room_id].resume_lecture()
-        emit('lesson_resumed', {}, room=room_id)
-
-@socketio.on('stop_lesson')
-def handle_stop_lesson(data):
-    room_id = data['room_id']
-    if room_id in room_dialogue:
-        room_dialogue[room_id].stop_lecture()
-        if room_id in room_lessons:
-            del room_lessons[room_id]
-        emit('lesson_stopped', {}, room=room_id)
-
-@socketio.on('skip_next')
-def handle_skip_next(data):
-    room_id = data['room_id']
-    if room_id in room_dialogue:
-        room_dialogue[room_id].skip_to_next()
-        emit('skipped_next', {}, room=room_id)
-
-@socketio.on('skip_previous')
-def handle_skip_previous(data):
-    room_id = data['room_id']
-    if room_id in room_dialogue:
-        room_dialogue[room_id].skip_to_previous()
-        emit('skipped_previous', {}, room=room_id)
-
-@socketio.on('get_lesson_info')
-def handle_get_lesson_info(data):
-    room_id = data['room_id']
-    if room_id in room_dialogue:
-        lesson_info = room_dialogue[room_id].get_lesson_info()
-        emit('lesson_info', lesson_info, room=room_id)
-
-@socketio.on('get_available_lessons')
-def handle_get_available_lessons(data):
-    room_id = data['room_id']
-    subject = data.get('subject')
-    if room_id in room_dialogue:
-        lessons = room_dialogue[room_id].get_available_lessons(subject)
-        emit('available_lessons', {'lessons': lessons}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
