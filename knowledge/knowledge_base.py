@@ -6,6 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import random
 import string
+import re
 
 class KnowledgeBase:
     def __init__(self, subject: str = "general"):
@@ -35,7 +36,10 @@ class KnowledgeBase:
                 "как дела": ["Все хорошо, продолжим урок", "Отлично, давайте заниматься"],
                 "не понял": ["Давайте разберем еще раз", "Попробую объяснить по-другому"],
                 "повтори": ["Повторяю...", "Еще раз:"],
-                "спасибо": ["Пожалуйста!", "Всегда рад помочь!"]
+                "спасибо": ["Пожалуйста!", "Всегда рад помочь!"],
+                "что такое": ["Расскажу подробнее об этом понятии", "Объясню этот термин"],
+                "объясни": ["С удовольствием объясню", "Давайте разберем этот вопрос"],
+                "расскажи": ["Расскажу подробнее", "Поделюсь информацией об этом"]
             },
             "contexts": {
                 "greeting": ["Привет!", "Здравствуйте!", "Рад вас видеть!"],
@@ -86,7 +90,10 @@ class KnowledgeBase:
                 "право система норм",
                 "культура духовные ценности",
                 "образование процесс обучения",
-                "наука система знаний"
+                "наука система знаний",
+                "математика наука о числах",
+                "физика наука о природе",
+                "химия наука о веществах"
             ]
             self.vectorizer.fit(demo_texts)
 
@@ -121,7 +128,7 @@ class KnowledgeBase:
         # Удаляем лишние пробелы и приводим к нижнему регистру
         return ' '.join(clean_text.lower().split())
 
-    def find_answer(self, question: str, threshold: float = 0.3) -> Optional[str]:
+    def find_answer(self, question: str, threshold: float = 0.2) -> Optional[str]:
         """Поиск ответа на вопрос в базе знаний"""
         if not question.strip():
             return None
@@ -135,21 +142,34 @@ class KnowledgeBase:
             return self.data["questions"][clean_question]
         
         # 2. Поиск по ключевым словам вопросов
-        question_keywords = ["что такое", "определение", "объясни", "расскажи", "поясни", "какие", "что значит"]
+        question_keywords = ["что такое", "определение", "объясни", "расскажи", "поясни", "какие", "что значит", "кто такой"]
         if any(keyword in clean_question for keyword in question_keywords):
-            # Ищем термины в вопросе
+            # Ищем все термины в вопросе, а не только первый
+            found_terms = []
             for term in self.data["terms"].keys():
                 clean_term = self._clean_text(term)
                 if clean_term and clean_term in clean_question:
-                    print(f"Найден термин '{term}' в вопросе")
-                    return self.data["terms"][term]
+                    found_terms.append((term, self.data["terms"][term]))
+            
+            if found_terms:
+                # Возвращаем все найденные термины
+                response = "В вашем вопросе упоминаются следующие понятия:\n"
+                for term, definition in found_terms:
+                    response += f"• {term}: {definition}\n"
+                return response
         
-        # 3. Поиск по терминам (прямое вхождение)
+        # 3. Поиск по терминам (прямое вхождение) - ищем ВСЕ термины
+        found_terms = []
         for term, definition in self.data["terms"].items():
             clean_term = self._clean_text(term)
             if clean_term and clean_term in clean_question:
-                print(f"Найдено прямое вхождение термина '{term}'")
-                return definition
+                found_terms.append((term, definition))
+        
+        if found_terms:
+            response = "По вашему вопросу:\n"
+            for term, definition in found_terms:
+                response += f"• {term}: {definition}\n"
+            return response
         
         # 4. Поиск по частичному совпадению терминов
         for term, definition in self.data["terms"].items():
@@ -159,9 +179,8 @@ class KnowledgeBase:
                 term_words = clean_term.split()
                 if len(term_words) > 1:
                     matches = sum(1 for word in term_words if word in clean_question)
-                    if matches >= len(term_words) - 1:  # Допускаем одно несовпадение
-                        print(f"Найдено частичное совпадение термина '{term}'")
-                        return definition
+                    if matches >= max(1, len(term_words) - 1):  # Более мягкое условие
+                        return f"{term}: {definition}"
         
         # 5. Поиск по схожести (TF-IDF + косинусная схожесть)
         if self.data["questions"]:
@@ -170,15 +189,24 @@ class KnowledgeBase:
                 q_vec = self.vectorizer.transform([clean_question])
                 q_vecs = self.vectorizer.transform(questions)
                 similarities = cosine_similarity(q_vec, q_vecs)
-                max_idx = np.argmax(similarities)
                 
-                max_similarity = similarities[0][max_idx]
-                print(f"Максимальная схожесть с вопросом: {max_similarity:.3f}")
+                # Находим несколько лучших совпадений
+                best_matches = []
+                for i, similarity in enumerate(similarities[0]):
+                    if similarity > threshold:
+                        best_matches.append((questions[i], similarity))
                 
-                if max_similarity > threshold:
-                    matched_question = questions[max_idx]
-                    print(f"Найден похожий вопрос: '{matched_question}'")
-                    return self.data["questions"][matched_question]
+                # Сортируем по убыванию схожести
+                best_matches.sort(key=lambda x: x[1], reverse=True)
+                
+                if best_matches:
+                    # Возвращаем несколько лучших ответов
+                    response = "Возможно, вы имели в виду:\n"
+                    for question_text, similarity in best_matches[:3]:  # Топ-3 ответа
+                        answer = self.data["questions"][question_text]
+                        response += f"• {answer}\n"
+                    return response
+                    
             except Exception as e:
                 print(f"Ошибка поиска по схожести: {e}")
         
@@ -233,7 +261,7 @@ class KnowledgeBase:
             "dialogue_contexts": len(self.dialogue_data.get("contexts", {}))
         }
 
-    def search_similar(self, query: str, max_results: int = 3) -> List[Dict]:
+    def search_similar(self, query: str, max_results: int = 5) -> List[Dict]:
         """Поиск похожих вопросов и терминов"""
         results = []
         
@@ -251,7 +279,7 @@ class KnowledgeBase:
                 similarities = cosine_similarity(q_vec, q_vecs)
                 
                 for i, similarity in enumerate(similarities[0]):
-                    if similarity > 0.3:  # Порог схожести
+                    if similarity > 0.2:  # Более низкий порог
                         results.append({
                             "type": "question",
                             "text": questions[i],
@@ -263,12 +291,12 @@ class KnowledgeBase:
         
         # Поиск по терминам
         for term, definition in self.data["terms"].items():
-            if query_lower in term.lower():
+            if query_lower in term.lower() or any(word in term.lower() for word in query_lower.split()):
                 results.append({
                     "type": "term",
                     "text": term,
                     "definition": definition,
-                    "similarity": 1.0
+                    "similarity": 0.8  # Высокая схожесть для прямого вхождения
                 })
         
         # Сортировка по схожести
