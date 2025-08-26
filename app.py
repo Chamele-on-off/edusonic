@@ -10,7 +10,6 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from lesson import LessonManager  # Импортируем новый менеджер уроков
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -25,7 +24,9 @@ room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
-room_lesson_manager = defaultdict(lambda: LessonManager(socketio))  # Новый менеджер уроков
+room_lessons = defaultdict(dict)
+room_lesson_threads = defaultdict(threading.Thread)
+room_last_processed = defaultdict(lambda: {'text': '', 'timestamp': 0})
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -36,7 +37,7 @@ PHONEME_MAP = {
     'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
     'ш': 'mouth_sh', 'ж': 'mouth_zh', 'س': 'mouth_ss',
     'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
-    'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
+    'н': 'mouth_nn', 'т': 'mouth_tt', 'د': 'mouth_dd',
     'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
     'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
     'й': 'mouth_ee'
@@ -80,15 +81,80 @@ def start_lesson(room_id, lesson_data):
     """Запускает урок с передачей данных"""
     print(f"Запуск урока в комнате {room_id}: {lesson_data['title']}")
     
-    # Используем новый менеджер уроков
-    lesson_manager = room_lesson_manager[room_id]
-    lesson_manager.start_lesson(lesson_data)
+    room_lessons[room_id] = {
+        'lesson_id': lesson_data['id'],
+        'title': lesson_data['title'],
+        'subject': lesson_data.get('subject', ''),
+        'phases': lesson_data.get('phases', []),
+        'current_phase': 0,
+        'status': 'active',
+        'start_time': time.time()
+    }
     
     emit('lesson_started', {
         'lesson_id': lesson_data['id'],
         'title': lesson_data['title'],
         'subject': lesson_data.get('subject', '')
     }, room=room_id)
+    
+    # Запускаем выполнение урока в отдельном потоке
+    if room_id in room_lesson_threads and room_lesson_threads[room_id].is_alive():
+        room_lesson_threads[room_id].join(timeout=1.0)
+    
+    lesson_thread = threading.Thread(target=run_lesson_phases, args=(room_id,), daemon=True)
+    room_lesson_threads[room_id] = lesson_thread
+    lesson_thread.start()
+
+def run_lesson_phases(room_id):
+    """Выполняет фазы урока"""
+    if room_id not in room_lessons:
+        print(f"Ошибка: урок не найден в комнате {room_id}")
+        return
+        
+    lesson = room_lessons[room_id]
+    phases = lesson['phases']
+    
+    print(f"Начало выполнения {len(phases)} фаз урока в комнате {room_id}")
+    
+    for phase_index, phase in enumerate(phases):
+        if room_id not in room_lessons or room_lessons[room_id]['status'] != 'active':
+            print(f"Урок прерван в фазе {phase_index}")
+            break
+            
+        # Обновляем текущую фазу
+        room_lessons[room_id]['current_phase'] = phase_index
+        
+        # Отправляем информацию о фазе
+        emit('lesson_phase', {
+            'phase_index': phase_index,
+            'total_phases': len(phases),
+            'type': phase.get('type', 'explanation'),
+            'content': phase.get('content', ''),
+            'duration': phase.get('duration', 60),
+            'allow_questions': phase.get('allow_questions', True)
+        }, room=room_id)
+        
+        print(f"Фаза {phase_index}: {phase.get('type', 'explanation')}")
+        
+        # Озвучиваем содержание фазы
+        speak_text(room_id, phase.get('content', ''), is_teacher=True)
+        
+        # Ждем продолжительность фазы
+        phase_duration = phase.get('duration', 60)
+        print(f"Ожидание фазы {phase_index}: {phase_duration} секунд")
+        
+        # Разбиваем ожидание на небольшие интервалы для проверки прерывания
+        for _ in range(phase_duration):
+            if room_id not in room_lessons or room_lessons[room_id]['status'] != 'active':
+                break
+            time.sleep(1)
+    
+    # Завершение урока
+    if room_id in room_lessons:
+        room_lessons[room_id]['status'] = 'completed'
+        print(f"Урок завершен в комнате {room_id}")
+        speak_text(room_id, "Урок завершен! Отлично поработали!", is_teacher=True)
+        emit('lesson_completed', {'lesson_id': lesson['lesson_id']}, room=room_id)
 
 @app.route('/')
 def home():
@@ -239,9 +305,21 @@ def handle_recognized_speech(data):
     text = data['text']
     user_sid = request.sid
     
+    # Защита от дублирования обработки одного и того же текста
+    current_time = time.time()
+    last_processed = room_last_processed[room_id]
+    
+    # Если тот же текст был обработан менее 2 секунд назад - пропускаем
+    if (text == last_processed['text'] and 
+        current_time - last_processed['timestamp'] < 2.0):
+        print(f"Пропускаем дублирующее сообщение: '{text}'")
+        return
+    
+    room_last_processed[room_id] = {'text': text, 'timestamp': current_time}
+    
     room_speech_data[room_id].append({
         'text': text,
-        'timestamp': time.time(),
+        'timestamp': current_time,
         'type': 'recognized',
         'sid': user_sid
     })
@@ -252,12 +330,12 @@ def handle_recognized_speech(data):
     
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
-        lesson_manager = room_lesson_manager[room_id]
         
-        # Проверяем, активен ли урок
-        lesson_active = lesson_manager.is_lesson_active()
+        # Проверяем, активен ли урок в комнате
+        lesson_active = room_id in room_lessons and room_lessons[room_id]['status'] == 'active'
         
-        print(f"Состояние урока: {lesson_active}")
+        # Отладочная информация
+        print(f"Состояние урока в комнате: {lesson_active}")
         print(f"Текущее состояние диалога: {dialogue.get_current_state()}")
         print(f"Урок начат в диалоге: {dialogue.is_lesson_started()}")
         
@@ -277,9 +355,9 @@ def handle_recognized_speech(data):
                 if lesson_data:
                     print(f"Запуск урока: {lesson_data['title']}")
                     start_lesson(room_id, lesson_data)
-                    return  # ВАЖНО: выходим после запуска урока
                 else:
-                    print(f"Не удалось запустить урок: lesson_data={lesson_data}")
+                    print("Ошибка: данные урока не найдены")
+                return  # ВАЖНО: выходим после запуска урока
                 
         print(f"Получен ответ от диалога: {response}")
         
@@ -298,12 +376,19 @@ def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
-    room_lesson_manager[room_id] = LessonManager(socketio)
     
     greeting = "Привет! Я ваш AI-учитель. Просто скажите название предмета, чтобы начать урок."
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
+
+@socketio.on('stop_lesson')
+def handle_stop_lesson(data):
+    room_id = data['room_id']
+    if room_id in room_lessons:
+        room_lessons[room_id]['status'] = 'stopped'
+        print(f"Урок остановлен в комнате {room_id}")
+        emit('lesson_stopped', {'lesson_id': room_lessons[room_id]['lesson_id']}, room=room_id)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
