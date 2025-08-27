@@ -63,7 +63,7 @@ class DialogueManager:
                 demo_lesson = self.lessons_dir / "social_general.txt"
                 if not demo_lesson.exists():
                     with open(demo_lesson, 'w', encoding='utf-8') as f:
-                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.")
+                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - форма правления, при которой народ является источником власти.\n\nЭкономика - хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - система общеобязательных норм, охраняемых государством.\n\nСоциализация - процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - система норм и принципов, регулирующих поведение людей.\n\nГлобализация - процесс всемирной экономической, политической и культурной интеграции.")
                 return
                 
             # Загрузка текстовых файлов уроков
@@ -115,9 +115,24 @@ class DialogueManager:
         try:
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Разбиваем на абзацы по точкам, но сохраняем структуру
-                paragraphs = re.split(r'(?<=[.!?])\s+', content)
-                return [p.strip() for p in paragraphs if p.strip()]
+                # Разбиваем на предложения для более естественного чтения
+                sentences = re.split(r'(?<=[.!?])\s+', content)
+                # Объединяем предложения в группы по 2-4 для плавного чтения
+                paragraphs = []
+                current_paragraph = []
+                
+                for sentence in sentences:
+                    if sentence.strip():
+                        current_paragraph.append(sentence.strip())
+                        if len(current_paragraph) >= 2:  # Группируем по 2-4 предложения
+                            paragraphs.append(' '.join(current_paragraph))
+                            current_paragraph = []
+                
+                # Добавляем оставшиеся предложения
+                if current_paragraph:
+                    paragraphs.append(' '.join(current_paragraph))
+                
+                return paragraphs if paragraphs else ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
         except Exception as e:
             print(f"Ошибка загрузки содержания урока: {e}")
             return ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
@@ -151,7 +166,7 @@ class DialogueManager:
             if subject.lower() in text_lower:
                 self.current_subject = subject
                 # Автоматически выбираем первый доступный урок (демо-урок если есть)
-                lessons = self.lessons[subject]
+                lessons = self.lessons.get(subject, [])
                 demo_lessons = [l for l in lessons if l.get('is_demo', False)]
                 
                 if demo_lessons:
@@ -159,7 +174,13 @@ class DialogueManager:
                 elif lessons:
                     self.selected_lesson = lessons[0]
                 else:
-                    return f"К сожалению, у меня пока нет уроков по {subject}. Давайте выберем другой предмет?"
+                    # Создаем временный урок, если нет доступных
+                    self.selected_lesson = {
+                        'id': f"demo_{subject}",
+                        'title': f"Демо-урок по {subject}",
+                        'file_path': self.lessons_dir / f"demo_{subject}.txt",
+                        'is_demo': True
+                    }
                 
                 self.lesson_started = True
                 self.current_state = "lesson_reading"
@@ -168,7 +189,7 @@ class DialogueManager:
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
                 if self.lesson_content:
-                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока. Скажите 'записал', когда будете готовы продолжить."
+                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока."
                 else:
                     return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
         
@@ -254,7 +275,7 @@ class DialogueManager:
 
     def _get_lesson_selection_message(self) -> str:
         """Формирует сообщение для выбора урока"""
-        lessons = self.lessons[self.current_subject]
+        lessons = self.lessons.get(self.current_subject, [])
         
         # Если есть демо-урок, предлагаем его сразу
         demo_lessons = [l for l in lessons if l.get('is_demo', False)]
@@ -272,7 +293,7 @@ class DialogueManager:
             self.current_state = "subject_selection"
             return "Сначала выберите предмет пожалуйста."
             
-        lessons = self.lessons[self.current_subject]
+        lessons = self.lessons.get(self.current_subject, [])
         
         # Если пользователь говорит "демо" - выбираем демо-урок или первый доступный
         if "демо" in text.lower() or "любой" in text.lower() or "первый" in text.lower():
@@ -282,7 +303,13 @@ class DialogueManager:
             elif lessons:
                 self.selected_lesson = lessons[0]
             else:
-                return "К сожалению, уроки по этому предмету временно недоступны."
+                # Создаем временный урок
+                self.selected_lesson = {
+                    'id': f"demo_{self.current_subject}",
+                    'title': f"Демо-урок по {self.current_subject}",
+                    'file_path': self.lessons_dir / f"demo_{self.current_subject}.txt",
+                    'is_demo': True
+                }
                 
             self.current_state = "lesson_confirmation"
             return self._get_lesson_confirmation_message(self.selected_lesson)
@@ -321,13 +348,17 @@ class DialogueManager:
             self.current_paragraph = 0
             
             # Загружаем содержание урока
-            self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+            if hasattr(self.selected_lesson, 'file_path'):
+                self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+            else:
+                # Создаем базовое содержание для временного урока
+                self.lesson_content = [f"Добро пожаловать на урок по {self.current_subject}! Давайте изучим эту интересную тему вместе."]
             
             # Инициализируем базу знаний для выбранного предмета
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
             if self.lesson_content:
-                return "Прекрасно! Начинаем чтение урока. Слушайте внимательно! Скажите 'записал' когда будете готовы продолжить."
+                return "Прекрасно! Начинаем чтение урока."
             else:
                 return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
                 
@@ -342,7 +373,8 @@ class DialogueManager:
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
         if "записал" in text.lower() or "дальше" in text.lower() or "продолжай" in text.lower():
-            return self._get_next_paragraph()
+            # Возвращаем None, так как чтение будет обработано в app.py
+            return None
             
         if "стоп" in text.lower() or "останови" in text.lower() or "хватит" in text.lower():
             self.lesson_started = False
@@ -383,10 +415,10 @@ class DialogueManager:
             if dialogue_response:
                 return dialogue_response
         
-        # 3. Поиск в предметной базе знаний
+        # 3. Поиск в предметной базе знаний (особенно для вопросов "что такое")
         if self.knowledge_base:
             answer = self.knowledge_base.find_answer(question)
-            if answer:
+            if answer and answer != "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться.":
                 return answer
         
         # 4. Запрос к LLM
