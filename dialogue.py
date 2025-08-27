@@ -4,6 +4,7 @@ from difflib import SequenceMatcher
 import json
 from pathlib import Path
 import time
+import re
 from knowledge.knowledge_base import KnowledgeBase
 from llm import LLMIntegration
 
@@ -15,106 +16,80 @@ class DialogueManager:
             "subject_selection": self._handle_subject_selection,
             "lesson_selection": self._handle_lesson_selection,
             "lesson_confirmation": self._handle_lesson_confirmation,
-            "lesson_active": self._handle_lesson_active
+            "lesson_reading": self._handle_lesson_reading
         }
         self.current_state = "greeting"
         self.current_subject = None
-        self.selected_lesson_id = None
-        self.selected_lesson_data = None
+        self.selected_lesson = None
         self.lesson_started = False
+        self.lesson_content = []
+        self.current_paragraph = 0
         self.lessons_dir = Path("lessons")
-        self.knowledge_base = KnowledgeBase("general")  # Всегда инициализируем базу знаний
+        self.knowledge_base = None
         self.llm = LLMIntegration()
-        self.available_lessons = self._load_lessons()
-        self.current_lessons_list = []  # Текущий список уроков для выбора
+        self._load_lessons()
         
         # Локальные шаблоны для быстрого доступа
         self.local_patterns = {
-            "привет": ["Привет! Какой предмет хочешь изучить?", "Здравствуй! Давай начнем урок. Просто скажи название предмета."],
-            "как дела": ["Отлично! Готов помочь тебе с уроками. Какой предмет интересует?", "Прекрасно! Какой урок хочешь начать?"],
-            "спасибо": ["Пожалуйста! Всегда рад помочь!", "Не за что! Ты отлично справляешься!"],
-            "не понимаю": ["Ничего страшного! Давай разберем вместе.", "Это нормально! Объясню еще раз."],
-            "повтори": ["Конечно, повторяю.", "Давай еще раз."],
-            "скучно": ["Давай выберем интересный предмет! Что тебе нравится?", "Предлагаю сменим тему! Какой предмет хочешь?"],
-            "трудно": ["Не переживай! Вместе разберемся.", "Сложности - это нормально! Я помогу."],
-            "молодец": ["Спасибо! Стараюсь для вас", "Рад, что нравится!", "Вы тоже молодец!"],
-            "хорошо": ["Отлично! Продолжаем!", "Супер! Двигаемся дальше!"],
-            "не знаю": ["Ничего страшного! Сейчас разберемся.", "Это повод узнать новое!"],
-            "начать": ["Отлично! Какой предмет хочешь изучать?", "Давай начнем! Просто назови предмет."],
-            "урок": ["Какой урок хочешь начать?", "Отлично! Назови предмет для урока."],
-            "математика": "LESSON_SELECTED:математика",
-            "обществознание": "LESSON_SELECTED:обществознание",
-            "русский": "LESSON_SELECTED:русский",
-            "физика": "LESSON_SELECTED:физика",
-            "химия": "LESSON_SELECTED:химия",
-            "биология": "LESSON_SELECTED:биология",
-            "история": "LESSON_SELECTED:история",
-            "английский": "LESSON_SELECTED:английский",
-            "информатика": "LESSON_SELECTED:информатика",
-            "готов": "LESSON_START_SIGNAL",
-            "да": "LESSON_START_SIGNAL",
-            "поехали": "LESSON_START_SIGNAL",
-            "начинаем": "LESSON_START_SIGNAL"
+            "привет": ["Привет. Рад вас видеть.", "Здравствуйте. Готовы к уроку?"],
+            "как дела": ["Все хорошо. Продолжим урок.", "Нормально. Как ваши успехи?"],
+            "спасибо": ["Пожалуйста.", "Всегда рад помочь."],
+            "не понимаю": ["Давайте разберем еще раз.", "Объясню по-другому."],
+            "повтори": ["Повторяю.", "Скажу еще раз."],
+            "скучно": ["Давайте сменим активность.", "Предложу другой подход."],
+            "трудно": ["Разберемся вместе.", "Сложности это нормально. Я помогу."],
+            "молодец": ["Спасибо.", "Рад, что нравится."],
+            "хорошо": ["Продолжаем.", "Двигаемся дальше."],
+            "не знаю": ["Сейчас разберемся.", "Это повод узнать новое."],
+            "записал": ["Хорошо, продолжаем.", "Отлично, идем дальше."],
+            "дальше": ["Переходим к следующей части.", "Продолжаем урок."],
+            "стоп": ["Останавливаю урок.", "Прерываю чтение."]
         }
 
-    def _load_lessons(self) -> Dict[str, List[Dict]]:
-        """Загружает все доступные уроки"""
-        lessons_by_subject = {}
+    def _load_lessons(self):
+        """Загружает список доступных уроков"""
+        self.lessons = {}
         try:
             if not self.lessons_dir.exists():
                 self.lessons_dir.mkdir(parents=True)
-                print("Папка lessons создана")
-                return lessons_by_subject
+                return
                 
-            for lesson_file in self.lessons_dir.glob("*.json"):
+            # Загрузка текстовых файлов уроков
+            for lesson_file in self.lessons_dir.glob("*.txt"):
                 try:
-                    with open(lesson_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        subject = data.get('subject', 'other').lower()
-                        lesson_id = data.get('id', 'unknown')
-                        
-                        if subject not in lessons_by_subject:
-                            lessons_by_subject[subject] = []
-                            
-                        lessons_by_subject[subject].append({
-                            'id': lesson_id,
-                            'title': data.get('title', 'Без названия'),
-                            'description': data.get('description', ''),
-                            'lecture_texts': data.get('lecture_texts', []),
-                            'file_path': str(lesson_file),
-                            'difficulty': data.get('difficulty', 'medium'),
-                            'duration': data.get('duration', 1800)
-                        })
-                        
-                        print(f"Загружен урок: {subject}/{lesson_id}")
-                        
+                    subject = "обществознание"  # По умолчанию
+                    if "math" in lesson_file.stem:
+                        subject = "математика"
+                    elif "history" in lesson_file.stem:
+                        subject = "история"
+                    
+                    if subject not in self.lessons:
+                        self.lessons[subject] = []
+                    
+                    self.lessons[subject].append({
+                        'id': lesson_file.stem,
+                        'title': lesson_file.stem.replace('_', ' ').title(),
+                        'description': f"Текстовый урок по {subject}",
+                        'file_path': lesson_file,
+                        'type': 'text'
+                    })
                 except Exception as e:
                     print(f"Ошибка загрузки урока {lesson_file}: {e}")
                     
         except Exception as e:
             print(f"Ошибка доступа к папке уроков: {e}")
-            
-        print(f"Загружено уроков: {sum(len(lessons) for lessons in lessons_by_subject.values())}")
-        return lessons_by_subject
 
-    def _load_lesson_data(self, subject: str, lesson_id: str) -> Optional[Dict]:
-        """Загружает данные конкретного урока"""
+    def _load_lesson_content(self, lesson_file: Path) -> List[str]:
+        """Загружает содержание урока из текстового файла"""
         try:
-            # Пробуем найти файл
-            for lesson_file in self.lessons_dir.glob("*.json"):
-                try:
-                    with open(lesson_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        if (data.get('subject', '').lower() == subject.lower() and 
-                            data.get('id', '') == lesson_id):
-                            return data
-                except:
-                    continue
-                    
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # Разбиваем на абзацы по точкам, но сохраняем структуру
+                paragraphs = re.split(r'(?<=[.!?])\s+', content)
+                return [p.strip() for p in paragraphs if p.strip()]
         except Exception as e:
-            print(f"Ошибка загрузки урока {lesson_id}: {e}")
-            
-        return None
+            print(f"Ошибка загрузки содержания урока: {e}")
+            return ["Содержание урока временно недоступно."]
 
     def _similarity(self, a: str, b: str) -> float:
         """Вычисление схожести строк"""
@@ -122,41 +97,21 @@ class DialogueManager:
 
     def process_input(self, text: str) -> str:
         """Обработка входящего текста и генерация ответа"""
+        if self.lesson_started and self.current_state != "lesson_reading":
+            return None
+            
         text_lower = text.lower().strip()
-        
-        # Если урок уже начат, обрабатываем как вопрос во время урока
-        if self.lesson_started:
-            print("Урок уже начат, обрабатываем как вопрос")
-            return self.handle_question_during_lesson(text)
         
         # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
-                # Если это сигнал начала урока
-                if responses == "LESSON_START_SIGNAL":
-                    if self.current_state == "lesson_confirmation" and self.selected_lesson_id:
-                        self.lesson_started = True
-                        self.current_state = "lesson_active"
-                        return "LESSON_START_SIGNAL"
-                    else:
-                        return "Сначала выбери предмет и урок."
-                
-                # Если это выбор предмета
-                if responses.startswith("LESSON_SELECTED:"):
-                    subject = responses.split(":")[1]
-                    self.current_subject = subject
-                    self.current_state = "lesson_selection"
-                    return self._get_lesson_selection_message()
-                
-                # Для остальных шаблонов
-                if isinstance(responses, list):
-                    return random.choice(responses)
-                return responses
+                return random.choice(responses)
         
-        # 2. Проверка диалоговых шаблонов из базы знаний
-        dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
-        if dialogue_response:
-            return dialogue_response
+        # 2. Проверка диалоговых шаблонов из базы знаний (если есть)
+        if self.knowledge_base:
+            dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
+            if dialogue_response:
+                return dialogue_response
         
         # 3. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -165,194 +120,183 @@ class DialogueManager:
             if response:
                 return response
         
-        # 4. Fallback - используем LLM для любых других запросов
-        print("Используем LLM для обработки запроса")
-        llm_response = self.llm.query(text, self.current_subject or "общее")
-        if llm_response:
-            return llm_response
+        # 4. Fallback с учетом состояния
+        fallbacks = {
+            "greeting": ["Давайте начнем урок. Скажите привет.", "Готовы начать занятие?"],
+            "subject_selection": ["Выберите предмет из списка.", "Какой предмет вас интересует?"],
+            "lesson_selection": ["Выберите урок из предложенных.", "Какой урок хотите пройти?"],
+            "lesson_confirmation": ["Скажите готов чтобы начать.", "Жду вашего подтверждения."],
+            "lesson_reading": ["Продолжаем урок.", "Слушайте внимательно."]
+        }
         
-        return "Не совсем понял. Можешь повторить или задать вопрос по-другому?"
+        return random.choice(fallbacks.get(self.current_state, ["Продолжим наш урок."]))
 
     def _handle_greeting(self, text: str) -> Optional[str]:
         greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали"]
-        
-        # Проверяем предметы
-        for subject in self.available_lessons.keys():
-            if subject in text.lower():
-                self.current_subject = subject
-                self.current_state = "lesson_selection"
-                return self._get_lesson_selection_message()
-                
-        if "урок" in text:
-            self.current_state = "subject_selection"
-            return "Отлично! Какой предмет хочешь изучать?"
-            
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
-            return "Привет! Просто скажи название предмета, например 'математика' или 'обществознание'"
+            subjects = list(self.lessons.keys())
             
+            if not subjects:
+                return "Уроки еще не загружены. Попробуйте позже."
+                
+            subject_list = "\n".join(f"{i+1}) {subj.capitalize()}" for i, subj in enumerate(subjects))
+            return f"Здравствуйте. Выберите предмет:\n{subject_list}"
         return None
 
     def _handle_subject_selection(self, text: str) -> Optional[str]:
-        # Проверяем предметы
-        for subject in self.available_lessons.keys():
-            if subject in text.lower():
+        subjects = list(self.lessons.keys())
+        
+        # Поиск по номеру
+        for i, subject in enumerate(subjects):
+            if str(i+1) in text:
+                self.current_subject = subject
+                self.current_state = "lesson_selection"
+                return self._get_lesson_selection_message()
+        
+        # Поиск по названию
+        for subject in subjects:
+            if subject.lower() in text.lower():
                 self.current_subject = subject
                 self.current_state = "lesson_selection"
                 return self._get_lesson_selection_message()
                 
+        # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
             self.current_state = "greeting"
-            return "Хорошо, давай начнем сначала!"
+            return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
         return None
 
     def _get_lesson_selection_message(self) -> str:
         """Формирует сообщение для выбора урока"""
-        if not self.current_subject or self.current_subject not in self.available_lessons:
-            self.current_state = "subject_selection"
-            return "Сначала выбери предмет."
-            
-        lessons = self.available_lessons[self.current_subject]
-        self.current_lessons_list = lessons  # Сохраняем текущий список уроков
+        lessons = self.lessons[self.current_subject]
+        lesson_list = "\n".join(f"{i+1}) {lesson['title']}" for i, lesson in enumerate(lessons))
         
-        if not lessons:
-            self.current_state = "subject_selection"
-            return f"Для предмета '{self.current_subject}' нет доступных уроков. Выбери другой предмет."
-        
-        # Если есть только один урок, сразу его выбираем
-        if len(lessons) == 1:
-            self.selected_lesson_id = lessons[0]['id']
-            self.current_state = "lesson_confirmation"
-            return f"Отлично! Начинаем урок '{lessons[0]['title']}'. Скажи 'готов' чтобы начать!"
-        
-        # Если несколько уроков, предлагаем выбор
-        lesson_list = "\n".join(
-            f"{i+1}) {lesson['title']} - {lesson.get('description', '')}"
-            for i, lesson in enumerate(lessons[:5])  # Ограничиваем до 5 уроков
-        )
-        
-        return f"Отлично! Выбрал {self.current_subject}!\nТеперь выбери урок:\n{lesson_list}\nПросто скажи номер урока или его название."
+        return f"Выбран предмет: {self.current_subject.capitalize()}.\nВыберите урок:\n{lesson_list}"
 
     def _handle_lesson_selection(self, text: str) -> Optional[str]:
-        if not self.current_subject or not self.current_lessons_list:
+        if not self.current_subject:
             self.current_state = "subject_selection"
-            return "Давай сначала выберем предмет."
+            return "Сначала выберите предмет."
             
-        lessons = self.current_lessons_list
+        lessons = self.lessons[self.current_subject]
         
-        # Поиск по номеру (1, 2, 3...)
+        # Поиск по номеру
         for i, lesson in enumerate(lessons):
             if str(i+1) in text:
-                self.selected_lesson_id = lesson['id']
+                self.selected_lesson = lesson
                 self.current_state = "lesson_confirmation"
-                return f"Отлично! Ты выбрал: '{lesson['title']}'. Скажи 'готов' чтобы начать урок!"
+                return self._get_lesson_confirmation_message(lesson)
         
-        # Поиск по названию (частичное совпадение)
+        # Поиск по названию
         for lesson in lessons:
-            lesson_title_lower = lesson['title'].lower()
-            text_lower = text.lower()
-            
-            # Проверяем частичное совпадение названия
-            if (lesson_title_lower in text_lower or 
-                any(word in text_lower for word in lesson_title_lower.split())):
-                self.selected_lesson_id = lesson['id']
+            if lesson['title'].lower() in text.lower():
+                self.selected_lesson = lesson
                 self.current_state = "lesson_confirmation"
-                return f"Отлично! Ты выбрал: '{lesson['title']}'. Скажи 'готов' чтобы начать урок!"
+                return self._get_lesson_confirmation_message(lesson)
                 
         # Возврат к выбору предмета
         if any(word in text for word in ["назад", "вернуться", "другой предмет"]):
             self.current_state = "subject_selection"
             self.current_subject = None
-            return "Хорошо, давай выберем другой предмет!"
-            
-        return f"Не понял, какой урок ты выбрал. Попробуй сказать номер (1, 2, 3) или название урока."
-
-    def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
-        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "да"]
-        
-        if any(word in text for word in ready_words):
-            if self.selected_lesson_id and self.current_subject:
-                # Загружаем данные урока
-                self.selected_lesson_data = self._load_lesson_data(self.current_subject, self.selected_lesson_id)
-                
-                if self.selected_lesson_data:
-                    self.lesson_started = True
-                    self.current_state = "lesson_active"
-                    
-                    # Инициализируем базу знаний для конкретного предмета
-                    try:
-                        self.knowledge_base = KnowledgeBase(self.current_subject)
-                        print(f"База знаний инициализирована для предмета: {self.current_subject}")
-                    except Exception as e:
-                        print(f"Ошибка инициализации базы знаний: {e}")
-                        # Оставляем общую базу знаний
-                    
-                    return "LESSON_START_SIGNAL"
-                else:
-                    return "Не удалось загрузить урок. Попробуй другой."
-            else:
-                return "Сначала выбери урок."
-                
-        # Возврат к выбору урока
-        if any(word in text for word in ["назад", "вернуться", "другой урок", "нет"]):
-            self.current_state = "lesson_selection"
-            self.selected_lesson_id = None
-            return "Хорошо, давай выберем другой урок!"
+            return "Хорошо, выберем другой предмет."
             
         return None
 
-    def _handle_lesson_active(self, text: str) -> Optional[str]:
-        """Обработка ввода во время активного урока"""
-        return self.handle_question_during_lesson(text)
+    def _get_lesson_confirmation_message(self, lesson: dict) -> str:
+        """Формирует сообщение подтверждения выбора урока"""
+        return f"Выбран урок: {lesson['title']}.\nСкажите готов чтобы начать чтение урока."
+
+    def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
+        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали"]
+        if any(word in text for word in ready_words) and self.selected_lesson:
+            self.lesson_started = True
+            self.current_state = "lesson_reading"
+            self.current_paragraph = 0
+            
+            # Загружаем содержание урока
+            self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+            
+            # Инициализируем базу знаний для выбранного предмета
+            self.knowledge_base = KnowledgeBase(self.current_subject)
+            
+            if self.lesson_content:
+                return "Начинаем чтение урока. Скажите записал когда будете готовы продолжить."
+            else:
+                return "Ошибка загрузки урока. Попробуйте выбрать другой урок."
+                
+        # Возврат к выбору урока
+        if any(word in text for word in ["назад", "вернуться", "другой урок"]):
+            self.current_state = "lesson_selection"
+            self.selected_lesson = None
+            return "Хорошо, выберем другой урок."
+            
+        return None
+
+    def _handle_lesson_reading(self, text: str) -> Optional[str]:
+        """Обработка во время чтения урока"""
+        if "записал" in text.lower() or "дальше" in text.lower():
+            return self._get_next_paragraph()
+            
+        if "стоп" in text.lower() or "останови" in text.lower():
+            self.lesson_started = False
+            self.current_state = "greeting"
+            return "Урок остановлен. Скажите привет чтобы начать заново."
+            
+        # Если это не команда управления чтением, обрабатываем как вопрос
+        return None
+
+    def _get_next_paragraph(self) -> Optional[str]:
+        """Возвращает следующий абзац урока"""
+        if self.current_paragraph < len(self.lesson_content):
+            paragraph = self.lesson_content[self.current_paragraph]
+            self.current_paragraph += 1
+            return paragraph
+        else:
+            self.lesson_started = False
+            self.current_state = "greeting"
+            return "Урок завершен. Скажите привет чтобы начать новый урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока"""
         if not question.strip():
-            return "Повтори, пожалуйста, вопрос. Я не расслышал."
+            return "Повторите вопрос пожалуйста."
             
         question_lower = question.lower().strip()
-        print(f"Обработка вопроса: '{question_lower}'")
         
-        # Команды управления уроком
-        control_commands = {
-            "пауза": "Ставлю на паузу.",
-            "продолжи": "Продолжаем!",
-            "дальше": "Переходим дальше.",
-            "стоп": "Останавливаю урок.",
-            "повтори": "Повторяю."
-        }
-        
-        for cmd, response in control_commands.items():
-            if cmd in question_lower:
-                return response
-        
-        # Локальные шаблоны
+        # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in question_lower:
-                if isinstance(responses, list):
-                    return random.choice(responses)
-                return responses
+                return random.choice(responses)
         
-        # Всегда сначала ищем в базе знаний
-        answer = self.knowledge_base.find_answer(question)
-        if answer:
-            print(f"Ответ найден в базе знаний: {answer}")
-            return answer
+        # 2. Проверка диалоговых шаблонов из базы знаний
+        if self.knowledge_base:
+            dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
+            if dialogue_response:
+                return dialogue_response
         
-        # Если не нашли в базе знаний, используем LLM
-        print("Используем LLM для ответа на вопрос")
-        llm_response = self.llm.query(question, self.current_subject or "общее")
+        # 3. Поиск в предметной базе знаний
+        if self.knowledge_base:
+            answer = self.knowledge_base.find_answer(question)
+            if answer:
+                return answer
+        
+        # 4. Запрос к LLM
+        llm_response = self.llm.query(question, self.current_subject)
         if llm_response:
-            # Сохраняем в базу знаний для будущего использования
-            self.knowledge_base.add_knowledge(question=question, answer=llm_response)
+            # Сохраняем в кэш и базу знаний
+            self.llm.add_to_cache(question, llm_response, self.current_subject)
+            if self.knowledge_base:
+                self.knowledge_base.add_knowledge(question=question, answer=llm_response)
             return llm_response
         
-        return "Интересный вопрос! Давайте обсудим его подробнее."
+        # 5. Финальный fallback
+        return "Интересный вопрос. Давайте обсудим его после завершения текущего материала."
 
     def get_selected_lesson(self) -> Optional[dict]:
         """Возвращает данные выбранного урока"""
-        return self.selected_lesson_data
+        return self.selected_lesson
 
     def is_lesson_started(self) -> bool:
         """Проверяет, начат ли урок"""
@@ -366,28 +310,20 @@ class DialogueManager:
         """Возвращает текущее состояние диалога"""
         return self.current_state
 
-    def get_lecture_texts(self) -> List[str]:
-        """Возвращает тексты лекции"""
-        if self.selected_lesson_data:
-            return self.selected_lesson_data.get('lecture_texts', [])
-        return []
-
-    def get_available_lessons(self, subject: str = None) -> List[Dict]:
-        """Возвращает список доступных уроков"""
-        if subject:
-            return self.available_lessons.get(subject, [])
-        else:
-            all_lessons = []
-            for lessons in self.available_lessons.values():
-                all_lessons.extend(lessons)
-            return all_lessons
-
     def reset(self):
         """Сброс состояния диалога"""
         self.current_state = "greeting"
         self.current_subject = None
-        self.selected_lesson_id = None
-        self.selected_lesson_data = None
+        self.selected_lesson = None
         self.lesson_started = False
-        self.current_lessons_list = []
-        # База знаний остается активной всегда
+        self.lesson_content = []
+        self.current_paragraph = 0
+        self.knowledge_base = None
+
+    def get_available_subjects(self) -> List[str]:
+        """Возвращает список доступных предметов"""
+        return list(self.lessons.keys())
+
+    def get_lessons_for_subject(self, subject: str) -> List[dict]:
+        """Возвращает уроки для указанного предмета"""
+        return self.lessons.get(subject, [])
