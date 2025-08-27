@@ -27,23 +27,30 @@ class DialogueManager:
         self.lessons_dir = Path("lessons")
         self.knowledge_base = None
         self.llm = LLMIntegration()
+        self.conversation_counter = 0
         self._load_lessons()
         
-        # Локальные шаблоны для быстрого доступа
+        # Расширенные локальные шаблоны для более естественного общения
         self.local_patterns = {
-            "привет": ["Привет. Рад вас видеть.", "Здравствуйте. Готовы к уроку?"],
-            "как дела": ["Все хорошо. Продолжим урок.", "Нормально. Как ваши успехи?"],
-            "спасибо": ["Пожалуйста.", "Всегда рад помочь."],
-            "не понимаю": ["Давайте разберем еще раз.", "Объясню по-другому."],
-            "повтори": ["Повторяю.", "Скажу еще раз."],
-            "скучно": ["Давайте сменим активность.", "Предложу другой подход."],
-            "трудно": ["Разберемся вместе.", "Сложности это нормально. Я помогу."],
-            "молодец": ["Спасибо.", "Рад, что нравится."],
-            "хорошо": ["Продолжаем.", "Двигаемся дальше."],
-            "не знаю": ["Сейчас разберемся.", "Это повод узнать новое."],
-            "записал": ["Хорошо, продолжаем.", "Отлично, идем дальше."],
-            "дальше": ["Переходим к следующей части.", "Продолжаем урок."],
-            "стоп": ["Останавливаю урок.", "Прерываю чтение."]
+            "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
+            "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
+            "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
+            "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
+            "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
+            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
+            "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
+            "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
+            "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
+            "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
+            "записал": ["Супер! Записали - значит запомнили. Продолжаем!", "Отлично! Идем дальше."],
+            "дальше": ["Переходим к следующей интересной части.", "Продолжаем наш увлекательный урок."],
+            "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
+            "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
+                      "AI-учитель, который сделает ваше обучение интересным и эффективным."],
+            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
+                          "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
+            "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
+                               "Моя задача - помочь вам учиться с удовольствием и пониманием."]
         }
 
     def _load_lessons(self):
@@ -52,16 +59,17 @@ class DialogueManager:
         try:
             if not self.lessons_dir.exists():
                 self.lessons_dir.mkdir(parents=True)
+                # Создаем демо-урок по обществознанию, если его нет
+                demo_lesson = self.lessons_dir / "social_general.txt"
+                if not demo_lesson.exists():
+                    with open(demo_lesson, 'w', encoding='utf-8') as f:
+                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.")
                 return
                 
             # Загрузка текстовых файлов уроков
             for lesson_file in self.lessons_dir.glob("*.txt"):
                 try:
-                    subject = "обществознание"  # По умолчанию
-                    if "math" in lesson_file.stem:
-                        subject = "математика"
-                    elif "history" in lesson_file.stem:
-                        subject = "история"
+                    subject = self._detect_subject(lesson_file.stem)
                     
                     if subject not in self.lessons:
                         self.lessons[subject] = []
@@ -69,15 +77,38 @@ class DialogueManager:
                     self.lessons[subject].append({
                         'id': lesson_file.stem,
                         'title': lesson_file.stem.replace('_', ' ').title(),
-                        'description': f"Текстовый урок по {subject}",
+                        'description': f"Интересный урок по {subject}",
                         'file_path': lesson_file,
-                        'type': 'text'
+                        'type': 'text',
+                        'is_demo': 'demo' in lesson_file.stem.lower() or 'general' in lesson_file.stem.lower()
                     })
                 except Exception as e:
                     print(f"Ошибка загрузки урока {lesson_file}: {e}")
                     
         except Exception as e:
             print(f"Ошибка доступа к папке уроков: {e}")
+
+    def _detect_subject(self, filename: str) -> str:
+        """Определяет предмет по названию файла"""
+        filename_lower = filename.lower()
+        if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
+            return "математика"
+        elif any(word in filename_lower for word in ['history', 'история', 'истор']):
+            return "история"
+        elif any(word in filename_lower for word in ['physics', 'физика', 'физ']):
+            return "физика"
+        elif any(word in filename_lower for word in ['chemistry', 'химия', 'хим']):
+            return "химия"
+        elif any(word in filename_lower for word in ['social', 'обществознание', 'общество']):
+            return "обществознание"
+        elif any(word in filename_lower for word in ['biology', 'биология', 'био']):
+            return "биология"
+        elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
+            return "литература"
+        elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
+            return "русский язык"
+        else:
+            return "общее"
 
     def _load_lesson_content(self, lesson_file: Path) -> List[str]:
         """Загружает содержание урока из текстового файла"""
@@ -89,7 +120,7 @@ class DialogueManager:
                 return [p.strip() for p in paragraphs if p.strip()]
         except Exception as e:
             print(f"Ошибка загрузки содержания урока: {e}")
-            return ["Содержание урока временно недоступно."]
+            return ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
 
     def _similarity(self, a: str, b: str) -> float:
         """Вычисление схожести строк"""
@@ -101,6 +132,7 @@ class DialogueManager:
             return None
             
         text_lower = text.lower().strip()
+        self.conversation_counter += 1
         
         # 1. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
@@ -113,48 +145,96 @@ class DialogueManager:
             if dialogue_response:
                 return dialogue_response
         
-        # 3. Обработка по текущему состоянию
+        # 3. Если пользователь называет предмет - автоматически выбираем демо-урок
+        available_subjects = self.get_available_subjects()
+        for subject in available_subjects:
+            if subject.lower() in text_lower:
+                self.current_subject = subject
+                # Автоматически выбираем первый доступный урок (демо-урок если есть)
+                lessons = self.lessons[subject]
+                demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+                
+                if demo_lessons:
+                    self.selected_lesson = demo_lessons[0]
+                elif lessons:
+                    self.selected_lesson = lessons[0]
+                else:
+                    return f"К сожалению, у меня пока нет уроков по {subject}. Давайте выберем другой предмет?"
+                
+                self.lesson_started = True
+                self.current_state = "lesson_reading"
+                self.current_paragraph = 0
+                self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+                self.knowledge_base = KnowledgeBase(self.current_subject)
+                
+                if self.lesson_content:
+                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока. Скажите 'записал', когда будете готовы продолжить."
+                else:
+                    return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
+        
+        # 4. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
         if handler:
             response = handler(text_lower)
             if response:
                 return response
         
-        # 4. Fallback с учетом состояния
+        # 5. Fallback с учетом состояния и счетчика разговора
         fallbacks = {
-            "greeting": ["Давайте начнем урок. Скажите привет.", "Готовы начать занятие?"],
-            "subject_selection": ["Выберите предмет из списка.", "Какой предмет вас интересует?"],
-            "lesson_selection": ["Выберите урок из предложенных.", "Какой урок хотите пройти?"],
-            "lesson_confirmation": ["Скажите готов чтобы начать.", "Жду вашего подтверждения."],
-            "lesson_reading": ["Продолжаем урок.", "Слушайте внимательно."]
+            "greeting": [
+                "Привет! Давайте познакомимся. Какой предмет вас интересует?",
+                "Здравствуйте! Я готов помочь с обучением. О чем хотите узнать?",
+                "Рад вас видеть! Давайте выберем интересную тему для урока."
+            ],
+            "subject_selection": [
+                "У меня есть уроки по разным предметам. Что вас интересует?",
+                "Могу предложить: обществознание, математика, история. Что выбираете?",
+                "Какой предмет хотите изучить? Выбирайте - я найду подходящий урок!"
+            ],
+            "lesson_selection": [
+                "Выберите урок из предложенных или скажите 'демо' для быстрого старта.",
+                "Какой урок вас заинтересовал? Или просто скажите название предмета.",
+                "Все уроки интересные! Выбирайте любой или назовите предмет."
+            ],
+            "lesson_confirmation": [
+                "Готовы начать? Скажите 'готов' или 'поехали'!",
+                "Жду вашего подтверждения чтобы начать урок.",
+                "Все готово к старту! Скажите когда начинать."
+            ],
+            "lesson_reading": [
+                "Продолжаем наш увлекательный урок.",
+                "Слушайте внимательно, это интересно!",
+                "Продолжаем изучение материала."
+            ]
         }
         
-        return random.choice(fallbacks.get(self.current_state, ["Продолжим наш урок."]))
+        # Добавляем вариативность в ответы
+        fallback_responses = fallbacks.get(self.current_state, ["Продолжим наш урок."])
+        response = random.choice(fallback_responses)
+        
+        # После 3-х реплик без прогресса - мягко направляем к выбору предмета
+        if self.conversation_counter >= 3 and self.current_state == "greeting":
+            response += " Кстати, какой предмет вас интересует?"
+            
+        return response
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали"]
+        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
-            subjects = list(self.lessons.keys())
+            subjects = self.get_available_subjects()
             
             if not subjects:
-                return "Уроки еще не загружены. Попробуйте позже."
+                return "К сожалению, уроки еще не загружены. Попробуйте позже."
                 
-            subject_list = "\n".join(f"{i+1}) {subj.capitalize()}" for i, subj in enumerate(subjects))
-            return f"Здравствуйте. Выберите предмет:\n{subject_list}"
+            subject_list = ", ".join([subj.capitalize() for subj in subjects])
+            return f"Отлично! Давайте выберем предмет для урока. У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета!"
         return None
 
     def _handle_subject_selection(self, text: str) -> Optional[str]:
-        subjects = list(self.lessons.keys())
+        subjects = self.get_available_subjects()
         
-        # Поиск по номеру
-        for i, subject in enumerate(subjects):
-            if str(i+1) in text:
-                self.current_subject = subject
-                self.current_state = "lesson_selection"
-                return self._get_lesson_selection_message()
-        
-        # Поиск по названию
+        # Поиск по названию предмета
         for subject in subjects:
             if subject.lower() in text.lower():
                 self.current_subject = subject
@@ -166,21 +246,46 @@ class DialogueManager:
             self.current_state = "greeting"
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
+        # Если пользователь просто говорит "да" или соглашается
+        if any(word in text for word in ["да", "ага", "угу", "ладно", "хорошо"]):
+            return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
+            
         return None
 
     def _get_lesson_selection_message(self) -> str:
         """Формирует сообщение для выбора урока"""
         lessons = self.lessons[self.current_subject]
-        lesson_list = "\n".join(f"{i+1}) {lesson['title']}" for i, lesson in enumerate(lessons))
         
-        return f"Выбран предмет: {self.current_subject.capitalize()}.\nВыберите урок:\n{lesson_list}"
+        # Если есть демо-урок, предлагаем его сразу
+        demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+        if demo_lessons:
+            self.selected_lesson = demo_lessons[0]
+            self.current_state = "lesson_confirmation"
+            return self._get_lesson_confirmation_message(self.selected_lesson)
+        
+        lesson_list = "\n".join(f"{i+1}) {lesson['title']}" for i, lesson in enumerate(lessons[:3]))  # Показываем только первые 3
+        
+        return f"Выбран предмет: {self.current_subject.capitalize()}.\nВыберите урок:\n{lesson_list}\nИли скажите 'демо' для быстрого старта!"
 
     def _handle_lesson_selection(self, text: str) -> Optional[str]:
         if not self.current_subject:
             self.current_state = "subject_selection"
-            return "Сначала выберите предмет."
+            return "Сначала выберите предмет пожалуйста."
             
         lessons = self.lessons[self.current_subject]
+        
+        # Если пользователь говорит "демо" - выбираем демо-урок или первый доступный
+        if "демо" in text.lower() or "любой" in text.lower() or "первый" in text.lower():
+            demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+            if demo_lessons:
+                self.selected_lesson = demo_lessons[0]
+            elif lessons:
+                self.selected_lesson = lessons[0]
+            else:
+                return "К сожалению, уроки по этому предмету временно недоступны."
+                
+            self.current_state = "lesson_confirmation"
+            return self._get_lesson_confirmation_message(self.selected_lesson)
         
         # Поиск по номеру
         for i, lesson in enumerate(lessons):
@@ -200,16 +305,16 @@ class DialogueManager:
         if any(word in text for word in ["назад", "вернуться", "другой предмет"]):
             self.current_state = "subject_selection"
             self.current_subject = None
-            return "Хорошо, выберем другой предмет."
+            return "Хорошо, давайте выберем другой предмет. Что вас интересует?"
             
         return None
 
     def _get_lesson_confirmation_message(self, lesson: dict) -> str:
         """Формирует сообщение подтверждения выбора урока"""
-        return f"Выбран урок: {lesson['title']}.\nСкажите готов чтобы начать чтение урока."
+        return f"Отлично! Выбран урок: '{lesson['title']}'.\nСкажите 'готов' чтобы начать увлекательное занятие!"
 
     def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
-        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали"]
+        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "вперед"]
         if any(word in text for word in ready_words) and self.selected_lesson:
             self.lesson_started = True
             self.current_state = "lesson_reading"
@@ -222,27 +327,28 @@ class DialogueManager:
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
             if self.lesson_content:
-                return "Начинаем чтение урока. Скажите записал когда будете готовы продолжить."
+                return "Прекрасно! Начинаем чтение урока. Слушайте внимательно! Скажите 'записал' когда будете готовы продолжить."
             else:
-                return "Ошибка загрузки урока. Попробуйте выбрать другой урок."
+                return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
                 
         # Возврат к выбору урока
         if any(word in text for word in ["назад", "вернуться", "другой урок"]):
             self.current_state = "lesson_selection"
             self.selected_lesson = None
-            return "Хорошо, выберем другой урок."
+            return "Хорошо, выберем другой урок. Какой вас заинтересует?"
             
         return None
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
-        if "записал" in text.lower() or "дальше" in text.lower():
+        if "записал" in text.lower() or "дальше" in text.lower() or "продолжай" in text.lower():
             return self._get_next_paragraph()
             
-        if "стоп" in text.lower() or "останови" in text.lower():
+        if "стоп" in text.lower() or "останови" in text.lower() or "хватит" in text.lower():
             self.lesson_started = False
             self.current_state = "greeting"
-            return "Урок остановлен. Скажите привет чтобы начать заново."
+            self.conversation_counter = 0
+            return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
             
         # Если это не команда управления чтением, обрабатываем как вопрос
         return None
@@ -256,12 +362,13 @@ class DialogueManager:
         else:
             self.lesson_started = False
             self.current_state = "greeting"
-            return "Урок завершен. Скажите привет чтобы начать новый урок."
+            self.conversation_counter = 0
+            return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока"""
         if not question.strip():
-            return "Повторите вопрос пожалуйста."
+            return "Повторите вопрос пожалуйста, я не расслышал."
             
         question_lower = question.lower().strip()
         
@@ -292,7 +399,7 @@ class DialogueManager:
             return llm_response
         
         # 5. Финальный fallback
-        return "Интересный вопрос. Давайте обсудим его после завершения текущего материала."
+        return "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
 
     def get_selected_lesson(self) -> Optional[dict]:
         """Возвращает данные выбранного урока"""
@@ -319,10 +426,15 @@ class DialogueManager:
         self.lesson_content = []
         self.current_paragraph = 0
         self.knowledge_base = None
+        self.conversation_counter = 0
 
     def get_available_subjects(self) -> List[str]:
         """Возвращает список доступных предметов"""
-        return list(self.lessons.keys())
+        subjects = list(self.lessons.keys())
+        # Всегда добавляем обществознание, даже если нет уроков
+        if "обществознание" not in subjects:
+            subjects.append("обществознание")
+        return subjects
 
     def get_lessons_for_subject(self, subject: str) -> List[dict]:
         """Возвращает уроки для указанного предмета"""
