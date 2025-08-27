@@ -149,18 +149,24 @@ class DialogueManager:
         text_lower = text.lower().strip()
         self.conversation_counter += 1
         
-        # 1. Быстрая проверка локальных шаблонов
+        # 1. Если есть база знаний по предмету, сначала проверяем там
+        if self.knowledge_base:
+            knowledge_response = self.knowledge_base.get_dialogue_response(text_lower)
+            if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
+                return knowledge_response
+        
+        # 2. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
         
-        # 2. Проверка диалоговых шаблонов из базы знаний (если есть)
+        # 3. Проверка диалоговых шаблонов из базы знаний (если есть)
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
             if dialogue_response:
                 return dialogue_response
         
-        # 3. Если пользователь называет предмет - автоматически выбираем демо-урок
+        # 4. Если пользователь называет предмет - автоматически выбираем демо-урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower:
@@ -193,14 +199,14 @@ class DialogueManager:
                 else:
                     return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
         
-        # 4. Обработка по текущему состоянию
+        # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
         if handler:
             response = handler(text_lower)
             if response:
                 return response
         
-        # 5. Fallback с учетом состояния и счетчика разговора
+        # 6. Fallback с учетом состояния и счетчика разговора
         fallbacks = {
             "greeting": [
                 "Привет! Давайте познакомимся. Какой предмет вас интересует?",
@@ -404,24 +410,30 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         
-        # 1. Быстрая проверка локальных шаблонов
+        # 1. Сначала проверяем базу знаний по предмету
+        if self.knowledge_base:
+            knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
+            if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
+                return knowledge_response
+        
+        # 2. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in question_lower:
                 return random.choice(responses)
         
-        # 2. Проверка диалоговых шаблонов из базы знаний
+        # 3. Проверка диалоговых шаблонов из базы знаний
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
             if dialogue_response:
                 return dialogue_response
         
-        # 3. Поиск в предметной базе знаний (особенно для вопросов "что такое")
+        # 4. Поиск в предметной базе знаний
         if self.knowledge_base:
             answer = self.knowledge_base.find_answer(question)
-            if answer and answer != "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться.":
+            if answer and not answer.startswith("Интересный вопрос!"):
                 return answer
         
-        # 4. Запрос к LLM
+        # 5. Запрос к LLM
         llm_response = self.llm.query(question, self.current_subject)
         if llm_response:
             # Сохраняем в кэш и базу знаний
@@ -430,7 +442,7 @@ class DialogueManager:
                 self.knowledge_base.add_knowledge(question=question, answer=llm_response)
             return llm_response
         
-        # 5. Финальный fallback
+        # 6. Финальный fallback
         return "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
 
     def get_selected_lesson(self) -> Optional[dict]:
