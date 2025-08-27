@@ -71,64 +71,34 @@ class KnowledgeBase:
                 self.knowledge_path.parent.mkdir(parents=True)
                 
             if self.knowledge_path.exists():
+                print(f"Загружаю базу знаний из: {self.knowledge_path}")
                 with open(self.knowledge_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    print(f"Успешно загружено {len(data.get('terms', {}))} терминов и {len(data.get('questions', {}))} вопросов по предмету {self.subject}")
+                    return data
         except Exception as e:
             print(f"Ошибка загрузки базы знаний {self.subject}: {e}")
         
-        # База по умолчанию
-        default_knowledge = {
+        # Если файл не найден или ошибка, возвращаем пустую базу
+        print(f"База знаний для предмета '{self.subject}' не найдена. Создаю пустую базу.")
+        return {
             "terms": {},
             "questions": {},
             "examples": {},
             "metadata": {
                 "subject": self.subject,
                 "version": "1.0",
-                "last_updated": "2024-01-01"
+                "last_updated": "2024-01-01",
+                "note": "Автоматически созданная база"
             }
         }
-        
-        # Добавляем базовые знания для обществознания
-        if self.subject == "обществознание":
-            default_knowledge["terms"] = {
-                "общество": "Общество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями. Общество характеризуется целостностью, саморегуляцией, открытостью и способностью к развитию.",
-                "государство": "Государство - это политическая организация общества, обладающая суверенитетом, специальным аппаратом управления и принуждения, а также устанавливающая правовой порядок на определенной территории.",
-                "демократия": "Демократия - это форма правления, при которой народ является источником власти. Основные принципы демократии: выборность органов власти, разделение властей, верховенство права и защита прав человека.",
-                "экономика": "Экономика - это хозяйственная деятельность общества, а также совокупность отношений, складывающихся в системе производства, распределения, обмена и потребления товаров и услуг.",
-                "культура": "Культура - это совокупность достижений человечества в производственной, общественной и духовной жизни. Культура включает в себя знания, искусство, мораль, законы, обычаи и другие способности и привычки, приобретенные человеком как членом общества.",
-                "право": "Право - это система общеобязательных норм, установленных или санкционированных государством и охраняемых его принудительной силой. Право регулирует общественные отношения и обеспечивает порядок в обществе.",
-                "социализация": "Социализация - это процесс усвоения индивидом социальных норм, ценностей, знаний и навыков, необходимых для успешного функционирования в обществе. Социализация происходит throughout всей жизни человека.",
-                "личность": "Личность - это человек как носитель социальных качеств и сознательной деятельности. Личность формируется в процессе социализации и характеризуется уникальным сочетанием социально значимых черт.",
-                "мораль": "Мораль - это система норм и принципов, регулирующих поведение людей с позиций добра и зла, справедливости и несправедливости. Мораль основывается на общечеловеческих ценностях и традициях.",
-                "глобализация": "Глобализация - это процесс всемирной экономической, политической и культурной интеграции и унификации. Глобализация проявляется в расширении международной торговли, увеличении миграции населения и распространении информационных технологий."
-            }
-            default_knowledge["questions"] = {
-                "что такое общество": "Общество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями. Общество характеризуется целостностью, саморегуляцией, открытостью и способностью к развитию.",
-                "что такое государство": "Государство - это политическая организация общества, обладающая суверенитетом, специальным аппаратом управления и принуждения, а также устанавливающая правовой порядок на определенной территории.",
-                "что такое демократия": "Демократия - это форма правления, при которой народ является источником власти. Основные принципы демократии: выборность органов власти, разделение властей, верховенство права и защита прав человека.",
-                "что такое экономика": "Экономика - это хозяйственная деятельность общества, а также совокупность отношений, складывающихся в системе производства, распределения, обмена и потребления товаров и услуг.",
-                "что такое культура": "Культура - это совокупность достижений человечества в производственной, общественной и духовной жизни. Культура включает знания, искусство, мораль, законы, обычаи и другие способности человека.",
-                "что такое право": "Право - это система общеобязательных норм, установленных или санкционированных государством и охраняемых его принудительной силой. Право регулирует общественные отношения.",
-                "что такое социализация": "Социализация - это процесс усвоения индивидом социальных норм, ценностей, знаний и навыков, необходимых для успешного функционирования в обществе.",
-                "что такое личность": "Личность - это человек как носитель социальных качеств и сознательной деятельности. Личность формируется в процессе социализации.",
-                "что такое мораль": "Мораль - это система норм и принципов, регулирующих поведение людей с позиций добра и зла, справедливости и несправедливости.",
-                "что такое глобализация": "Глобализация - это процесс всемирной экономической, политической и культурной интеграции и унификации.",
-                "какие функции у государства": "Основные функции государства: защита территории и суверенитета, управление экономикой, социальная защита населения, поддержание правопорядка, осуществление правосудия и международное сотрудничество.",
-                "что изучает обществознание": "Обществознание изучает общество, социальные отношения, политику, экономику, право и духовную жизнь. Это комплексная наука, помогающая понять законы развития общества и место человека в нем.",
-                "зачем нужно обществознание": "Обществознание помогает понимать общественные процессы, права и обязанности гражданина, развивает критическое мышление и формирует активную гражданскую позицию. Знание обществознания необходимо для успешной социализации и участия в общественной жизни.",
-                "как устроено общество": "Общество состоит из социальных институтов: семьи, государства, экономики, образования, религии и культуры. Эти институты взаимосвязаны и выполняют определенные функции в обществе. Общество также делится на социальные группы, слои и классы.",
-                "какие бывают экономические системы": "Основные экономические системы: традиционная (основана на обычаях и традициях), командная (централизованное планирование), рыночная (спрос и предложение) и смешанная (сочетание рыночных механизмов и государственного регулирования).",
-                "что такое социальная стратификация": "Социальная стратификация - это расслоение общества на группы по различным критериям: доход, власть, образование и престиж. Основные формы стратификации: рабство, касты, сословия и классы.",
-                "как происходит социализация": "Социализация происходит через агентов социализации: семью, школу, СМИ, группу сверстников и другие социальные институты. Социализация включает два этапа: первичную (в детстве) и вторичную (в течение всей жизни)."
-            }
-        
-        return default_knowledge
 
     def _init_vectorizer(self):
         """Инициализация TF-IDF векторайзера"""
         texts = list(self.data["terms"].keys()) + list(self.data["questions"].keys())
         if texts:
             self.vectorizer.fit(texts)
+            print(f"Векторайзер инициализирован с {len(texts)} текстами для предмета {self.subject}")
         else:
             # Запасные данные для инициализации
             demo_texts = [
@@ -136,18 +106,10 @@ class KnowledgeBase:
                 "государство политическая организация", 
                 "экономика хозяйственная деятельность",
                 "право система норм",
-                "культура духовные ценности",
-                "образование процесс обучения",
-                "наука система знаний",
-                "математика наука о числах",
-                "физика наука о природе",
-                "химия наука о веществах",
-                "история наука о прошлом",
-                "литература искусство слова",
-                "биология наука о жизни",
-                "география наука о земле"
+                "культура духовные ценности"
             ]
             self.vectorizer.fit(demo_texts)
+            print(f"Векторайзер инициализирован с демо-данными для предмета {self.subject}")
 
     def get_dialogue_response(self, text: str) -> Optional[str]:
         """Получение ответа из диалоговых шаблонов"""
@@ -156,16 +118,27 @@ class KnowledgeBase:
             
         text_lower = text.lower().strip()
         
-        # Поиск по шаблонам
+        # Сначала проверяем, есть ли ответ в базе знаний предмета
+        knowledge_answer = self.find_answer(text_lower)
+        if knowledge_answer and not knowledge_answer.startswith("Интересный вопрос!"):
+            print(f"Найден ответ в базе знаний: {knowledge_answer[:100]}...")
+            return knowledge_answer
+        
+        # Затем проверяем диалоговые шаблоны
         for pattern, responses in self.dialogue_data.get("patterns", {}).items():
             if pattern in text_lower and responses:
-                return random.choice(responses)
+                response = random.choice(responses)
+                print(f"Найден диалоговый шаблон: {pattern} -> {response}")
+                return response
         
         # Поиск по контекстам (если есть точное совпадение)
         for context, responses in self.dialogue_data.get("contexts", {}).items():
             if context in text_lower and responses:
-                return random.choice(responses)
+                response = random.choice(responses)
+                print(f"Найден контекстный шаблон: {context} -> {response}")
+                return response
                 
+        print(f"Ответ не найден для: {text_lower}")
         return None
 
     def _clean_text(self, text: str) -> str:
@@ -180,41 +153,42 @@ class KnowledgeBase:
         # Удаляем лишние пробелы и приводим к нижнему регистру
         return ' '.join(clean_text.lower().split())
 
-    def find_answer(self, question: str, threshold: float = 0.2) -> Optional[str]:
+    def find_answer(self, question: str, threshold: float = 0.3) -> Optional[str]:
         """Поиск ответа на вопрос в базе знаний"""
         if not question.strip():
             return None
             
         clean_question = self._clean_text(question)
+        print(f"Поиск ответа для: '{clean_question}' в предмете {self.subject}")
         
         # 1. Точное совпадение с вопросами
         if clean_question in self.data["questions"]:
+            print(f"Точное совпадение с вопросом: {clean_question}")
             return self.data["questions"][clean_question]
         
         # 2. Поиск по ключевым словам "что такое"
         if "что такое" in clean_question:
             # Извлекаем термин после "что такое"
-            term = clean_question.replace("что такое", "").strip()
-            if term in self.data["terms"]:
-                return self.data["terms"][term]
-            
-            # Поиск похожих терминов
-            for known_term in self.data["terms"].keys():
-                if known_term in term or term in known_term:
-                    return self.data["terms"][known_term]
+            term_part = clean_question.replace("что такое", "").strip()
+            if term_part:
+                print(f"Поиск термина после 'что такое': '{term_part}'")
+                # Ищем точное совпадение термина
+                if term_part in self.data["terms"]:
+                    print(f"Точное совпадение термина: {term_part}")
+                    return self.data["terms"][term_part]
+                
+                # Ищем частичное совпадение
+                for term, definition in self.data["terms"].items():
+                    if term in term_part or term_part in term:
+                        print(f"Частичное совпадение термина: {term}")
+                        return definition
         
         # 3. Поиск по терминам (прямое вхождение)
-        found_terms = []
         for term, definition in self.data["terms"].items():
             clean_term = self._clean_text(term)
             if clean_term and clean_term in clean_question:
-                found_terms.append((term, definition))
-        
-        if found_terms:
-            response = "По вашему вопросу:\n"
-            for term, definition in found_terms:
-                response += f"• {term}: {definition}\n"
-            return response
+                print(f"Термин найден в вопросе: {term}")
+                return f"{term}: {definition}"
         
         # 4. Поиск по частичному совпадению терминов
         for term, definition in self.data["terms"].items():
@@ -225,6 +199,7 @@ class KnowledgeBase:
                 if len(term_words) > 1:
                     matches = sum(1 for word in term_words if word in clean_question)
                     if matches >= max(1, len(term_words) - 1):
+                        print(f"Частичное совпадение слов термина: {term}")
                         return f"{term}: {definition}"
         
         # 5. Поиск по схожести (TF-IDF + косинусная схожесть)
@@ -235,40 +210,41 @@ class KnowledgeBase:
                 q_vecs = self.vectorizer.transform(questions)
                 similarities = cosine_similarity(q_vec, q_vecs)
                 
-                # Находим несколько лучших совпадений
-                best_matches = []
-                for i, similarity in enumerate(similarities[0]):
-                    if similarity > threshold:
-                        best_matches.append((questions[i], similarity))
+                # Находим лучшее совпадение
+                best_match_idx = np.argmax(similarities)
+                best_similarity = similarities[0][best_match_idx]
                 
-                # Сортируем по убыванию схожести
-                best_matches.sort(key=lambda x: x[1], reverse=True)
-                
-                if best_matches:
-                    # Возвращаем несколько лучших ответов
-                    response = "Возможно, вы имели в виду:\n"
-                    for question_text, similarity in best_matches[:2]:
-                        answer = self.data["questions"][question_text]
-                        response += f"• {answer}\n"
-                    return response
+                if best_similarity > threshold:
+                    best_question = questions[best_match_idx]
+                    print(f"Найдено похожий вопрос по схожести: {best_question} (схожесть: {best_similarity:.2f})")
+                    return self.data["questions"][best_question]
                     
             except Exception as e:
                 print(f"Ошибка поиска по схожести: {e}")
         
-        return None
+        print("Ответ не найден в базе знаний")
+        return "Интересный вопрос! Давайте обсудим его подробнее."
 
     def get_term(self, term: str) -> Optional[str]:
         """Получение определения термина"""
-        return self.data["terms"].get(term.lower())
+        term_lower = term.lower().strip()
+        definition = self.data["terms"].get(term_lower)
+        if definition:
+            print(f"Найдено определение термина '{term}': {definition[:100]}...")
+        else:
+            print(f"Термин '{term}' не найден в базе знаний")
+        return definition
 
     def add_knowledge(self, term: str = None, definition: str = None, 
                      question: str = None, answer: str = None):
         """Добавление знаний в базу"""
         if term and definition:
             self.data["terms"][term.lower()] = definition
+            print(f"Добавлен термин: {term}")
             
         if question and answer:
             self.data["questions"][question.lower()] = answer
+            print(f"Добавлен вопрос: {question}")
             
         self._save_knowledge()
 
@@ -283,6 +259,7 @@ class KnowledgeBase:
         try:
             with open(self.knowledge_path, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, ensure_ascii=False, indent=2)
+            print(f"База знаний сохранена в: {self.knowledge_path}")
         except Exception as e:
             print(f"Ошибка сохранения базы знаний: {e}")
 
@@ -291,6 +268,7 @@ class KnowledgeBase:
         try:
             with open(self.dialogue_path, 'w', encoding='utf-8') as f:
                 json.dump(self.dialogue_data, f, ensure_ascii=False, indent=2)
+            print(f"Диалоговые шаблоны сохранены в: {self.dialogue_path}")
         except Exception as e:
             print(f"Ошибка сохранения диалоговых шаблонов: {e}")
 
@@ -346,3 +324,11 @@ class KnowledgeBase:
         # Сортировка по схожести
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results[:max_results]
+
+    def list_terms(self) -> List[str]:
+        """Возвращает список всех терминов в базе знаний"""
+        return list(self.data["terms"].keys())
+
+    def list_questions(self) -> List[str]:
+        """Возвращает список всех вопросов в базе знаний"""
+        return list(self.data["questions"].keys())
