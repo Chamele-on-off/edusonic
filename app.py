@@ -46,7 +46,7 @@ def reset_speaking_state(room_id):
     room_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
-def speak_text(room_id, text, voice_type='female', is_teacher=False):
+def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
     """Озвучивает текст с анимацией и добавляет его в историю"""
     if not text.strip():
         return
@@ -64,15 +64,16 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False):
             'is_teacher': is_teacher
         }, room=room_id)
         
-        room_speech_data[room_id].append({
-            'text': text,
-            'timestamp': time.time(),
-            'type': 'generated',
-            'voice_type': voice_type,
-            'is_teacher': is_teacher
-        })
-        if len(room_speech_data[room_id]) > 50:
-            room_speech_data[room_id].pop(0)
+        if not skip_history:
+            room_speech_data[room_id].append({
+                'text': text,
+                'timestamp': time.time(),
+                'type': 'generated',
+                'voice_type': voice_type,
+                'is_teacher': is_teacher
+            })
+            if len(room_speech_data[room_id]) > 50:
+                room_speech_data[room_id].pop(0)
     
     speech_duration = max(2, len(text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
@@ -249,31 +250,40 @@ def handle_recognized_speech(data):
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
+                # Отправляем текст, но не озвучиваем повторно (озвучивание будет в handle_lesson_reading)
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
             
             # Проверка команд управления чтением
             reading_response = dialogue.process_input(text)
             if reading_response:
+                # Отправляем текст, но не озвучиваем повторно
                 emit('speech_text', {
                     'text': f"Учитель: {reading_response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                speak_text(room_id, reading_response, voice_type='female', is_teacher=True)
+                
+                # Если это команда для продолжения урока, получаем следующий абзац
+                if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
+                    next_paragraph = dialogue._get_next_paragraph()
+                    if next_paragraph:
+                        speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
             if response:
+                # Отправляем текст, но не озвучиваем повторно
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                
+                # Озвучиваем ответ только здесь (избегаем двойного озвучивания)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
                 # Если урок выбран и подтвержден
@@ -285,6 +295,11 @@ def handle_recognized_speech(data):
                             'title': lesson_data['title'],
                             'subject': dialogue.get_current_subject()
                         }, room=room_id)
+                        
+                        # Немедленно начинаем чтение первого абзаца урока
+                        first_paragraph = dialogue._get_next_paragraph()
+                        if first_paragraph:
+                            speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
