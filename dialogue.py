@@ -250,7 +250,7 @@ class DialogueManager:
         return response
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", 'здравствуй', "начать", "старт", "готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -278,7 +278,7 @@ class DialogueManager:
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
         # Если пользователь просто говорит "да" или соглашается
-        if any(word in text for word in ["да", "ага", "угу", " ладно", "хорошо"]):
+        if any(word in text for word in ["да", "ага", "угу", "ладно", "хорошо"]):
             return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
             
         return None
