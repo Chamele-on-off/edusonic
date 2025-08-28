@@ -250,40 +250,46 @@ def handle_recognized_speech(data):
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
-                # Отправляем текст, но не озвучиваем повторно (озвучивание будет в handle_lesson_reading)
+                # Отправляем текст и озвучиваем ответ на вопрос
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                speak_text(room_id, response, voice_type='female', is_teacher=True)
             
             # Проверка команд управления чтением
             reading_response = dialogue.process_input(text)
-            if reading_response:
-                # Отправляем текст, но не озвучиваем повторно
+            if reading_response and not any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
+                # Отправляем текст и озвучиваем ответ на команду
                 emit('speech_text', {
                     'text': f"Учитель: {reading_response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                speak_text(room_id, reading_response, voice_type='female', is_teacher=True)
                 
-                # Если это команда для продолжения урока, получаем следующий абзац
-                if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
-                    next_paragraph = dialogue._get_next_paragraph()
-                    if next_paragraph:
-                        speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+            # Если это команда для продолжения урока, получаем следующий абзац
+            if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
+                next_paragraph = dialogue._get_next_paragraph()
+                if next_paragraph:
+                    # Отправляем текст и озвучиваем следующий абзац
+                    emit('speech_text', {
+                        'text': f"Учитель: {next_paragraph}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
             if response:
-                # Отправляем текст, но не озвучиваем повторно
+                # Отправляем текст и озвучиваем ответ
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                
-                # Озвучиваем ответ только здесь (избегаем двойного озвучивания)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
                 # Если урок выбран и подтвержден
@@ -299,6 +305,12 @@ def handle_recognized_speech(data):
                         # Немедленно начинаем чтение первого абзаца урока
                         first_paragraph = dialogue._get_next_paragraph()
                         if first_paragraph:
+                            # Отправляем текст и озвучиваем первый абзац
+                            emit('speech_text', {
+                                'text': f"Учитель: {first_paragraph}",
+                                'sid': 'teacher',
+                                'is_teacher': True
+                            }, room=room_id)
                             speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
