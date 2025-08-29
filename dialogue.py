@@ -116,20 +116,20 @@ class DialogueManager:
         try:
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Разбиваем на абзацы для более естественного чтения
+                # Разбиваем на предложения для более естественного чтения
+                sentences = re.split(r'(?<=[.!?])\s+', content)
+                # Объединяем предложения в группы по 2-4 для плавного чтения
                 paragraphs = []
                 current_paragraph = []
-                lines = content.split('\n')
                 
-                for line in lines:
-                    line = line.strip()
-                    if line:  # Непустая строка
-                        current_paragraph.append(line)
-                    elif current_paragraph:  # Пустая строка и есть накопленный параграф
-                        paragraphs.append(' '.join(current_paragraph))
-                        current_paragraph = []
+                for sentence in sentences:
+                    if sentence.strip():
+                        current_paragraph.append(sentence.strip())
+                        if len(current_paragraph) >= 2:  # Группируем по 2-4 предложения
+                            paragraphs.append(' '.join(current_paragraph))
+                            current_paragraph = []
                 
-                # Добавляем последний параграф, если есть
+                # Добавляем оставшиеся предложения
                 if current_paragraph:
                     paragraphs.append(' '.join(current_paragraph))
                 
@@ -250,7 +250,7 @@ class DialogueManager:
         return response
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", 'здравствуйте', "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -278,7 +278,7 @@ class DialogueManager:
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
         # Если пользователь просто говорит "да" или соглашается
-        if any(word in text for word in ["да", "ага", "угу", " ладно", "хорошо"]):
+        if any(word in text for word in ["да", "ага", "угу", "ладно", "хорошо"]):
             return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
             
         return None
@@ -368,12 +368,6 @@ class DialogueManager:
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
             if self.lesson_content:
-                # Отправляем событие начала чтения урока
-                self.socketio.emit('lesson_reading_started', {
-                    'lesson_id': self.selected_lesson['id'],
-                    'title': self.selected_lesson['title'],
-                    'subject': self.current_subject
-                })
                 return None  # Не возвращаем сообщение, чтение начнется в app.py
             else:
                 return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
