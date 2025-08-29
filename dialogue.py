@@ -116,24 +116,33 @@ class DialogueManager:
         try:
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Разбиваем на предложения для более естественного чтения
-                sentences = re.split(r'(?<=[.!?])\s+', content)
-                # Объединяем предложения в группы по 2-4 для плавного чтения
-                paragraphs = []
-                current_paragraph = []
+                # Разбиваем на абзацы для более естественного чтения
+                paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
                 
-                for sentence in sentences:
-                    if sentence.strip():
-                        current_paragraph.append(sentence.strip())
-                        if len(current_paragraph) >= 2:  # Группируем по 2-4 предложения
-                            paragraphs.append(' '.join(current_paragraph))
-                            current_paragraph = []
+                # Если абзацы слишком длинные, разбиваем их на более мелкие части
+                processed_paragraphs = []
+                for paragraph in paragraphs:
+                    if len(paragraph) > 500:  # Если абзац слишком длинный
+                        sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+                        current_chunk = []
+                        current_length = 0
+                        
+                        for sentence in sentences:
+                            if sentence.strip():
+                                if current_length + len(sentence) > 400 and current_chunk:
+                                    processed_paragraphs.append(' '.join(current_chunk))
+                                    current_chunk = [sentence]
+                                    current_length = len(sentence)
+                                else:
+                                    current_chunk.append(sentence)
+                                    current_length += len(sentence)
+                        
+                        if current_chunk:
+                            processed_paragraphs.append(' '.join(current_chunk))
+                    else:
+                        processed_paragraphs.append(paragraph)
                 
-                # Добавляем оставшиеся предложения
-                if current_paragraph:
-                    paragraphs.append(' '.join(current_paragraph))
-                
-                return paragraphs if paragraphs else ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
+                return processed_paragraphs if processed_paragraphs else ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
         except Exception as e:
             print(f"Ошибка загрузки содержания урока: {e}")
             return ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
@@ -250,7 +259,7 @@ class DialogueManager:
         return response
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", 'здравствуй', 'начать', 'старт', 'готов', 'поехали', 'давай', 'началом']
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -361,7 +370,7 @@ class DialogueManager:
             if hasattr(self.selected_lesson, 'file_path'):
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
             else:
-                # Создаем базовое содержание для временного урока
+                # Создаем базое содержание для временного урока
                 self.lesson_content = [f"Добро пожаловать на урок по {self.current_subject}! Давайте изучим эту интересную тему вместе."]
             
             # Инициализируем базу знаний для выбранного предмета
