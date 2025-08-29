@@ -27,6 +27,7 @@ room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_speech_queue = defaultdict(list)
 room_currently_speaking = defaultdict(bool)
+room_lesson_reading = defaultdict(bool)
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -343,6 +344,18 @@ def handle_activate_ai_teacher(data):
     process_speech_queue(room_id, (greeting, 'female', True, False))
     
     emit('ai_teacher_activated', {}, room=room_id)
+
+@socketio.on('start_lesson_reading')
+def handle_start_lesson_reading(data):
+    """Начинает чтение урока с озвучиванием"""
+    room_id = data['room_id']
+    dialogue = room_dialogue[room_id]
+    
+    if dialogue.is_lesson_started() and dialogue.get_current_state() == "lesson_reading":
+        room_lesson_reading[room_id] = True
+        first_paragraph = dialogue._get_next_paragraph()
+        if first_paragraph:
+            process_speech_queue(room_id, (first_paragraph, 'female', True, False))
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
