@@ -194,8 +194,10 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                # Возвращаем None, чтобы не озвучивать подтверждение - сразу начнем урок
-                return None
+                if self.lesson_content:
+                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока."
+                else:
+                    return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
         
         # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -333,7 +335,7 @@ class DialogueManager:
                 return self._get_lesson_confirmation_message(lesson)
                 
         # Возврат к выбору предмета
-        if any(word in text for word in ["назад", "вернуться", "другой предмет"]):
+        if any(word in text for word in ["назад", "вернуться", 'другой предмет']):
             self.current_state = "subject_selection"
             self.current_subject = None
             return "Хорошо, давайте выберем другой предмет. Что вас интересует?"
@@ -361,8 +363,10 @@ class DialogueManager:
             # Инициализируем базу знаний для выбранного предмета
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
-            # Возвращаем None, чтобы не озвучивать подтверждение - сразу начнем урок
-            return None
+            if self.lesson_content:
+                return "Прекрасно! Начинаем чтение урока."
+            else:
+                return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
                 
         # Возврат к выбору урока
         if any(word in text for word in ["назад", "вернуться", "другой урок"]):
