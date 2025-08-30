@@ -28,7 +28,6 @@ class DialogueManager:
         self.knowledge_base = None
         self.llm = LLMIntegration()
         self.conversation_counter = 0
-        self.lesson_selection_in_progress = False
         self._load_lessons()
         
         # Расширенные локальные шаблоны для более естественного общения
@@ -170,8 +169,7 @@ class DialogueManager:
         # 4. Если пользователь называет предмет - автоматически выбираем демо-урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
-            if subject.lower() in text_lower and not self.lesson_selection_in_progress:
-                self.lesson_selection_in_progress = True
+            if subject.lower() in text_lower:
                 self.current_subject = subject
                 # Автоматически выбираем первый доступный урок (демо-урок если есть)
                 lessons = self.lessons.get(subject, [])
@@ -197,10 +195,8 @@ class DialogueManager:
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
                 if self.lesson_content:
-                    self.lesson_selection_in_progress = False
-                    return f"Отлично! Выбрал демо-урок по {subject}. Начинаем чтение урока."
+                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока."
                 else:
-                    self.lesson_selection_in_progress = False
                     return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
         
         # 5. Обработка по текущему состоянию
@@ -250,7 +246,7 @@ class DialogueManager:
         return response
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", 'здравствуйте', "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -368,7 +364,7 @@ class DialogueManager:
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
             if self.lesson_content:
-                return None  # Не возвращаем сообщение, чтение начнется в app.py
+                return "Прекрасно! Начинаем чтение урока."
             else:
                 return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
                 
@@ -475,7 +471,6 @@ class DialogueManager:
         self.current_paragraph = 0
         self.knowledge_base = None
         self.conversation_counter = 0
-        self.lesson_selection_in_progress = False
 
     def get_available_subjects(self) -> List[str]:
         """Возвращает список доступных предметов"""
