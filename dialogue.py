@@ -335,7 +335,7 @@ class DialogueManager:
                 return self._get_lesson_confirmation_message(lesson)
                 
         # Возврат к выбору предмета
-        if any(word in text for word in ["назад", "вернуться", 'другой предмет']):
+        if any(word in text for word in ["назад", "вернуться", "другой предмет"]):
             self.current_state = "subject_selection"
             self.current_subject = None
             return "Хорошо, давайте выберем другой предмет. Что вас интересует?"
