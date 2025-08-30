@@ -25,9 +25,7 @@ room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
-current_speech_thread = defaultdict(lambda: None)
-speech_queue = defaultdict(list)
-is_speaking = defaultdict(bool)
+current_speech_lock = defaultdict(threading.Lock)  # Блокировка для предотвращения наложения речи
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -47,56 +45,41 @@ PHONEME_MAP = {
 def reset_speaking_state(room_id):
     """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
-    is_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
-    
-    # Проверяем, есть ли следующее сообщение в очереди
-    if speech_queue[room_id]:
-        next_speech = speech_queue[room_id].pop(0)
-        speak_text(room_id, **next_speech)
 
-def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, priority=False):
+def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
     """Озвучивает текст с анимацией и добавляет его в историю"""
     if not text.strip():
         return
         
-    # Если уже идет речь, добавляем в очередь
-    if is_speaking[room_id] and not priority:
-        speech_queue[room_id].append({
-            'text': text,
-            'voice_type': voice_type,
-            'is_teacher': is_teacher,
-            'skip_history': skip_history
-        })
-        return
+    # Используем блокировку для предотвращения наложения речи
+    with current_speech_lock[room_id]:
+        room_speaking[room_id] = True
+        socketio.emit('speaking_state', {'speaking': True}, room=room_id)
         
-    is_speaking[room_id] = True
-    room_speaking[room_id] = True
-    socketio.emit('speaking_state', {'speaking': True}, room=room_id)
-    
-    audio_data = text_to_speech(text, lang='ru')
-    if audio_data:
-        emit('speech_audio', {
-            'audio': audio_data,
-            'text': text,
-            'timestamp': time.time(),
-            'voice_type': voice_type,
-            'is_teacher': is_teacher
-        }, room=room_id)
-        
-        if not skip_history:
-            room_speech_data[room_id].append({
+        audio_data = text_to_speech(text, lang='ru')
+        if audio_data:
+            emit('speech_audio', {
+                'audio': audio_data,
                 'text': text,
                 'timestamp': time.time(),
-                'type': 'generated',
                 'voice_type': voice_type,
                 'is_teacher': is_teacher
-            })
-            if len(room_speech_data[room_id]) > 50:
-                room_speech_data[room_id].pop(0)
-    
-    speech_duration = max(2, len(text) * 0.1)
-    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
+            }, room=room_id)
+            
+            if not skip_history:
+                room_speech_data[room_id].append({
+                    'text': text,
+                    'timestamp': time.time(),
+                    'type': 'generated',
+                    'voice_type': voice_type,
+                    'is_teacher': is_teacher
+                })
+                if len(room_speech_data[room_id]) > 50:
+                    room_speech_data[room_id].pop(0)
+        
+        speech_duration = max(2, len(text) * 0.1)
+        threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
 
 @app.route('/')
 def home():
@@ -168,7 +151,7 @@ def animation_loop(room_id, avatar_name):
     
     while animation_running[room_id]:
         if room_speaking[room_id]:
-            # Генерируем случайную фонему для анимации речи
+            # Всегда используем анимацию речи, когда система говорит
             current_char = random.choice(list(PHONEME_MAP.keys()))
             speech_frames = get_speech_frames(avatar_name, current_char)
             if speech_frames:
@@ -176,7 +159,6 @@ def animation_loop(room_id, avatar_name):
                 frame_path = f'/frames/{avatar_name}/{frame}'
                 socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
         else:
-            # Анимация нейтрального состояния с морганием
             blink_counter += 1
             if blink_counter >= 30 and blink_frames:
                 for frame in blink_frames:
@@ -233,7 +215,7 @@ def handle_start_animation(data):
     avatar_name = data['avatar_name']
     if not animation_running[room_id]:
         animation_running[room_id] = True
-        threading.Thread(target=animation_loop, args=(room_id, avatar_name), daemon=True).start()
+        threading.Thread(target=animation_loop, args=(room_id, avatar_name)).start()
 
 @socketio.on('stop_animation')
 def handle_stop_animation(data):
@@ -272,43 +254,78 @@ def handle_recognized_speech(data):
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
-                # Добавляем ответ в очередь с приоритетом
-                speak_text(room_id, response, voice_type='female', is_teacher=True, priority=True)
+                # Используем блокировку для предотвращения наложения речи
+                with current_speech_lock[room_id]:
+                    # Отправляем текст и озвучиваем ответ на вопрос
+                    emit('speech_text', {
+                        'text': f"Учитель: {response}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, response, voice_type='female', is_teacher=True)
             
             # Проверка команд управления чтением
             reading_response = dialogue.process_input(text)
             if reading_response and not any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
-                # Добавляем ответ в очередь с приоритетом
-                speak_text(room_id, reading_response, voice_type='female', is_teacher=True, priority=True)
+                # Используем блокировку для предотвращения наложения речи
+                with current_speech_lock[room_id]:
+                    # Отправляем текст и озвучиваем ответ на команду
+                    emit('speech_text', {
+                        'text': f"Учитель: {reading_response}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, reading_response, voice_type='female', is_teacher=True)
                 
             # Если это команда для продолжения урока, получаем следующий абзац
             if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
-                    # Добавляем следующий абзац в очередь
-                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                    # Используем блокировку для предотвращения наложения речи
+                    with current_speech_lock[room_id]:
+                        # Отправляем текст и озвучиваем следующий абзац
+                        emit('speech_text', {
+                            'text': f"Учитель: {next_paragraph}",
+                            'sid': 'teacher',
+                            'is_teacher': True
+                        }, room=room_id)
+                        speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
             if response:
-                # Добавляем ответ в очередь
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
-                
-                # Если урок выбран и подтвержден
-                if dialogue.is_lesson_started() and dialogue.get_current_state() == "lesson_reading":
-                    lesson_data = dialogue.get_selected_lesson()
-                    if lesson_data:
-                        emit('lesson_started', {
-                            'lesson_id': lesson_data['id'],
-                            'title': lesson_data['title'],
-                            'subject': dialogue.get_current_subject()
-                        }, room=room_id)
-                        
-                        # Немедленно начинаем чтение первого абзаца урока
-                        first_paragraph = dialogue._get_next_paragraph()
-                        if first_paragraph:
-                            # Добавляем первый абзац в очередь
-                            speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
+                # Используем блокировку для предотвращения наложения речи
+                with current_speech_lock[room_id]:
+                    # Отправляем текст и озвучиваем ответ
+                    emit('speech_text', {
+                        'text': f"Учитель: {response}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, response, voice_type='female', is_teacher=True)
+                    
+                    # Если урок выбран и подтвержден
+                    if dialogue.is_lesson_started() and dialogue.get_current_state() == "lesson_reading":
+                        lesson_data = dialogue.get_selected_lesson()
+                        if lesson_data:
+                            emit('lesson_started', {
+                                'lesson_id': lesson_data['id'],
+                                'title': lesson_data['title'],
+                                'subject': dialogue.get_current_subject()
+                            }, room=room_id)
+                            
+                            # Немедленно начинаем чтение первого абзаца урока
+                            first_paragraph = dialogue._get_next_paragraph()
+                            if first_paragraph:
+                                # Используем блокировку для предотвращения наложения речи
+                                with current_speech_lock[room_id]:
+                                    # Отправляем текст и озвучиваем первый абзац
+                                    emit('speech_text', {
+                                        'text': f"Учитель: {first_paragraph}",
+                                        'sid': 'teacher',
+                                        'is_teacher': True
+                                    }, room=room_id)
+                                    speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
