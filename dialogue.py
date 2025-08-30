@@ -194,10 +194,8 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                if self.lesson_content:
-                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока."
-                else:
-                    return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
+                # Возвращаем None, чтобы не озвучивать подтверждение - сразу начнем урок
+                return None
         
         # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -246,7 +244,7 @@ class DialogueManager:
         return response
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", "здравствуй", "начать", "старт", " готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -363,10 +361,8 @@ class DialogueManager:
             # Инициализируем базу знаний для выбранного предмета
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
-            if self.lesson_content:
-                return "Прекрасно! Начинаем чтение урока."
-            else:
-                return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
+            # Возвращаем None, чтобы не озвучивать подтверждение - сразу начнем урок
+            return None
                 
         # Возврат к выбору урока
         if any(word in text for word in ["назад", "вернуться", "другой урок"]):
@@ -386,6 +382,7 @@ class DialogueManager:
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
+            self.knowledge_base = None
             return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
             
         # Если это не команда управления чтением, обрабатываем как вопрос
@@ -401,6 +398,7 @@ class DialogueManager:
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
+            self.knowledge_base = None
             return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
