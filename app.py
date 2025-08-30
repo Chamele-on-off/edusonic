@@ -25,8 +25,6 @@ room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
-room_speech_queue = defaultdict(list)
-room_is_speaking = defaultdict(bool)
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -47,25 +45,12 @@ def reset_speaking_state(room_id):
     """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
-    
-    # Проверяем очередь и воспроизводим следующий элемент, если есть
-    if room_speech_queue[room_id]:
-        next_speech = room_speech_queue[room_id].pop(0)
-        process_speech_queue(room_id, next_speech)
 
-def process_speech_queue(room_id, speech_data):
-    """Обрабатывает очередь речи"""
-    if room_speaking[room_id]:
-        # Если уже говорим, добавляем в очередь
-        room_speech_queue[room_id].append(speech_data)
+def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
+    """Озвучивает текст с анимацией и добавляет его в историю"""
+    if not text.strip():
         return
-    
-    # Начинаем воспроизведение
-    text = speech_data['text']
-    voice_type = speech_data.get('voice_type', 'female')
-    is_teacher = speech_data.get('is_teacher', False)
-    skip_history = speech_data.get('skip_history', False)
-    
+        
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
@@ -92,21 +77,6 @@ def process_speech_queue(room_id, speech_data):
     
     speech_duration = max(2, len(text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id)).start()
-
-def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст с анимацией и добавляет его в историю"""
-    if not text.strip():
-        return
-        
-    # Добавляем в очередь вместо немедленного воспроизведения
-    speech_data = {
-        'text': text,
-        'voice_type': voice_type,
-        'is_teacher': is_teacher,
-        'skip_history': skip_history
-    }
-    
-    process_speech_queue(room_id, speech_data)
 
 @app.route('/')
 def home():
@@ -332,7 +302,10 @@ def handle_recognized_speech(data):
                             'subject': dialogue.get_current_subject()
                         }, room=room_id)
                         
-                        # Немедленно начинаем чтение первого абзаца урока
+                        # Ждем завершения текущей речи перед началом урока
+                        time.sleep(1)  # Небольшая задержка
+                        
+                        # Начинаем чтение первого абзаца урока
                         first_paragraph = dialogue._get_next_paragraph()
                         if first_paragraph:
                             speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
