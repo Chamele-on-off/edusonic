@@ -250,26 +250,25 @@ def handle_recognized_speech(data):
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
-                # Отправляем текст и озвучиваем ответ
-                emit('speech_text', {
-                    'text': f"Учитель: {response}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                
-                # ОЗВУЧИВАЕМ ответ на вопрос
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
+                # Отправляем текст и озвучиваем ответ (только если это не команда управления)
+                if not any(word in text.lower() for word in ["записал", "дальше", "продолжай", "стоп", "останови", "хватит"]):
+                    emit('speech_text', {
+                        'text': f"Учитель: {response}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    # ОЗВУЧИВАЕМ ответ на вопрос
+                    speak_text(room_id, response, voice_type='female', is_teacher=True)
             
             # Проверка команд управления чтением
             reading_response = dialogue.process_input(text)
             if reading_response:
-                # Отправляем текст и озвучиваем ответ
+                # Отправляем текст и озвучиваем ответ для команд управления
                 emit('speech_text', {
                     'text': f"Учитель: {reading_response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                
                 # ОЗВУЧИВАЕМ ответ на команду управления
                 speak_text(room_id, reading_response, voice_type='female', is_teacher=True)
                 
@@ -278,6 +277,10 @@ def handle_recognized_speech(data):
                     next_paragraph = dialogue._get_next_paragraph()
                     if next_paragraph:
                         speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                
+                # Если это команда остановки, сбрасываем состояние
+                if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
+                    dialogue.reset()
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
@@ -292,7 +295,7 @@ def handle_recognized_speech(data):
                 # Озвучиваем ответ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
-                # Если урок выбран и подтвержден
+                # Если урок выбран и подтвержден, сразу начинаем чтение
                 if dialogue.is_lesson_started() and dialogue.get_current_state() == "lesson_reading":
                     lesson_data = dialogue.get_selected_lesson()
                     if lesson_data:
@@ -302,10 +305,7 @@ def handle_recognized_speech(data):
                             'subject': dialogue.get_current_subject()
                         }, room=room_id)
                         
-                        # Ждем завершения текущей речи перед началом урока
-                        time.sleep(1)  # Небольшая задержка
-                        
-                        # Начинаем чтение первого абзаца урока
+                        # Немедленно начинаем чтение первого абзаца урока
                         first_paragraph = dialogue._get_next_paragraph()
                         if first_paragraph:
                             speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
