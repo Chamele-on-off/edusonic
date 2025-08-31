@@ -141,14 +141,14 @@ def get_speech_frames(avatar_name, phoneme):
             if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комнаты"""
+    """Основной цикл анимации для комната"""
     blink_counter = 0
     blink_frames = get_blink_frames(avatar_name)
     neutral_frames = get_neutral_frames(avatar_name)
     
     while animation_running[room_id]:
         if room_speaking[room_id]:
-            current_char = random.choice(list(PHONEMe_MAP.keys()))
+            current_char = random.choice(list(PHONEME_MAP.keys()))
             speech_frames = get_speech_frames(avatar_name, current_char)
             if speech_frames:
                 frame = random.choice(speech_frames)
@@ -253,14 +253,7 @@ def handle_recognized_speech(data):
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
             # Сначала проверяем команды управления
-            if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
-                # Получаем следующий абзац урока
-                next_paragraph = dialogue._get_next_paragraph()
-                if next_paragraph:
-                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-                return
-                
-            if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
+            if any(word in text.lower() for word in ["записал", "дальше", "продолжай", "стоп", "останови", "хватит"]):
                 reading_response = dialogue.process_input(text)
                 if reading_response:
                     # Отправляем текст
@@ -269,8 +262,16 @@ def handle_recognized_speech(data):
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    # Останавливаем урок
-                    dialogue.reset()
+                    
+                    # Если это команда для продолжения урока, получаем следующий абзац
+                    if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
+                        next_paragraph = dialogue._get_next_paragraph()
+                        if next_paragraph:
+                            speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                    
+                    # Если это команда остановки
+                    if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
+                        dialogue.reset()
             else:
                 # Обработка вопросов во время чтения урока
                 response = dialogue.handle_question_during_lesson(text)
