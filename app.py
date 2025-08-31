@@ -250,8 +250,8 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # Если урок в процессе чтения
-        if dialogue.is_lesson_started() and dialogue.get_current_state() == "lesson_reading":
+        # Если урок уже начат, обрабатываем как вопрос/команду
+        if dialogue.is_lesson_started():
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
@@ -298,7 +298,7 @@ def handle_recognized_speech(data):
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
                 # Если урок выбран, сразу начинаем чтение
-                if dialogue.is_lesson_started() and dialogue.get_current_state() == "lesson_reading":
+                if dialogue.is_lesson_started():
                     lesson_data = dialogue.get_selected_lesson()
                     if lesson_data:
                         emit('lesson_started', {
