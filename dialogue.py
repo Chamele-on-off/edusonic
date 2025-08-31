@@ -141,7 +141,7 @@ class DialogueManager:
 
     def process_input(self, text: str) -> str:
         """Обработка входящего текста и генерация ответа"""
-        if self.lesson_started and self.current_state != "lesson_reading":
+        if self.lesson_started:
             return None
             
         text_lower = text.lower().strip()
@@ -168,6 +168,10 @@ class DialogueManager:
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower:
+                # Если урок уже выбран для этого предмета, игнорируем повторный выбор
+                if self.current_subject == subject and self.lesson_started:
+                    return None
+                    
                 self.current_subject = subject
                 # Автоматически выбираем первый доступный урок (демо-урок если есть)
                 lessons = self.lessons.get(subject, [])
@@ -178,7 +182,7 @@ class DialogueManager:
                 elif lessons:
                     self.selected_lesson = lessons[0]
                 else:
-                    # Создаем временный урок, если нет доступных
+                    # Создаем временный урок
                     self.selected_lesson = {
                         'id': f"demo_{subject}",
                         'title': f"Демо-урок по {subject}",
@@ -192,8 +196,8 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                # Возвращаем None, чтобы сразу начать чтение урока
-                return None
+                # Возвращаем подтверждение выбора
+                return f"Отлично! Начинаем урок по {subject}."
         
         # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -274,8 +278,8 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                # Возвращаем None, чтобы сразу начать чтение урока
-                return None
+                # Возвращаем подтверждение выбора
+                return f"Отлично! Начинаем урок по {subject}."
                 
         # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
