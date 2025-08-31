@@ -14,8 +14,6 @@ class DialogueManager:
         self.dialogue_states = {
             "greeting": self._handle_greeting,
             "subject_selection": self._handle_subject_selection,
-            "lesson_selection": self._handle_lesson_selection,
-            "lesson_confirmation": self._handle_lesson_confirmation,
             "lesson_reading": self._handle_lesson_reading
         }
         self.current_state = "greeting"
@@ -166,7 +164,7 @@ class DialogueManager:
             if dialogue_response:
                 return dialogue_response
         
-        # 4. Если пользователь называет предмет - автоматически выбираем демо-урок
+        # 4. Если пользователь называет предмет - автоматически начинаем урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower:
@@ -194,10 +192,8 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                if self.lesson_content:
-                    return f"Отлично! Выбрал демо-урок по {subject}: '{self.selected_lesson['title']}'. Начинаем чтение урока."
-                else:
-                    return "Ошибка загрузки урока. Попробуйте выбрать другой предмет."
+                # Возвращаем None, чтобы сразу начать чтение урока
+                return None
         
         # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -217,16 +213,6 @@ class DialogueManager:
                 "У меня есть уроки по разным предметам. Что вас интересует?",
                 "Могу предложить: обществознание, математика, история. Что выбираете?",
                 "Какой предмет хотите изучить? Выбирайте - я найду подходящий урок!"
-            ],
-            "lesson_selection": [
-                "Выберите урок из предложенных или скажите 'демо' для быстрого старта.",
-                "Какой урок вас заинтересовал? Или просто скажите название предмета.",
-                "Все уроки интересные! Выбирайте любой или назовите предмет."
-            ],
-            "lesson_confirmation": [
-                "Готовы начать? Скажите 'готов' или 'поехали'!",
-                "Жду вашего подтверждения чтобы начать урок.",
-                "Все готово к старту! Скажите когда начинать."
             ],
             "lesson_reading": [
                 "Продолжаем наш увлекательный урок.",
@@ -265,8 +251,31 @@ class DialogueManager:
         for subject in subjects:
             if subject.lower() in text.lower():
                 self.current_subject = subject
-                self.current_state = "lesson_selection"
-                return self._get_lesson_selection_message()
+                # Автоматически начинаем урок при выборе предмета
+                lessons = self.lessons.get(subject, [])
+                demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+                
+                if demo_lessons:
+                    self.selected_lesson = demo_lessons[0]
+                elif lessons:
+                    self.selected_lesson = lessons[0]
+                else:
+                    # Создаем временный урок
+                    self.selected_lesson = {
+                        'id': f"demo_{subject}",
+                        'title': f"Демо-урок по {subject}",
+                        'file_path': self.lessons_dir / f"demo_{subject}.txt",
+                        'is_demo': True
+                    }
+                
+                self.lesson_started = True
+                self.current_state = "lesson_reading"
+                self.current_paragraph = 0
+                self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+                self.knowledge_base = KnowledgeBase(self.current_subject)
+                
+                # Возвращаем None, чтобы сразу начать чтение урока
+                return None
                 
         # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
@@ -276,103 +285,6 @@ class DialogueManager:
         # Если пользователь просто говорит "да" или соглашается
         if any(word in text for word in ["да", "ага", "угу", "ладно", "хорошо"]):
             return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
-            
-        return None
-
-    def _get_lesson_selection_message(self) -> str:
-        """Формирует сообщение для выбора урока"""
-        lessons = self.lessons.get(self.current_subject, [])
-        
-        # Если есть демо-урок, предлагаем его сразу
-        demo_lessons = [l for l in lessons if l.get('is_demo', False)]
-        if demo_lessons:
-            self.selected_lesson = demo_lessons[0]
-            self.current_state = "lesson_confirmation"
-            return self._get_lesson_confirmation_message(self.selected_lesson)
-        
-        lesson_list = "\n".join(f"{i+1}) {lesson['title']}" for i, lesson in enumerate(lessons[:3]))  # Показываем только первые 3
-        
-        return f"Выбран предмет: {self.current_subject.capitalize()}.\nВыберите урок:\n{lesson_list}\nИли скажите 'демо' для быстрого старта!"
-
-    def _handle_lesson_selection(self, text: str) -> Optional[str]:
-        if not self.current_subject:
-            self.current_state = "subject_selection"
-            return "Сначала выберите предмет пожалуйста."
-            
-        lessons = self.lessons.get(self.current_subject, [])
-        
-        # Если пользователь говорит "демо" - выбираем демо-урок или первый доступный
-        if "демо" in text.lower() or "любой" in text.lower() or "первый" in text.lower():
-            demo_lessons = [l for l in lessons if l.get('is_demo', False)]
-            if demo_lessons:
-                self.selected_lesson = demo_lessons[0]
-            elif lessons:
-                self.selected_lesson = lessons[0]
-            else:
-                # Создаем временный урок
-                self.selected_lesson = {
-                    'id': f"demo_{self.current_subject}",
-                    'title': f"Демо-урок по {self.current_subject}",
-                    'file_path': self.lessons_dir / f"demo_{self.current_subject}.txt",
-                    'is_demo': True
-                }
-                
-            self.current_state = "lesson_confirmation"
-            return self._get_lesson_confirmation_message(self.selected_lesson)
-        
-        # Поиск по номеру
-        for i, lesson in enumerate(lessons):
-            if str(i+1) in text:
-                self.selected_lesson = lesson
-                self.current_state = "lesson_confirmation"
-                return self._get_lesson_confirmation_message(lesson)
-        
-        # Поиск по названию
-        for lesson in lessons:
-            if lesson['title'].lower() in text.lower():
-                self.selected_lesson = lesson
-                self.current_state = "lesson_confirmation"
-                return self._get_lesson_confirmation_message(lesson)
-                
-        # Возврат к выбору предмета
-        if any(word in text for word in ["назад", "вернуться", 'другой предмет']):
-            self.current_state = "subject_selection"
-            self.current_subject = None
-            return "Хорошо, давайте выберем другой предмет. Что вас интересует?"
-            
-        return None
-
-    def _get_lesson_confirmation_message(self, lesson: dict) -> str:
-        """Формирует сообщение подтверждения выбора урока"""
-        return f"Отлично! Выбран урок: '{lesson['title']}'.\nСкажите 'готов' чтобы начать увлекательное занятие!"
-
-    def _handle_lesson_confirmation(self, text: str) -> Optional[str]:
-        ready_words = ["готов", "поехали", "начинаем", "старт", "давай", "начали", "вперед"]
-        if any(word in text for word in ready_words) and self.selected_lesson:
-            self.lesson_started = True
-            self.current_state = "lesson_reading"
-            self.current_paragraph = 0
-            
-            # Загружаем содержание урока
-            if hasattr(self.selected_lesson, 'file_path'):
-                self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
-            else:
-                # Создаем базовое содержание для временного урока
-                self.lesson_content = [f"Добро пожаловать на урок по {self.current_subject}! Давайте изучим эту интересную тему вместе."]
-            
-            # Инициализируем базу знаний для выбранного предмета
-            self.knowledge_base = KnowledgeBase(self.current_subject)
-            
-            if self.lesson_content:
-                return "Прекрасно! Начинаем чтение урока."
-            else:
-                return "Ой! Ошибка загрузки урока. Давайте выберем другой?"
-                
-        # Возврат к выбору урока
-        if any(word in text for word in ["назад", "вернуться", "другой урок"]):
-            self.current_state = "lesson_selection"
-            self.selected_lesson = None
-            return "Хорошо, выберем другой урок. Какой вас заинтересует?"
             
         return None
 
