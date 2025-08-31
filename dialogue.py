@@ -59,7 +59,7 @@ class DialogueManager:
                 demo_lesson = self.lessons_dir / "social_general.txt"
                 if not demo_lesson.exists():
                     with open(demo_lesson, 'w', encoding='utf-8') as f:
-                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - форма правления, при которой народ является источником власти.\n\nЭкономика - хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - система общеобязательных норм, охраняемых государством.\n\nСоциализация - процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - система норм и принципов, регулирующих поведение людей.\n\nГлобализация - процесс всемирной экономической, политической и культурной интеграции.")
+                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организации общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - форма правления, при которой народ является источником власти.\n\nЭкономика - хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - система общеобязательных норм, охраняемых государством.\n\nСоциализация - процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - система норм и принципов, регулирующих поведение людей.\n\nГлобализация - процесс всемирной экономической, политической и культурной интеграции.")
                 return
                 
             # Загрузка текстовых файлов уроков
@@ -139,40 +139,37 @@ class DialogueManager:
 
     def process_input(self, text: str) -> str:
         """Обработка входящего текста и генерация ответа"""
+        text_lower = text.lower().strip()
+        
+        # 1. Сначала проверяем команды управления уроком
         if self.lesson_started:
-            # Во время урока обрабатываем только команды управления
-            if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
-                return self._handle_lesson_reading(text)
+            if any(word in text_lower for word in ["записал", "дальше", "продолжай", "стоп", "останови", "хватит"]):
+                return self._handle_lesson_reading(text_lower)
             return None
             
-        text_lower = text.lower().strip()
         self.conversation_counter += 1
         
-        # 1. Если есть база знаний по предмету, сначала проверяем там
+        # 2. Если есть база знаний по предмету, сначала проверяем там
         if self.knowledge_base:
             knowledge_response = self.knowledge_base.get_dialogue_response(text_lower)
             if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                 return knowledge_response
         
-        # 2. Быстрая проверка локальных шаблонов
+        # 3. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
         
-        # 3. Проверка диалоговых шаблонов из базы знаний (если есть)
+        # 4. Проверка диалоговых шаблонов из базы знаний (если есть)
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
             if dialogue_response:
                 return dialogue_response
         
-        # 4. Если пользователь называет предмет - автоматически начинаем урок
+        # 5. Если пользователь называет предмет - автоматически начинаем урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower:
-                # Если урок уже выбран для этого предмета, игнорируем повторный выбор
-                if self.current_subject == subject and self.lesson_started:
-                    return None
-                    
                 self.current_subject = subject
                 # Автоматически выбираем первый доступный урок (демо-урок если есть)
                 lessons = self.lessons.get(subject, [])
@@ -200,14 +197,14 @@ class DialogueManager:
                 # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
                 return None
         
-        # 5. Обработка по текущему состоянию
+        # 6. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
         if handler:
             response = handler(text_lower)
             if response:
                 return response
         
-        # 6. Fallback с учетом состояния и счетчика разговора
+        # 7. Fallback с учетом состояния и счетчика разговора
         fallbacks = {
             "greeting": [
                 "Привет! Давайте познакомимся. Какой предмет вас интересует?",
@@ -230,7 +227,7 @@ class DialogueManager:
         fallback_responses = fallbacks.get(self.current_state, ["Продолжим наш урок."])
         response = random.choice(fallback_responses)
         
-        # После 3-х реплик без прогреста - мягко направляем к выбору предмета
+        # После 3-х реплик без прогресса - мягко направляем к выбору предмета
         if self.conversation_counter >= 3 and self.current_state == "greeting":
             response += " Кстати, какой предмет вас интересует?"
             
@@ -295,11 +292,11 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
-        # Команды "записал", "дальше", "продолжай" обрабатываются в app.py для получения следующего абзаца
-        if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
+        if any(word in text for word in ["записал", "дальше", "продолжай"]):
+            # Возвращаем None, так как чтение будет обработано в app.py
             return None
             
-        if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
+        if any(word in text for word in ["стоп", "останови", "хватит"]):
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
