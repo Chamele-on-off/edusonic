@@ -40,8 +40,6 @@ class DialogueManager:
             "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
             "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
             "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
-            "записал": ["Супер! Записали - значит запомнили. Продолжаем!", "Отлично! Идем дальше."],
-            "дальше": ["Переходим к следующей интересной части.", "Продолжаем наш увлекательный урок."],
             "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
             "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
                       "AI-учитель, который сделает ваше обучение интересным и эффективным."],
@@ -142,6 +140,9 @@ class DialogueManager:
     def process_input(self, text: str) -> str:
         """Обработка входящего текста и генерация ответа"""
         if self.lesson_started:
+            # Во время урока обрабатываем только команды управления
+            if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
+                return self._handle_lesson_reading(text)
             return None
             
         text_lower = text.lower().strip()
@@ -196,8 +197,8 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                # Возвращаем подтверждение выбора
-                return f"Отлично! Начинаем урок по {subject}."
+                # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
+                return None
         
         # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -229,7 +230,7 @@ class DialogueManager:
         fallback_responses = fallbacks.get(self.current_state, ["Продолжим наш урок."])
         response = random.choice(fallback_responses)
         
-        # После 3-х реплик без прогресса - мягко направляем к выбору предмета
+        # После 3-х реплик без прогреста - мягко направляем к выбору предмета
         if self.conversation_counter >= 3 and self.current_state == "greeting":
             response += " Кстати, какой предмет вас интересует?"
             
@@ -278,8 +279,8 @@ class DialogueManager:
                 self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
                 self.knowledge_base = KnowledgeBase(self.current_subject)
                 
-                # Возвращаем подтверждение выбора
-                return f"Отлично! Начинаем урок по {subject}."
+                # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
+                return None
                 
         # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
@@ -294,11 +295,11 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
-        if "записал" in text.lower() or "дальше" in text.lower() or "продолжай" in text.lower():
-            # Возвращаем None, так как чтение будет обработано в app.py
+        # Команды "записал", "дальше", "продолжай" обрабатываются в app.py для получения следующего абзаца
+        if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
             return None
             
-        if "стоп" in text.lower() or "останови" in text.lower() or "хватит" in text.lower():
+        if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
