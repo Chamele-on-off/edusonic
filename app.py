@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_from_directory, jsonify, request
+from flask import Flask, render_template, send_from_directory, jsonify, request, send_file
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -10,6 +10,9 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
+import json
+import re
+from datetime import datetime
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -111,6 +114,127 @@ def get_frames(avatar_name):
 @app.route('/frames/<avatar_name>/<path:filename>')
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
+
+@app.route('/api/add_knowledge', methods=['POST'])
+def add_knowledge():
+    """Добавление новых данных в базу знаний"""
+    try:
+        data = request.get_json()
+        subject = data.get('subject', 'общее')
+        text = data.get('text', '')
+        
+        if not text.strip():
+            return jsonify({"success": False, "error": "Пустой текст"})
+        
+        # Создаем путь к файлу базы знаний
+        materials_dir = BASE_DIR / 'materials'
+        if not materials_dir.exists():
+            materials_dir.mkdir()
+            
+        knowledge_path = materials_dir / f'{subject}_knowledge.json'
+        
+        # Загружаем существующую базу или создаем новую
+        if knowledge_path.exists():
+            with open(knowledge_path, 'r', encoding='utf-8') as f:
+                knowledge_data = json.load(f)
+        else:
+            knowledge_data = {
+                "terms": {},
+                "questions": {},
+                "examples": {},
+                "metadata": {
+                    "subject": subject,
+                    "version": "1.0",
+                    "last_updated": datetime.now().strftime("%Y-%m-%d"),
+                    "author": "AI Teacher System",
+                    "description": f"База знаний по {subject} для AI-учителя"
+                }
+            }
+        
+        # Обрабатываем текст и добавляем в базу
+        lines = text.strip().split('\n')
+        for line in lines:
+            if ' - ' in line:
+                term, definition = line.split(' - ', 1)
+                term = term.strip()
+                definition = definition.strip()
+                if term and definition:
+                    knowledge_data['terms'][term.lower()] = definition
+        
+        # Сохраняем обновленную базу
+        with open(knowledge_path, 'w', encoding='utf-8') as f:
+            json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/add_lesson', methods=['POST'])
+def add_lesson():
+    """Добавление нового урока"""
+    try:
+        data = request.get_json()
+        subject = data.get('subject', 'общее')
+        title = data.get('title', '')
+        content = data.get('content', '')
+        
+        if not title.strip() or not content.strip():
+            return jsonify({"success": False, "error": "Пустое название или содержание урока"})
+        
+        # Создаем директорию lessons если ее нет
+        lessons_dir = BASE_DIR / 'lessons'
+        if not lessons_dir.exists():
+            lessons_dir.mkdir()
+        
+        # Создаем имя файла из названия урока
+        filename = re.sub(r'[^\w\s]', '', title.lower())
+        filename = re.sub(r'\s+', '_', filename)
+        filename = f"{filename}.txt"
+        
+        # Сохраняем урок
+        lesson_path = lessons_dir / filename
+        with open(lesson_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({"success": True})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/download_knowledge')
+def download_knowledge():
+    """Скачивание базы знаний"""
+    try:
+        subject = request.args.get('subject', 'общее')
+        knowledge_path = BASE_DIR / 'materials' / f'{subject}_knowledge.json'
+        
+        if not knowledge_path.exists():
+            return jsonify({"error": "База знаний не найдена"}), 404
+        
+        return send_file(knowledge_path, as_attachment=True)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/lesson_content/<lesson_id>')
+def get_lesson_content(lesson_id):
+    """Получение содержания урока"""
+    try:
+        lesson_path = BASE_DIR / 'lessons' / f'{lesson_id}.txt'
+        
+        if not lesson_path.exists():
+            return jsonify({"error": "Урок не найден"}), 404
+        
+        # Используем существующую функцию для загрузки контента
+        from dialogue import DialogueManager
+        dm = DialogueManager(None)
+        content = dm._load_lesson_content(lesson_path)
+        
+        return jsonify({"content": content})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def text_to_speech(text, lang='ru'):
     """Преобразует текст в аудио (base64)"""
