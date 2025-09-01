@@ -3,268 +3,471 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Конференция</title>
+    <title>Виртуальный класс</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --success: #4cc9f0;
+            --danger: #f72585;
+            --dark: #212529;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+        }
+        
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1c1e22;
-            color: #fff;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
             height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
+        
         #header {
-            background: #2d3035;
-            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #404348;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 100;
         }
+        
         #logo {
             font-weight: bold;
-            font-size: 1.2rem;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
+        
         #main {
             flex: 1;
             display: flex;
             position: relative;
             overflow: hidden;
         }
+        
         #video-container {
             flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: #000;
             position: relative;
         }
-        #teacher-video {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        #self-video {
+        
+        #background-animation {
             position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 20%;
-            max-width: 300px;
-            border: 2px solid #fff;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            z-index: 10;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
         }
+        
+        .animated-circle {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.3;
+        }
+        
+        #lesson-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 80%;
+            max-height: 80%;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 5;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        #lesson-content h2 {
+            margin-bottom: 20px;
+            color: var(--success);
+            text-align: center;
+        }
+        
+        #lesson-text {
+            font-size: 1.4rem;
+            line-height: 1.6;
+            text-align: center;
+        }
+        
+        #teacher-video-container {
+            position: absolute;
+            bottom: 100px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            border: 3px solid white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            background: black;
+        }
+        
+        #teacher-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        #self-video-container {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            width: 200px;
+            height: 150px;
+            border: 3px solid white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+            background: black;
+        }
+        
+        #self-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        #status-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        #participants {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
         #controls {
-            background: #2d3035;
+            background: rgba(0, 0, 0, 0.7);
             padding: 15px;
             display: flex;
             justify-content: center;
             gap: 15px;
-            border-top: 1px solid #404348;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 100;
         }
+        
         .control-btn {
-            width: 50px;
-            height: 50px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             border: none;
-            background: #3d4046;
+            background: rgba(255, 255, 255, 0.2);
             color: white;
             cursor: pointer;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
-        }
-        .control-btn:hover {
-            background: #4e5158;
-        }
-        .control-btn i {
+            transition: all 0.3s ease;
             font-size: 20px;
-            margin-bottom: 3px;
         }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .control-btn.active {
+            background: var(--primary);
+        }
+        
         .control-btn span {
-            font-size: 11px;
+            font-size: 12px;
+            margin-top: 4px;
         }
-        #fullscreen-btn {
-            background: #4a4d54;
-        }
+        
         #end-call-btn {
-            background: #e74c3c;
+            background: var(--danger);
         }
+        
         #end-call-btn:hover {
-            background: #c0392b;
+            background: #e01b74;
         }
-        #status {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 10;
-        }
-        .active {
-            background: #4CAF50 !important;
-        }
-        #participants {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 10;
-        }
-        #room-info {
-            position: absolute;
-            top: 40px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 10;
-        }
+        
         #speech-text {
             position: absolute;
-            bottom: 100px;
+            bottom: 270px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.7);
-            padding: 10px 15px;
-            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 25px;
             max-width: 80%;
             text-align: center;
             display: none;
             font-size: 18px;
             color: white;
-            z-index: 100;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
         }
+        
         #audio-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.7);
             display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
         }
+        
         #audio-play-btn {
-            padding: 15px 30px;
-            background: #3498db;
+            padding: 20px 40px;
+            background: var(--primary);
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 18px;
+            border-radius: 50px;
+            font-size: 20px;
             cursor: pointer;
+            transition: all 0.3s ease;
         }
+        
+        #audio-play-btn:hover {
+            background: var(--secondary);
+            transform: scale(1.05);
+        }
+        
         #activate-ai-btn {
             position: absolute;
-            bottom: 180px;
+            bottom: 270px;
             left: 50%;
             transform: translateX(-50%);
             padding: 15px 30px;
-            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
             border: none;
-            border-radius: 30px;
+            border-radius: 50px;
             font-size: 18px;
             cursor: pointer;
-            z-index: 100;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 10;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
             display: none;
         }
+        
         #activate-ai-btn:hover {
-            background: linear-gradient(135deg, #5d7de8, #9666d8);
+            transform: translateX(-50%) scale(1.05);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
         }
-        .icon {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            line-height: 1;
+        
+        @media (max-width: 768px) {
+            #header {
+                padding: 10px 15px;
+            }
+            
+            #logo {
+                font-size: 1.1rem;
+            }
+            
+            #teacher-video-container,
+            #self-video-container {
+                width: 120px;
+                height: 90px;
+                bottom: 80px;
+            }
+            
+            #controls {
+                padding: 10px;
+                gap: 10px;
+            }
+            
+            .control-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 16px;
+            }
+            
+            .control-btn span {
+                font-size: 10px;
+            }
+            
+            #speech-text {
+                bottom: 200px;
+                font-size: 16px;
+                padding: 12px 20px;
+            }
+            
+            #activate-ai-btn {
+                bottom: 200px;
+                padding: 12px 24px;
+                font-size: 16px;
+            }
+            
+            #lesson-text {
+                font-size: 1.2rem;
+            }
         }
+        
+        @media (max-width: 480px) {
+            #teacher-video-container,
+            #self-video-container {
+                width: 100px;
+                height: 75px;
+                bottom: 70px;
+            }
+            
+            .control-btn {
+                width: 45px;
+                height: 45px;
+                font-size: 14px;
+            }
+            
+            #status-container {
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
         body.embedded {
             height: auto;
         }
+        
         body.embedded #header {
             display: none;
         }
+        
         body.embedded #controls {
-            padding: 5px;
+            padding: 10px;
         }
+        
         body.embedded .control-btn {
-            width: 40px;
-            height: 40px;
-            font-size: 12px;
+            width: 50px;
+            height: 50px;
+            font-size: 16px;
         }
     </style>
 </head>
 <body>
-    <div id="header">
-        <div id="logo">Virtual Classroom</div>
-        <div id="meeting-id">Конференция</div>
+    <div id="header" class="fade-in">
+        <div id="logo">
+            <i class="fas fa-chalkboard-teacher"></i>
+            <span>Виртуальный класс</span>
+        </div>
+        <div id="meeting-id">Комната: <span id="room-name">default</span></div>
     </div>
 
     <div id="main">
         <div id="video-container">
-            <img id="teacher-video" src="" alt="Анимация учителя">
-            <video id="self-video" autoplay muted></video>
+            <div id="background-animation"></div>
             
-            <div id="status">Подключение к конференции...</div>
-            <div id="room-info">Комната: <span id="room-name">default</span></div>
-            <div id="participants">Участников: 1</div>
+            <div id="lesson-content">
+                <h2 id="lesson-title"></h2>
+                <div id="lesson-text"></div>
+            </div>
+            
+            <div id="teacher-video-container" class="fade-in">
+                <img id="teacher-video" src="" alt="Аватар учителя">
+            </div>
+            
+            <div id="self-video-container" class="fade-in">
+                <video id="self-video" autoplay muted></video>
+            </div>
+            
+            <div id="status-container" class="fade-in">
+                <div id="status">Подключение к конференции...</div>
+                <div id="participants">
+                    <i class="fas fa-users"></i>
+                    <span id="participants-count">1</span> участников
+                </div>
+            </div>
+            
             <div id="speech-text"></div>
-            <button id="activate-ai-btn">Activate AI-Teacher</button>
+            <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
             
             <div id="audio-overlay">
-                <button id="audio-play-btn">Нажмите для воспроизведения</button>
+                <button id="audio-play-btn">
+                    <i class="fas fa-volume-up"></i> Нажмите для воспроизведения
+                </button>
             </div>
         </div>
     </div>
 
-    <div id="controls">
+    <div id="controls" class="fade-in">
         <button class="control-btn" id="mic-btn" title="Микрофон">
-            <div class="icon">🎤</div>
+            <i class="fas fa-microphone"></i>
             <span>Вкл</span>
         </button>
         <button class="control-btn" id="cam-btn" title="Камера">
-            <div class="icon">📷</div>
+            <i class="fas fa-video"></i>
             <span>Вкл</span>
         </button>
         <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
-            <div class="icon">🖥️</div>
+            <i class="fas fa-desktop"></i>
             <span>Экран</span>
         </button>
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
-            <div class="icon">⛶</div>
+            <i class="fas fa-expand"></i>
             <span>Полный</span>
         </button>
         <button class="control-btn" id="end-call-btn" title="Выйти">
-            <div class="icon">📞</div>
+            <i class="fas fa-phone-slash"></i>
             <span>Выйти</span>
         </button>
     </div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Получаем ID комнаты из URL
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room') || 'default';
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
-        // Элементы
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
@@ -273,15 +476,16 @@
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
-        const participantsDiv = document.getElementById('participants');
+        const participantsCount = document.getElementById('participants-count');
         const speechTextDiv = document.getElementById('speech-text');
-        const videoContainer = document.getElementById('video-container');
-        const mainElement = document.getElementById('main');
         const audioOverlay = document.getElementById('audio-overlay');
         const audioPlayBtn = document.getElementById('audio-play-btn');
         const activateAiBtn = document.getElementById('activate-ai-btn');
+        const lessonContent = document.getElementById('lesson-content');
+        const lessonTitle = document.getElementById('lesson-title');
+        const lessonText = document.getElementById('lesson-text');
+        const backgroundAnimation = document.getElementById('background-animation');
 
-        // Состояние
         let userStream = null;
         let socket = null;
         let isMicOn = false;
@@ -291,8 +495,41 @@
         let speechHistory = [];
         let pendingAudio = null;
         let aiTeacherActivated = false;
+        let animationCircles = [];
+        let currentLesson = null;
+        let currentParagraph = 0;
 
-        // Инициализация Socket.io
+        function createBackgroundAnimation() {
+            for (let i = 0; i < 10; i++) {
+                const circle = document.createElement('div');
+                circle.className = 'animated-circle';
+                
+                const size = Math.random() * 100 + 50;
+                circle.style.width = `${size}px`;
+                circle.style.height = `${size}px`;
+                circle.style.left = `${Math.random() * 100}%`;
+                circle.style.top = `${Math.random() * 100}%`;
+                
+                const colors = ['#4361ee', '#3a0ca3', '#4cc9f0', '#f72585'];
+                circle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                backgroundAnimation.appendChild(circle);
+                animationCircles.push(circle);
+                
+                anime({
+                    targets: circle,
+                    translateX: () => anime.random(-300, 300),
+                    translateY: () => anime.random(-300, 300),
+                    scale: () => anime.random(0.5, 1.5),
+                    duration: () => anime.random(5000, 15000),
+                    easing: 'easeInOutQuad',
+                    complete: function(anim) {
+                        anim.restart();
+                    }
+                });
+            }
+        }
+
         function initSocket() {
             socket = io();
             
@@ -312,14 +549,12 @@
             
             socket.on('animation_frame', (data) => {
                 teacherVideo.src = data.frame;
-                statusDiv.textContent = `Анимация учителя: кадр ${data.index + 1}/${data.total}`;
             });
             
             socket.on('speech_audio', (data) => {
                 try {
                     const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
                     
-                    // Пытаемся воспроизвести автоматически
                     const playPromise = audio.play();
                     
                     if (playPromise !== undefined) {
@@ -329,7 +564,6 @@
                                 audioOverlay.style.display = 'none';
                             })
                             .catch(error => {
-                                // Если автовоспроизведение запрещено
                                 pendingAudio = audio;
                                 audioOverlay.style.display = 'flex';
                                 showSpeechText(data.text, 'teacher');
@@ -347,7 +581,7 @@
             });
             
             socket.on('participants_update', (data) => {
-                participantsDiv.textContent = `Участников: ${data.count}`;
+                participantsCount.textContent = data.count;
             });
             
             socket.on('speech_history', (data) => {
@@ -371,9 +605,47 @@
                     statusDiv.textContent = 'AI-Teacher готов';
                 }
             });
+            
+            socket.on('lesson_started', (data) => {
+                currentLesson = data;
+                currentParagraph = 0;
+                lessonTitle.textContent = `${data.subject}: ${data.title}`;
+                loadLessonContent(data.lesson_id);
+            });
         }
 
-        // Обработчик кнопки воспроизведения
+        function loadLessonContent(lessonId) {
+            fetch(`/api/lesson_content/${lessonId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.content && data.content.length > 0) {
+                        displayLessonParagraph(data.content);
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки урока:', error);
+                });
+        }
+
+        function displayLessonParagraph(content) {
+            if (currentParagraph < content.length) {
+                lessonText.textContent = content[currentParagraph];
+                lessonContent.style.display = 'block';
+                
+                anime({
+                    targets: lessonText,
+                    opacity: [0, 1],
+                    duration: 1000,
+                    easing: 'easeInOutQuad'
+                });
+                
+                currentParagraph++;
+            } else {
+                lessonContent.style.display = 'none';
+                currentLesson = null;
+            }
+        }
+
         audioPlayBtn.addEventListener('click', () => {
             if (pendingAudio) {
                 pendingAudio.play()
@@ -388,23 +660,39 @@
             }
         });
 
-        // Активация AI-Teacher
         activateAiBtn.addEventListener('click', () => {
             socket.emit('activate_ai_teacher', { room_id: roomId });
         });
 
-        // Показать текст речи на экране
         function showSpeechText(text, source) {
             speechTextDiv.textContent = text;
             speechTextDiv.style.display = 'block';
-            speechTextDiv.style.color = source === 'me' ? '#4CAF50' : '#3498db';
+            speechTextDiv.style.background = source === 'me' 
+                ? 'linear-gradient(135deg, rgba(76, 201, 240, 0.8), rgba(58, 12, 163, 0.8))' 
+                : 'linear-gradient(135deg, rgba(67, 97, 238, 0.8), rgba(247, 37, 133, 0.8))';
+            
+            anime({
+                targets: speechTextDiv,
+                opacity: [0, 1],
+                translateY: [20, 0],
+                duration: 500,
+                easing: 'easeOutQuad'
+            });
             
             setTimeout(() => {
-                speechTextDiv.style.display = 'none';
+                anime({
+                    targets: speechTextDiv,
+                    opacity: [1, 0],
+                    translateY: [0, -20],
+                    duration: 500,
+                    easing: 'easeInQuad',
+                    complete: () => {
+                        speechTextDiv.style.display = 'none';
+                    }
+                });
             }, 5000);
         }
 
-        // Инициализация распознавания речи
         function initSpeechRecognition() {
             if ('webkitSpeechRecognition' in window) {
                 recognition = new webkitSpeechRecognition();
@@ -437,11 +725,16 @@
             }
         }
 
-        // Управление микрофоном
         async function toggleMicrophone() {
             try {
                 if (!isMicOn) {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            sampleRate: 44100
+                        }
+                    });
                     if (userStream) {
                         userStream.getAudioTracks().forEach(track => userStream.addTrack(track));
                     } else {
@@ -473,14 +766,20 @@
                 }
             } catch (error) {
                 statusDiv.textContent = 'Ошибка доступа к микрофону: ' + error.message;
+                console.error('Ошибка доступа к микрофону:', error);
             }
         }
 
-        // Управление камерой
         async function toggleCamera() {
             try {
                 if (!isCamOn) {
-                    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const videoStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            facingMode: 'user'
+                        }
+                    });
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
                     } else {
@@ -491,7 +790,7 @@
                     camBtn.classList.add('active');
                     camBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Камера включена';
-                    selfVideo.style.display = 'block';
+                    document.getElementById('self-video-container').style.display = 'block';
                 } else {
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => track.stop());
@@ -501,22 +800,28 @@
                     camBtn.classList.remove('active');
                     camBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Камера выключена';
-                    selfVideo.style.display = 'none';
+                    document.getElementById('self-video-container').style.display = 'none';
                 }
             } catch (error) {
                 statusDiv.textContent = 'Ошибка доступа к камере: ' + error.message;
+                console.error('Ошибка доступа к камере:', error);
+                
+                if (error.name === 'NotAllowedError') {
+                    statusDiv.textContent = 'Доступ к камере запрещен. Разрешите доступ в настройках браузера.';
+                } else if (error.name === 'NotFoundError' || error.name === 'OverconstrainedError') {
+                    statusDiv.textContent = 'Камера не найдена или недоступна.';
+                }
             }
         }
 
-        // Полноэкранный режим
         function toggleFullscreen() {
             if (!isFullscreen) {
-                if (mainElement.requestFullscreen) {
-                    mainElement.requestFullscreen();
-                } else if (mainElement.webkitRequestFullscreen) {
-                    mainElement.webkitRequestFullscreen();
-                } else if (mainElement.msRequestFullscreen) {
-                    mainElement.msRequestFullscreen();
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) {
+                    document.documentElement.msRequestFullscreen();
                 }
                 isFullscreen = true;
                 fullscreenBtn.querySelector('span').textContent = 'Обычный';
@@ -533,7 +838,6 @@
             }
         }
 
-        // Завершение вызова
         function endCall() {
             if (userStream) {
                 userStream.getTracks().forEach(track => track.stop());
@@ -553,16 +857,16 @@
             }
         }
 
-        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
+            createBackgroundAnimation();
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
             fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
-            selfVideo.style.display = 'none';
+            document.getElementById('self-video-container').style.display = 'none';
 
             if (isEmbedded) {
                 document.body.classList.add('embedded');
@@ -572,6 +876,12 @@
                 if (event.data === 'end_conference') {
                     endCall();
                 }
+            });
+            
+            window.addEventListener('resize', () => {
+                animationCircles.forEach(circle => circle.remove());
+                animationCircles = [];
+                createBackgroundAnimation();
             });
         });
 
