@@ -59,7 +59,7 @@ class DialogueManager:
                 demo_lesson = self.lessons_dir / "social_general.txt"
                 if not demo_lesson.exists():
                     with open(demo_lesson, 'w', encoding='utf-8') as f:
-                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - форма правления, при которой народ является источником власти.\n\nЭкономика - хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - система общеобязательных норм, охраняемых государством.\n\nСоциализация - процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - система норм и принципов, регулирующих поведение людей.\n\nГлобализация - процесс всемирной экономической, политической и культурной интеграции.")
+                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - это форма правления, при которой народ является источником власти.\n\nЭкономика - это хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - это совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - это система общеобязательных норм, охраняемых государством.\n\nСоциализация - это процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - это человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - это система норм и принципов, регулирующих поведение людей.\n\nГлобализация - это процесс всемирной экономической, политической и культурной интеграции.")
                 return
                 
             # Загрузка текстовых файлов уроков
@@ -111,22 +111,26 @@ class DialogueManager:
         try:
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Разбиваем на предложения для более естественного чтения
-                sentences = re.split(r'(?<=[.!?])\s+', content)
-                # Объединяем предложения в группы по 2-4 для плавного чтения
-                paragraphs = []
-                current_paragraph = []
+                # Разбиваем на абзацы (по пустым строкам)
+                paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
                 
-                for sentence in sentences:
-                    if sentence.strip():
-                        current_paragraph.append(sentence.strip())
-                        if len(current_paragraph) >= 2:  # Группируем по 2-4 предложения
-                            paragraphs.append(' '.join(current_paragraph))
-                            current_paragraph = []
-                
-                # Добавляем оставшиеся предложения
-                if current_paragraph:
-                    paragraphs.append(' '.join(current_paragraph))
+                # Если абзацев нет, разбиваем на предложения
+                if not paragraphs:
+                    sentences = re.split(r'(?<=[.!?])\s+', content)
+                    # Объединяем предложения в группы по 2-3 для плавного чтения
+                    current_paragraph = []
+                    paragraphs = []
+                    
+                    for sentence in sentences:
+                        if sentence.strip():
+                            current_paragraph.append(sentence.strip())
+                            if len(current_paragraph) >= 2:  # Группируем по 2-3 предложения
+                                paragraphs.append(' '.join(current_paragraph))
+                                current_paragraph = []
+                    
+                    # Добавляем оставшиеся предложения
+                    if current_paragraph:
+                        paragraphs.append(' '.join(current_paragraph))
                 
                 return paragraphs if paragraphs else ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
         except Exception as e:
@@ -137,65 +141,42 @@ class DialogueManager:
         """Вычисление схожести строк"""
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-    def process_input(self, text: str) -> str:
+    def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа"""
         text_lower = text.lower().strip()
         
         # 1. Сначала проверяем команды управления уроком
         if self.lesson_started:
-            if any(word in text_lower for word in ["стоп", "останови", "хватит"]):
+            if any(word in text_lower for word in ["стоп", "останови", "хватит", "закончи"]):
                 return self._handle_lesson_reading(text_lower)
             return None
             
         self.conversation_counter += 1
         
-        # 2. Если есть база знаний по предмету, сначала проверяем там
+        # 2. Если пользователь называет предмет - автоматически начинаем урок (В ПЕРВУЮ ОЧЕРЕДЬ!)
+        available_subjects = self.get_available_subjects()
+        for subject in available_subjects:
+            if subject.lower() in text_lower:
+                # Пропускаем поиск в базе знаний, если это выбор предмета
+                print(f"Обнаружен выбор предмета: {subject}")
+                return self._handle_subject_selection_direct(subject)
+        
+        # 3. Если есть база знаний по предмету, проверяем там
         if self.knowledge_base:
             knowledge_response = self.knowledge_base.get_dialogue_response(text_lower)
             if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                 return knowledge_response
         
-        # 3. Быстрая проверка локальных шаблонов
+        # 4. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
         
-        # 4. Проверка диалоговых шаблонов из базы знаний (если есть)
+        # 5. Проверка диалоговых шаблонов из базы знаний (если есть)
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
             if dialogue_response:
                 return dialogue_response
-        
-        # 5. Если пользователь называет предмет - автоматически начинаем урок
-        available_subjects = self.get_available_subjects()
-        for subject in available_subjects:
-            if subject.lower() in text_lower:
-                self.current_subject = subject
-                # Автоматически выбираем первый доступный урок (демо-урок если есть)
-                lessons = self.lessons.get(subject, [])
-                demo_lessons = [l for l in lessons if l.get('is_demo', False)]
-                
-                if demo_lessons:
-                    self.selected_lesson = demo_lessons[0]
-                elif lessons:
-                    self.selected_lesson = lessons[0]
-                else:
-                    # Создаем временный урок
-                    self.selected_lesson = {
-                        'id': f"demo_{subject}",
-                        'title': f"Демо-урок по {subject}",
-                        'file_path': self.lessons_dir / f"demo_{subject}.txt",
-                        'is_demo': True
-                    }
-                
-                self.lesson_started = True
-                self.current_state = "lesson_reading"
-                self.current_paragraph = 0
-                self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
-                self.knowledge_base = KnowledgeBase(self.current_subject)
-                
-                # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
-                return None
         
         # 6. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
@@ -233,6 +214,35 @@ class DialogueManager:
             
         return response
 
+    def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
+        """Прямая обработка выбора предмета (без поиска в базе знаний)"""
+        self.current_subject = subject
+        # Автоматически выбираем первый доступный урок (демо-урок если есть)
+        lessons = self.lessons.get(subject, [])
+        demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+        
+        if demo_lessons:
+            self.selected_lesson = demo_lessons[0]
+        elif lessons:
+            self.selected_lesson = lessons[0]
+        else:
+            # Создаем временный урок
+            self.selected_lesson = {
+                'id': f"demo_{subject}",
+                'title': f"Демо-урок по {subject}",
+                'file_path': self.lessons_dir / f"demo_{subject}.txt",
+                'is_demo': True
+            }
+        
+        self.lesson_started = True
+        self.current_state = "lesson_reading"
+        self.current_paragraph = 0
+        self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+        self.knowledge_base = KnowledgeBase(self.current_subject)
+        
+        # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
+        return None
+
     def _handle_greeting(self, text: str) -> Optional[str]:
         greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
@@ -252,32 +262,7 @@ class DialogueManager:
         # Поиск по названию предмета
         for subject in subjects:
             if subject.lower() in text.lower():
-                self.current_subject = subject
-                # Автоматически начинаем урок при выборе предмета
-                lessons = self.lessons.get(subject, [])
-                demo_lessons = [l for l in lessons if l.get('is_demo', False)]
-                
-                if demo_lessons:
-                    self.selected_lesson = demo_lessons[0]
-                elif lessons:
-                    self.selected_lesson = lessons[0]
-                else:
-                    # Создаем временный урок
-                    self.selected_lesson = {
-                        'id': f"demo_{subject}",
-                        'title': f"Демо-урок по {subject}",
-                        'file_path': self.lessons_dir / f"demo_{subject}.txt",
-                        'is_demo': True
-                    }
-                
-                self.lesson_started = True
-                self.current_state = "lesson_reading"
-                self.current_paragraph = 0
-                self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
-                self.knowledge_base = KnowledgeBase(self.current_subject)
-                
-                # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
-                return None
+                return self._handle_subject_selection_direct(subject)
                 
         # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
@@ -292,7 +277,7 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
-        if any(word in text for word in ["стоп", "останови", "хватит"]):
+        if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
