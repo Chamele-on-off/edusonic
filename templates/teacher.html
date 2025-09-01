@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анимация аватара</title>
+    <title>Панель управления AI-учителем</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -96,12 +96,66 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+        
+        .management-panel {
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        
+        .tab-container {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        
+        .tab.active {
+            border: 1px solid #ddd;
+            border-bottom: 1px solid white;
+            margin-bottom: -1px;
+            border-radius: 4px 4px 0 0;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .knowledge-form, .lesson-form {
+            margin-bottom: 20px;
+        }
+        
+        .subject-select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
-        <h1 style="text-align: center;">Анимация аватара</h1>
+        <h1 style="text-align: center;">Панель управления AI-учителем</h1>
         
         <div id="room-controls">
             <h3>Комната: <span id="room-id">default</span></h3>
@@ -145,6 +199,73 @@
 
         <div id="conference-link">
             <a id="conference-link-a" href="/conference?room=default" target="_blank">Перейти в конференцию</a>
+        </div>
+        
+        <!-- Новая панель управления -->
+        <div class="management-panel">
+            <h2>Управление базой знаний и уроками</h2>
+            
+            <div class="tab-container">
+                <div class="tab active" data-tab="knowledge">База знаний</div>
+                <div class="tab" data-tab="lessons">Уроки</div>
+                <div class="tab" data-tab="download">Скачать</div>
+            </div>
+            
+            <div class="tab-content active" id="knowledge-tab">
+                <div class="knowledge-form">
+                    <h3>Добавить в базу знаний</h3>
+                    <select class="subject-select" id="knowledge-subject">
+                        <option value="обществознание">Обществознание</option>
+                        <option value="математика">Математика</option>
+                        <option value="история">История</option>
+                        <option value="физика">Физика</option>
+                        <option value="химия">Химия</option>
+                        <option value="биология">Биология</option>
+                        <option value="литература">Литература</option>
+                        <option value="русский язык">Русский язык</option>
+                        <option value="общее">Общее</option>
+                    </select>
+                    <textarea id="knowledge-text" placeholder="Введите текст для добавления в базу знаний. Формат: термин - определение (каждая пара с новой строки)"></textarea>
+                    <button id="add-knowledge-btn">Добавить в базу</button>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="lessons-tab">
+                <div class="lesson-form">
+                    <h3>Добавить новый урок</h3>
+                    <select class="subject-select" id="lesson-subject">
+                        <option value="обществознание">Обществознание</option>
+                        <option value="математика">Математика</option>
+                        <option value="история">История</option>
+                        <option value="физика">Физика</option>
+                        <option value="химия">Химия</option>
+                        <option value="биология">Биология</option>
+                        <option value="литература">Литература</option>
+                        <option value="русский язык">Русский язык</option>
+                        <option value="общее">Общее</option>
+                    </select>
+                    <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd;">
+                    <textarea id="lesson-content" placeholder="Содержание урока"></textarea>
+                    <button id="add-lesson-btn">Добавить урок</button>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="download-tab">
+                <h3>Скачать базу знаний</h3>
+                <p>Выберите предмет для скачивания текущей базы знаний:</p>
+                <select class="subject-select" id="download-subject">
+                    <option value="обществознание">Обществознание</option>
+                    <option value="математика">Математика</option>
+                    <option value="история">История</option>
+                    <option value="физика">Физика</option>
+                    <option value="химия">Химия</option>
+                    <option value="биология">Биология</option>
+                    <option value="литература">Литература</option>
+                    <option value="русский язык">Русский язык</option>
+                    <option value="общее">Общее</option>
+                </select>
+                <button id="download-btn">Скачать базу знаний</button>
+            </div>
         </div>
     </div>
 
@@ -417,6 +538,110 @@
                 const newRoom = roomInput.value.trim() || 'default';
                 initRoom(newRoom);
                 roomInput.value = '';
+            });
+            
+            // Управление вкладками
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    this.classList.add('active');
+                    document.getElementById(this.dataset.tab + '-tab').classList.add('active');
+                });
+            });
+            
+            // Добавление в базу знаний
+            document.getElementById('add-knowledge-btn').addEventListener('click', function() {
+                const subject = document.getElementById('knowledge-subject').value;
+                const text = document.getElementById('knowledge-text').value;
+                
+                if (!text.trim()) {
+                    alert('Введите текст для добавления в базу знаний');
+                    return;
+                }
+                
+                fetch('/api/add_knowledge', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        subject: subject,
+                        text: text
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Данные успешно добавлены в базу знаний!');
+                        document.getElementById('knowledge-text').value = '';
+                    } else {
+                        alert('Ошибка: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка при добавлении данных: ' + error);
+                });
+            });
+            
+            // Добавление урока
+            document.getElementById('add-lesson-btn').addEventListener('click', function() {
+                const subject = document.getElementById('lesson-subject').value;
+                const title = document.getElementById('lesson-title').value;
+                const content = document.getElementById('lesson-content').value;
+                
+                if (!title.trim() || !content.trim()) {
+                    alert('Заполните название и содержание урока');
+                    return;
+                }
+                
+                fetch('/api/add_lesson', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        subject: subject,
+                        title: title,
+                        content: content
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Урок успешно добавлен!');
+                        document.getElementById('lesson-title').value = '';
+                        document.getElementById('lesson-content').value = '';
+                    } else {
+                        alert('Ошибка: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка при добавлении урока: ' + error);
+                });
+            });
+            
+            // Скачивание базы знаний
+            document.getElementById('download-btn').addEventListener('click', function() {
+                const subject = document.getElementById('download-subject').value;
+                
+                fetch(`/api/download_knowledge?subject=${encodeURIComponent(subject)}`)
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `${subject}_knowledge.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                })
+                .catch(error => {
+                    alert('Ошибка при скачивании: ' + error);
+                });
             });
         });
     </script>
