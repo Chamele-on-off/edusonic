@@ -253,41 +253,72 @@ def handle_recognized_speech(data):
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
             # Сначала проверяем команды управления
-            if any(word in text.lower() for word in ["записал", "дальше", "продолжай", "стоп", "останови", "хватит"]):
-                reading_response = dialogue.process_input(text)
-                if reading_response:
+            if any(word in text.lower() for word in ["записал", "дальше", "продолжай", "следующий", "продолжить"]):
+                # Получаем следующий абзац урока
+                next_paragraph = dialogue._get_next_paragraph()
+                if next_paragraph:
                     # Отправляем текст
                     emit('speech_text', {
-                        'text': f"Учитель: {reading_response}",
+                        'text': f"Учитель: {next_paragraph}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    
-                    # Если это команда для продолжения урока, получаем следующий абзац
-                    if any(word in text.lower() for word in ["записал", "дальше", "продолжай"]):
-                        next_paragraph = dialogue._get_next_paragraph()
-                        if next_paragraph:
-                            speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-                    
-                    # Если это команда остановки
-                    if any(word in text.lower() for word in ["стоп", "останови", "хватит"]):
-                        dialogue.reset()
-            else:
-                # Обработка вопросов во время чтения урока
-                response = dialogue.handle_question_during_lesson(text)
-                if response:
+                    # Озвучиваем следующий абзац
+                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                return
+            
+            # Команды остановки
+            if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
+                stop_response = dialogue.process_input(text)
+                if stop_response:
                     # Отправляем текст
                     emit('speech_text', {
-                        'text': f"Учитель: {response}",
+                        'text': f"Учитель: {stop_response}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    # ОЗВУЧИВАЕМ ответ на вопрос
-                    speak_text(room_id, response, voice_type='female', is_teacher=True)
+                    # Озвучиваем ответ на остановку
+                    speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
+                return
+            
+            # Обработка вопросов во время чтения урока
+            response = dialogue.handle_question_during_lesson(text)
+            if response:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {response}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                # ОЗВУЧИВАЕМ ответ на вопрос
+                speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
-            if response:
+            
+            # Если response None - это значит был выбран предмет и нужно начать урок
+            if response is None:
+                # Урок выбран, начинаем чтение
+                lesson_data = dialogue.get_selected_lesson()
+                if lesson_data:
+                    emit('lesson_started', {
+                        'lesson_id': lesson_data['id'],
+                        'title': lesson_data['title'],
+                        'subject': dialogue.get_current_subject()
+                    }, room=room_id)
+                    
+                    # Немедленно начинаем чтение первого абзаца урока
+                    first_paragraph = dialogue._get_next_paragraph()
+                    if first_paragraph:
+                        # Отправляем текст
+                        emit('speech_text', {
+                            'text': f"Учитель: {first_paragraph}",
+                            'sid': 'teacher',
+                            'is_teacher': True
+                        }, room=room_id)
+                        # Озвучиваем первый абзац
+                        speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
+            elif response:
                 # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
@@ -297,21 +328,6 @@ def handle_recognized_speech(data):
                 
                 # Озвучиваем ответ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
-                
-                # Если урок выбран, сразу начинаем чтение
-                if dialogue.is_lesson_started():
-                    lesson_data = dialogue.get_selected_lesson()
-                    if lesson_data:
-                        emit('lesson_started', {
-                            'lesson_id': lesson_data['id'],
-                            'title': lesson_data['title'],
-                            'subject': dialogue.get_current_subject()
-                        }, room=room_id)
-                        
-                        # Немедленно начинаем чтение первого абзаца урока
-                        first_paragraph = dialogue._get_next_paragraph()
-                        if first_paragraph:
-                            speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
