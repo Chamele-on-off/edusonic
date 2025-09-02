@@ -92,10 +92,10 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background: rgba(0, 0, 0, 0.95);
-            padding: 40px;
+            padding: 30px;
             border-radius: 20px;
             max-width: 85%;
-            max-height: 75%;
+            max-height: 70%;
             overflow: hidden;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
@@ -106,50 +106,78 @@
                 0 0 0 1px rgba(76, 201, 240, 0.3),
                 0 0 25px rgba(76, 201, 240, 0.2);
             border: 1px solid rgba(76, 201, 240, 0.1);
-            -webkit-overflow-scrolling: touch;
         }
         
         #lesson-content h2 {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             color: var(--teacher-color);
             text-align: center;
-            font-size: 1.6rem;
+            font-size: 1.5rem;
             font-weight: 300;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        #lesson-text-container {
+            position: relative;
+            min-height: 150px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            padding: 20px;
         }
         
         #lesson-text {
             font-size: 1.1rem;
             line-height: 1.6;
             text-align: center;
-            font-weight: 350;
             color: rgba(255, 255, 255, 0.95);
-            min-height: 120px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 25px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            position: relative;
-            overflow: hidden;
+            margin: 0;
         }
         
-        #lesson-text::before {
-            content: '';
+        .floating-word {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--teacher-color), transparent);
-            animation: shimmer 3s infinite;
+            font-size: 2rem;
+            font-weight: bold;
+            opacity: 0.1;
+            pointer-events: none;
+            z-index: -1;
+            animation: floatWord 15s linear infinite;
         }
         
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
+        @keyframes floatWord {
+            0% {
+                transform: translateY(100%) rotate(0deg);
+                opacity: 0.1;
+            }
+            50% {
+                opacity: 0.2;
+            }
+            100% {
+                transform: translateY(-100%) rotate(360deg);
+                opacity: 0;
+            }
+        }
+        
+        .knowledge-particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--teacher-color);
+            opacity: 0.6;
+            animation: particleFloat 8s ease-in-out infinite;
+        }
+        
+        @keyframes particleFloat {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 0.6;
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+                opacity: 0.8;
+            }
         }
         
         .typing-cursor {
@@ -171,20 +199,20 @@
             position: absolute;
             bottom: 100px;
             right: 20px;
-            width: 200px;
-            height: 150px;
             border: 3px solid var(--teacher-color);
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 8px 25px rgba(76, 201, 240, 0.3);
             z-index: 10;
             background: black;
+            transition: all 0.3s ease;
         }
         
         #teacher-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
         }
         
         #teacher-speech {
@@ -202,13 +230,13 @@
             box-shadow: 0 8px 20px rgba(76, 201, 240, 0.4);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            animation: speech-appear 0.5s ease-out;
+            animation: speechAppear 0.3s ease-out;
         }
         
-        @keyframes speech-appear {
+        @keyframes speechAppear {
             from {
                 opacity: 0;
-                transform: translateY(20px) scale(0.9);
+                transform: translateY(10px) scale(0.9);
             }
             to {
                 opacity: 1;
@@ -252,7 +280,7 @@
             box-shadow: 0 8px 20px rgba(247, 37, 133, 0.4);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            animation: speech-appear 0.5s ease-out;
+            animation: speechAppear 0.3s ease-out;
         }
         
         #status-container {
@@ -357,64 +385,6 @@
             transform: translateX(-50%) scale(0.95);
         }
         
-        #manual-speech-input {
-            position: absolute;
-            bottom: 350px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            z-index: 10;
-            display: none;
-            flex-direction: column;
-            gap: 10px;
-            min-width: 300px;
-        }
-        
-        #manual-speech-input input {
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 16px;
-            background: white;
-            color: black;
-        }
-        
-        #manual-speech-input button {
-            padding: 12px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        #manual-speech-btn {
-            position: absolute;
-            bottom: 350px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 12px 24px;
-            background: var(--success);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
-            z-index: 10;
-            display: none;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        
-        #manual-speech-btn:active {
-            transform: translateX(-50%) scale(0.95);
-        }
-        
         .camera-permission {
             position: absolute;
             top: 50%;
@@ -441,6 +411,21 @@
             font-size: 16px;
         }
         
+        .speech-bubble {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 18px;
+            border-radius: 18px;
+            max-width: 250px;
+            font-size: 14px;
+            z-index: 11;
+            display: none;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            animation: speechAppear 0.3s ease-out;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -450,11 +435,18 @@
                 font-size: 1.1rem;
             }
             
-            #teacher-video-container,
+            #teacher-video-container {
+                width: 150px;
+                height: 112px;
+                bottom: 90px;
+                right: 15px;
+            }
+            
             #self-video-container {
                 width: 150px;
                 height: 112px;
                 bottom: 90px;
+                left: 15px;
             }
             
             #teacher-speech,
@@ -485,40 +477,38 @@
                 font-size: 16px;
             }
             
-            #manual-speech-btn {
-                bottom: 280px;
-                padding: 10px 20px;
-                font-size: 14px;
-            }
-            
-            #manual-speech-input {
-                bottom: 280px;
-                min-width: 250px;
-                padding: 12px;
-            }
-            
             #lesson-content {
-                padding: 30px;
+                padding: 20px;
                 max-width: 90%;
             }
             
             #lesson-content h2 {
-                font-size: 1.4rem;
+                font-size: 1.3rem;
             }
             
             #lesson-text {
                 font-size: 1rem;
-                min-height: 100px;
-                padding: 20px;
+            }
+            
+            #lesson-text-container {
+                min-height: 120px;
+                padding: 15px;
             }
         }
         
         @media (max-width: 480px) {
-            #teacher-video-container,
+            #teacher-video-container {
+                width: 120px;
+                height: 90px;
+                bottom: 80px;
+                right: 10px;
+            }
+            
             #self-video-container {
                 width: 120px;
                 height: 90px;
                 bottom: 80px;
+                left: 10px;
             }
             
             #teacher-speech,
@@ -547,41 +537,22 @@
                 font-size: 14px;
             }
             
-            #manual-speech-btn {
-                bottom: 250px;
-                padding: 8px 16px;
-                font-size: 13px;
-            }
-            
-            #manual-speech-input {
-                bottom: 250px;
-                min-width: 220px;
-                padding: 10px;
-            }
-            
-            #manual-speech-input input {
-                padding: 10px;
-                font-size: 14px;
-            }
-            
-            #manual-speech-input button {
-                padding: 10px;
-                font-size: 14px;
-            }
-            
             #lesson-content {
-                padding: 20px;
+                padding: 15px;
             }
             
             #lesson-content h2 {
-                font-size: 1.2rem;
-                margin-bottom: 20px;
+                font-size: 1.1rem;
+                margin-bottom: 15px;
             }
             
             #lesson-text {
                 font-size: 0.9rem;
-                min-height: 80px;
-                padding: 15px;
+            }
+            
+            #lesson-text-container {
+                min-height: 100px;
+                padding: 12px;
             }
         }
         
@@ -658,7 +629,9 @@
             
             <div id="lesson-content">
                 <h2 id="lesson-title"></h2>
-                <div id="lesson-text"></div>
+                <div id="lesson-text-container">
+                    <div id="lesson-text"></div>
+                </div>
             </div>
             
             <div id="teacher-video-container" class="fade-in">
@@ -680,15 +653,6 @@
             </div>
             
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
-            
-            <button id="manual-speech-btn" class="fade-in">
-                <i class="fas fa-keyboard"></i> Ввести текст
-            </button>
-            
-            <div id="manual-speech-input" class="fade-in">
-                <input type="text" id="speech-input-text" placeholder="Введите ваше сообщение...">
-                <button id="send-speech-btn">Отправить</button>
-            </div>
             
             <div class="camera-permission fade-in" id="camera-permission">
                 <p>Разрешите доступ к камере и микрофону для участия в конференции</p>
@@ -742,11 +706,8 @@
         const lessonContent = document.getElementById('lesson-content');
         const lessonTitle = document.getElementById('lesson-title');
         const lessonText = document.getElementById('lesson-text');
+        const lessonTextContainer = document.getElementById('lesson-text-container');
         const backgroundAnimation = document.getElementById('background-animation');
-        const manualSpeechBtn = document.getElementById('manual-speech-btn');
-        const manualSpeechInput = document.getElementById('manual-speech-input');
-        const speechInputText = document.getElementById('speech-input-text');
-        const sendSpeechBtn = document.getElementById('send-speech-btn');
         const cameraPermission = document.getElementById('camera-permission');
         const enableCameraBtn = document.getElementById('enable-camera-btn');
 
@@ -764,6 +725,7 @@
         let currentTypingAnimation = null;
         let currentLessonContent = [];
         let devicesEnabled = false;
+        let currentAvatarAspectRatio = 1;
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -796,6 +758,46 @@
             }
         }
 
+        function createLessonBackgroundAnimation() {
+            // Создаем плавающие слова
+            const words = ['Знание', 'Учение', 'Наука', 'Образование', 'Развитие', 'Мудрость'];
+            for (let i = 0; i < 12; i++) {
+                const word = document.createElement('div');
+                word.className = 'floating-word';
+                word.textContent = words[Math.floor(Math.random() * words.length)];
+                word.style.left = `${Math.random() * 100}%`;
+                word.style.animationDelay = `${Math.random() * 15}s`;
+                lessonTextContainer.appendChild(word);
+            }
+            
+            // Создаем частицы знаний
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'knowledge-particle';
+                particle.style.left = `${Math.random() * 100}%`;
+                particle.style.top = `${Math.random() * 100}%`;
+                particle.style.animationDelay = `${Math.random() * 8}s`;
+                lessonTextContainer.appendChild(particle);
+            }
+        }
+
+        function adjustTeacherVideoSize(img) {
+            if (img.naturalWidth && img.naturalHeight) {
+                currentAvatarAspectRatio = img.naturalWidth / img.naturalHeight;
+                const teacherContainer = document.getElementById('teacher-video-container');
+                
+                if (currentAvatarAspectRatio > 1) {
+                    // Горизонтальное изображение
+                    teacherContainer.style.width = '200px';
+                    teacherContainer.style.height = '150px';
+                } else {
+                    // Вертикальное изображение
+                    teacherContainer.style.width = '150px';
+                    teacherContainer.style.height = '200px';
+                }
+            }
+        }
+
         function initSocket() {
             socket = io();
             
@@ -807,11 +809,6 @@
                 setTimeout(() => {
                     enableCameraAndMicrophone();
                 }, 1000);
-                
-                // Для iOS показываем кнопку ручного ввода
-                if (isIOS) {
-                    manualSpeechBtn.style.display = 'block';
-                }
             });
             
             socket.on('disconnect', () => {
@@ -819,6 +816,9 @@
             });
             
             socket.on('animation_frame', (data) => {
+                teacherVideo.onload = function() {
+                    adjustTeacherVideoSize(this);
+                };
                 teacherVideo.src = data.frame;
             });
             
@@ -919,7 +919,8 @@
                 micBtn.classList.add('active');
                 micBtn.querySelector('span').textContent = 'Выкл';
                 
-                if (recognition && !isIOS) {
+                // Запускаем распознавание речи
+                if (recognition) {
                     recognition.start();
                 }
                 
@@ -929,7 +930,6 @@
                 
                 // Показываем кнопку активации AI-учителя
                 activateAiBtn.style.display = 'block';
-                manualSpeechBtn.style.display = 'block';
                 
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
@@ -1016,7 +1016,7 @@
                     currentIndex++;
                     
                     // Прокрутка к последнему символу
-                    lessonText.scrollTop = lessonText.scrollHeight;
+                    lessonTextContainer.scrollTop = lessonTextContainer.scrollHeight;
                 } else {
                     clearInterval(currentTypingAnimation);
                     lessonText.removeChild(cursor);
@@ -1029,25 +1029,8 @@
             teacherSpeech.textContent = cleanText;
             teacherSpeech.style.display = 'block';
             
-            anime({
-                targets: teacherSpeech,
-                opacity: [0, 1],
-                translateY: [20, 0],
-                duration: 500,
-                easing: 'easeOutQuad'
-            });
-            
             setTimeout(() => {
-                anime({
-                    targets: teacherSpeech,
-                    opacity: [1, 0],
-                    translateY: [0, -20],
-                    duration: 500,
-                    easing: 'easeInQuad',
-                    complete: () => {
-                        teacherSpeech.style.display = 'none';
-                    }
-                });
+                teacherSpeech.style.display = 'none';
             }, 5000);
         }
 
@@ -1055,56 +1038,13 @@
             studentSpeech.textContent = text;
             studentSpeech.style.display = 'block';
             
-            anime({
-                targets: studentSpeech,
-                opacity: [0, 1],
-                translateY: [20, 0],
-                duration: 500,
-                easing: 'easeOutQuad'
-            });
-            
             setTimeout(() => {
-                anime({
-                    targets: studentSpeech,
-                    opacity: [1, 0],
-                    translateY: [0, -20],
-                    duration: 500,
-                    easing: 'easeInQuad',
-                    complete: () => {
-                        studentSpeech.style.display = 'none';
-                    }
-                });
+                studentSpeech.style.display = 'none';
             }, 5000);
         }
 
         activateAiBtn.addEventListener('click', () => {
             socket.emit('activate_ai_teacher', { room_id: roomId });
-        });
-
-        manualSpeechBtn.addEventListener('click', () => {
-            manualSpeechInput.style.display = 'flex';
-            manualSpeechBtn.style.display = 'none';
-            speechInputText.focus();
-        });
-
-        sendSpeechBtn.addEventListener('click', () => {
-            const text = speechInputText.value.trim();
-            if (text) {
-                socket.emit('recognized_speech', {
-                    room_id: roomId,
-                    text: text
-                });
-                showStudentSpeech(text, 'me');
-                speechInputText.value = '';
-                manualSpeechInput.style.display = 'none';
-                manualSpeechBtn.style.display = 'block';
-            }
-        });
-
-        speechInputText.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendSpeechBtn.click();
-            }
         });
 
         async function toggleMicrophone() {
@@ -1127,7 +1067,7 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
-                    if (recognition && !isIOS) {
+                    if (recognition) {
                         recognition.start();
                     }
                 } else {
@@ -1139,7 +1079,7 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
-                    if (recognition && !isIOS) {
+                    if (recognition) {
                         recognition.stop();
                     }
                 }
@@ -1242,8 +1182,8 @@
         }
 
         function initSpeechRecognition() {
-            if ('webkitSpeechRecognition' in window && !isIOS) {
-                recognition = new webkitSpeechRecognition();
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
                 recognition.continuous = true;
                 recognition.interimResults = true;
                 recognition.lang = 'ru-RU';
@@ -1268,8 +1208,14 @@
                 recognition.onerror = (event) => {
                     console.error('Ошибка распознавания речи:', event.error);
                 };
+
+                recognition.onend = () => {
+                    if (isMicOn) {
+                        recognition.start();
+                    }
+                };
             } else {
-                console.warn('Распознавание речи не поддерживается или отключено для iOS');
+                console.warn('Распознавание речи не поддерживается в этом браузере');
             }
         }
 
@@ -1277,6 +1223,7 @@
             initSocket();
             createBackgroundAnimation();
             initSpeechRecognition();
+            createLessonBackgroundAnimation();
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
