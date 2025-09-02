@@ -91,108 +91,31 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.95);
+            background: rgba(0, 0, 0, 0.8);
             padding: 30px;
-            border-radius: 20px;
-            max-width: 85%;
-            max-height: 70%;
-            overflow: hidden;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            border-radius: 15px;
+            max-width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 5;
             display: none;
-            box-shadow: 
-                0 20px 40px rgba(0, 0, 0, 0.4),
-                0 0 0 1px rgba(76, 201, 240, 0.3),
-                0 0 25px rgba(76, 201, 240, 0.2);
-            border: 1px solid rgba(76, 201, 240, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            -webkit-overflow-scrolling: touch;
         }
         
         #lesson-content h2 {
             margin-bottom: 20px;
-            color: var(--teacher-color);
+            color: var(--success);
             text-align: center;
             font-size: 1.5rem;
-            font-weight: 300;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-        
-        #lesson-text-container {
-            position: relative;
-            min-height: 150px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            overflow: hidden;
-            padding: 20px;
         }
         
         #lesson-text {
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             line-height: 1.6;
             text-align: center;
-            color: rgba(255, 255, 255, 0.95);
-            margin: 0;
-        }
-        
-        .floating-word {
-            position: absolute;
-            font-size: 2rem;
-            font-weight: bold;
-            opacity: 0.1;
-            pointer-events: none;
-            z-index: -1;
-            animation: floatWord 15s linear infinite;
-        }
-        
-        @keyframes floatWord {
-            0% {
-                transform: translateY(100%) rotate(0deg);
-                opacity: 0.1;
-            }
-            50% {
-                opacity: 0.2;
-            }
-            100% {
-                transform: translateY(-100%) rotate(360deg);
-                opacity: 0;
-            }
-        }
-        
-        .knowledge-particle {
-            position: absolute;
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--teacher-color);
-            opacity: 0.6;
-            animation: particleFloat 8s ease-in-out infinite;
-        }
-        
-        @keyframes particleFloat {
-            0%, 100% {
-                transform: translateY(0) rotate(0deg);
-                opacity: 0.6;
-            }
-            50% {
-                transform: translateY(-20px) rotate(180deg);
-                opacity: 0.8;
-            }
-        }
-        
-        .typing-cursor {
-            display: inline-block;
-            width: 2px;
-            height: 1.2rem;
-            background: var(--teacher-color);
-            margin-left: 2px;
-            animation: blink 1s infinite;
-            vertical-align: middle;
-        }
-        
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
         }
         
         #teacher-video-container {
@@ -411,21 +334,6 @@
             font-size: 16px;
         }
         
-        .speech-bubble {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 12px 18px;
-            border-radius: 18px;
-            max-width: 250px;
-            font-size: 14px;
-            z-index: 11;
-            display: none;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            animation: speechAppear 0.3s ease-out;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-        
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -479,7 +387,7 @@
             
             #lesson-content {
                 padding: 20px;
-                max-width: 90%;
+                max-width: 95%;
             }
             
             #lesson-content h2 {
@@ -487,12 +395,7 @@
             }
             
             #lesson-text {
-                font-size: 1rem;
-            }
-            
-            #lesson-text-container {
-                min-height: 120px;
-                padding: 15px;
+                font-size: 1.1rem;
             }
         }
         
@@ -542,17 +445,12 @@
             }
             
             #lesson-content h2 {
-                font-size: 1.1rem;
+                font-size: 1.2rem;
                 margin-bottom: 15px;
             }
             
             #lesson-text {
-                font-size: 0.9rem;
-            }
-            
-            #lesson-text-container {
-                min-height: 100px;
-                padding: 12px;
+                font-size: 1rem;
             }
         }
         
@@ -629,9 +527,7 @@
             
             <div id="lesson-content">
                 <h2 id="lesson-title"></h2>
-                <div id="lesson-text-container">
-                    <div id="lesson-text"></div>
-                </div>
+                <div id="lesson-text"></div>
             </div>
             
             <div id="teacher-video-container" class="fade-in">
@@ -706,7 +602,6 @@
         const lessonContent = document.getElementById('lesson-content');
         const lessonTitle = document.getElementById('lesson-title');
         const lessonText = document.getElementById('lesson-text');
-        const lessonTextContainer = document.getElementById('lesson-text-container');
         const backgroundAnimation = document.getElementById('background-animation');
         const cameraPermission = document.getElementById('camera-permission');
         const enableCameraBtn = document.getElementById('enable-camera-btn');
@@ -726,6 +621,7 @@
         let currentLessonContent = [];
         let devicesEnabled = false;
         let currentAvatarAspectRatio = 1;
+        let isLessonActive = false;
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -755,29 +651,6 @@
                         anim.restart();
                     }
                 });
-            }
-        }
-
-        function createLessonBackgroundAnimation() {
-            // Создаем плавающие слова
-            const words = ['Знание', 'Учение', 'Наука', 'Образование', 'Развитие', 'Мудрость'];
-            for (let i = 0; i < 12; i++) {
-                const word = document.createElement('div');
-                word.className = 'floating-word';
-                word.textContent = words[Math.floor(Math.random() * words.length)];
-                word.style.left = `${Math.random() * 100}%`;
-                word.style.animationDelay = `${Math.random() * 15}s`;
-                lessonTextContainer.appendChild(word);
-            }
-            
-            // Создаем частицы знаний
-            for (let i = 0; i < 20; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'knowledge-particle';
-                particle.style.left = `${Math.random() * 100}%`;
-                particle.style.top = `${Math.random() * 100}%`;
-                particle.style.animationDelay = `${Math.random() * 8}s`;
-                lessonTextContainer.appendChild(particle);
             }
         }
 
@@ -831,22 +704,30 @@
                     if (playPromise !== undefined) {
                         playPromise
                             .then(() => {
-                                showTeacherSpeech(data.text);
+                                if (!isLessonActive) {
+                                    showTeacherSpeech(data.text);
+                                }
                             })
                             .catch(error => {
                                 console.error('Ошибка автовоспроизведения:', error);
-                                showTeacherSpeech(data.text);
+                                if (!isLessonActive) {
+                                    showTeacherSpeech(data.text);
+                                }
                             });
                     }
                 } catch (error) {
                     console.error('Ошибка воспроизведения аудио:', error);
-                    showTeacherSpeech(data.text);
+                    if (!isLessonActive) {
+                        showTeacherSpeech(data.text);
+                    }
                 }
             });
             
             socket.on('speech_text', (data) => {
                 if (data.is_teacher) {
-                    showTeacherSpeech(data.text);
+                    if (!isLessonActive) {
+                        showTeacherSpeech(data.text);
+                    }
                     // Обновляем текст урока если это урок
                     if (currentLesson && data.text.startsWith('Учитель: ')) {
                         const lessonText = data.text.replace('Учитель: ', '');
@@ -882,6 +763,7 @@
             });
             
             socket.on('lesson_started', (data) => {
+                isLessonActive = true;
                 currentLesson = data;
                 currentParagraph = 0;
                 lessonTitle.textContent = `${data.subject}: ${data.title}`;
@@ -978,6 +860,7 @@
                 // Урок завершен
                 lessonContent.style.display = 'none';
                 currentLesson = null;
+                isLessonActive = false;
             }
         }
 
@@ -1001,25 +884,18 @@
             }
             
             lessonText.textContent = '';
-            const cursor = document.createElement('span');
-            cursor.className = 'typing-cursor';
-            lessonText.appendChild(cursor);
-            
             let currentIndex = 0;
             const typingSpeed = 30; // ms per character
             
             currentTypingAnimation = setInterval(() => {
                 if (currentIndex < text.length) {
-                    const char = text.charAt(currentIndex);
-                    const textNode = document.createTextNode(char);
-                    lessonText.insertBefore(textNode, cursor);
+                    lessonText.textContent += text.charAt(currentIndex);
                     currentIndex++;
                     
                     // Прокрутка к последнему символу
-                    lessonTextContainer.scrollTop = lessonTextContainer.scrollHeight;
+                    lessonContent.scrollTop = lessonContent.scrollHeight;
                 } else {
                     clearInterval(currentTypingAnimation);
-                    lessonText.removeChild(cursor);
                 }
             }, typingSpeed);
         }
@@ -1223,7 +1099,6 @@
             initSocket();
             createBackgroundAnimation();
             initSpeechRecognition();
-            createLessonBackgroundAnimation();
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
