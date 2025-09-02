@@ -12,11 +12,11 @@
             --secondary: #3a0ca3;
             --success: #4cc9f0;
             --danger: #f72585;
+            --dark: #212529;
+            --light: #f8f9fa;
+            --gray: #6c757d;
             --teacher-color: #4cc9f0;
             --student-color: #f72585;
-            --gold: #ffd700;
-            --silver: #c0c0c0;
-            --bronze: #cd7f32;
         }
         
         * {
@@ -28,7 +28,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
             color: white;
             height: 100vh;
             display: flex;
@@ -38,27 +38,22 @@
         }
         
         #header {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 25px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 100;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         #logo {
             font-weight: bold;
-            font-size: 1.6rem;
+            font-size: 1.4rem;
             display: flex;
             align-items: center;
-            gap: 12px;
-            background: linear-gradient(135deg, var(--teacher-color), var(--primary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            gap: 10px;
         }
         
         #main {
@@ -83,28 +78,12 @@
             width: 100%;
             height: 100%;
             z-index: 0;
-            overflow: hidden;
         }
         
-        .floating-particle {
+        .animated-circle {
             position: absolute;
             border-radius: 50%;
-            background: radial-gradient(circle, var(--teacher-color), transparent);
-            opacity: 0.6;
-            filter: blur(2px);
-        }
-        
-        .knowledge-orb {
-            position: absolute;
-            border-radius: 50%;
-            background: radial-gradient(circle, var(--gold), transparent);
-            opacity: 0.4;
-            animation: float 6s ease-in-out infinite;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            50% { transform: translateY(-20px) rotate(180deg); }
+            opacity: 0.3;
         }
         
         #lesson-content {
@@ -112,45 +91,57 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            padding: 50px;
-            border-radius: 30px;
-            max-width: 90%;
-            max-height: 80%;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 85%;
+            max-height: 75%;
             overflow: hidden;
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             z-index: 5;
             display: none;
             box-shadow: 
-                0 25px 50px rgba(0, 0, 0, 0.5),
+                0 20px 40px rgba(0, 0, 0, 0.4),
                 0 0 0 1px rgba(76, 201, 240, 0.3),
-                0 0 30px rgba(76, 201, 240, 0.2);
-            border: 2px solid rgba(76, 201, 240, 0.1);
+                0 0 25px rgba(76, 201, 240, 0.2);
+            border: 1px solid rgba(76, 201, 240, 0.1);
             -webkit-overflow-scrolling: touch;
         }
         
         #lesson-content h2 {
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             color: var(--teacher-color);
             text-align: center;
-            font-size: 2.2rem;
+            font-size: 1.6rem;
             font-weight: 300;
-            letter-spacing: 1px;
-            text-shadow: 0 0 20px rgba(76, 201, 240, 0.8);
-            background: linear-gradient(135deg, var(--teacher-color), var(--silver));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            position: relative;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
         
-        #lesson-content h2::after {
+        #lesson-text {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            text-align: center;
+            font-weight: 350;
+            color: rgba(255, 255, 255, 0.95);
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #lesson-text::before {
             content: '';
             position: absolute;
-            bottom: -10px;
-            left: 25%;
-            width: 50%;
+            top: 0;
+            left: 0;
+            right: 0;
             height: 2px;
             background: linear-gradient(90deg, transparent, var(--teacher-color), transparent);
             animation: shimmer 3s infinite;
@@ -161,53 +152,14 @@
             100% { transform: translateX(100%); }
         }
         
-        #lesson-text {
-            font-size: 1.6rem;
-            line-height: 1.8;
-            text-align: center;
-            font-weight: 350;
-            color: rgba(255, 255, 255, 0.95);
-            min-height: 150px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 30px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 20px;
-            border: 1px solid rgba(76, 201, 240, 0.2);
-            position: relative;
-            overflow: hidden;
-            font-family: 'Georgia', serif;
-        }
-        
-        #lesson-text::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(45deg, 
-                rgba(76, 201, 240, 0.1) 0%, 
-                transparent 50%, 
-                rgba(76, 201, 240, 0.1) 100%);
-            animation: background-shift 8s ease-in-out infinite;
-        }
-        
-        @keyframes background-shift {
-            0%, 100% { transform: translateX(0%); }
-            50% { transform: translateX(100%); }
-        }
-        
         .typing-cursor {
             display: inline-block;
-            width: 3px;
-            height: 1.8rem;
-            background: var(--gold);
-            margin-left: 4px;
-            animation: blink 1s infinite, glow 2s infinite;
+            width: 2px;
+            height: 1.2rem;
+            background: var(--teacher-color);
+            margin-left: 2px;
+            animation: blink 1s infinite;
             vertical-align: middle;
-            box-shadow: 0 0 10px var(--gold);
         }
         
         @keyframes blink {
@@ -215,34 +167,18 @@
             51%, 100% { opacity: 0; }
         }
         
-        @keyframes glow {
-            0%, 100% { box-shadow: 0 0 10px var(--gold); }
-            50% { box-shadow: 0 0 20px var(--gold), 0 0 30px var(--teacher-color); }
-        }
-        
         #teacher-video-container {
             position: absolute;
-            bottom: 120px;
-            right: 30px;
-            width: 250px;
-            height: 188px;
-            border: 4px solid var(--teacher-color);
-            border-radius: 20px;
+            bottom: 100px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            border: 3px solid var(--teacher-color);
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 
-                0 15px 35px rgba(76, 201, 240, 0.4),
-                0 0 30px rgba(76, 201, 240, 0.3);
+            box-shadow: 0 8px 25px rgba(76, 201, 240, 0.3);
             z-index: 10;
             background: black;
-            transform: perspective(1000px) rotateY(-5deg);
-            transition: all 0.3s ease;
-        }
-        
-        #teacher-video-container:hover {
-            transform: perspective(1000px) rotateY(0deg) scale(1.05);
-            box-shadow: 
-                0 20px 45px rgba(76, 201, 240, 0.6),
-                0 0 40px rgba(76, 201, 240, 0.4);
         }
         
         #teacher-video {
@@ -253,22 +189,19 @@
         
         #teacher-speech {
             position: absolute;
-            bottom: calc(100% + 15px);
+            bottom: calc(100% + 10px);
             right: 0;
             background: linear-gradient(135deg, var(--teacher-color), #3a86ff);
             color: white;
-            padding: 15px 25px;
-            border-radius: 25px;
-            max-width: 280px;
-            font-size: 15px;
+            padding: 12px 20px;
+            border-radius: 20px;
+            max-width: 250px;
+            font-size: 14px;
             z-index: 11;
             display: none;
-            box-shadow: 
-                0 10px 25px rgba(76, 201, 240, 0.5),
-                0 0 15px rgba(76, 201, 240, 0.3);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 20px rgba(76, 201, 240, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             animation: speech-appear 0.5s ease-out;
         }
         
@@ -285,27 +218,16 @@
         
         #self-video-container {
             position: absolute;
-            bottom: 120px;
-            left: 30px;
-            width: 250px;
-            height: 188px;
-            border: 4px solid var(--student-color);
-            border-radius: 20px;
+            bottom: 100px;
+            left: 20px;
+            width: 200px;
+            height: 150px;
+            border: 3px solid var(--student-color);
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 
-                0 15px 35px rgba(247, 37, 133, 0.4),
-                0 0 30px rgba(247, 37, 133, 0.3);
+            box-shadow: 0 8px 25px rgba(247, 37, 133, 0.3);
             z-index: 10;
             background: black;
-            transform: perspective(1000px) rotateY(5deg);
-            transition: all 0.3s ease;
-        }
-        
-        #self-video-container:hover {
-            transform: perspective(1000px) rotateY(0deg) scale(1.05);
-            box-shadow: 
-                0 20px 45px rgba(247, 37, 133, 0.6),
-                0 0 40px rgba(247, 37, 133, 0.4);
         }
         
         #self-video {
@@ -317,68 +239,62 @@
         
         #student-speech {
             position: absolute;
-            bottom: calc(100% + 15px);
+            bottom: calc(100% + 10px);
             left: 0;
             background: linear-gradient(135deg, var(--student-color), #ff6b6b);
             color: white;
-            padding: 15px 25px;
-            border-radius: 25px;
-            max-width: 280px;
-            font-size: 15px;
+            padding: 12px 20px;
+            border-radius: 20px;
+            max-width: 250px;
+            font-size: 14px;
             z-index: 11;
             display: none;
-            box-shadow: 
-                0 10px 25px rgba(247, 37, 133, 0.5),
-                0 0 15px rgba(247, 37, 133, 0.3);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 20px rgba(247, 37, 133, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             animation: speech-appear 0.5s ease-out;
         }
         
         #status-container {
             position: absolute;
-            top: 25px;
-            left: 25px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 20px;
-            border-radius: 15px;
-            font-size: 15px;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
             z-index: 10;
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            max-width: 85%;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            gap: 5px;
+            max-width: 80%;
         }
         
         #participants {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 5px;
         }
         
         #controls {
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
             display: flex;
             justify-content: center;
-            gap: 20px;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            gap: 15px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 100;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         .control-btn {
-            width: 70px;
-            height: 70px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             border: none;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+            background: rgba(255, 255, 255, 0.2);
             color: white;
             cursor: pointer;
             display: flex;
@@ -386,89 +302,55 @@
             align-items: center;
             justify-content: center;
             transition: all 0.3s ease;
-            font-size: 24px;
+            font-size: 20px;
             -webkit-user-select: none;
             user-select: none;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-        }
-        
-        .control-btn::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transform: rotate(45deg);
-            transition: all 0.6s ease;
-        }
-        
-        .control-btn:hover::before {
-            animation: shine 1.5s ease-in-out;
-        }
-        
-        @keyframes shine {
-            0% { transform: rotate(45deg) translateX(-100%); }
-            100% { transform: rotate(45deg) translateX(100%); }
         }
         
         .control-btn:active {
-            transform: scale(0.92);
+            transform: scale(0.95);
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
         
         .control-btn.active {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            box-shadow: 0 0 25px rgba(67, 97, 238, 0.6);
+            background: var(--primary);
         }
         
         .control-btn span {
-            font-size: 13px;
-            margin-top: 6px;
-            font-weight: 500;
+            font-size: 12px;
+            margin-top: 4px;
         }
         
         #end-call-btn {
-            background: linear-gradient(135deg, var(--danger), #e01b74);
+            background: var(--danger);
         }
         
         #end-call-btn:active {
-            transform: scale(0.92);
+            background: #e01b74;
+            transform: scale(0.95);
         }
         
         #activate-ai-btn {
             position: absolute;
-            bottom: 300px;
+            bottom: 270px;
             left: 50%;
             transform: translateX(-50%);
-            padding: 18px 36px;
+            padding: 15px 30px;
             background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
             border: none;
             border-radius: 50px;
             font-size: 18px;
-            font-weight: 600;
             cursor: pointer;
             z-index: 10;
-            box-shadow: 
-                0 10px 30px rgba(67, 97, 238, 0.4),
-                0 0 20px rgba(67, 97, 238, 0.3);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             transition: all 0.3s ease;
             display: none;
             -webkit-user-select: none;
             user-select: none;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        #activate-ai-btn:hover {
-            transform: translateX(-50%) scale(1.05);
-            box-shadow: 
-                0 15px 35px rgba(67, 97, 238, 0.6),
-                0 0 25px rgba(67, 97, 238, 0.4);
         }
         
         #activate-ai-btn:active {
@@ -477,89 +359,56 @@
         
         #manual-speech-input {
             position: absolute;
-            bottom: 380px;
+            bottom: 350px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.95);
-            padding: 25px;
-            border-radius: 25px;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 10;
             display: none;
             flex-direction: column;
-            gap: 15px;
-            min-width: 350px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            gap: 10px;
+            min-width: 300px;
         }
         
         #manual-speech-input input {
-            padding: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 15px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
             font-size: 16px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
-        }
-        
-        #manual-speech-input input:focus {
-            outline: none;
-            border-color: var(--teacher-color);
-            box-shadow: 0 0 15px rgba(76, 201, 240, 0.3);
-        }
-        
-        #manual-speech-input input::placeholder {
-            color: rgba(255, 255, 255, 0.7);
+            background: white;
+            color: black;
         }
         
         #manual-speech-input button {
-            padding: 16px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 12px;
+            background: var(--primary);
             color: white;
             border: none;
-            border-radius: 15px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        #manual-speech-input button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(67, 97, 238, 0.4);
         }
         
         #manual-speech-btn {
             position: absolute;
-            bottom: 380px;
+            bottom: 350px;
             left: 50%;
             transform: translateX(-50%);
-            padding: 16px 32px;
-            background: linear-gradient(135deg, var(--success), #38b6ff);
+            padding: 12px 24px;
+            background: var(--success);
             color: white;
             border: none;
             border-radius: 25px;
             font-size: 16px;
-            font-weight: 600;
             cursor: pointer;
             z-index: 10;
             display: none;
             -webkit-user-select: none;
             user-select: none;
-            box-shadow: 0 10px 25px rgba(76, 201, 240, 0.4);
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        #manual-speech-btn:hover {
-            transform: translateX(-50%) scale(1.05);
-            box-shadow: 0 15px 30px rgba(76, 201, 240, 0.6);
         }
         
         #manual-speech-btn:active {
@@ -571,112 +420,95 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.95);
-            padding: 40px;
-            border-radius: 25px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
             text-align: center;
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 20;
             display: none;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
-        }
-        
-        .camera-permission p {
-            margin-bottom: 25px;
-            font-size: 18px;
-            line-height: 1.6;
-            color: rgba(255, 255, 255, 0.9);
         }
         
         .camera-permission button {
-            padding: 16px 32px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: var(--primary);
             color: white;
             border: none;
             border-radius: 25px;
             cursor: pointer;
             font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .camera-permission button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(67, 97, 238, 0.4);
         }
         
         @media (max-width: 768px) {
             #header {
-                padding: 12px 20px;
+                padding: 10px 15px;
             }
             
             #logo {
-                font-size: 1.3rem;
+                font-size: 1.1rem;
             }
             
             #teacher-video-container,
             #self-video-container {
-                width: 180px;
-                height: 135px;
-                bottom: 100px;
-                right: 20px;
-                left: 20px;
+                width: 150px;
+                height: 112px;
+                bottom: 90px;
             }
             
             #teacher-speech,
             #student-speech {
-                max-width: 220px;
-                font-size: 14px;
-                padding: 12px 20px;
+                max-width: 200px;
+                font-size: 13px;
+                padding: 10px 16px;
             }
             
             #controls {
-                padding: 15px;
-                gap: 15px;
+                padding: 10px;
+                gap: 10px;
             }
             
             .control-btn {
-                width: 60px;
-                height: 60px;
-                font-size: 22px;
+                width: 50px;
+                height: 50px;
+                font-size: 18px;
             }
             
             .control-btn span {
-                font-size: 12px;
+                font-size: 10px;
             }
             
             #activate-ai-btn {
-                bottom: 250px;
-                padding: 16px 32px;
+                bottom: 220px;
+                padding: 12px 24px;
                 font-size: 16px;
             }
             
             #manual-speech-btn {
-                bottom: 320px;
-                padding: 14px 28px;
-                font-size: 15px;
+                bottom: 280px;
+                padding: 10px 20px;
+                font-size: 14px;
             }
             
             #manual-speech-input {
-                bottom: 320px;
-                min-width: 300px;
-                padding: 20px;
+                bottom: 280px;
+                min-width: 250px;
+                padding: 12px;
             }
             
             #lesson-content {
                 padding: 30px;
-                max-width: 95%;
+                max-width: 90%;
             }
             
             #lesson-content h2 {
-                font-size: 1.8rem;
+                font-size: 1.4rem;
             }
             
             #lesson-text {
-                font-size: 1.4rem;
-                min-height: 120px;
+                font-size: 1rem;
+                min-height: 100px;
                 padding: 20px;
             }
         }
@@ -684,124 +516,96 @@
         @media (max-width: 480px) {
             #teacher-video-container,
             #self-video-container {
-                width: 150px;
-                height: 113px;
-                bottom: 90px;
-                right: 15px;
-                left: 15px;
+                width: 120px;
+                height: 90px;
+                bottom: 80px;
             }
             
             #teacher-speech,
             #student-speech {
                 max-width: 180px;
-                font-size: 13px;
-                padding: 10px 16px;
-                bottom: calc(100% + 12px);
+                font-size: 12px;
+                padding: 8px 14px;
+                bottom: calc(100% + 8px);
             }
             
             .control-btn {
-                width: 55px;
-                height: 55px;
-                font-size: 20px;
+                width: 45px;
+                height: 45px;
+                font-size: 16px;
             }
             
             #status-container {
-                font-size: 13px;
-                padding: 12px 16px;
-                max-width: 80%;
+                font-size: 12px;
+                padding: 8px 12px;
+                max-width: 70%;
             }
             
             #activate-ai-btn {
-                bottom: 220px;
-                padding: 14px 28px;
-                font-size: 15px;
-            }
-            
-            #manual-speech-btn {
-                bottom: 280px;
-                padding: 12px 24px;
+                bottom: 200px;
+                padding: 10px 20px;
                 font-size: 14px;
             }
             
+            #manual-speech-btn {
+                bottom: 250px;
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+            
             #manual-speech-input {
-                bottom: 280px;
-                min-width: 260px;
-                padding: 18px;
+                bottom: 250px;
+                min-width: 220px;
+                padding: 10px;
             }
             
             #manual-speech-input input {
-                padding: 14px;
+                padding: 10px;
                 font-size: 14px;
             }
             
             #manual-speech-input button {
-                padding: 14px;
+                padding: 10px;
                 font-size: 14px;
             }
             
             #lesson-content {
-                padding: 25px;
+                padding: 20px;
             }
             
             #lesson-content h2 {
-                font-size: 1.6rem;
-                margin-bottom: 25px;
+                font-size: 1.2rem;
+                margin-bottom: 20px;
             }
             
             #lesson-text {
-                font-size: 1.2rem;
-                min-height: 100px;
-                padding: 18px;
+                font-size: 0.9rem;
+                min-height: 80px;
+                padding: 15px;
             }
         }
         
         .fade-in {
-            animation: fadeIn 0.6s ease-out forwards;
+            animation: fadeIn 0.5s ease forwards;
         }
         
         @keyframes fadeIn {
-            from { 
-                opacity: 0; 
-                transform: translateY(40px) scale(0.9) rotateX(10deg);
-                filter: blur(10px);
-            }
-            to { 
-                opacity: 1; 
-                transform: translateY(0) scale(1) rotateX(0);
-                filter: blur(0);
-            }
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .slide-out {
-            animation: slideOut 0.6s ease-in forwards;
+            animation: slideOut 0.5s ease forwards;
         }
         
         @keyframes slideOut {
             from { 
                 opacity: 1; 
                 transform: translateY(0) scale(1);
-                filter: blur(0);
             }
             to { 
                 opacity: 0; 
-                transform: translateY(-40px) scale(0.9);
-                filter: blur(10px);
-            }
-        }
-        
-        .text-glow {
-            animation: textGlow 3s ease-in-out infinite;
-        }
-        
-        @keyframes textGlow {
-            0%, 100% { 
-                text-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
-            }
-            50% { 
-                text-shadow: 
-                    0 0 20px rgba(76, 201, 240, 0.8),
-                    0 0 30px rgba(76, 201, 240, 0.6),
-                    0 0 40px rgba(76, 201, 240, 0.4);
+                transform: translateY(-20px) scale(0.95);
             }
         }
         
@@ -814,13 +618,13 @@
         }
         
         body.embedded #controls {
-            padding: 15px;
+            padding: 10px;
         }
         
         body.embedded .control-btn {
-            width: 55px;
-            height: 55px;
-            font-size: 20px;
+            width: 50px;
+            height: 50px;
+            font-size: 16px;
         }
         
         /* iOS specific fixes */
@@ -875,7 +679,7 @@
                 </div>
             </div>
             
-            <button id="activate-ai-btn" class="fade-in">✨ Активировать AI-Учителя</button>
+            <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
             
             <button id="manual-speech-btn" class="fade-in">
                 <i class="fas fa-keyboard"></i> Ввести текст
@@ -962,48 +766,33 @@
         let devicesEnabled = false;
 
         function createBackgroundAnimation() {
-            // Создаем парящие частицы знаний
-            for (let i = 0; i < 15; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'floating-particle';
+            for (let i = 0; i < 8; i++) {
+                const circle = document.createElement('div');
+                circle.className = 'animated-circle';
                 
-                const size = Math.random() * 60 + 20;
-                particle.style.width = `${size}px`;
-                particle.style.height = `${size}px`;
-                particle.style.left = `${Math.random() * 100}%`;
-                particle.style.top = `${Math.random() * 100}%`;
+                const size = Math.random() * 80 + 40;
+                circle.style.width = `${size}px`;
+                circle.style.height = `${size}px`;
+                circle.style.left = `${Math.random() * 100}%`;
+                circle.style.top = `${Math.random() * 100}%`;
                 
-                const colors = ['#4361ee', '#3a0ca3', '#4cc9f0', '#f72585', '#ffd700'];
-                particle.style.background = `radial-gradient(circle, ${colors[Math.floor(Math.random() * colors.length)]}, transparent)`;
+                const colors = ['#4361ee', '#3a0ca3', '#4cc9f0', '#f72585'];
+                circle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
                 
-                backgroundAnimation.appendChild(particle);
+                backgroundAnimation.appendChild(circle);
+                animationCircles.push(circle);
                 
                 anime({
-                    targets: particle,
-                    translateX: () => anime.random(-300, 300),
-                    translateY: () => anime.random(-300, 300),
-                    rotate: () => anime.random(0, 360),
-                    duration: () => anime.random(8000, 15000),
+                    targets: circle,
+                    translateX: () => anime.random(-200, 200),
+                    translateY: () => anime.random(-200, 200),
+                    scale: () => anime.random(0.5, 1.2),
+                    duration: () => anime.random(4000, 12000),
                     easing: 'easeInOutQuad',
                     complete: function(anim) {
                         anim.restart();
                     }
                 });
-            }
-
-            // Создаем орбы знаний
-            for (let i = 0; i < 5; i++) {
-                const orb = document.createElement('div');
-                orb.className = 'knowledge-orb';
-                
-                const size = Math.random() * 100 + 50;
-                orb.style.width = `${size}px`;
-                orb.style.height = `${size}px`;
-                orb.style.left = `${Math.random() * 100}%`;
-                orb.style.top = `${Math.random() * 100}%`;
-                orb.style.animationDelay = `${Math.random() * 2}s`;
-                
-                backgroundAnimation.appendChild(orb);
             }
         }
 
@@ -1179,7 +968,7 @@
                         lessonText.classList.remove('slide-out');
                         lessonText.textContent = '';
                         animateTextTyping(paragraph);
-                    }, 600);
+                    }, 500);
                 } else {
                     animateTextTyping(paragraph);
                 }
@@ -1217,7 +1006,7 @@
             lessonText.appendChild(cursor);
             
             let currentIndex = 0;
-            const typingSpeed = 25; // ms per character
+            const typingSpeed = 30; // ms per character
             
             currentTypingAnimation = setInterval(() => {
                 if (currentIndex < text.length) {
@@ -1231,8 +1020,6 @@
                 } else {
                     clearInterval(currentTypingAnimation);
                     lessonText.removeChild(cursor);
-                    // Добавляем свечение к тексту
-                    lessonText.classList.add('text-glow');
                 }
             }, typingSpeed);
         }
