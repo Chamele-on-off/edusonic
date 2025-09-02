@@ -101,7 +101,7 @@
             -webkit-backdrop-filter: blur(10px);
             z-index: 5;
             display: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 极速5);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             -webkit-overflow-scrolling: touch;
         }
         
@@ -176,7 +176,7 @@
             border: 3px solid var(--student-color);
             border-radius: 12px;
             overflow: hidden;
-            box-shadow: 极速8px 25px rgba(247, 37, 133, 0.3);
+            box-shadow: 0 8px 25px rgba(247, 37, 133, 0.3);
             z-index: 10;
             background: black;
         }
@@ -197,7 +197,7 @@
             padding: 12px 20px;
             border-radius: 20px;
             max-width: 250px;
-           极速 font-size: 14px;
+            font-size: 14px;
             z-index: 11;
             display: none;
             box-shadow: 0 8px 20px rgba(247, 37, 133, 0.4);
@@ -224,7 +224,7 @@
         }
         
         #participants {
-            display:极速 flex;
+            display: flex;
             align-items: center;
             gap: 5px;
         }
@@ -237,7 +237,7 @@
             gap: 15px;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            z极速-index: 100;
+            z-index: 100;
         }
         
         .control-btn {
@@ -272,14 +272,14 @@
         
         .control-btn span {
             font-size: 12px;
-            margin-top: 4极速px;
+            margin-top: 4px;
         }
         
         #end-call-btn {
-极速           background: var(--danger);
+            background: var(--danger);
         }
         
-        #极速end-call-btn:active {
+        #end-call-btn:active {
             background: #e01b74;
             transform: scale(0.95);
         }
@@ -305,7 +305,7 @@
         }
         
         #activate-ai-btn:active {
-            transform: translateX(-极速50%) scale(0.95);
+            transform: translateX(-50%) scale(0.95);
         }
         
         .camera-permission {
@@ -352,8 +352,8 @@
             
             #self-video-container {
                 width: 150px;
-                height: 112极速px;
-                bottom: 90极速px;
+                height: 112px;
+                bottom: 90px;
                 left: 15px;
             }
             
@@ -412,7 +412,7 @@
                 height: 90px;
                 bottom: 80px;
                 left: 10px;
-极速           }
+            }
             
             #teacher-speech,
             #student-speech {
@@ -424,7 +424,7 @@
             
             .control-btn {
                 width: 45px;
-                height: 45极速px;
+                height: 45px;
                 font-size: 16px;
             }
             
@@ -486,14 +486,14 @@
             display: none;
         }
         
-        body.embedded #极速controls {
+        body.embedded #controls {
             padding: 10px;
         }
         
         body.embedded .control-btn {
             width: 50px;
             height: 50px;
-            font极速-size: 16px;
+            font-size: 16px;
         }
         
         /* iOS specific fixes */
@@ -525,7 +525,7 @@
         <div id="video-container">
             <div id="background-animation"></div>
             
-            <div极速 id="lesson-content">
+            <div id="lesson-content">
                 <h2 id="lesson-title"></h2>
                 <div id="lesson-text"></div>
             </div>
@@ -562,15 +562,15 @@
             <i class="fas fa-microphone"></i>
             <span>Вкл</span>
         </button>
-        <button class="control-btn极速" id="cam-btn" title="Камера">
+        <button class="control-btn" id="cam-btn" title="Камера">
             <i class="fas fa-video"></i>
             <span>Вкл</span>
         </button>
         <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
-            <极速i class="fas fa-desktop"></i>
+            <i class="fas fa-desktop"></i>
             <span>Экран</span>
         </button>
-        <button class="control-btn"极速 id="fullscreen-btn" title="Полный экран">
+        <button class="control-btn" id="fullscreen-btn" title="Полный экран">
             <i class="fas fa-expand"></i>
             <span>Полный</span>
         </button>
@@ -626,7 +626,7 @@
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
                 const circle = document.createElement('div');
-                circle.class极速Name = 'animated-circle';
+                circle.className = 'animated-circle';
                 
                 const size = Math.random() * 80 + 40;
                 circle.style.width = `${size}px`;
@@ -738,7 +738,7 @@
                 }
             });
             
-            socket.on('participants_update', (极速data) => {
+            socket.on('participants_update', (data) => {
                 participantsCount.textContent = data.count;
             });
             
@@ -791,7 +791,7 @@
                 
                 // Включаем камеру
                 selfVideo.srcObject = userStream;
-                isCam极速On = true;
+                isCamOn = true;
                 camBtn.classList.add('active');
                 camBtn.querySelector('span').textContent = 'Выкл';
                 document.getElementById('self-video-container').style.display = 'block';
@@ -852,7 +852,7 @@
                         animateTextTyping(paragraph);
                     }, 500);
                 } else {
-                    animateTextTyp极速ing(paragraph);
+                    animateTextTyping(paragraph);
                 }
                 
                 currentParagraph = paragraphIndex + 1;
@@ -869,7 +869,7 @@
                 const paragraphIndex = currentLessonContent.indexOf(text);
                 if (paragraphIndex !== -1 && paragraphIndex >= currentParagraph) {
                     displayLessonParagraph(paragraphIndex);
-                } else if (paragraphIndex === -极速1) {
+                } else if (paragraphIndex === -1) {
                     // Новый текст, которого нет в текущем контенте
                     animateTextTyping(text);
                 }
@@ -952,7 +952,7 @@
                     }
                     isMicOn = false;
                     micBtn.classList.remove('active');
-                    micBtn.querySelector极速('span').textContent = 'Вкл';
+                    micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
                     if (recognition) {
@@ -1115,7 +1115,7 @@
                 }
             });
             
-            window.addEventListener('resize', ()极速 => {
+            window.addEventListener('resize', () => {
                 animationCircles.forEach(circle => circle.remove());
                 animationCircles = [];
                 createBackgroundAnimation();
