@@ -150,29 +150,6 @@
             border-radius: 4px;
             border: 1px solid #ddd;
         }
-        
-        .lesson-list {
-            margin-top: 20px;
-        }
-        
-        .lesson-item {
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            background: #f9f9f9;
-        }
-        
-        .lesson-item h4 {
-            margin: 0 0 5px 0;
-            color: #2c3e50;
-        }
-        
-        .lesson-item p {
-            margin: 0;
-            color: #7f8c8d;
-            font-size: 14px;
-        }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
@@ -267,14 +244,9 @@
                         <option value="русский язык">Русский язык</option>
                         <option value="общее">Общее</option>
                     </select>
-                    <input type="text" id="lesson-title" placeholder="Название урока (латинскими буквами, без пробелов)" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd;">
-                    <textarea id="lesson-content" placeholder="Содержание урока (абзацы разделяются пустой строкой)"></textarea>
+                    <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd;">
+                    <textarea id="lesson-content" placeholder="Содержание урока"></textarea>
                     <button id="add-lesson-btn">Добавить урок</button>
-                </div>
-                
-                <div class="lesson-list" id="lessons-list">
-                    <h3>Доступные уроки</h3>
-                    <div id="lessons-container">Загрузка...</div>
                 </div>
             </div>
             
@@ -531,37 +503,6 @@
             }
         }
         
-        // Загрузка списка уроков
-        async function loadLessons() {
-            try {
-                const response = await fetch('/api/lessons');
-                const data = await response.json();
-                
-                const container = document.getElementById('lessons-container');
-                if (data.lessons && Object.keys(data.lessons).length > 0) {
-                    let html = '';
-                    for (const [subject, lessons] of Object.entries(data.lessons)) {
-                        html += `<h4>${subject}</h4>`;
-                        lessons.forEach(lesson => {
-                            html += `
-                                <div class="lesson-item">
-                                    <h4>${lesson.title}</h4>
-                                    <p>ID: ${lesson.id} | Тип: ${lesson.type}</p>
-                                    <p>Файл: ${lesson.file_path}</p>
-                                </div>
-                            `;
-                        });
-                    }
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = '<p>Уроки не найдены</p>';
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки уроков:', error);
-                document.getElementById('lessons-container').innerHTML = '<p>Ошибка загрузки уроков</p>';
-            }
-        }
-        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             // Инициализация комнаты по умолчанию
@@ -569,9 +510,6 @@
             
             // Загрузка списка аватаров
             loadAvatars();
-            
-            // Загрузка списка уроков
-            loadLessons();
             
             // Выбор аватара
             avatarSelect.addEventListener('change', () => {
@@ -610,11 +548,6 @@
                     
                     this.classList.add('active');
                     document.getElementById(this.dataset.tab + '-tab').classList.add('active');
-                    
-                    // При переключении на вкладку уроков обновляем список
-                    if (this.dataset.tab === 'lessons') {
-                        loadLessons();
-                    }
                 });
             });
             
@@ -663,12 +596,6 @@
                     return;
                 }
                 
-                // Проверяем, что название содержит только латинские буквы и символы
-                if (!/^[a-zA-Z0-9_-]+$/.test(title)) {
-                    alert('Название урока должно содержать только латинские буквы, цифры, дефисы и подчеркивания');
-                    return;
-                }
-                
                 fetch('/api/add_lesson', {
                     method: 'POST',
                     headers: {
@@ -686,8 +613,6 @@
                         alert('Урок успешно добавлен!');
                         document.getElementById('lesson-title').value = '';
                         document.getElementById('lesson-content').value = '';
-                        // Обновляем список уроков
-                        loadLessons();
                     } else {
                         alert('Ошибка: ' + data.error);
                     }
