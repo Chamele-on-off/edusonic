@@ -1,6 +1,6 @@
 # config.py
 LLM_CONFIG = {
-    "api_key": "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",
+    "api_key": "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",
     "model": "deepseek/deepseek-chat-v3-0324:free",
     "api_url": "https://openrouter.ai/api/v1/chat/completions"
 }
