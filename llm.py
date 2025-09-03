@@ -3,16 +3,18 @@ import json
 from typing import Optional, Dict
 from pathlib import Path
 import time
-from config import LLM_CONFIG, QWEN_CONFIG
+from config import get_api_key, load_config  # Изменен импорт
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
                  model: str = "deepseek/deepseek-chat-v3-0324:free"):
-        self.api_key = api_key or LLM_CONFIG["api_key"]
-        self.api_url = api_url or LLM_CONFIG["api_url"]
-        self.model = model or LLM_CONFIG["model"]
+        # Загружаем конфигурацию для получения API ключа
+        config = load_config()
+        self.api_key = api_key or config.get("llm", {}).get("api_key", "")
+        self.api_url = api_url or config.get("llm", {}).get("api_url", "https://openrouter.ai/api/v1/chat/completions")
+        self.model = model or config.get("llm", {}).get("model", "deepseek/deepseek-chat-v3-0324:free")
         self.cache_dir = Path(cache_dir)
         self.cache = self._load_cache()
         
@@ -166,7 +168,8 @@ class LLMIntegration:
             print(f"Установлена кастомная модель: {self.model}")
             
         # Переключаем API ключ в зависимости от модели
+        config = load_config()
         if "qwen" in model.lower():
-            self.api_key = QWEN_CONFIG["api_key"]
+            self.api_key = config.get("qwen", {}).get("api_key", "")
         else:
-            self.api_key = LLM_CONFIG["api_key"]
+            self.api_key = config.get("llm", {}).get("api_key", "")
