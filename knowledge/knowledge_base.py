@@ -7,17 +7,52 @@ from sklearn.metrics.pairwise import cosine_similarity
 import random
 import string
 import re
+from datetime import datetime
 
 class KnowledgeBase:
     def __init__(self, subject: str = "general"):
         self.subject = subject
         self.knowledge_path = Path(f"materials/{subject}_knowledge.json")
+        self.llm_answers_path = Path(f"materials/{subject}_llm_answers.json")  # Новый файл для ответов LLM
         self.dialogue_path = Path("materials/dialogue_knowledge.json")
         self.vectorizer = TfidfVectorizer(max_features=1000, stop_words=['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это'])
+        self.llm_vectorizer = TfidfVectorizer(max_features=1000, stop_words=['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это'])
         self.data = self._load_knowledge()
+        self.llm_answers_data = self._load_llm_answers()  # Данные ответов LLM
         self.dialogue_data = self._load_dialogue_knowledge()
-        self._init_vectorizer()
+        self._init_vectorizers()
         
+    def _load_llm_answers(self) -> Dict:
+        """Загрузка ответов LLM из файла"""
+        try:
+            if not self.llm_answers_path.parent.exists():
+                self.llm_answers_path.parent.mkdir(parents=True)
+                
+            if self.llm_answers_path.exists():
+                with open(self.llm_answers_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки ответов LLM: {e}")
+        
+        # База по умолчанию
+        return {
+            "answers": {},
+            "metadata": {
+                "subject": self.subject,
+                "version": "1.0",
+                "last_updated": datetime.now().isoformat(),
+                "total_answers": 0
+            }
+        }
+
+    def _save_llm_answers(self):
+        """Сохранение ответов LLM в файл"""
+        try:
+            with open(self.llm_answers_path, 'w', encoding='utf-8') as f:
+                json.dump(self.llm_answers_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения ответов LLM: {e}")
+
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка диалоговых шаблонов"""
         try:
@@ -93,14 +128,14 @@ class KnowledgeBase:
             }
         }
 
-    def _init_vectorizer(self):
-        """Инициализация TF-IDF векторайзера"""
+    def _init_vectorizers(self):
+        """Инициализация TF-IDF векторайзеров для основной базы и ответов LLM"""
+        # Инициализация для основной базы
         texts = list(self.data["terms"].keys()) + list(self.data["questions"].keys())
         if texts:
             self.vectorizer.fit(texts)
             print(f"Векторайзер инициализирован с {len(texts)} текстами для предмета {self.subject}")
         else:
-            # Запасные данные для инициализации
             demo_texts = [
                 "общество группа людей",
                 "государство политическая организация", 
@@ -110,6 +145,74 @@ class KnowledgeBase:
             ]
             self.vectorizer.fit(demo_texts)
             print(f"Векторайзер инициализирован с демо-данными для предмета {self.subject}")
+        
+        # Инициализация для ответов LLM
+        llm_texts = list(self.llm_answers_data.get("answers", {}).keys())
+        if llm_texts:
+            self.llm_vectorizer.fit(llm_texts)
+            print(f"LLM векторайзер инициализирован с {len(llm_texts)} ответами для предмета {self.subject}")
+        else:
+            self.llm_vectorizer.fit(["демо вопрос ответ"])
+            print(f"LLM векторайзер инициализирован с демо-данными")
+
+    def add_llm_answer(self, question: str, answer: str):
+        """Добавление ответа LLM в базу"""
+        clean_question = self._clean_text(question)
+        if clean_question and answer:
+            self.llm_answers_data["answers"][clean_question] = {
+                "answer": answer,
+                "timestamp": datetime.now().isoformat(),
+                "subject": self.subject
+            }
+            self.llm_answers_data["metadata"]["total_answers"] = len(self.llm_answers_data["answers"])
+            self.llm_answers_data["metadata"]["last_updated"] = datetime.now().isoformat()
+            self._save_llm_answers()
+            
+            # Переинициализируем векторайзер с новыми данными
+            llm_texts = list(self.llm_answers_data["answers"].keys())
+            if llm_texts:
+                self.llm_vectorizer.fit(llm_texts)
+                print(f"Добавлен ответ LLM в базу. Всего ответов: {len(self.llm_answers_data['answers'])}")
+            
+            return True
+        return False
+
+    def find_llm_answer(self, question: str, threshold: float = 0.4) -> Optional[str]:
+        """Поиск похожего ответа в базе ответов LLM"""
+        if not question.strip():
+            return None
+            
+        clean_question = self._clean_text(question)
+        answers = self.llm_answers_data.get("answers", {})
+        
+        if not answers:
+            return None
+        
+        # Сначала проверяем точное совпадение
+        if clean_question in answers:
+            print(f"Точное совпадение в базе ответов LLM: {clean_question}")
+            return answers[clean_question]["answer"]
+        
+        # Затем поиск по схожести (TF-IDF + косинусная схожесть)
+        try:
+            questions = list(answers.keys())
+            q_vec = self.llm_vectorizer.transform([clean_question])
+            q_vecs = self.llm_vectorizer.transform(questions)
+            similarities = cosine_similarity(q_vec, q_vecs)
+            
+            # Находим лучшее совпадение
+            best_match_idx = np.argmax(similarities)
+            best_similarity = similarities[0][best_match_idx]
+            
+            if best_similarity > threshold:
+                best_question = questions[best_match_idx]
+                print(f"Найдено похожий вопрос в базе LLM: {best_question} (схожесть: {best_similarity:.2f})")
+                return answers[best_question]["answer"]
+                
+        except Exception as e:
+            print(f"Ошибка поиска по схожести в базе LLM: {e}")
+        
+        return None
 
     def get_dialogue_response(self, text: str) -> Optional[str]:
         """Получение ответа из диалоговых шаблонов"""
@@ -123,6 +226,12 @@ class KnowledgeBase:
         if knowledge_answer and not knowledge_answer.startswith("Интересный вопрос!"):
             print(f"Найден ответ в базе знаний: {knowledge_answer[:100]}...")
             return knowledge_answer
+        
+        # Затем проверяем базу ответов LLM
+        llm_answer = self.find_llm_answer(text_lower)
+        if llm_answer:
+            print(f"Найден ответ в базе LLM: {llm_answer[:100]}...")
+            return llm_answer
         
         # Затем проверяем диалоговые шаблоны
         for pattern, responses in self.dialogue_data.get("patterns", {}).items():
@@ -279,6 +388,7 @@ class KnowledgeBase:
             "terms_count": len(self.data["terms"]),
             "questions_count": len(self.data["questions"]),
             "examples_count": len(self.data["examples"]),
+            "llm_answers_count": len(self.llm_answers_data.get("answers", {})),
             "dialogue_patterns": len(self.dialogue_data.get("patterns", {})),
             "dialogue_contexts": len(self.dialogue_data.get("contexts", {}))
         }
@@ -311,6 +421,27 @@ class KnowledgeBase:
             except Exception as e:
                 print(f"Ошибка поиска похожих вопросов: {e}")
         
+        # Поиск по ответам LLM
+        llm_answers = self.llm_answers_data.get("answers", {})
+        if llm_answers:
+            llm_questions = list(llm_answers.keys())
+            try:
+                q_vec = self.llm_vectorizer.transform([query_lower])
+                q_vecs = self.llm_vectorizer.transform(llm_questions)
+                similarities = cosine_similarity(q_vec, q_vecs)
+                
+                for i, similarity in enumerate(similarities[0]):
+                    if similarity > 0.3:
+                        results.append({
+                            "type": "llm_answer",
+                            "text": llm_questions[i],
+                            "answer": llm_answers[llm_questions[i]]["answer"],
+                            "similarity": float(similarity),
+                            "timestamp": llm_answers[llm_questions[i]]["timestamp"]
+                        })
+            except Exception as e:
+                print(f"Ошибка поиска похожих ответов LLM: {e}")
+        
         # Поиск по терминам
         for term, definition in self.data["terms"].items():
             if query_lower in term.lower() or any(word in term.lower() for word in query_lower.split()):
@@ -332,3 +463,10 @@ class KnowledgeBase:
     def list_questions(self) -> List[str]:
         """Возвращает список всех вопросов в базе знаний"""
         return list(self.data["questions"].keys())
+
+    def list_llm_answers(self) -> List[Dict]:
+        """Возвращает список всех ответов LLM"""
+        return [
+            {"question": q, "answer": a["answer"], "timestamp": a["timestamp"]}
+            for q, a in self.llm_answers_data.get("answers", {}).items()
+        ]
