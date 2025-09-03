@@ -9,12 +9,12 @@ CONFIG_FILE = Path(__file__).parent / 'api_config.json'
 DEFAULT_CONFIG = {
     "llm": {
         "api_key": "",
-        "model": "deepseek/deepseek-chat-v3-0324:free",
+        "model": "qwen/qwen3-4b:free",
         "api_url": "https://openrouter.ai/api/v1/chat/completions"
     },
     "qwen": {
         "api_key": "", 
-        "model": "qwen/qwen3-235b-a22b:free",
+        "model": "deepseek/deepseek-chat-v3-0324:free",
         "api_url": "https://openrouter.ai/api/v1/chat/completions"
     }
 }
