@@ -9,7 +9,7 @@ class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
-                 model: str = "deepseek/deepseek-r1"):
+                 model: str = "deepseek/deepseek-chat-v3-0324:free"):
         self.api_key = api_key or LLM_CONFIG["api_key"]
         self.api_url = api_url or LLM_CONFIG["api_url"]
         self.model = model or LLM_CONFIG["model"]
@@ -153,9 +153,9 @@ class LLMIntegration:
     def set_model(self, model: str):
         """Установка модели LLM"""
         available_models = {
-            "deepseek": "deepseek/deepseek-r1",
-            "qwen": "qwen/qwen-2.5-32b",
-            "qwen-turbo": "qwen/qwen-2.5-coder-32b-instruct"
+            "deepseek": "deepseek/deepseek-chat-v3-0324:free",
+            "qwen": "qwen/qwen3-235b-a22b:free",
+            "qwen-turbo": "qwen/qwen3-235b-a22b:free"
         }
         
         if model in available_models:
