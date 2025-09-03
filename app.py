@@ -10,6 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
+from config import update_api_key, get_api_key, load_config  # Добавлен импорт
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -521,6 +522,79 @@ def download_knowledge():
     # Здесь должна быть логика формирования файла базы знаний
     # Пока возвращаем заглушку
     return jsonify({"success": False, "error": "Not implemented yet"})
+
+# Новые API эндпоинты для управления API ключами
+@app.route('/api/config/keys', methods=['GET'])
+def get_api_keys():
+    """Получение текущих API ключей"""
+    try:
+        config = load_config()
+        return jsonify({
+            "success": True,
+            "keys": {
+                "deepseek": config.get("llm", {}).get("api_key", ""),
+                "qwen": config.get("qwen", {}).get("api_key", "")
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/config/keys', methods=['POST'])
+def set_api_key():
+    """Установка API ключа"""
+    try:
+        data = request.json
+        provider = data.get('provider')
+        api_key = data.get('api_key')
+        
+        if not provider or not api_key:
+            return jsonify({"success": False, "error": "Provider and API key are required"})
+        
+        if provider not in ['deepseek', 'qwen']:
+            return jsonify({"success": False, "error": "Invalid provider. Use 'deepseek' or 'qwen'"})
+        
+        success = update_api_key(provider, api_key)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"API ключ для {provider} успешно обновлен",
+                "provider": provider
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to update API key"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/config/test', methods=['POST'])
+def test_api_key():
+    """Тестирование API ключа"""
+    try:
+        data = request.json
+        provider = data.get('provider')
+        api_key = data.get('api_key')
+        
+        if not provider or not api_key:
+            return jsonify({"success": False, "error": "Provider and API key are required"})
+        
+        # Здесь можно добавить реальную проверку ключа через API
+        # Пока просто проверяем формат
+        if len(api_key) > 10 and api_key.startswith('sk-'):
+            return jsonify({
+                "success": True,
+                "message": f"Ключ {provider} выглядит корректно",
+                "valid": True
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "message": f"Ключ {provider} может быть неверным",
+                "valid": False
+            })
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
     # Создаем необходимые папки
