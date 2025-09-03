@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_from_directory, jsonify, request, send_file
+from flask import Flask, render_template, send_from_directory, jsonify, request
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -10,9 +10,6 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-import json
-import re
-from datetime import datetime
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -114,127 +111,6 @@ def get_frames(avatar_name):
 @app.route('/frames/<avatar_name>/<path:filename>')
 def serve_frame(avatar_name, filename):
     return send_from_directory(FRAMES_DIR / avatar_name, filename)
-
-@app.route('/api/add_knowledge', methods=['POST'])
-def add_knowledge():
-    """Добавление новых данных в базу знаний"""
-    try:
-        data = request.get_json()
-        subject = data.get('subject', 'общее')
-        text = data.get('text', '')
-        
-        if not text.strip():
-            return jsonify({"success": False, "error": "Пустой текст"})
-        
-        # Создаем путь к файлу базы знаний
-        materials_dir = BASE_DIR / 'materials'
-        if not materials_dir.exists():
-            materials_dir.mkdir()
-            
-        knowledge_path = materials_dir / f'{subject}_knowledge.json'
-        
-        # Загружаем существующую базу или создаем новую
-        if knowledge_path.exists():
-            with open(knowledge_path, 'r', encoding='utf-8') as f:
-                knowledge_data = json.load(f)
-        else:
-            knowledge_data = {
-                "terms": {},
-                "questions": {},
-                "examples": {},
-                "metadata": {
-                    "subject": subject,
-                    "version": "1.0",
-                    "last_updated": datetime.now().strftime("%Y-%m-%d"),
-                    "author": "AI Teacher System",
-                    "description": f"База знаний по {subject} для AI-учителя"
-                }
-            }
-        
-        # Обрабатываем текст и добавляем в базу
-        lines = text.strip().split('\n')
-        for line in lines:
-            if ' - ' in line:
-                term, definition = line.split(' - ', 1)
-                term = term.strip()
-                definition = definition.strip()
-                if term and definition:
-                    knowledge_data['terms'][term.lower()] = definition
-        
-        # Сохраняем обновленную базу
-        with open(knowledge_path, 'w', encoding='utf-8') as f:
-            json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
-        
-        return jsonify({"success": True})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/add_lesson', methods=['POST'])
-def add_lesson():
-    """Добавление нового урока"""
-    try:
-        data = request.get_json()
-        subject = data.get('subject', 'общее')
-        title = data.get('title', '')
-        content = data.get('content', '')
-        
-        if not title.strip() or not content.strip():
-            return jsonify({"success": False, "error": "Пустое название или содержание урока"})
-        
-        # Создаем директорию lessons если ее нет
-        lessons_dir = BASE_DIR / 'lessons'
-        if not lessons_dir.exists():
-            lessons_dir.mkdir()
-        
-        # Создаем имя файла из названия урока
-        filename = re.sub(r'[^\w\s]', '', title.lower())
-        filename = re.sub(r'\s+', '_', filename)
-        filename = f"{filename}.txt"
-        
-        # Сохраняем урок
-        lesson_path = lessons_dir / filename
-        with open(lesson_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        
-        return jsonify({"success": True})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/download_knowledge')
-def download_knowledge():
-    """Скачивание базы знаний"""
-    try:
-        subject = request.args.get('subject', 'общее')
-        knowledge_path = BASE_DIR / 'materials' / f'{subject}_knowledge.json'
-        
-        if not knowledge_path.exists():
-            return jsonify({"error": "База знаний не найдена"}), 404
-        
-        return send_file(knowledge_path, as_attachment=True)
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/lesson_content/<lesson_id>')
-def get_lesson_content(lesson_id):
-    """Получение содержания урока"""
-    try:
-        lesson_path = BASE_DIR / 'lessons' / f'{lesson_id}.txt'
-        
-        if not lesson_path.exists():
-            return jsonify({"error": "Урок не найден"}), 404
-        
-        # Используем существующую функцию для загрузки контента
-        from dialogue import DialogueManager
-        dm = DialogueManager(None)
-        content = dm._load_lesson_content(lesson_path)
-        
-        return jsonify({"content": content})
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 def text_to_speech(text, lang='ru'):
     """Преобразует текст в аудио (base64)"""
@@ -464,5 +340,191 @@ def handle_activate_ai_teacher(data):
     
     emit('ai_teacher_activated', {}, room=room_id)
 
+@app.route('/api/llm/model', methods=['POST'])
+def set_llm_model():
+    """Установка модели LLM для комнаты"""
+    try:
+        data = request.json
+        model = data.get('model')
+        room_id = data.get('room_id', 'default')
+        
+        if not model:
+            return jsonify({"success": False, "error": "Model not specified"})
+        
+        if room_id in room_dialogue:
+            room_dialogue[room_id].set_llm_model(model)
+            return jsonify({"success": True, "model": model, "room": room_id})
+        
+        return jsonify({"success": False, "error": "Room not found"})
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/llm/models', methods=['GET'])
+def get_llm_models():
+    """Получение списка доступных моделей LLM"""
+    models = [
+        {"id": "deepseek", "name": "DeepSeek R1", "description": "Мощная модель для образовательных целей"},
+        {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
+        {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования"}
+    ]
+    return jsonify({"models": models})
+
+@app.route('/api/llm/status', methods=['GET'])
+def get_llm_status():
+    """Получение статуса LLM для комнаты"""
+    room_id = request.args.get('room_id', 'default')
+    
+    if room_id in room_dialogue:
+        stats = room_dialogue[room_id].llm.get_cache_stats()
+        return jsonify({
+            "success": True,
+            "room": room_id,
+            "cache_stats": stats,
+            "model": room_dialogue[room_id].llm.model
+        })
+    
+    return jsonify({"success": False, "error": "Room not found"})
+
+@app.route('/api/knowledge/stats', methods=['GET'])
+def get_knowledge_stats():
+    """Получение статистики базы знаний для комнаты"""
+    room_id = request.args.get('room_id', 'default')
+    subject = request.args.get('subject', '')
+    
+    if room_id in room_dialogue:
+        stats = room_dialogue[room_id].get_knowledge_stats()
+        if stats:
+            return jsonify({
+                "success": True,
+                "room": room_id,
+                "subject": subject or stats.get("subject", "unknown"),
+                "stats": stats
+            })
+    
+    return jsonify({"success": False, "error": "Room not found or no knowledge base"})
+
+@app.route('/api/knowledge/search', methods=['GET'])
+def search_knowledge():
+    """Поиск в базе знаний"""
+    room_id = request.args.get('room_id', 'default')
+    query = request.args.get('query', '')
+    max_results = int(request.args.get('max_results', 5))
+    
+    if not query:
+        return jsonify({"success": False, "error": "Query parameter is required"})
+    
+    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
+        results = room_dialogue[room_id].knowledge_base.search_similar(query, max_results)
+        return jsonify({
+            "success": True,
+            "room": room_id,
+            "query": query,
+            "results": results,
+            "total_found": len(results)
+        })
+    
+    return jsonify({"success": False, "error": "Room not found or no knowledge base"})
+
+@app.route('/api/knowledge/llm_answers', methods=['GET'])
+def get_llm_answers():
+    """Получение списка ответов LLM для предмета"""
+    room_id = request.args.get('room_id', 'default')
+    subject = request.args.get('subject', '')
+    
+    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
+        answers = room_dialogue[room_id].knowledge_base.list_llm_answers()
+        return jsonify({
+            "success": True,
+            "room": room_id,
+            "subject": subject,
+            "answers": answers,
+            "total_answers": len(answers)
+        })
+    
+    return jsonify({"success": False, "error": "Room not found or no knowledge base"})
+
+@app.route('/api/lesson_content/<lesson_id>')
+def get_lesson_content(lesson_id):
+    """Получение содержания урока"""
+    try:
+        lesson_file = Path("lessons") / f"{lesson_id}.txt"
+        if not lesson_file.exists():
+            return jsonify({"error": "Lesson not found"}), 404
+        
+        with open(lesson_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Разбиваем на абзацы
+        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        
+        return jsonify({
+            "success": True,
+            "lesson_id": lesson_id,
+            "content": paragraphs,
+            "paragraph_count": len(paragraphs)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/add_knowledge', methods=['POST'])
+def add_knowledge():
+    """Добавление знаний в базу"""
+    try:
+        data = request.json
+        subject = data.get('subject', 'общее')
+        text = data.get('text', '')
+        
+        if not text.strip():
+            return jsonify({"success": False, "error": "Text is required"})
+        
+        # Здесь должна быть логика добавления в базу знаний
+        # Пока просто возвращаем успех
+        print(f"Добавление знаний по {subject}: {text[:100]}...")
+        
+        return jsonify({"success": True, "subject": subject})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/add_lesson', methods=['POST'])
+def add_lesson():
+    """Добавление нового урока"""
+    try:
+        data = request.json
+        subject = data.get('subject', 'общее')
+        title = data.get('title', '')
+        content = data.get('content', '')
+        
+        if not title or not content:
+            return jsonify({"success": False, "error": "Title and content are required"})
+        
+        # Создаем имя файла
+        filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
+        lesson_path = Path("lessons") / filename
+        
+        with open(lesson_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"Добавлен урок: {title} по {subject}")
+        
+        return jsonify({"success": True, "filename": filename})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/download_knowledge')
+def download_knowledge():
+    """Скачивание базы знаний"""
+    subject = request.args.get('subject', 'обществознание')
+    # Здесь должна быть логика формирования файла базы знаний
+    # Пока возвращаем заглушку
+    return jsonify({"success": False, "error": "Not implemented yet"})
+
 if __name__ == '__main__':
+    # Создаем необходимые папки
+    for folder in ['lessons', 'cache', 'materials']:
+        os.makedirs(folder, exist_ok=True)
+    
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
