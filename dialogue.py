@@ -1,9 +1,8 @@
-import random
-from typing import Dict, Optional, List
-from difflib import SequenceMatcher
 import json
 from pathlib import Path
-import time
+from typing import Dict, Optional, List
+from difflib import SequenceMatcher
+import random
 import re
 from knowledge.knowledge_base import KnowledgeBase
 from llm import LLMIntegration
@@ -172,7 +171,7 @@ class DialogueManager:
             if pattern in text_lower:
                 return random.choice(responses)
         
-        # 5. Проверка диалоговых шаблонов из базы знаний (если есть)
+        # 5. Проверка диалоговых шаблонов из базы знаний
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
             if dialogue_response:
@@ -193,7 +192,7 @@ class DialogueManager:
                 "Рад вас видеть! Давайте выберем интересную тему для урока."
             ],
             "subject_selection": [
-                "У меня есть уроки по разным предметам. Что вас интересует?",
+                "У меня есть уроки по разным предметов. Что вас интересует?",
                 "Могу предложить: обществознание, математика, история. Что выбираете?",
                 "Какой предмет хотите изучить? Выбирайте - я найду подходящий урок!"
             ],
@@ -244,7 +243,7 @@ class DialogueManager:
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", "здравствуй", "начать", "старт", "готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", "здравствуй", "начать", "старт", " готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -270,7 +269,7 @@ class DialogueManager:
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
         # Если пользователь просто говорит "да" или соглашается
-        if any(word in text for word in ["да", "ага", "угу", "ладно", "хорошо"]):
+        if any(word in text for word in ["да", "ага", 'угу', "ладно", "хорошо"]):
             return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
             
         return None
@@ -330,12 +329,20 @@ class DialogueManager:
             if answer and not answer.startswith("Интересный вопрос!"):
                 return answer
         
-        # 5. Запрос к LLM
-        llm_response = self.llm.query(question, self.current_subject)
+        # 5. Запрос к LLM с контекстом текущего урока
+        current_context = ""
+        if self.lesson_content and self.current_paragraph > 0:
+            # Берем текущий и предыдущий абзацы для контекста
+            context_start = max(0, self.current_paragraph - 2)
+            current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+        
+        llm_response = self.llm.query(question, current_context, self.current_subject)
         if llm_response:
-            # Сохраняем в кэш и базу знаний
+            # Сохраняем в кэш LLM и базу знаний ответов
             self.llm.add_to_cache(question, llm_response, self.current_subject)
             if self.knowledge_base:
+                # Сохраняем ответ в базу знаний для будущего использования
+                self.knowledge_base.add_llm_answer(question, llm_response)
                 self.knowledge_base.add_knowledge(question=question, answer=llm_response)
             return llm_response
         
@@ -380,3 +387,14 @@ class DialogueManager:
     def get_lessons_for_subject(self, subject: str) -> List[dict]:
         """Возвращает уроки для указанного предмета"""
         return self.lessons.get(subject, [])
+
+    def set_llm_model(self, model: str):
+        """Установка модели LLM"""
+        self.llm.set_model(model)
+        print(f"Установлена модель LLM: {model}")
+
+    def get_knowledge_stats(self) -> Optional[Dict]:
+        """Получение статистики базы знаний"""
+        if self.knowledge_base:
+            return self.knowledge_base.get_stats()
+        return None
