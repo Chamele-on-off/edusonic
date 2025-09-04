@@ -10,7 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config  # Добавлен импорт
+from config import update_api_key, get_api_key, load_config, get_model_config
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -365,9 +365,10 @@ def set_llm_model():
 def get_llm_models():
     """Получение списка доступных моделей LLM"""
     models = [
-        {"id": "deepseek", "name": "DeepSeek R1", "description": "Мощная модель для образовательных целей"},
-        {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
-        {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования"}
+        {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta", "provider": "openrouter"},
+        {"id": "llama3", "name": "Llama 3.3 8B Instruct", "description": "Инструктивная версия Llama 3.3", "provider": "openrouter"},
+        {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba", "provider": "openrouter"},
+        {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования", "provider": "openrouter"}
     ]
     return jsonify({"models": models})
 
@@ -532,8 +533,8 @@ def get_api_keys():
         return jsonify({
             "success": True,
             "keys": {
-                "deepseek": config.get("llm", {}).get("api_key", ""),
-                "qwen": config.get("qwen", {}).get("api_key", "")
+                "openrouter": config.get("openrouter", {}).get("api_key", ""),
+                "llm": config.get("llm", {}).get("api_key", "")
             }
         })
     except Exception as e:
@@ -550,8 +551,8 @@ def set_api_key():
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
         
-        if provider not in ['deepseek', 'qwen']:
-            return jsonify({"success": False, "error": "Invalid provider. Use 'deepseek' or 'qwen'"})
+        if provider not in ['openrouter', 'llm']:
+            return jsonify({"success": False, "error": "Invalid provider. Use 'openrouter' or 'llm'"})
         
         success = update_api_key(provider, api_key)
         
@@ -578,23 +579,52 @@ def test_api_key():
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
         
-        # Здесь можно добавить реальную проверку ключа через API
-        # Пока просто проверяем формат
-        if len(api_key) > 10 and api_key.startswith('sk-'):
+        # Тестируем ключ через простой запрос к OpenRouter
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://your-site.com",
+            "X-Title": "AI Teacher"
+        }
+        
+        test_data = {
+            "model": "meta-llama/llama-3.3-8b-instruct:free",
+            "messages": [{"role": "user", "content": "test"}],
+            "max_tokens": 10
+        }
+        
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=test_data,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
             return jsonify({
                 "success": True,
-                "message": f"Ключ {provider} выглядит корректно",
+                "message": f"Ключ {provider} работает корректно",
                 "valid": True
+            })
+        elif response.status_code == 401:
+            return jsonify({
+                "success": True,
+                "message": f"Ключ {provider} неверный или неактивный",
+                "valid": False
             })
         else:
             return jsonify({
                 "success": True,
-                "message": f"Ключ {provider} может быть неверным",
+                "message": f"Ключ {provider} может быть неверным (код: {response.status_code})",
                 "valid": False
             })
             
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        return jsonify({
+            "success": True,
+            "message": f"Ошибка проверки ключа: {str(e)}",
+            "valid": False
+        })
 
 if __name__ == '__main__':
     # Создаем необходимые папки
