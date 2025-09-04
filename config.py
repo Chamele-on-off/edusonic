@@ -1,4 +1,3 @@
-# config.py
 import json
 import os
 from pathlib import Path
@@ -9,13 +8,18 @@ CONFIG_FILE = Path(__file__).parent / 'api_config.json'
 DEFAULT_CONFIG = {
     "llm": {
         "api_key": "",
-        "model": "deepseek/deepseek-chat-v3-0324:free",
-        "api_url": "https://openrouter.ai/api/v1/chat/completions"
+        "model": "meta-llama/llama-3.3-8b-instruct:free",
+        "api_url": "https://openrouter.ai/api/v1/chat/completions",
+        "provider": "openrouter"
     },
-    "qwen": {
-        "api_key": "", 
+    "openrouter": {
+        "api_key": "",
         "model": "meta-llama/llama-3.3-8b-instruct:free",
         "api_url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "fallback": {
+        "enabled": True,
+        "model": "meta-llama/llama-3.3-8b-instruct:free"
     }
 }
 
@@ -56,6 +60,12 @@ def get_api_key(provider):
     config = load_config()
     return config.get(provider, {}).get("api_key", "")
 
+def get_model_config(provider):
+    """Получение конфигурации модели для указанного провайдера"""
+    config = load_config()
+    return config.get(provider, {})
+
 # Загружаем конфигурацию при импорте
 LLM_CONFIG = load_config().get("llm", DEFAULT_CONFIG["llm"])
-QWEN_CONFIG = load_config().get("qwen", DEFAULT_CONFIG["qwen"])
+OPENROUTER_CONFIG = load_config().get("openrouter", DEFAULT_CONFIG["openrouter"])
+FALLBACK_CONFIG = load_config().get("fallback", DEFAULT_CONFIG["fallback"])
