@@ -323,9 +323,9 @@ class DialogueManager:
             if dialogue_response:
                 return dialogue_response
         
-        # 4. Поиск в предметной базе знаний
+        # 4. Поиск в предметной базе знаний с повышенным порогом схожести
         if self.knowledge_base:
-            answer = self.knowledge_base.find_answer(question)
+            answer = self.knowledge_base.find_answer(question, threshold=0.5)
             if answer and not answer.startswith("Интересный вопрос!"):
                 return answer
         
