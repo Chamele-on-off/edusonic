@@ -212,19 +212,11 @@
             
             <div class="api-key-grid">
                 <div class="api-key-form">
-                    <h3>DeepSeek API Key</h3>
-                    <input type="password" id="deepseek-key" class="api-key-input" placeholder="Введите API ключ для DeepSeek">
-                    <button id="save-deepseek-btn">Сохранить</button>
-                    <button id="test-deepseek-btn">Проверить</button>
-                    <div id="deepseek-status" class="api-status"></div>
-                </div>
-                
-                <div class="api-key-form">
-                    <h3>Qwen API Key</h3>
-                    <input type="password" id="qwen-key" class="api-key-input" placeholder="Введите API ключ для Qwen">
-                    <button id="save-qwen-btn">Сохранить</button>
-                    <button id="test-qwen-btn">Проверить</button>
-                    <div id="qwen-status" class="api-status"></div>
+                    <h3>OpenRouter API Key</h3>
+                    <input type="password" id="openrouter-key" class="api-key-input" placeholder="Введите API ключ для OpenRouter">
+                    <button id="save-openrouter-btn">Сохранить</button>
+                    <button id="test-openrouter-btn">Проверить</button>
+                    <div id="openrouter-status" class="api-status"></div>
                 </div>
             </div>
         </div>
@@ -364,14 +356,10 @@
         const embedCodeTextarea = document.getElementById('embed-code');
         
         // Новые элементы для управления API ключами
-        const deepseekKeyInput = document.getElementById('deepseek-key');
-        const qwenKeyInput = document.getElementById('qwen-key');
-        const saveDeepseekBtn = document.getElementById('save-deepseek-btn');
-        const saveQwenBtn = document.getElementById('save-qwen-btn');
-        const testDeepseekBtn = document.getElementById('test-deepseek-btn');
-        const testQwenBtn = document.getElementById('test-qwen-btn');
-        const deepseekStatus = document.getElementById('deepseek-status');
-        const qwenStatus = document.getElementById('qwen-status');
+        const openrouterKeyInput = document.getElementById('openrouter-key');
+        const saveOpenrouterBtn = document.getElementById('save-openrouter-btn');
+        const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
+        const openrouterStatus = document.getElementById('openrouter-status');
         
         // Socket.io
         const socket = io();
@@ -392,8 +380,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        deepseekKeyInput.value = data.keys.deepseek || '';
-                        qwenKeyInput.value = data.keys.qwen || '';
+                        openrouterKeyInput.value = data.keys.openrouter || '';
                         log('API ключи загружены');
                     } else {
                         log('Ошибка загрузки API ключей: ' + data.error);
@@ -417,7 +404,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                const statusElement = provider === 'deepseek' ? deepseekStatus : qwenStatus;
+                const statusElement = openrouterStatus;
                 if (data.success) {
                     statusElement.textContent = data.message;
                     statusElement.className = 'api-status success';
@@ -436,7 +423,7 @@
                 }, 5000);
             })
             .catch(error => {
-                const statusElement = provider === 'deepseek' ? deepseekStatus : qwenStatus;
+                const statusElement = openrouterStatus;
                 statusElement.textContent = 'Ошибка сети: ' + error;
                 statusElement.className = 'api-status error';
                 statusElement.style.display = 'block';
@@ -457,7 +444,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                const statusElement = provider === 'deepseek' ? deepseekStatus : qwenStatus;
+                const statusElement = openrouterStatus;
                 if (data.success) {
                     statusElement.textContent = data.message;
                     statusElement.className = 'api-status ' + (data.valid ? 'success' : 'error');
@@ -476,7 +463,7 @@
                 }, 5000);
             })
             .catch(error => {
-                const statusElement = provider === 'deepseek' ? deepseekStatus : qwenStatus;
+                const statusElement = openrouterStatus;
                 statusElement.textContent = 'Ошибка сети: ' + error;
                 statusElement.className = 'api-status error';
                 statusElement.style.display = 'block';
@@ -695,20 +682,12 @@
             loadAvatars();
             
             // Обработчики для API ключей
-            saveDeepseekBtn.addEventListener('click', () => {
-                saveApiKey('deepseek', deepseekKeyInput.value);
+            saveOpenrouterBtn.addEventListener('click', () => {
+                saveApiKey('openrouter', openrouterKeyInput.value);
             });
             
-            saveQwenBtn.addEventListener('click', () => {
-                saveApiKey('qwen', qwenKeyInput.value);
-            });
-            
-            testDeepseekBtn.addEventListener('click', () => {
-                testApiKey('deepseek', deepseekKeyInput.value);
-            });
-            
-            testQwenBtn.addEventListener('click', () => {
-                testApiKey('qwen', qwenKeyInput.value);
+            testOpenrouterBtn.addEventListener('click', () => {
+                testApiKey('openrouter', openrouterKeyInput.value);
             });
             
             // Выбор аватара
