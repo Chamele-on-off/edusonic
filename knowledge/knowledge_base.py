@@ -259,6 +259,7 @@ class KnowledgeBase:
             r'определение (.+?)\??$',
             r'объясни (.+?)\??$',
             r'расскажи про (.+?)\??$',
+            r'разъясни (.+?)\??$',
             r'кто такой (.+?)\??$',
             r'кто такая (.+?)\??$'
         ]
@@ -271,7 +272,25 @@ class KnowledgeBase:
                     return term
         return None
 
-    def find_answer(self, question: str, threshold: float = 0.4) -> Optional[str]:
+    def _remove_question_words(self, text: str) -> str:
+        """Удаляет вопросительные слова из текста"""
+        question_words = [
+            'что такое', 'что значит', 'объясни', 'расскажи про', 
+            'разъясни', 'кто такой', 'кто такая', 'как работает',
+            'что это', 'что означает'
+        ]
+        
+        result = text.lower()
+        for word in question_words:
+            result = result.replace(word, '').strip()
+        
+        # Удаляем знаки вопроса и лишние пробелы
+        result = result.replace('?', '').strip()
+        result = re.sub(r'\s+', ' ', result)
+        
+        return result
+
+    def find_answer(self, question: str, threshold: float = 0.5) -> Optional[str]:
         """Поиск ответа на вопрос в базе знаний"""
         if not question.strip():
             return None
@@ -284,7 +303,24 @@ class KnowledgeBase:
             print(f"Точное совпадение с вопросом: {clean_question}")
             return self.data["questions"][clean_question]
         
-        # 2. Извлечение термина из вопроса типа "что такое X"
+        # 2. Удаляем вопросительные слова и ищем чистый термин
+        clean_term_query = self._remove_question_words(question)
+        if clean_term_query and clean_term_query != clean_question:
+            print(f"Очищенный запрос от вопросительных слов: '{clean_term_query}'")
+            
+            # Проверяем точное совпадение очищенного термина
+            if clean_term_query in self.data["terms"]:
+                print(f"Точное совпадение очищенного термина: {clean_term_query}")
+                return self.data["terms"][clean_term_query]
+            
+            # Проверяем частичные совпадения очищенных терминов
+            for term, definition in self.data["terms"].items():
+                clean_term = self._clean_text(term)
+                if clean_term_query == clean_term:
+                    print(f"Точное совпадение после очистки: {term}")
+                    return definition
+        
+        # 3. Извлечение термина из вопроса типа "что такое X"
         extracted_term = self._extract_term_from_question(question)
         if extracted_term:
             print(f"Извлечен термин из вопроса: '{extracted_term}'")
@@ -301,20 +337,15 @@ class KnowledgeBase:
                 if clean_extracted_term == clean_term:
                     print(f"Точное совпадение после очистки: {term}")
                     return definition
-                
-                # Проверяем вхождение извлеченного термина в существующие термины
-                if clean_extracted_term in clean_term or clean_term in clean_extracted_term:
-                    print(f"Частичное совпадение термина: {term}")
-                    return definition
         
-        # 3. Поиск по терминам (прямое вхождение)
+        # 4. Поиск по терминам (прямое вхождение)
         for term, definition in self.data["terms"].items():
             clean_term = self._clean_text(term)
             if clean_term and clean_term in clean_question:
                 print(f"Термин найден в вопросе: {term}")
                 return f"{term}: {definition}"
         
-        # 4. Поиск по частичному совпадению терминов (только для многословных терминов)
+        # 5. Поиск по частичному совпадению терминов (только для многословных терминов)
         for term, definition in self.data["terms"].items():
             clean_term = self._clean_text(term)
             if clean_term:
@@ -326,7 +357,7 @@ class KnowledgeBase:
                         print(f"Полное совпадение слов термина: {term}")
                         return f"{term}: {definition}"
         
-        # 5. Поиск по схожести (TF-IDF + косинусная схожесть) - только для вопросов
+        # 6. Поиск по схожести (TF-IDF + косинусная схожесть) - только для вопросов
         if self.data["questions"]:
             questions = list(self.data["questions"].keys())
             try:
