@@ -20,7 +20,7 @@ class LLMIntegration:
         self.cache_dir = Path(cache_dir)
         self.cache = self._load_cache()
         self.last_request_time = 0
-        self.request_delay = 1.0  # Задержка между запросами для избежания 429
+        self.request_delay = 1.0
         self.max_retries = 3
         self.retry_delay = 2.0
         
@@ -48,8 +48,15 @@ class LLMIntegration:
             print(f"Ошибка сохранения кэша: {e}")
 
     def _process_content(self, content: str) -> str:
-        """Обработка контента (удаление тегов thinking)"""
-        return content.replace('<think>', '').replace('</think>', '')
+        """Обработка контента"""
+        # Удаляем лишние пробелы и переносы строк
+        content = content.strip()
+        # Удаляем префиксы типа "Ответ:" или "AI:"
+        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:"]
+        for prefix in prefixes:
+            if content.startswith(prefix):
+                content = content[len(prefix):].strip()
+        return content
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "") -> Optional[str]:
         """Запрос к LLM API через OpenRouter"""
@@ -57,7 +64,7 @@ class LLMIntegration:
             print("API ключ не установлен для LLM")
             return None
             
-        # Добавляем задержку между запросами для избежания 429
+        # Добавляем задержку между запросами
         current_time = time.time()
         time_since_last_request = current_time - self.last_request_time
         if time_since_last_request < self.request_delay:
@@ -66,33 +73,42 @@ class LLMIntegration:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://your-site.com",  # Required by OpenRouter
-            "X-Title": "AI Teacher"  # Required by OpenRouter
+            "HTTP-Referer": "https://ai-teacher.com",
+            "X-Title": "AI Teacher"
         }
         
-        # Формируем промпт для учителя
-        system_prompt = f"""Ты - профессиональный учитель и эксперт в предмете "{subject}". 
-Твоя задача - давать четкие, понятные и структурированные ответы на вопросы учеников.
-Отвечай кратко, но информативно, используя примеры если это уместно.
-Объясняй сложные понятия простым языком.
-Будь дружелюбным и поддерживающим учителем.
-Отвечай на русском языке."""
+        # Улучшенный промпт для учителя
+        system_prompt = f"""Ты - профессиональный учитель и эксперт по предмету "{subject}". 
+Твоя задача - давать четкие, понятные и информативные ответы на вопросы учеников.
+
+Важные правила:
+1. Отвечай максимально подробно и информативно
+2. Объясняй сложные понятия простым языком
+3. Приводи примеры если это уместно
+4. Будь дружелюбным и поддерживающим
+5. Отвечай на русском языке
+6. Не говори общие фразы типа "расскажу подробнее" - сразу давай конкретный ответ
+7. Если вопрос короткий, дай развернутый ответ
+8. Структурируй ответ если это необходимо
+
+Контекст текущего урока: {context}"""
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Контекст урока: {context}\n\nВопрос ученика: {prompt}"}
+            {"role": "user", "content": prompt}
         ]
 
         data = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 800,
+            "max_tokens": 1000,
             "stream": False
         }
 
         for attempt in range(self.max_retries):
             try:
+                print(f"🔄 Попытка {attempt + 1}: Отправка запроса к {self.model}")
                 response = requests.post(
                     self.api_url,
                     headers=headers,
@@ -104,35 +120,41 @@ class LLMIntegration:
                 
                 if response.status_code == 200:
                     result = response.json()
-                    answer = result['choices'][0]['message']['content']
-                    return self._process_content(answer.strip())
-                elif response.status_code == 429:
-                    print(f"Ошибка 429 (Rate Limit). Попытка {attempt + 1}/{self.max_retries}")
-                    if attempt < self.max_retries - 1:
-                        time.sleep(self.retry_delay * (attempt + 1))
-                        continue
+                    if 'choices' in result and len(result['choices']) > 0:
+                        answer = result['choices'][0]['message']['content']
+                        processed_answer = self._process_content(answer)
+                        print(f"✅ Получен ответ от LLM: {processed_answer[:100]}...")
+                        return processed_answer
                     else:
-                        print(f"Превышено количество попыток. Ошибка API: {response.status_code} - {response.text}")
+                        print("❌ Неверный формат ответа от API")
                         return None
+                        
+                elif response.status_code == 429:
+                    wait_time = self.retry_delay * (attempt + 1)
+                    print(f"⏳ Ошибка 429 (Rate Limit). Ждем {wait_time} сек...")
+                    time.sleep(wait_time)
+                    continue
+                    
                 else:
-                    print(f"Ошибка API LLM: {response.status_code} - {response.text}")
+                    print(f"❌ Ошибка API: {response.status_code} - {response.text[:200]}")
+                    if attempt < self.max_retries - 1:
+                        time.sleep(self.retry_delay)
+                        continue
                     return None
                     
             except requests.exceptions.Timeout:
-                print(f"Таймаут запроса к LLM API. Попытка {attempt + 1}/{self.max_retries}")
+                print(f"⏰ Таймаут запроса. Попытка {attempt + 1}/{self.max_retries}")
                 if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay * (attempt + 1))
+                    time.sleep(self.retry_delay)
                     continue
-                else:
-                    print("Превышено количество попыток из-за таймаутов")
-                    return None
+                return None
+                
             except Exception as e:
-                print(f"Ошибка запроса к LLM API (попытка {attempt + 1}): {e}")
+                print(f"❌ Ошибка при запросе (попытка {attempt + 1}): {e}")
                 if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay * (attempt + 1))
+                    time.sleep(self.retry_delay)
                     continue
-                else:
-                    return None
+                return None
         
         return None
 
@@ -146,28 +168,28 @@ class LLMIntegration:
         # Проверка кэша
         cache_key = f"{subject}_{question_lower}" if subject else question_lower
         if cache_key in self.cache:
-            print(f"Использую кэшированный ответ для: {question_lower}")
+            print(f"💾 Использую кэшированный ответ для: {question_lower}")
             return self.cache[cache_key]
         
-        print(f"Запрос к LLM: {question} (предмет: {subject})")
+        print(f"📨 Запрос к LLM: '{question}' (предмет: {subject})")
         
         # Запрос к реальному LLM
         llm_response = self._query_llm_api(question, context, subject)
         
-        if llm_response:
-            print(f"Получен ответ от LLM: {llm_response[:100]}...")
+        if llm_response and llm_response.strip():
+            print(f"✅ Ответ получен: {llm_response[:100]}...")
             self.cache[cache_key] = llm_response
             self._save_cache()
             return llm_response
         
         # Fallback на локальные ответы если LLM недоступен
-        print("LLM недоступен, использую fallback ответ")
+        print("⚠️ LLM недоступен, использую fallback ответ")
         fallback_responses = [
-            f"Интересный вопрос по {subject}! Давайте разберем его подробнее на следующем занятии.",
-            f"По теме {subject} это важный аспект. Я подготовлю подробное объяснение к нашему следующему уроку.",
-            f"Хороший вопрос! В контексте {subject} это требует детального изучения, которое мы проведем позже.",
-            f"Записал ваш вопрос по {subject}. Вернемся к нему в подходящий момент урока.",
-            f"В рамках {subject} этот вопрос очень важен. Давайте обсудим его дополнительно после текущего материала."
+            f"Это интересный вопрос по {subject}! Давайте разберем его подробнее.",
+            f"По теме {subject} это важный аспект. Я подготовлю подробное объяснение.",
+            f"Хороший вопрос! В контексте {subject} это требует детального изучения.",
+            f"Записал ваш вопрос по {subject}. Вернемся к нему в подходящий момент.",
+            f"В рамках {subject} этот вопрос очень важен. Давайте обсудим его дополнительно."
         ]
         
         answer = fallback_responses[hash(question_lower) % len(fallback_responses)]
@@ -200,16 +222,16 @@ class LLMIntegration:
             "llama": "meta-llama/llama-3.3-8b-instruct:free",
             "llama3": "meta-llama/llama-3.3-8b-instruct:free",
             "qwen": "qwen/qwen3-235b-a22b:free",
-            "qwen-turbo": "qwen/qwen3-235b-a22b:free"
+            "deepseek": "deepseek/deepseek-chat-v3-0324:free"
         }
         
         if model in available_models:
             self.model = available_models[model]
-            print(f"Установлена модель: {self.model}")
+            print(f"🔧 Установлена модель: {self.model}")
         else:
             self.model = model
-            print(f"Установлена кастомная модель: {self.model}")
+            print(f"🔧 Установлена кастомная модель: {self.model}")
             
-        # Переключаем API ключ в зависимости от модели
+        # Всегда используем OpenRouter API ключ
         config = load_config()
         self.api_key = config.get("openrouter", {}).get("api_key", "")
