@@ -11,6 +11,7 @@ from collections import defaultdict
 import random
 from dialogue import DialogueManager
 from config import update_api_key, get_api_key, load_config, get_model_config
+import requests
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -231,7 +232,7 @@ def handle_recognized_speech(data):
     room_id = data['room_id']
     text = data['text']
     user_sid = request.sid
-    
+
     # Игнорируем распознавание системных сообщений и короткие фразы
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
         len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
