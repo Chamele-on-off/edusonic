@@ -13,12 +13,12 @@ class KnowledgeBase:
     def __init__(self, subject: str = "general"):
         self.subject = subject
         self.knowledge_path = Path(f"materials/{subject}_knowledge.json")
-        self.llm_answers_path = Path(f"materials/{subject}_llm_answers.json")  # Новый файл для ответов LLM
+        self.llm_answers_path = Path(f"materials/{subject}_llm_answers.json")
         self.dialogue_path = Path("materials/dialogue_knowledge.json")
         self.vectorizer = TfidfVectorizer(max_features=1000, stop_words=['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это'])
         self.llm_vectorizer = TfidfVectorizer(max_features=1000, stop_words=['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это'])
         self.data = self._load_knowledge()
-        self.llm_answers_data = self._load_llm_answers()  # Данные ответов LLM
+        self.llm_answers_data = self._load_llm_answers()
         self.dialogue_data = self._load_dialogue_knowledge()
         self._init_vectorizers()
         
@@ -34,7 +34,6 @@ class KnowledgeBase:
         except Exception as e:
             print(f"Ошибка загрузки ответов LLM: {e}")
         
-        # База по умолчанию
         return {
             "answers": {},
             "metadata": {
@@ -65,7 +64,6 @@ class KnowledgeBase:
         except Exception as e:
             print(f"Ошибка загрузки диалоговых шаблонов: {e}")
         
-        # База по умолчанию
         return {
             "patterns": {
                 "как дела": ["Все хорошо, продолжим урок", "Отлично, давайте заниматься", "Прекрасно! А у вас?"],
@@ -114,7 +112,6 @@ class KnowledgeBase:
         except Exception as e:
             print(f"Ошибка загрузки базы знаний {self.subject}: {e}")
         
-        # Если файл не найден или ошибка, возвращаем пустую базу
         print(f"База знаний для предмета '{self.subject}' не найдена. Создаю пустую базу.")
         return {
             "terms": {},
@@ -129,8 +126,7 @@ class KnowledgeBase:
         }
 
     def _init_vectorizers(self):
-        """Инициализация TF-IDF векторайзеров для основной базы и ответов LLM"""
-        # Инициализация для основной базы
+        """Инициализация TF-IDF векторайзеров"""
         texts = list(self.data["terms"].keys()) + list(self.data["questions"].keys())
         if texts:
             self.vectorizer.fit(texts)
@@ -146,7 +142,6 @@ class KnowledgeBase:
             self.vectorizer.fit(demo_texts)
             print(f"Векторайзер инициализирован с демо-данными для предмета {self.subject}")
         
-        # Инициализация для ответов LLM
         llm_texts = list(self.llm_answers_data.get("answers", {}).keys())
         if llm_texts:
             self.llm_vectorizer.fit(llm_texts)
@@ -168,7 +163,6 @@ class KnowledgeBase:
             self.llm_answers_data["metadata"]["last_updated"] = datetime.now().isoformat()
             self._save_llm_answers()
             
-            # Переинициализируем векторайзер с новыми данными
             llm_texts = list(self.llm_answers_data["answers"].keys())
             if llm_texts:
                 self.llm_vectorizer.fit(llm_texts)
@@ -188,19 +182,16 @@ class KnowledgeBase:
         if not answers:
             return None
         
-        # Сначала проверяем точное совпадение
         if clean_question in answers:
             print(f"Точное совпадение в базе ответов LLM: {clean_question}")
             return answers[clean_question]["answer"]
         
-        # Затем поиск по схожести (TF-IDF + косинусная схожесть)
         try:
             questions = list(answers.keys())
             q_vec = self.llm_vectorizer.transform([clean_question])
             q_vecs = self.llm_vectorizer.transform(questions)
             similarities = cosine_similarity(q_vec, q_vecs)
             
-            # Находим лучшее совпадение
             best_match_idx = np.argmax(similarities)
             best_similarity = similarities[0][best_match_idx]
             
@@ -240,7 +231,7 @@ class KnowledgeBase:
                 print(f"Найден диалоговый шаблон: {pattern} -> {response}")
                 return response
         
-        # Поиск по контекстам (если есть точное совпадение)
+        # Поиск по контекстам
         for context, responses in self.dialogue_data.get("contexts", {}).items():
             if context in text_lower and responses:
                 response = random.choice(responses)
@@ -255,11 +246,9 @@ class KnowledgeBase:
         if not text:
             return ""
             
-        # Удаляем знаки препинания
         translator = str.maketrans('', '', string.punctuation + '«»„""')
         clean_text = text.translate(translator)
         
-        # Удаляем лишние пробелы и приводим к нижнему регистру
         return ' '.join(clean_text.lower().split())
 
     def find_answer(self, question: str, threshold: float = 0.3) -> Optional[str]:
@@ -277,16 +266,13 @@ class KnowledgeBase:
         
         # 2. Поиск по ключевым словам "что такое"
         if "что такое" in clean_question:
-            # Извлекаем термин после "что такое"
             term_part = clean_question.replace("что такое", "").strip()
             if term_part:
                 print(f"Поиск термина после 'что такое': '{term_part}'")
-                # Ищем точное совпадение термина
                 if term_part in self.data["terms"]:
                     print(f"Точное совпадение термина: {term_part}")
                     return self.data["terms"][term_part]
                 
-                # Ищем частичное совпадение
                 for term, definition in self.data["terms"].items():
                     if term in term_part or term_part in term:
                         print(f"Частичное совпадение термина: {term}")
@@ -303,7 +289,6 @@ class KnowledgeBase:
         for term, definition in self.data["terms"].items():
             clean_term = self._clean_text(term)
             if clean_term:
-                # Разбиваем термин на слова и проверяем наличие каждого слова в вопросе
                 term_words = clean_term.split()
                 if len(term_words) > 1:
                     matches = sum(1 for word in term_words if word in clean_question)
@@ -319,7 +304,6 @@ class KnowledgeBase:
                 q_vecs = self.vectorizer.transform(questions)
                 similarities = cosine_similarity(q_vec, q_vecs)
                 
-                # Находим лучшее совпадение
                 best_match_idx = np.argmax(similarities)
                 best_similarity = similarities[0][best_match_idx]
                 
@@ -335,7 +319,7 @@ class KnowledgeBase:
         return "Интересный вопрос! Давайте обсудим его подробнее."
 
     def get_term(self, term: str) -> Optional[str]:
-        """Получение определения термина"""
+        """Получение определение термина"""
         term_lower = term.lower().strip()
         definition = self.data["terms"].get(term_lower)
         if definition:
