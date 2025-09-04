@@ -156,8 +156,8 @@ class LLMIntegration:
         """Установка модели LLM"""
         available_models = {
             "deepseek": "deepseek/deepseek-chat-v3-0324:free",
-            "qwen": "qwen/qwen3-235b-a22b:free",
-            "qwen-turbo": "qwen/qwen3-235b-a22b:free"
+            "qwen": "meta-llama/llama-3.3-8b-instruct:free",
+            "qwen-turbo": "meta-llama/llama-3.3-8b-instruct:free"
         }
         
         if model in available_models:
