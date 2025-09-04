@@ -292,7 +292,7 @@ def handle_recognized_speech(data):
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # ОЗВУЧИВАЕМ ответ на вопрос
+                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
@@ -328,7 +328,7 @@ def handle_recognized_speech(data):
                     'is_teacher': True
                 }, room=room_id)
                 
-                # Озвучиваем ответ
+                # Озвучиваем ответ (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
