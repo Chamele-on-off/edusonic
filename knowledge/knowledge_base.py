@@ -251,7 +251,27 @@ class KnowledgeBase:
         
         return ' '.join(clean_text.lower().split())
 
-    def find_answer(self, question: str, threshold: float = 0.3) -> Optional[str]:
+    def _extract_term_from_question(self, question: str) -> Optional[str]:
+        """Извлекает термин из вопроса типа 'что такое X'"""
+        patterns = [
+            r'что такое (.+?)\??$',
+            r'что значит (.+?)\??$',
+            r'определение (.+?)\??$',
+            r'объясни (.+?)\??$',
+            r'расскажи про (.+?)\??$',
+            r'кто такой (.+?)\??$',
+            r'кто такая (.+?)\??$'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, question.lower())
+            if match:
+                term = match.group(1).strip()
+                if term:
+                    return term
+        return None
+
+    def find_answer(self, question: str, threshold: float = 0.4) -> Optional[str]:
         """Поиск ответа на вопрос в базе знаний"""
         if not question.strip():
             return None
@@ -264,19 +284,28 @@ class KnowledgeBase:
             print(f"Точное совпадение с вопросом: {clean_question}")
             return self.data["questions"][clean_question]
         
-        # 2. Поиск по ключевым словам "что такое"
-        if "что такое" in clean_question:
-            term_part = clean_question.replace("что такое", "").strip()
-            if term_part:
-                print(f"Поиск термина после 'что такое': '{term_part}'")
-                if term_part in self.data["terms"]:
-                    print(f"Точное совпадение термина: {term_part}")
-                    return self.data["terms"][term_part]
+        # 2. Извлечение термина из вопроса типа "что такое X"
+        extracted_term = self._extract_term_from_question(question)
+        if extracted_term:
+            print(f"Извлечен термин из вопроса: '{extracted_term}'")
+            
+            # Проверяем точное совпадение термина
+            if extracted_term in self.data["terms"]:
+                print(f"Точное совпадение термина: {extracted_term}")
+                return self.data["terms"][extracted_term]
+            
+            # Проверяем частичные совпадения терминов
+            clean_extracted_term = self._clean_text(extracted_term)
+            for term, definition in self.data["terms"].items():
+                clean_term = self._clean_text(term)
+                if clean_extracted_term == clean_term:
+                    print(f"Точное совпадение после очистки: {term}")
+                    return definition
                 
-                for term, definition in self.data["terms"].items():
-                    if term in term_part or term_part in term:
-                        print(f"Частичное совпадение термина: {term}")
-                        return definition
+                # Проверяем вхождение извлеченного термина в существующие термины
+                if clean_extracted_term in clean_term or clean_term in clean_extracted_term:
+                    print(f"Частичное совпадение термина: {term}")
+                    return definition
         
         # 3. Поиск по терминам (прямое вхождение)
         for term, definition in self.data["terms"].items():
@@ -285,18 +314,19 @@ class KnowledgeBase:
                 print(f"Термин найден в вопросе: {term}")
                 return f"{term}: {definition}"
         
-        # 4. Поиск по частичному совпадению терминов
+        # 4. Поиск по частичному совпадению терминов (только для многословных терминов)
         for term, definition in self.data["terms"].items():
             clean_term = self._clean_text(term)
             if clean_term:
                 term_words = clean_term.split()
                 if len(term_words) > 1:
                     matches = sum(1 for word in term_words if word in clean_question)
-                    if matches >= max(1, len(term_words) - 1):
-                        print(f"Частичное совпадение слов термина: {term}")
+                    # Требуем совпадения всех слов термина
+                    if matches == len(term_words):
+                        print(f"Полное совпадение слов термина: {term}")
                         return f"{term}: {definition}"
         
-        # 5. Поиск по схожести (TF-IDF + косинусная схожесть)
+        # 5. Поиск по схожести (TF-IDF + косинусная схожесть) - только для вопросов
         if self.data["questions"]:
             questions = list(self.data["questions"].keys())
             try:
@@ -304,6 +334,7 @@ class KnowledgeBase:
                 q_vecs = self.vectorizer.transform(questions)
                 similarities = cosine_similarity(q_vec, q_vecs)
                 
+                # Находим лучшее совпадение
                 best_match_idx = np.argmax(similarities)
                 best_similarity = similarities[0][best_match_idx]
                 
