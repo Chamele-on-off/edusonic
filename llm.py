@@ -4,6 +4,7 @@ from typing import Optional, Dict
 from pathlib import Path
 import time
 from config import get_api_key, load_config, get_model_config
+import re
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
@@ -47,16 +48,26 @@ class LLMIntegration:
         except Exception as e:
             print(f"Ошибка сохранения кэша: {e}")
 
-    def _process_content(self, content: str) -> str:
-        """Обработка контента"""
-        # Удаляем лишние пробелы и переносы строк
-        content = content.strip()
+    def _clean_llm_response(self, content: str) -> str:
+        """Очистка ответа LLM от форматирования и специальных символов"""
+        if not content:
+            return ""
+            
+        # Удаляем звездочки и другие маркеры форматирования
+        content = re.sub(r'[\*\#\-\_]{2,}', '', content)
+        content = re.sub(r'^\s*[\*\-\+]\s*', '', content, flags=re.MULTILINE)
+        
         # Удаляем префиксы типа "Ответ:" или "AI:"
-        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:"]
+        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:", "**", "*"]
         for prefix in prefixes:
             if content.startswith(prefix):
                 content = content[len(prefix):].strip()
-        return content
+        
+        # Удаляем лишние пробелы и переносы строк
+        content = re.sub(r'\s+', ' ', content)
+        content = re.sub(r'\n+', '\n', content)
+        
+        return content.strip()
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "") -> Optional[str]:
         """Запрос к LLM API через OpenRouter"""
@@ -87,9 +98,10 @@ class LLMIntegration:
 3. Приводи примеры если это уместно
 4. Будь дружелюбным и поддерживающим
 5. Отвечай на русском языке
-6. Не говори общие фразы типа "расскажу подробнее" - сразу давай конкретный ответ
-7. Если вопрос короткий, дай развернутый ответ
-8. Структурируй ответ если это необходимо
+6. Не используй форматирование markdown (звездочки, жирный шрифт и т.д.)
+7. Не говори общие фразы типа "расскажу подробнее" - сразу давай конкретный ответ
+8. Если вопрос короткий, дай развернутый ответ
+9. Структурируй ответ если это необходимо
 
 Контекст текущего урока: {context}"""
 
@@ -122,7 +134,7 @@ class LLMIntegration:
                     result = response.json()
                     if 'choices' in result and len(result['choices']) > 0:
                         answer = result['choices'][0]['message']['content']
-                        processed_answer = self._process_content(answer)
+                        processed_answer = self._clean_llm_response(answer)
                         print(f"✅ Получен ответ от LLM: {processed_answer[:100]}...")
                         return processed_answer
                     else:
