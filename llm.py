@@ -3,20 +3,26 @@ import json
 from typing import Optional, Dict
 from pathlib import Path
 import time
-from config import get_api_key, load_config  # Изменен импорт
+from config import get_api_key, load_config, get_model_config
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
-                 model: str = "deepseek/deepseek-chat-v3-0324:free"):
+                 model: str = "meta-llama/llama-3.3-8b-instruct:free"):
         # Загружаем конфигурацию для получения API ключа
         config = load_config()
-        self.api_key = api_key or config.get("llm", {}).get("api_key", "")
-        self.api_url = api_url or config.get("llm", {}).get("api_url", "https://openrouter.ai/api/v1/chat/completions")
-        self.model = model or config.get("llm", {}).get("model", "deepseek/deepseek-chat-v3-0324:free")
+        openrouter_config = get_model_config("openrouter")
+        
+        self.api_key = api_key or openrouter_config.get("api_key", "")
+        self.api_url = api_url or openrouter_config.get("api_url", "https://openrouter.ai/api/v1/chat/completions")
+        self.model = model or openrouter_config.get("model", "meta-llama/llama-3.3-8b-instruct:free")
         self.cache_dir = Path(cache_dir)
         self.cache = self._load_cache()
+        self.last_request_time = 0
+        self.request_delay = 1.0  # Задержка между запросами для избежания 429
+        self.max_retries = 3
+        self.retry_delay = 2.0
         
     def _load_cache(self) -> Dict:
         """Загрузка кэша из файла"""
@@ -51,9 +57,17 @@ class LLMIntegration:
             print("API ключ не установлен для LLM")
             return None
             
+        # Добавляем задержку между запросами для избежания 429
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        if time_since_last_request < self.request_delay:
+            time.sleep(self.request_delay - time_since_last_request)
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://your-site.com",  # Required by OpenRouter
+            "X-Title": "AI Teacher"  # Required by OpenRouter
         }
         
         # Формируем промпт для учителя
@@ -61,41 +75,69 @@ class LLMIntegration:
 Твоя задача - давать четкие, понятные и структурированные ответы на вопросы учеников.
 Отвечай кратко, но информативно, используя примеры если это уместно.
 Объясняй сложные понятия простым языком.
-Будь дружелюбным и поддерживающим учителем."""
+Будь дружелюбным и поддерживающим учителем.
+Отвечай на русском языке."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Контекст урока: {context}\n\nВопрос ученика: {prompt}"}
+        ]
 
         data = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Вопрос ученика: {prompt}\n\nКонтекст урока: {context}"}
-            ],
+            "messages": messages,
             "temperature": 0.7,
             "max_tokens": 800,
             "stream": False
         }
 
-        try:
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                answer = result['choices'][0]['message']['content']
-                return self._process_content(answer.strip())
-            else:
-                print(f"Ошибка API LLM: {response.status_code} - {response.text}")
-                return None
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(
+                    self.api_url,
+                    headers=headers,
+                    json=data,
+                    timeout=30
+                )
                 
-        except Exception as e:
-            print(f"Ошибка запроса к LLM API: {e}")
-            return None
+                self.last_request_time = time.time()
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    answer = result['choices'][0]['message']['content']
+                    return self._process_content(answer.strip())
+                elif response.status_code == 429:
+                    print(f"Ошибка 429 (Rate Limit). Попытка {attempt + 1}/{self.max_retries}")
+                    if attempt < self.max_retries - 1:
+                        time.sleep(self.retry_delay * (attempt + 1))
+                        continue
+                    else:
+                        print(f"Превышено количество попыток. Ошибка API: {response.status_code} - {response.text}")
+                        return None
+                else:
+                    print(f"Ошибка API LLM: {response.status_code} - {response.text}")
+                    return None
+                    
+            except requests.exceptions.Timeout:
+                print(f"Таймаут запроса к LLM API. Попытка {attempt + 1}/{self.max_retries}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay * (attempt + 1))
+                    continue
+                else:
+                    print("Превышено количество попыток из-за таймаутов")
+                    return None
+            except Exception as e:
+                print(f"Ошибка запроса к LLM API (попытка {attempt + 1}): {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay * (attempt + 1))
+                    continue
+                else:
+                    return None
+        
+        return None
 
     def query(self, question: str, context: str = "", subject: str = "") -> Optional[str]:
-        """Запрос к LLM API"""
+        """Запрос к LLM API с гарантированным ответом"""
         if not question.strip():
             return None
             
@@ -155,9 +197,10 @@ class LLMIntegration:
     def set_model(self, model: str):
         """Установка модели LLM"""
         available_models = {
-            "deepseek": "deepseek/deepseek-chat-v3-0324:free",
-            "qwen": "meta-llama/llama-3.3-8b-instruct:free",
-            "qwen-turbo": "meta-llama/llama-3.3-8b-instruct:free"
+            "llama": "meta-llama/llama-3.3-8b-instruct:free",
+            "llama3": "meta-llama/llama-3.3-8b-instruct:free",
+            "qwen": "qwen/qwen3-235b-a22b:free",
+            "qwen-turbo": "qwen/qwen3-235b-a22b:free"
         }
         
         if model in available_models:
@@ -169,7 +212,4 @@ class LLMIntegration:
             
         # Переключаем API ключ в зависимости от модели
         config = load_config()
-        if "qwen" in model.lower():
-            self.api_key = config.get("qwen", {}).get("api_key", "")
-        else:
-            self.api_key = config.get("llm", {}).get("api_key", "")
+        self.api_key = config.get("openrouter", {}).get("api_key", "")
