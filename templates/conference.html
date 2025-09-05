@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <style>
         :root {
-            --primary: #4361ee;
+            --primary: #4263EB;
             --secondary: #3a0ca3;
             --success: #4cc9f0;
             --danger: #f72585;
@@ -17,10 +17,13 @@
             --gray: #6c757d;
             --teacher-color: #4cc9f0;
             --student-color: #f72585;
-            --board-bg: #F0F2F5;
+            --board-bg: #F5F6F8;
             --board-text: #333333;
-            --board-border: #E1E5EB;
+            --board-border: #E6E9EF;
             --board-shadow: rgba(0, 0, 0, 0.1);
+            --miro-blue: #4263EB;
+            --miro-gray: #6B778C;
+            --miro-light-gray: #F4F5F7;
         }
         
         * {
@@ -96,30 +99,149 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background: var(--board-bg);
-            padding: 25px;
-            border-radius: 12px;
-            max-width: 90%;
-            max-height: 80%;
-            overflow-y: auto;
+            padding: 0;
+            border-radius: 16px;
+            width: 80%;
+            height: 70%;
+            overflow: hidden;
             z-index: 5;
             display: none;
-            box-shadow: 0 10px 40px var(--board-shadow), 0 0 0 1px var(--board-border);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--board-border);
             -webkit-overflow-scrolling: touch;
             color: var(--board-text);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        .miro-toolbar {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid var(--board-border);
+            gap: 8px;
+        }
+        
+        .toolbar-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--board-border);
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--miro-gray);
+        }
+        
+        .toolbar-btn:hover {
+            background: var(--miro-light-gray);
+            color: var(--miro-blue);
+        }
+        
+        .toolbar-separator {
+            width: 1px;
+            height: 20px;
+            background: var(--board-border);
+            margin: 0 8px;
+        }
+        
+        #lesson-canvas {
+            flex: 1;
+            height: calc(100% - 56px);
+            overflow: auto;
+            padding: 30px;
+            background: var(--board-bg);
+            position: relative;
+        }
+        
+        .text-widget {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--board-border);
+            min-width: 200px;
+            max-width: 600px;
+            position: relative;
+            cursor: grab;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .text-widget:active {
+            cursor: grabbing;
+            box-shadow: 0 4px 20px rgba(66, 99, 235, 0.15);
+        }
+        
+        .widget-handle {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .text-widget:hover .widget-handle {
+            opacity: 1;
+        }
+        
+        .handle-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            border: none;
+            background: var(--miro-light-gray);
+            color: var(--miro-gray);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .handle-btn:hover {
+            background: var(--miro-blue);
+            color: white;
         }
         
         #lesson-text {
-            font-size: 1.2rem;
-            line-height: 1.7;
-            text-align: left;
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.05);
-            border: 1px solid var(--board-border);
-            min-height: 180px;
-            white-space: pre-wrap;
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 120px;
+            outline: none;
+            border: none;
+            resize: none;
+            width: 100%;
+            background: transparent;
+        }
+        
+        .miro-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(var(--board-border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--board-border) 1px, transparent 1px);
+            background-size: 20px 20px;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+        
+        .typing-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: var(--miro-blue);
+            margin-left: 2px;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
         }
         
         #teacher-video-container {
@@ -338,6 +460,39 @@
             font-size: 16px;
         }
         
+        .zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 8px;
+            display: flex;
+            gap: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10;
+        }
+        
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--board-border);
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            color: var(--miro-gray);
+            transition: all 0.2s ease;
+        }
+        
+        .zoom-btn:hover {
+            background: var(--miro-light-gray);
+            color: var(--miro-blue);
+        }
+        
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -345,6 +500,30 @@
             
             #logo {
                 font-size: 1.1rem;
+            }
+            
+            #lesson-content {
+                width: 90%;
+                height: 60%;
+            }
+            
+            #lesson-canvas {
+                padding: 20px;
+            }
+            
+            .text-widget {
+                padding: 16px;
+                max-width: 400px;
+            }
+            
+            .miro-toolbar {
+                padding: 10px 12px;
+            }
+            
+            .toolbar-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 12px;
             }
             
             #teacher-video-container {
@@ -388,20 +567,23 @@
                 padding: 12px 24px;
                 font-size: 16px;
             }
-            
-            #lesson-content {
-                padding: 20px;
-                max-width: 95%;
-            }
-            
-            #lesson-text {
-                font-size: 1.1rem;
-                padding: 20px;
-                min-height: 150px;
-            }
         }
         
         @media (max-width: 480px) {
+            #lesson-content {
+                width: 95%;
+                height: 55%;
+            }
+            
+            #lesson-canvas {
+                padding: 15px;
+            }
+            
+            .text-widget {
+                padding: 12px;
+                max-width: 300px;
+            }
+            
             #teacher-video-container {
                 width: 120px;
                 height: 90px;
@@ -442,14 +624,15 @@
                 font-size: 14px;
             }
             
-            #lesson-content {
-                padding: 15px;
+            .zoom-controls {
+                bottom: 15px;
+                right: 15px;
             }
             
-            #lesson-text {
-                font-size: 1rem;
-                padding: 15px;
-                min-height: 120px;
+            .zoom-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
             }
         }
         
@@ -509,28 +692,6 @@
                 cursor: default;
             }
         }
-        
-        /* Miro-like board styling enhancements */
-        .miro-board {
-            background: linear-gradient(to bottom, #F0F2F5, #E8EBF0) !important;
-            border: 1px solid #DDE1E6 !important;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.05) !important;
-        }
-        
-        .typing-cursor {
-            display: inline-block;
-            width: 2px;
-            height: 1.2em;
-            background-color: var(--primary);
-            margin-left: 2px;
-            animation: blink 1s infinite;
-            vertical-align: middle;
-        }
-        
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
-        }
     </style>
 </head>
 <body>
@@ -546,8 +707,50 @@
         <div id="video-container">
             <div id="background-animation"></div>
             
-            <div id="lesson-content" class="miro-board">
-                <div id="lesson-text"></div>
+            <div id="lesson-content">
+                <div class="miro-toolbar">
+                    <button class="toolbar-btn" title="Выделение">
+                        <i class="fas fa-mouse-pointer"></i>
+                    </button>
+                    <button class="toolbar-btn" title="Текст">
+                        <i class="fas fa-font"></i>
+                    </button>
+                    <button class="toolbar-btn" title="Фигуры">
+                        <i class="fas fa-square"></i>
+                    </button>
+                    <button class="toolbar-btn" title="Стикеры">
+                        <i class="fas fa-sticky-note"></i>
+                    </button>
+                    <div class="toolbar-separator"></div>
+                    <button class="toolbar-btn" title="Комментировать">
+                        <i class="fas fa-comment"></i>
+                    </button>
+                    <button class="toolbar-btn" title="Презентация">
+                        <i class="fas fa-presentation"></i>
+                    </button>
+                </div>
+                <div id="lesson-canvas">
+                    <div class="miro-grid"></div>
+                    <div class="text-widget" id="main-text-widget">
+                        <div class="widget-handle">
+                            <button class="handle-btn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div id="lesson-text"></div>
+                    </div>
+                </div>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="zoom-out" title="Уменьшить">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <button class="zoom-btn" id="zoom-reset" title="Сбросить масштаб">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="zoom-btn" id="zoom-in" title="Увеличить">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
             </div>
             
             <div id="teacher-video-container" class="fade-in">
@@ -621,9 +824,14 @@
         const activateAiBtn = document.getElementById('activate-ai-btn');
         const lessonContent = document.getElementById('lesson-content');
         const lessonText = document.getElementById('lesson-text');
+        const lessonCanvas = document.getElementById('lesson-canvas');
         const backgroundAnimation = document.getElementById('background-animation');
         const cameraPermission = document.getElementById('camera-permission');
         const enableCameraBtn = document.getElementById('enable-camera-btn');
+        const textWidget = document.getElementById('main-text-widget');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const zoomResetBtn = document.getElementById('zoom-reset');
+        const zoomInBtn = document.getElementById('zoom-in');
 
         let userStream = null;
         let socket = null;
@@ -641,6 +849,9 @@
         let devicesEnabled = false;
         let currentAvatarAspectRatio = 1;
         let isLessonActive = false;
+        let scale = 1;
+        let isDragging = false;
+        let startX, startY, scrollLeft, scrollTop;
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -673,17 +884,85 @@
             }
         }
 
+        function initDragging() {
+            textWidget.addEventListener('mousedown', startDrag);
+            textWidget.addEventListener('touchstart', startDrag);
+            
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('touchmove', drag);
+            
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+            
+            function startDrag(e) {
+                isDragging = true;
+                startX = e.pageX || e.touches[0].pageX;
+                startY = e.pageY || e.touches[0].pageY;
+                scrollLeft = lessonCanvas.scrollLeft;
+                scrollTop = lessonCanvas.scrollTop;
+                textWidget.style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+            
+            function drag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                const x = e.pageX || e.touches[0].pageX;
+                const y = e.pageY || e.touches[0].pageY;
+                const walkX = (x - startX) * 2;
+                const walkY = (y - startY) * 2;
+                lessonCanvas.scrollLeft = scrollLeft - walkX;
+                lessonCanvas.scrollTop = scrollTop - walkY;
+            }
+            
+            function endDrag() {
+                isDragging = false;
+                textWidget.style.cursor = 'grab';
+            }
+        }
+
+        function initZoom() {
+            let currentScale = 1;
+            
+            zoomInBtn.addEventListener('click', () => {
+                currentScale = Math.min(currentScale + 0.1, 2);
+                updateZoom();
+            });
+            
+            zoomOutBtn.addEventListener('click', () => {
+                currentScale = Math.max(currentScale - 0.1, 0.5);
+                updateZoom();
+            });
+            
+            zoomResetBtn.addEventListener('click', () => {
+                currentScale = 1;
+                updateZoom();
+            });
+            
+            lessonCanvas.addEventListener('wheel', (e) => {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    currentScale += e.deltaY * -0.01;
+                    currentScale = Math.max(0.5, Math.min(2, currentScale));
+                    updateZoom();
+                }
+            });
+            
+            function updateZoom() {
+                lessonCanvas.style.transform = `scale(${currentScale})`;
+                lessonCanvas.style.transformOrigin = 'center center';
+            }
+        }
+
         function adjustTeacherVideoSize(img) {
             if (img.naturalWidth && img.naturalHeight) {
                 currentAvatarAspectRatio = img.naturalWidth / img.naturalHeight;
                 const teacherContainer = document.getElementById('teacher-video-container');
                 
                 if (currentAvatarAspectRatio > 1) {
-                    // Горизонтальное изображение
                     teacherContainer.style.width = '200px';
                     teacherContainer.style.height = '150px';
                 } else {
-                    // Вертикальное изображение
                     teacherContainer.style.width = '150px';
                     teacherContainer.style.height = '200px';
                 }
@@ -697,7 +976,6 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 socket.emit('join_room', { room_id: roomId });
                 
-                // Автоматически включаем камеру и микрофон
                 setTimeout(() => {
                     enableCameraAndMicrophone();
                 }, 1000);
@@ -717,9 +995,7 @@
             socket.on('speech_audio', (data) => {
                 try {
                     const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
-                    
                     const playPromise = audio.play();
-                    
                     if (playPromise !== undefined) {
                         playPromise
                             .then(() => {
@@ -747,7 +1023,6 @@
                     if (!isLessonActive) {
                         showTeacherSpeech(data.text);
                     }
-                    // Обновляем текст урока если это урок
                     if (currentLesson && data.text.startsWith('Учитель: ')) {
                         const lessonText = data.text.replace('Учитель: ', '');
                         updateLessonText(lessonText);
@@ -791,7 +1066,6 @@
 
         async function enableCameraAndMicrophone() {
             try {
-                // Запрашиваем доступ к камере и микрофону одновременно
                 const stream = await navigator.mediaDevices.getUserMedia({ 
                     video: {
                         width: { ideal: 640 },
@@ -806,20 +1080,16 @@
                 });
                 
                 userStream = stream;
-                
-                // Включаем камеру
                 selfVideo.srcObject = userStream;
                 isCamOn = true;
                 camBtn.classList.add('active');
                 camBtn.querySelector('span').textContent = 'Выкл';
                 document.getElementById('self-video-container').style.display = 'block';
                 
-                // Включаем микрофон
                 isMicOn = true;
                 micBtn.classList.add('active');
                 micBtn.querySelector('span').textContent = 'Выкл';
                 
-                // Запускаем распознавание речи
                 if (recognition) {
                     recognition.start();
                 }
@@ -827,8 +1097,6 @@
                 statusDiv.textContent = 'Камера и микрофон включены';
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
-                
-                // Показываем кнопку активации AI-учителя
                 activateAiBtn.style.display = 'block';
                 
             } catch (error) {
@@ -861,7 +1129,6 @@
             if (paragraphIndex < currentLessonContent.length) {
                 const paragraph = currentLessonContent[paragraphIndex];
                 
-                // Анимация исчезновения предыдущего текста
                 if (lessonText.textContent !== '') {
                     lessonText.classList.add('slide-out');
                     setTimeout(() => {
@@ -875,7 +1142,6 @@
                 
                 currentParagraph = paragraphIndex + 1;
             } else {
-                // Урок завершен
                 lessonContent.style.display = 'none';
                 currentLesson = null;
                 isLessonActive = false;
@@ -888,7 +1154,6 @@
                 if (paragraphIndex !== -1 && paragraphIndex >= currentParagraph) {
                     displayLessonParagraph(paragraphIndex);
                 } else if (paragraphIndex === -1) {
-                    // Новый текст, которого нет в текущем контенте
                     animateTextTyping(text);
                 }
             }
@@ -903,24 +1168,20 @@
             
             lessonText.textContent = '';
             let currentIndex = 0;
-            const typingSpeed = 30; // ms per character
+            const typingSpeed = 30;
             
             currentTypingAnimation = setInterval(() => {
                 if (currentIndex < text.length) {
                     lessonText.textContent += text.charAt(currentIndex);
                     currentIndex++;
-                    
-                    // Прокрутка к последнему символу
-                    lessonContent.scrollTop = lessonContent.scrollHeight;
+                    lessonCanvas.scrollTop = lessonCanvas.scrollHeight;
                 } else {
                     clearInterval(currentTypingAnimation);
-                    // Убираем курсор после завершения печати
                     const cursor = document.querySelector('.typing-cursor');
                     if (cursor) cursor.remove();
                 }
             }, typingSpeed);
             
-            // Добавляем мигающий курсор
             const cursor = document.createElement('span');
             cursor.className = 'typing-cursor';
             lessonText.appendChild(cursor);
@@ -1125,6 +1386,8 @@
             initSocket();
             createBackgroundAnimation();
             initSpeechRecognition();
+            initDragging();
+            initZoom();
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
