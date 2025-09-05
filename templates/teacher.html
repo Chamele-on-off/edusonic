@@ -37,12 +37,17 @@
         button, select, input {
             padding: 10px 15px;
             border-radius: 4px;
+            font-size: 14px;
         }
         button {
             background: #3498db;
             color: white;
             border: none;
             cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background: #2980b9;
         }
         button:disabled {
             background: #95a5a6;
@@ -52,10 +57,15 @@
             border: 1px solid #ddd;
             min-width: 150px;
         }
+        input[type="text"] {
+            border: 1px solid #ddd;
+            min-width: 200px;
+        }
         #status {
             text-align: center;
             margin: 10px 0;
             font-family: monospace;
+            color: #555;
         }
         #debug {
             margin-top: 20px;
@@ -65,6 +75,8 @@
             font-family: monospace;
             max-height: 200px;
             overflow-y: auto;
+            font-size: 12px;
+            border: 1px solid #ddd;
         }
         #conference-link {
             margin-top: 20px;
@@ -76,12 +88,14 @@
             height: 200px;
             margin: 20px auto;
             border: 1px solid #ddd;
+            border-radius: 4px;
         }
         #room-controls {
             margin-top: 20px;
             padding: 15px;
             background: #eef;
             border-radius: 4px;
+            border: 1px solid #dde;
         }
         #room-id {
             font-weight: bold;
@@ -95,11 +109,13 @@
             background: #f8f8f8;
             border: 1px solid #ddd;
             border-radius: 4px;
+            font-size: 12px;
+            resize: vertical;
         }
         
         .management-panel {
             margin-top: 30px;
-            border-top: 1px solid #ddd;
+            border-top: 2px solid #eee;
             padding-top: 20px;
         }
         
@@ -107,23 +123,37 @@
             display: flex;
             border-bottom: 1px solid #ddd;
             margin-bottom: 15px;
+            flex-wrap: wrap;
         }
         
         .tab {
-            padding: 10px 20px;
+            padding: 12px 20px;
             cursor: pointer;
             border: 1px solid transparent;
+            background: #f8f9fa;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            transition: background-color 0.3s;
+        }
+        
+        .tab:hover {
+            background: #e9ecef;
         }
         
         .tab.active {
             border: 1px solid #ddd;
             border-bottom: 1px solid white;
+            background: white;
             margin-bottom: -1px;
-            border-radius: 4px 4px 0 0;
         }
         
         .tab-content {
             display: none;
+            padding: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
         }
         
         .tab-content.active {
@@ -133,27 +163,35 @@
         textarea {
             width: 100%;
             height: 200px;
-            padding: 10px;
-            margin-bottom: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
             border-radius: 4px;
             border: 1px solid #ddd;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
         }
         
         .knowledge-form, .lesson-form {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #eee;
         }
         
         .subject-select {
             width: 100%;
             padding: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             border-radius: 4px;
             border: 1px solid #ddd;
+            font-size: 14px;
         }
         
         .api-key-form {
             background: #f9f9f9;
-            padding: 15px;
+            padding: 20px;
             border-radius: 8px;
             margin-bottom: 20px;
             border: 1px solid #eee;
@@ -161,18 +199,20 @@
         
         .api-key-input {
             width: 100%;
-            padding: 10px;
-            margin: 10px 0;
+            padding: 12px;
+            margin: 12px 0;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-family: monospace;
+            font-size: 14px;
         }
         
         .api-status {
-            margin-top: 10px;
-            padding: 10px;
+            margin-top: 12px;
+            padding: 12px;
             border-radius: 4px;
             display: none;
+            font-size: 14px;
         }
         
         .api-status.success {
@@ -189,31 +229,90 @@
         
         .api-key-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 20px;
             margin-bottom: 20px;
         }
         
         .download-buttons {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             margin-top: 15px;
+            flex-wrap: wrap;
         }
         
         .download-btn {
             background: #27ae60;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 12px 18px;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
         }
         
         .download-btn:hover {
             background: #219a52;
         }
         
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        h2, h3, h4 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+        
+        h2 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #c3e6cb;
+            display: none;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+            display: none;
+        }
+        
         @media (max-width: 768px) {
+            #avatar {
+                width: 300px;
+                height: 300px;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .controls > * {
+                width: 100%;
+                max-width: 300px;
+            }
+            
             .api-key-grid {
                 grid-template-columns: 1fr;
             }
@@ -221,13 +320,52 @@
             .download-buttons {
                 flex-direction: column;
             }
+            
+            .tab-container {
+                flex-direction: column;
+            }
+            
+            .tab {
+                margin-bottom: 5px;
+                border-radius: 4px;
+            }
+            
+            .tab.active {
+                margin-bottom: 0;
+                border-radius: 4px 4px 0 0;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            #container {
+                padding: 15px;
+            }
+            
+            #avatar {
+                width: 250px;
+                height: 250px;
+            }
+            
+            button, select, input {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            
+            .tab {
+                padding: 10px 15px;
+                font-size: 13px;
+            }
+            
+            .tab-content {
+                padding: 15px;
+            }
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
-        <h1 style="text-align: center;">Панель управления AI-учителем</h1>
+        <h1 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Панель управления AI-учителем</h1>
         
         <!-- Новая секция для управления API ключами -->
         <div class="management-panel">
@@ -237,8 +375,10 @@
                 <div class="api-key-form">
                     <h3>OpenRouter API Key</h3>
                     <input type="password" id="openrouter-key" class="api-key-input" placeholder="Введите API ключ для OpenRouter">
-                    <button id="save-openrouter-btn">Сохранить</button>
-                    <button id="test-openrouter-btn">Проверить</button>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button id="save-openrouter-btn">Сохранить</button>
+                        <button id="test-openrouter-btn">Проверить</button>
+                    </div>
                     <div id="openrouter-status" class="api-status"></div>
                 </div>
             </div>
@@ -250,7 +390,7 @@
                 <input type="text" id="room-input" placeholder="Имя комнаты">
                 <button id="change-room-btn">Сменить комнату</button>
             </div>
-            <div>
+            <div class="form-group">
                 <label for="embed-code">Код для вставки на другой сайт:</label>
                 <textarea id="embed-code" rows="3" readonly></textarea>
             </div>
@@ -260,17 +400,17 @@
             <select id="avatar-select">
                 <option value="">Выберите аватар</option>
             </select>
-            <button id="load-btn" disabled>Загрузить</button>
+            <button id="load-btn" disabled>Загрузить аватар</button>
         </div>
         
         <img id="avatar" src="" alt="Аватар">
         <video id="video-preview" autoplay muted></video>
         
-        <div id="status">Выберите аватар</div>
+        <div id="status">Выберите аватар для загрузки</div>
         
         <div class="controls">
-            <button id="start-btn" disabled>Старт</button>
-            <button id="stop-btn" disabled>Стоп</button>
+            <button id="start-btn" disabled>Старт анимации</button>
+            <button id="stop-btn" disabled>Стоп анимации</button>
         </div>
 
         <div class="controls">
@@ -285,7 +425,9 @@
         <div id="debug"></div>
 
         <div id="conference-link">
-            <a id="conference-link-a" href="/conference?room=default" target="_blank">Перейти в конференцию</a>
+            <a id="conference-link-a" href="/conference?room=default" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
+                📹 Перейти в конференцию
+            </a>
         </div>
         
         <!-- Панель управления базой знаний и уроками -->
@@ -312,8 +454,12 @@
                         <option value="русский язык">Русский язык</option>
                         <option value="общее">Общее</option>
                     </select>
-                    <textarea id="knowledge-text" placeholder="Введите текст для добавления в базу знаний. Формат: термин - определение (каждая пара с новой строки)"></textarea>
+                    <textarea id="knowledge-text" placeholder="Введите текст для добавления в базу знаний. Формат: 
+термин - определение
+вопрос? - ответ
+каждая пара с новой строки"></textarea>
                     <button id="add-knowledge-btn">Добавить в базу</button>
+                    <div id="knowledge-status" class="success-message"></div>
                 </div>
             </div>
             
@@ -331,17 +477,18 @@
                         <option value="русский язык">Русский язык</option>
                         <option value="общее">Общее</option>
                     </select>
-                    <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd;">
-                    <textarea id="lesson-content" placeholder="Содержание урока"></textarea>
+                    <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ddd;">
+                    <textarea id="lesson-content" placeholder="Содержание урока (разделяйте абзацы пустыми строками)"></textarea>
                     <button id="add-lesson-btn">Добавить урок</button>
+                    <div id="lesson-status" class="success-message"></div>
                 </div>
             </div>
             
             <div class="tab-content" id="download-tab">
                 <h3>Скачать материалы</h3>
                 
-                <div style="margin-bottom: 20px;">
-                    <h4>Базы знаний</h4>
+                <div style="margin-bottom: 25px; padding: 15px; background: #f9f9f9; border-radius: 6px;">
+                    <h4>📚 Базы знаний</h4>
                     <p>Выберите предмет для скачивания базы знаний:</p>
                     <select class="subject-select" id="download-subject">
                         <option value="обществознание">Обществознание</option>
@@ -355,17 +502,19 @@
                         <option value="общее">Общее</option>
                     </select>
                     <div class="download-buttons">
-                        <button class="download-btn" id="download-knowledge-btn">Скачать базу знаний</button>
+                        <button class="download-btn" id="download-knowledge-btn">📥 Скачать базу знаний</button>
                     </div>
                 </div>
                 
-                <div>
-                    <h4>Уроки</h4>
+                <div style="padding: 15px; background: #f9f9f9; border-radius: 6px;">
+                    <h4>📖 Уроки</h4>
                     <p>Скачать все доступные уроки:</p>
                     <div class="download-buttons">
-                        <button class="download-btn" id="download-lessons-btn">Скачать все уроки</button>
+                        <button class="download-btn" id="download-lessons-btn">📥 Скачать все уроки</button>
                     </div>
                 </div>
+                
+                <div id="download-status" class="success-message"></div>
             </div>
         </div>
     </div>
@@ -401,6 +550,11 @@
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
         const downloadLessonsBtn = document.getElementById('download-lessons-btn');
+        
+        // Элементы статуса
+        const knowledgeStatus = document.getElementById('knowledge-status');
+        const lessonStatus = document.getElementById('lesson-status');
+        const downloadStatus = document.getElementById('download-status');
         
         // Socket.io
         const socket = io();
@@ -576,7 +730,7 @@
         
         // Загрузка кадров аватара
         async function loadAvatarFrames(avatarName) {
-            try:
+            try {
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
                 loadedImages = [];
                 
@@ -711,6 +865,17 @@
             }
         }
         
+        // Показать статус сообщение
+        function showStatus(element, message, isSuccess = true) {
+            element.textContent = message;
+            element.className = isSuccess ? 'success-message' : 'error-message';
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             // Загружаем API ключи при загрузке страницы
@@ -777,7 +942,7 @@
                 const text = document.getElementById('knowledge-text').value;
                 
                 if (!text.trim()) {
-                    alert('Введите текст для добавления в базу знаний');
+                    showStatus(knowledgeStatus, 'Введите текст для добавления в базу знаний', false);
                     return;
                 }
                 
@@ -794,14 +959,14 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Данные успешно добавлены в базу знаний!');
+                        showStatus(knowledgeStatus, `Данные успешно добавлены в базу знаний! Добавлено элементов: ${data.added_items}`);
                         document.getElementById('knowledge-text').value = '';
                     } else {
-                        alert('Ошибка: ' + data.error);
+                        showStatus(knowledgeStatus, 'Ошибка: ' + data.error, false);
                     }
                 })
                 .catch(error => {
-                    alert('Ошибка при добавлении данных: ' + error);
+                    showStatus(knowledgeStatus, 'Ошибка при добавлении данных: ' + error, false);
                 });
             });
             
@@ -812,7 +977,7 @@
                 const content = document.getElementById('lesson-content').value;
                 
                 if (!title.trim() || !content.trim()) {
-                    alert('Заполните название и содержание урока');
+                    showStatus(lessonStatus, 'Заполните название и содержание урока', false);
                     return;
                 }
                 
@@ -830,15 +995,15 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Урок успешно добавлен!');
+                        showStatus(lessonStatus, `Урок "${title}" успешно добавлен по предмету "${subject}"!`);
                         document.getElementById('lesson-title').value = '';
                         document.getElementById('lesson-content').value = '';
                     } else {
-                        alert('Ошибка: ' + data.error);
+                        showStatus(lessonStatus, 'Ошибка: ' + data.error, false);
                     }
                 })
                 .catch(error => {
-                    alert('Ошибка при добавлении урока: ' + error);
+                    showStatus(lessonStatus, 'Ошибка при добавлении урока: ' + error, false);
                 });
             });
             
@@ -863,9 +1028,10 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
+                    showStatus(downloadStatus, `База знаний по предмету "${subject}" успешно скачана!`);
                 })
                 .catch(error => {
-                    alert('Ошибка при скачивании: ' + error.message);
+                    showStatus(downloadStatus, 'Ошибка при скачивании: ' + error.message, false);
                 });
             });
             
@@ -888,9 +1054,10 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
+                    showStatus(downloadStatus, 'Все уроки успешно скачаны!');
                 })
                 .catch(error => {
-                    alert('Ошибка при скачивании уроков: ' + error.message);
+                    showStatus(downloadStatus, 'Ошибка при скачивании уроков: ' + error.message, false);
                 });
             });
         });
