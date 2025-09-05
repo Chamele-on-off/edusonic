@@ -243,7 +243,7 @@ class DialogueManager:
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", "здравствуй", "начать", "старт", " готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", "здравствуй", 'начать', "старт", " готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             subjects = self.get_available_subjects()
@@ -329,7 +329,14 @@ class DialogueManager:
             if answer and not answer.startswith("Интересный вопрос!"):
                 return answer
         
-        # 5. Запрос к LLM с контекстом текущего урока
+        # 5. Проверяем базу ответов LLM с высокой точностью (порог 0.8)
+        if self.knowledge_base:
+            llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
+            if llm_answer:
+                print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
+                return llm_answer
+        
+        # 6. Запрос к LLM с контекстом текущего урока
         current_context = ""
         if self.lesson_content and self.current_paragraph > 0:
             # Берем текущий и предыдущий абзацы для контекста
@@ -346,7 +353,7 @@ class DialogueManager:
                 self.knowledge_base.add_knowledge(question=question, answer=llm_response)
             return llm_response
         
-        # 6. Финальный fallback
+        # 7. Финальный fallback
         return "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
 
     def get_selected_lesson(self) -> Optional[dict]:
