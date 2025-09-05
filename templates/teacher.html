@@ -194,9 +194,32 @@
             margin-bottom: 20px;
         }
         
+        .download-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .download-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .download-btn:hover {
+            background: #219a52;
+        }
+        
         @media (max-width: 768px) {
             .api-key-grid {
                 grid-template-columns: 1fr;
+            }
+            
+            .download-buttons {
+                flex-direction: column;
             }
         }
     </style>
@@ -315,20 +338,34 @@
             </div>
             
             <div class="tab-content" id="download-tab">
-                <h3>Скачать базу знаний</h3>
-                <p>Выберите предмет для скачивания текущей базы знаний:</p>
-                <select class="subject-select" id="download-subject">
-                    <option value="обществознание">Обществознание</option>
-                    <option value="математика">Математика</option>
-                    <option value="история">История</option>
-                    <option value="физика">Физика</option>
-                    <option value="химия">Химия</option>
-                    <option value="биология">Биология</option>
-                    <option value="литература">Литература</option>
-                    <option value="русский язык">Русский язык</option>
-                    <option value="общее">Общее</option>
-                </select>
-                <button id="download-btn">Скачать базу знаний</button>
+                <h3>Скачать материалы</h3>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4>Базы знаний</h4>
+                    <p>Выберите предмет для скачивания базы знаний:</p>
+                    <select class="subject-select" id="download-subject">
+                        <option value="обществознание">Обществознание</option>
+                        <option value="математика">Математика</option>
+                        <option value="история">История</option>
+                        <option value="физика">Физика</option>
+                        <option value="химия">Химия</option>
+                        <option value="биология">Биология</option>
+                        <option value="литература">Литература</option>
+                        <option value="русский язык">Русский язык</option>
+                        <option value="общее">Общее</option>
+                    </select>
+                    <div class="download-buttons">
+                        <button class="download-btn" id="download-knowledge-btn">Скачать базу знаний</button>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4>Уроки</h4>
+                    <p>Скачать все доступные уроки:</p>
+                    <div class="download-buttons">
+                        <button class="download-btn" id="download-lessons-btn">Скачать все уроки</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -360,6 +397,10 @@
         const saveOpenrouterBtn = document.getElementById('save-openrouter-btn');
         const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
         const openrouterStatus = document.getElementById('openrouter-status');
+        
+        // Элементы для скачивания
+        const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
+        const downloadLessonsBtn = document.getElementById('download-lessons-btn');
         
         // Socket.io
         const socket = io();
@@ -535,7 +576,7 @@
         
         // Загрузка кадров аватара
         async function loadAvatarFrames(avatarName) {
-            try {
+            try:
                 statusDiv.textContent = `Загрузка ${avatarName}...`;
                 loadedImages = [];
                 
@@ -802,24 +843,54 @@
             });
             
             // Скачивание базы знаний
-            document.getElementById('download-btn').addEventListener('click', function() {
+            downloadKnowledgeBtn.addEventListener('click', function() {
                 const subject = document.getElementById('download-subject').value;
                 
                 fetch(`/api/download_knowledge?subject=${encodeURIComponent(subject)}`)
-                .then(response => response.blob())
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка скачивания');
+                })
                 .then(blob => {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.style.display = 'none';
                     a.href = url;
-                    a.download = `${subject}_knowledge.json`;
+                    a.download = `${subject}_knowledge.zip`;
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
                 })
                 .catch(error => {
-                    alert('Ошибка при скачивании: ' + error);
+                    alert('Ошибка при скачивании: ' + error.message);
+                });
+            });
+            
+            // Скачивание уроков
+            downloadLessonsBtn.addEventListener('click', function() {
+                fetch('/api/download_lessons')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка скачивания');
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'ai_teacher_lessons.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                })
+                .catch(error => {
+                    alert('Ошибка при скачивании уроков: ' + error.message);
                 });
             });
         });
