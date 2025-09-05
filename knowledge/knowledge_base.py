@@ -171,8 +171,8 @@ class KnowledgeBase:
             return True
         return False
 
-    def find_llm_answer(self, question: str, threshold: float = 0.4) -> Optional[str]:
-        """Поиск похожего ответа в базе ответов LLM"""
+    def find_llm_answer(self, question: str, threshold: float = 0.8) -> Optional[str]:
+        """Поиск похожего ответа в базе ответов LLM с высокой точностью"""
         if not question.strip():
             return None
             
@@ -182,10 +182,12 @@ class KnowledgeBase:
         if not answers:
             return None
         
+        # 1. Точное совпадение (самый надежный способ)
         if clean_question in answers:
-            print(f"Точное совпадение в базе ответов LLM: {clean_question}")
+            print(f"💾 Точное совпадение в базе ответов LLM: {clean_question}")
             return answers[clean_question]["answer"]
         
+        # 2. Поиск по очень высокой схожести (только для уверенных совпадений)
         try:
             questions = list(answers.keys())
             q_vec = self.llm_vectorizer.transform([clean_question])
@@ -197,7 +199,7 @@ class KnowledgeBase:
             
             if best_similarity > threshold:
                 best_question = questions[best_match_idx]
-                print(f"Найдено похожий вопрос в базе LLM: {best_question} (схожесть: {best_similarity:.2f})")
+                print(f"💾 Найдено очень похожий вопрос в базе LLM: {best_question} (схожесть: {best_similarity:.3f})")
                 return answers[best_question]["answer"]
                 
         except Exception as e:
@@ -218,10 +220,10 @@ class KnowledgeBase:
             print(f"Найден ответ в базе знаний: {knowledge_answer[:100]}...")
             return knowledge_answer
         
-        # Затем проверяем базу ответов LLM
-        llm_answer = self.find_llm_answer(text_lower)
+        # Затем проверяем базу ответов LLM с высокой точностью
+        llm_answer = self.find_llm_answer(text_lower, threshold=0.8)
         if llm_answer:
-            print(f"Найден ответ в базе LLM: {llm_answer[:100]}...")
+            print(f"💾 Найден ответ в базе LLM: {llm_answer[:100]}...")
             return llm_answer
         
         # Затем проверяем диалоговые шаблоны
