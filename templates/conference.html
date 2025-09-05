@@ -17,6 +17,10 @@
             --gray: #6c757d;
             --teacher-color: #4cc9f0;
             --student-color: #f72585;
+            --board-bg: #F0F2F5;
+            --board-text: #333333;
+            --board-border: #E1E5EB;
+            --board-shadow: rgba(0, 0, 0, 0.1);
         }
         
         * {
@@ -91,31 +95,31 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 30px;
-            border-radius: 15px;
+            background: var(--board-bg);
+            padding: 25px;
+            border-radius: 12px;
             max-width: 90%;
             max-height: 80%;
             overflow-y: auto;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             z-index: 5;
             display: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 40px var(--board-shadow), 0 0 0 1px var(--board-border);
             -webkit-overflow-scrolling: touch;
-        }
-        
-        #lesson-content h2 {
-            margin-bottom: 20px;
-            color: var(--success);
-            text-align: center;
-            font-size: 1.5rem;
+            color: var(--board-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         #lesson-text {
             font-size: 1.2rem;
-            line-height: 1.6;
-            text-align: center;
+            line-height: 1.7;
+            text-align: left;
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--board-border);
+            min-height: 180px;
+            white-space: pre-wrap;
         }
         
         #teacher-video-container {
@@ -390,12 +394,10 @@
                 max-width: 95%;
             }
             
-            #lesson-content h2 {
-                font-size: 1.3rem;
-            }
-            
             #lesson-text {
                 font-size: 1.1rem;
+                padding: 20px;
+                min-height: 150px;
             }
         }
         
@@ -444,13 +446,10 @@
                 padding: 15px;
             }
             
-            #lesson-content h2 {
-                font-size: 1.2rem;
-                margin-bottom: 15px;
-            }
-            
             #lesson-text {
                 font-size: 1rem;
+                padding: 15px;
+                min-height: 120px;
             }
         }
         
@@ -510,6 +509,28 @@
                 cursor: default;
             }
         }
+        
+        /* Miro-like board styling enhancements */
+        .miro-board {
+            background: linear-gradient(to bottom, #F0F2F5, #E8EBF0) !important;
+            border: 1px solid #DDE1E6 !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+        }
+        
+        .typing-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: var(--primary);
+            margin-left: 2px;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -525,8 +546,7 @@
         <div id="video-container">
             <div id="background-animation"></div>
             
-            <div id="lesson-content">
-                <h2 id="lesson-title"></h2>
+            <div id="lesson-content" class="miro-board">
                 <div id="lesson-text"></div>
             </div>
             
@@ -600,7 +620,6 @@
         const studentSpeech = document.getElementById('student-speech');
         const activateAiBtn = document.getElementById('activate-ai-btn');
         const lessonContent = document.getElementById('lesson-content');
-        const lessonTitle = document.getElementById('lesson-title');
         const lessonText = document.getElementById('lesson-text');
         const backgroundAnimation = document.getElementById('background-animation');
         const cameraPermission = document.getElementById('camera-permission');
@@ -766,7 +785,6 @@
                 isLessonActive = true;
                 currentLesson = data;
                 currentParagraph = 0;
-                lessonTitle.textContent = `${data.subject}: ${data.title}`;
                 loadLessonContent(data.lesson_id);
             });
         }
@@ -896,8 +914,16 @@
                     lessonContent.scrollTop = lessonContent.scrollHeight;
                 } else {
                     clearInterval(currentTypingAnimation);
+                    // Убираем курсор после завершения печати
+                    const cursor = document.querySelector('.typing-cursor');
+                    if (cursor) cursor.remove();
                 }
             }, typingSpeed);
+            
+            // Добавляем мигающий курсор
+            const cursor = document.createElement('span');
+            cursor.className = 'typing-cursor';
+            lessonText.appendChild(cursor);
         }
 
         function showTeacherSpeech(text) {
