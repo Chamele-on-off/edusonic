@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_from_directory, jsonify, request
+from flask import Flask, render_template, send_from_directory, jsonify, request, send_file
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -12,12 +12,20 @@ import random
 from dialogue import DialogueManager
 from config import update_api_key, get_api_key, load_config, get_model_config
 import requests
+import json
+from datetime import datetime
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
+LESSONS_DIR = BASE_DIR / 'lessons'
+MATERIALS_DIR = BASE_DIR / 'materials'
+
+# Создаем необходимые папки
+for folder in [LESSONS_DIR, MATERIALS_DIR]:
+    os.makedirs(folder, exist_ok=True)
 
 # Глобальные состояния
 animation_running = defaultdict(bool)
@@ -451,7 +459,7 @@ def get_llm_answers():
 def get_lesson_content(lesson_id):
     """Получение содержания урока"""
     try:
-        lesson_file = Path("lessons") / f"{lesson_id}.txt"
+        lesson_file = LESSONS_DIR / f"{lesson_id}.txt"
         if not lesson_file.exists():
             return jsonify({"error": "Lesson not found"}), 404
         
@@ -471,6 +479,54 @@ def get_lesson_content(lesson_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/lessons')
+def get_available_lessons():
+    """Получение списка доступных уроков"""
+    try:
+        lessons = {}
+        for lesson_file in LESSONS_DIR.glob("*.txt"):
+            subject = _detect_subject(lesson_file.stem)
+            
+            if subject not in lessons:
+                lessons[subject] = []
+            
+            lessons[subject].append({
+                'id': lesson_file.stem,
+                'title': lesson_file.stem.replace('_', ' ').title(),
+                'file_path': lesson_file.name,
+                'type': 'text'
+            })
+        
+        return jsonify({
+            "success": True,
+            "lessons": lessons
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def _detect_subject(filename: str) -> str:
+    """Определяет предмет по названию файла"""
+    filename_lower = filename.lower()
+    if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
+        return "математика"
+    elif any(word in filename_lower for word in ['history', 'история', 'истор']):
+        return "история"
+    elif any(word in filename_lower for word in ['physics', 'физика', 'физ']):
+        return "физика"
+    elif any(word in filename_lower for word in ['chemistry', 'химия', 'хим']):
+        return "химия"
+    elif any(word in filename_lower for word in ['social', 'обществознание', 'общество']):
+        return "обществознание"
+    elif any(word in filename_lower for word in ['biology', 'биология', 'био']):
+        return "биология"
+    elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
+        return "литература"
+    elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
+        return "русский язык"
+    else:
+        return "общее"
+
 @app.route('/api/add_knowledge', methods=['POST'])
 def add_knowledge():
     """Добавление знаний в базу"""
@@ -482,11 +538,43 @@ def add_knowledge():
         if not text.strip():
             return jsonify({"success": False, "error": "Text is required"})
         
-        # Здесь должна быть логика добавления в базу знаний
-        # Пока просто возвращаем успех
-        print(f"Добавление знаний по {subject}: {text[:100]}...")
+        # Создаем базу знаний для предмета если ее нет
+        knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
+        if knowledge_file.exists():
+            with open(knowledge_file, 'r', encoding='utf-8') as f:
+                knowledge_data = json.load(f)
+        else:
+            knowledge_data = {
+                "terms": {},
+                "questions": {},
+                "examples": {},
+                "metadata": {
+                    "subject": subject,
+                    "version": "1.0",
+                    "last_updated": datetime.now().isoformat(),
+                    "author": "AI Teacher System"
+                }
+            }
         
-        return jsonify({"success": True, "subject": subject})
+        # Парсим текст и добавляем в базу знаний
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        for line in lines:
+            if ' - ' in line:
+                term, definition = line.split(' - ', 1)
+                knowledge_data["terms"][term.strip().lower()] = definition.strip()
+            elif line.endswith('?'):
+                knowledge_data["questions"][line.strip().lower()] = "Ответ будет добавлен автоматически"
+            else:
+                # Просто добавляем как общую информацию
+                if "general_info" not in knowledge_data:
+                    knowledge_data["general_info"] = []
+                knowledge_data["general_info"].append(line.strip())
+        
+        # Сохраняем обновленную базу знаний
+        with open(knowledge_file, 'w', encoding='utf-8') as f:
+            json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({"success": True, "subject": subject, "added_items": len(lines)})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -505,14 +593,12 @@ def add_lesson():
         
         # Создаем имя файла
         filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
-        lesson_path = Path("lessons") / filename
+        lesson_path = LESSONS_DIR / filename
         
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        print(f"Добавлен урок: {title} по {subject}")
-        
-        return jsonify({"success": True, "filename": filename})
+        return jsonify({"success": True, "filename": filename, "subject": subject, "title": title})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -521,9 +607,57 @@ def add_lesson():
 def download_knowledge():
     """Скачивание базы знаний"""
     subject = request.args.get('subject', 'обществознание')
-    # Здесь должна быть логика формирования файла базы знаний
-    # Пока возвращаем заглушку
-    return jsonify({"success": False, "error": "Not implemented yet"})
+    knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
+    llm_answers_file = MATERIALS_DIR / f"{subject}_llm_answers.json"
+    
+    if not knowledge_file.exists() and not llm_answers_file.exists():
+        return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
+    
+    # Создаем временный файл для скачивания
+    import tempfile
+    import zipfile
+    
+    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    
+    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+        if knowledge_file.exists():
+            zipf.write(knowledge_file, f"{subject}_knowledge.json")
+        if llm_answers_file.exists():
+            zipf.write(llm_answers_file, f"{subject}_llm_answers.json")
+    
+    temp_zip.close()
+    
+    return send_file(
+        temp_zip.name,
+        as_attachment=True,
+        download_name=f"{subject}_knowledge_base.zip",
+        mimetype='application/zip'
+    )
+
+@app.route('/api/download_lessons')
+def download_lessons():
+    """Скачивание всех уроков"""
+    if not any(LESSONS_DIR.iterdir()):
+        return jsonify({"success": False, "error": "Уроки не найдены"})
+    
+    # Создаем временный zip-файл
+    import tempfile
+    import zipfile
+    
+    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    
+    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+        for lesson_file in LESSONS_DIR.glob("*.txt"):
+            zipf.write(lesson_file, lesson_file.name)
+    
+    temp_zip.close()
+    
+    return send_file(
+        temp_zip.name,
+        as_attachment=True,
+        download_name="ai_teacher_lessons.zip",
+        mimetype='application/zip'
+    )
 
 # Новые API эндпоинты для управления API ключами
 @app.route('/api/config/keys', methods=['GET'])
@@ -628,8 +762,4 @@ def test_api_key():
         })
 
 if __name__ == '__main__':
-    # Создаем необходимые папки
-    for folder in ['lessons', 'cache', 'materials']:
-        os.makedirs(folder, exist_ok=True)
-    
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
