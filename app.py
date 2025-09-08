@@ -58,7 +58,7 @@ def reset_speaking_state(room_id):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст с анимацией и добавляет его в историю"""
+    """Озвучивает текст с анимацией и добавляет его в историе"""
     if not text.strip():
         return
         
@@ -745,7 +745,7 @@ def get_api_keys():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/config/keys', methods['POST'])
+@app.route('/api/config/keys', methods=['POST'])
 def set_api_key():
     """Установка API ключа"""
     try:
