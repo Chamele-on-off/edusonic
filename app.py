@@ -10,7 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config
+from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
 import requests
 import json
 from datetime import datetime
@@ -35,6 +35,7 @@ room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
+room_llm_mode = defaultdict(lambda: get_llm_mode())  # Режим LLM для каждой комнаты
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -200,6 +201,9 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
     
+    # Устанавливаем режим LLM для диалог менеджера комнаты
+    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+    
     if len(room_participants[room_id]) == 1:
         greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
@@ -345,10 +349,30 @@ def handle_activate_ai_teacher(data):
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
     
+    # Устанавливаем режим LLM для нового диалог менеджера
+    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+    
     greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
+
+@socketio.on('set_llm_mode')
+def handle_set_llm_mode(data):
+    room_id = data['room_id']
+    mode = data['mode']
+    
+    if mode in ["traditional", "llm_first"]:
+        room_llm_mode[room_id] = mode
+        if room_id in room_dialogue:
+            room_dialogue[room_id].set_llm_mode(mode)
+        
+        emit('llm_mode_changed', {
+            'mode': mode,
+            'room': room_id
+        }, room=room_id)
+        
+        print(f"Режим LLM изменен в комнате {room_id}: {mode}")
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
@@ -397,6 +421,52 @@ def get_llm_status():
     
     return jsonify({"success": False, "error": "Room not found"})
 
+@app.route('/api/config/llm_mode', methods=['GET'])
+def get_llm_mode_api():
+    """Получение текущего режима работы LLM"""
+    try:
+        config = load_config()
+        return jsonify({
+            "success": True,
+            "mode": config.get("llm_query_mode", {}).get("default_mode", "traditional"),
+            "available_modes": config.get("llm_query_mode", {}).get("available_modes", ["traditional", "llm_first"])
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/config/llm_mode', methods=['POST'])
+def set_llm_mode_api():
+    """Установка режима работы LLM"""
+    try:
+        data = request.json
+        mode = data.get('mode')
+        
+        if not mode:
+            return jsonify({"success": False, "error": "Mode not specified"})
+        
+        if mode not in ["traditional", "llm_first"]:
+            return jsonify({"success": False, "error": "Invalid mode. Use 'traditional' or 'llm_first'"})
+        
+        success = set_llm_mode(mode)
+        
+        if success:
+            # Обновляем режим для всех активных комнат
+            for room_id in room_llm_mode:
+                room_llm_mode[room_id] = mode
+                if room_id in room_dialogue:
+                    room_dialogue[room_id].set_llm_mode(mode)
+            
+            return jsonify({
+                "success": True,
+                "message": f"Режим LLM успешно изменен на '{mode}'",
+                "mode": mode
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to save config"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route('/api/knowledge/stats', methods=['GET'])
 def get_knowledge_stats():
     """Получение статистики базы знаний для комнаты"""
@@ -413,7 +483,7 @@ def get_knowledge_stats():
                 "stats": stats
             })
     
-    return jsonify({"success": False, "error": "Room not found or no knowledge base"})
+    return jsonify({"success": False, "error": "Room not found"})
 
 @app.route('/api/knowledge/search', methods=['GET'])
 def search_knowledge():
@@ -675,7 +745,7 @@ def get_api_keys():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/config/keys', methods=['POST'])
+@app.route('/api/config/keys', methods['POST'])
 def set_api_key():
     """Установка API ключа"""
     try:
