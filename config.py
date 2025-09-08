@@ -20,6 +20,10 @@ DEFAULT_CONFIG = {
     "fallback": {
         "enabled": True,
         "model": "meta-llama/llama-3.3-8b-instruct:free"
+    },
+    "llm_query_mode": {
+        "default_mode": "traditional",  # "traditional" или "llm_first"
+        "available_modes": ["traditional", "llm_first"]
     }
 }
 
@@ -64,6 +68,24 @@ def get_model_config(provider):
     """Получение конфигурации модели для указанного провайдера"""
     config = load_config()
     return config.get(provider, {})
+
+def get_llm_mode():
+    """Получение режима работы LLM"""
+    config = load_config()
+    return config.get("llm_query_mode", {}).get("default_mode", "traditional")
+
+def set_llm_mode(mode):
+    """Установка режима работы LLM"""
+    if mode not in ["traditional", "llm_first"]:
+        return False
+        
+    config = load_config()
+    
+    if 'llm_query_mode' not in config:
+        config['llm_query_mode'] = {}
+    
+    config['llm_query_mode']['default_mode'] = mode
+    return save_config(config)
 
 # Загружаем конфигурацию при импорте
 LLM_CONFIG = load_config().get("llm", DEFAULT_CONFIG["llm"])
