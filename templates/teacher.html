@@ -297,6 +297,41 @@
             display: none;
         }
         
+        .llm-mode-panel {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        
+        .mode-description {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #3498db;
+        }
+        
+        .mode-description.llm-first {
+            border-left-color: #e74c3c;
+        }
+        
+        .mode-description h4 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        
+        .mode-steps {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .mode-steps li {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -380,6 +415,45 @@
                         <button id="test-openrouter-btn">Проверить</button>
                     </div>
                     <div id="openrouter-status" class="api-status"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Секция управления режимом LLM -->
+        <div class="management-panel">
+            <h2>Режим работы AI-учителя</h2>
+            
+            <div class="llm-mode-panel">
+                <div class="form-group">
+                    <label for="llm-mode-select">Стратегия ответов на вопросы:</label>
+                    <select id="llm-mode-select" class="subject-select">
+                        <option value="traditional">Сначала база знаний, потом LLM</option>
+                        <option value="llm_first">Сначала LLM, потом база знаний</option>
+                    </select>
+                </div>
+                
+                <button id="set-llm-mode-btn" style="margin-top: 10px;">Применить режим</button>
+                
+                <div id="llm-mode-status" class="success-message"></div>
+                
+                <div class="mode-description">
+                    <h4>📚 Режим "Сначала база знаний, потом LLM"</h4>
+                    <p>Традиционный подход, который экономит запросы к LLM:</p>
+                    <ol class="mode-steps">
+                        <li>Поиск в локальной базе знаний</li>
+                        <li>Проверка сохраненных ответов LLM</li>
+                        <li>Запрос к внешнему LLM (если ответ не найден)</li>
+                    </ol>
+                </div>
+                
+                <div class="mode-description llm-first">
+                    <h4>🚀 Режим "Сначала LLM, потом база знаний"</h4>
+                    <p>Приоритет качественным ответам от AI:</p>
+                    <ol class="mode-steps">
+                        <li>Немедленный запрос к внешнему LLM</li>
+                        <li>Поиск в локальной базе знаний (если LLM не ответил)</li>
+                        <li>Проверка сохраненных ответов LLM</li>
+                    </ol>
                 </div>
             </div>
         </div>
@@ -547,6 +621,11 @@
         const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
         const openrouterStatus = document.getElementById('openrouter-status');
         
+        // Элементы для управления режимом LLM
+        const llmModeSelect = document.getElementById('llm-mode-select');
+        const setLlmModeBtn = document.getElementById('set-llm-mode-btn');
+        const llmModeStatus = document.getElementById('llm-mode-status');
+        
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
         const downloadLessonsBtn = document.getElementById('download-lessons-btn');
@@ -663,6 +742,51 @@
                 statusElement.className = 'api-status error';
                 statusElement.style.display = 'block';
                 log('Ошибка сети при проверке ключа: ' + error);
+            });
+        }
+        
+        // Функции для работы с режимом LLM
+        function loadLLMMode() {
+            fetch('/api/config/llm_mode')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        llmModeSelect.value = data.mode;
+                        log(`Текущий режим LLM: ${data.mode}`);
+                    }
+                })
+                .catch(error => {
+                    log('Ошибка загрузки режима LLM: ' + error);
+                });
+        }
+        
+        function setLLMMode(mode) {
+            fetch('/api/config/llm_mode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ mode: mode })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(llmModeStatus, data.message);
+                    log(data.message);
+                    
+                    // Также отправляем сокет-запрос для применения режима ко всем активным комнатам
+                    if (socket) {
+                        socket.emit('set_llm_mode', { 
+                            room_id: currentRoom,
+                            mode: mode
+                        });
+                    }
+                } else {
+                    showStatus(llmModeStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showStatus(llmModeStatus, 'Ошибка сети: ' + error, false);
             });
         }
         
@@ -881,6 +1005,9 @@
             // Загружаем API ключи при загрузке страницы
             loadApiKeys();
             
+            // Загружаем режим LLM при загрузке страницы
+            loadLLMMode();
+            
             // Инициализация комнаты по умолчанию
             initRoom('default');
             
@@ -894,6 +1021,12 @@
             
             testOpenrouterBtn.addEventListener('click', () => {
                 testApiKey('openrouter', openrouterKeyInput.value);
+            });
+            
+            // Обработчики для режима LLM
+            setLlmModeBtn.addEventListener('click', function() {
+                const mode = llmModeSelect.value;
+                setLLMMode(mode);
             });
             
             // Выбор аватара
