@@ -332,6 +332,14 @@
             line-height: 1.4;
         }
         
+        .dialogue-mode-panel {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -401,6 +409,46 @@
 <body>
     <div id="container">
         <h1 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Панель управления AI-учителем</h1>
+        
+        <!-- Секция управления режимом диалога -->
+        <div class="management-panel">
+            <h2>Режим работы диалога</h2>
+            
+            <div class="dialogue-mode-panel">
+                <div class="form-group">
+                    <label for="dialogue-mode-select">Режим диалога учителя:</label>
+                    <select id="dialogue-mode-select" class="subject-select">
+                        <option value="default">Обычный режим</option>
+                        <option value="demo">Демо-режим</option>
+                    </select>
+                </div>
+                
+                <button id="set-dialogue-mode-btn" style="margin-top: 10px;">Применить режим диалога</button>
+                
+                <div id="dialogue-mode-status" class="success-message"></div>
+                
+                <div class="mode-description">
+                    <h4>📚 Обычный режим</h4>
+                    <p>Стандартная работа с уроками из папки lessons/:</p>
+                    <ol class="mode-steps">
+                        <li>Выбор предмета из доступных уроков</li>
+                        <li>Чтение готового материала из файлов</li>
+                        <li>Ответы на вопросы через базу знаний и LLM</li>
+                    </ol>
+                </div>
+                
+                <div class="mode-description llm-first">
+                    <h4>🚀 Демо-режим</h4>
+                    <p>Интерактивное обучение с генерацией контента:</p>
+                    <ol class="mode-steps">
+                        <li>Предложение демо-уроков из lessons/demo/</li>
+                        <li>Генерация уроков по любым темам через LLM</li>
+                        <li>Сохранение контекста диалога для осмысленных ответов</li>
+                        <li>Автоматическое сохранение сгенерированных материалов</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
         
         <!-- Новая секция для управления API ключами -->
         <div class="management-panel">
@@ -615,7 +663,12 @@
         const conferenceLink = document.getElementById('conference-link-a');
         const embedCodeTextarea = document.getElementById('embed-code');
         
-        // Новые элементы для управления API ключами
+        // Новые элементы для управления режимом диалога
+        const dialogueModeSelect = document.getElementById('dialogue-mode-select');
+        const setDialogueModeBtn = document.getElementById('set-dialogue-mode-btn');
+        const dialogueModeStatus = document.getElementById('dialogue-mode-status');
+        
+        // Элементы для управления API ключами
         const openrouterKeyInput = document.getElementById('openrouter-key');
         const saveOpenrouterBtn = document.getElementById('save-openrouter-btn');
         const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
@@ -647,6 +700,15 @@
         let mediaStream = null;
         let videoStreamInterval = null;
         let currentRoom = 'default';
+        
+        // Функции для работы с режимом диалога
+        function setDialogueMode(mode) {
+            socket.emit('set_dialogue_mode', { 
+                room_id: currentRoom,
+                mode: mode
+            });
+            log(`Запрошено переключение режима диалога: ${mode}`);
+        }
         
         // Функции для работы с API ключами
         function loadApiKeys() {
@@ -790,7 +852,7 @@
             });
         }
         
-        // Инициализация комнаты
+        // Инициализация комната
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
@@ -1013,6 +1075,18 @@
             
             // Загрузка списка аватаров
             loadAvatars();
+            
+            // Обработчики для режима диалога
+            setDialogueModeBtn.addEventListener('click', function() {
+                const mode = dialogueModeSelect.value;
+                setDialogueMode(mode);
+            });
+            
+            // Обработчик ответа от сервера о смене режима диалога
+            socket.on('dialogue_mode_changed', (data) => {
+                log(`Режим диалога изменен на: ${data.mode}`);
+                showStatus(dialogueModeStatus, `Режим изменен на: ${data.mode === 'demo' ? 'Демо-режим' : 'Обычный режим'}`);
+            });
             
             // Обработчики для API ключей
             saveOpenrouterBtn.addEventListener('click', () => {
