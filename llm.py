@@ -3,9 +3,8 @@ import json
 from typing import Optional, Dict
 from pathlib import Path
 import time
-from config import get_api_key, load_config, get_model_config, get_all_llm_keys
+from config import get_api_key, load_config, get_model_config
 import re
-import random
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
@@ -16,7 +15,7 @@ class LLMIntegration:
         config = load_config()
         openrouter_config = get_model_config("openrouter")
         
-        self.api_key = api_key or self._get_random_llm_key()
+        self.api_key = api_key or openrouter_config.get("api_key", "")
         self.api_url = api_url or openrouter_config.get("api_url", "https://openrouter.ai/api/v1/chat/completions")
         self.model = model or openrouter_config.get("model", "meta-llama/llama-3.3-8b-instruct:free")
         self.cache_dir = Path(cache_dir)
@@ -25,23 +24,6 @@ class LLMIntegration:
         self.request_delay = 1.0
         self.max_retries = 3
         self.retry_delay = 2.0
-        self.current_key_index = 0
-        
-    def _get_random_llm_key(self) -> str:
-        """Получение случайного LLM ключа из конфигурации"""
-        llm_keys = get_all_llm_keys()
-        if llm_keys:
-            return random.choice(list(llm_keys.values()))
-        return ""
-        
-    def _rotate_api_key(self):
-        """Смена API ключа на следующий из доступных"""
-        llm_keys = get_all_llm_keys()
-        if llm_keys:
-            keys_list = list(llm_keys.values())
-            if keys_list:
-                self.api_key = random.choice(keys_list)
-                print(f"🔑 Используется API ключ: ...{self.api_key[-8:]}")
         
     def _load_cache(self) -> Dict:
         """Загрузка кэша из файла"""
@@ -71,10 +53,21 @@ class LLMIntegration:
         if not content:
             return ""
             
-        translator = str.maketrans('', '', string.punctuation + '«»„""')
-        clean_text = text.translate(translator)
+        # Удаляем звездочки и другие маркеры форматирования
+        content = re.sub(r'[\*\#\-\_]{2,}', '', content)
+        content = re.sub(r'^\s*[\*\-\+]\s*', '', content, flags=re.MULTILINE)
         
-        return ' '.join(clean_text.lower().split())
+        # Удаляем префиксы типа "Ответ:" или "AI:"
+        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:", "**", "*"]
+        for prefix in prefixes:
+            if content.startswith(prefix):
+                content = content[len(prefix):].strip()
+        
+        # Удаляем лишние пробелы и переносы строк
+        content = re.sub(r'\s+', ' ', content)
+        content = re.sub(r'\n+', '\n', content)
+        
+        return content.strip()
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "") -> Optional[str]:
         """Запрос к LLM API через OpenRouter"""
@@ -153,14 +146,6 @@ class LLMIntegration:
                     print(f"⏳ Ошибка 429 (Rate Limit). Ждем {wait_time} сек...")
                     time.sleep(wait_time)
                     continue
-                    
-                elif response.status_code == 401:
-                    print("❌ Ошибка 401 (Unauthorized). Пробуем другой API ключ...")
-                    self._rotate_api_key()
-                    if attempt < self.max_retries - 1:
-                        time.sleep(self.retry_delay)
-                        continue
-                    return None
                     
                 else:
                     print(f"❌ Ошибка API: {response.status_code} - {response.text[:200]}")
@@ -261,8 +246,4 @@ class LLMIntegration:
             
         # Всегда используем OpenRouter API ключ
         config = load_config()
-        self.api_key = self._get_random_llm_key()
-
-    def set_api_key(self, api_key: str):
-        """Установка конкретного API ключа"""
-        self.api_key = api_key
+        self.api_key = config.get("openrouter", {}).get("api_key", "")
