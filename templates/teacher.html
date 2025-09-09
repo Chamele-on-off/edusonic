@@ -229,7 +229,7 @@
         
         .api-key-grid {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr 1fr;
             gap: 20px;
             margin-bottom: 20px;
         }
@@ -332,6 +332,50 @@
             line-height: 1.4;
         }
         
+        .keys-list {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+        }
+        
+        .key-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+        
+        .key-item:last-child {
+            border-bottom: none;
+        }
+        
+        .key-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .key-action-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 3px;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .delete-btn {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .test-btn {
+            background: #f39c12;
+            color: white;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -369,6 +413,11 @@
                 margin-bottom: 0;
                 border-radius: 4px 4px 0 0;
             }
+            
+            .key-item {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
         }
         
         @media (max-width: 480px) {
@@ -394,6 +443,11 @@
             .tab-content {
                 padding: 15px;
             }
+            
+            .key-action-btn {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -402,7 +456,7 @@
     <div id="container">
         <h1 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Панель управления AI-учителем</h1>
         
-        <!-- Новая секция для управления API ключами -->
+        <!-- Секция для управления API ключами -->
         <div class="management-panel">
             <h2>Управление API ключами</h2>
             
@@ -415,6 +469,34 @@
                         <button id="test-openrouter-btn">Проверить</button>
                     </div>
                     <div id="openrouter-status" class="api-status"></div>
+                </div>
+                
+                <div class="api-key-form">
+                    <h3>Управление ключами LLM</h3>
+                    
+                    <div id="llm-keys-list">
+                        <h4>Текущие ключи LLM:</h4>
+                        <div class="keys-list">
+                            <div id="llm-keys-container">
+                                <p id="no-llm-keys">Нет добавленных ключей LLM</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="llm-key-name">Имя ключа:</label>
+                        <input type="text" id="llm-key-name" class="api-key-input" placeholder="Будет сгенерировано автоматически" readonly>
+                    </div>
+                    
+                    <input type="password" id="llm-key-value" class="api-key-input" placeholder="Введите API ключ для LLM">
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px;">
+                        <button id="add-llm-key-btn">Добавить ключ LLM</button>
+                        <button id="generate-llm-name-btn">Сгенерировать имя</button>
+                        <button id="test-llm-key-btn">Проверить ключ</button>
+                    </div>
+                    
+                    <div id="llm-key-status" class="api-status"></div>
                 </div>
             </div>
         </div>
@@ -615,11 +697,21 @@
         const conferenceLink = document.getElementById('conference-link-a');
         const embedCodeTextarea = document.getElementById('embed-code');
         
-        // Новые элементы для управления API ключами
+        // Элементы для управления API ключами
         const openrouterKeyInput = document.getElementById('openrouter-key');
         const saveOpenrouterBtn = document.getElementById('save-openrouter-btn');
         const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
         const openrouterStatus = document.getElementById('openrouter-status');
+        
+        // Элементы для управления LLM ключами
+        const llmKeyNameInput = document.getElementById('llm-key-name');
+        const llmKeyValueInput = document.getElementById('llm-key-value');
+        const addLlmKeyBtn = document.getElementById('add-llm-key-btn');
+        const generateLlmNameBtn = document.getElementById('generate-llm-name-btn');
+        const testLlmKeyBtn = document.getElementById('test-llm-key-btn');
+        const llmKeyStatus = document.getElementById('llm-key-status');
+        const llmKeysContainer = document.getElementById('llm-keys-container');
+        const noLlmKeys = document.getElementById('no-llm-keys');
         
         // Элементы для управления режимом LLM
         const llmModeSelect = document.getElementById('llm-mode-select');
@@ -665,7 +757,7 @@
                 });
         }
         
-        function saveApiKey(provider, apiKey) {
+        function saveApiKey(provider, apiKey, keyName) {
             fetch('/api/config/keys', {
                 method: 'POST',
                 headers: {
@@ -673,17 +765,22 @@
                 },
                 body: JSON.stringify({
                     provider: provider,
-                    api_key: apiKey
+                    api_key: apiKey,
+                    key_name: keyName
                 })
             })
             .then(response => response.json())
             .then(data => {
-                const statusElement = openrouterStatus;
+                const statusElement = provider === 'openrouter' ? openrouterStatus : llmKeyStatus;
                 if (data.success) {
                     statusElement.textContent = data.message;
                     statusElement.className = 'api-status success';
                     statusElement.style.display = 'block';
                     log(data.message);
+                    
+                    if (provider === 'llm') {
+                        loadLLMKeys();
+                    }
                 } else {
                     statusElement.textContent = 'Ошибка: ' + data.error;
                     statusElement.className = 'api-status error';
@@ -697,7 +794,7 @@
                 }, 5000);
             })
             .catch(error => {
-                const statusElement = openrouterStatus;
+                const statusElement = provider === 'openrouter' ? openrouterStatus : llmKeyStatus;
                 statusElement.textContent = 'Ошибка сети: ' + error;
                 statusElement.className = 'api-status error';
                 statusElement.style.display = 'block';
@@ -718,7 +815,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                const statusElement = openrouterStatus;
+                const statusElement = provider === 'openrouter' ? openrouterStatus : llmKeyStatus;
                 if (data.success) {
                     statusElement.textContent = data.message;
                     statusElement.className = 'api-status ' + (data.valid ? 'success' : 'error');
@@ -737,12 +834,118 @@
                 }, 5000);
             })
             .catch(error => {
-                const statusElement = openrouterStatus;
+                const statusElement = provider === 'openrouter' ? openrouterStatus : llmKeyStatus;
                 statusElement.textContent = 'Ошибка сети: ' + error;
                 statusElement.className = 'api-status error';
                 statusElement.style.display = 'block';
                 log('Ошибка сети при проверке ключа: ' + error);
             });
+        }
+        
+        // Функции для работы с LLM ключами
+        function loadLLMKeys() {
+            fetch('/api/config/llm_keys')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateLLMKeysList(data.keys);
+                        llmKeyNameInput.value = data.next_key_name;
+                    }
+                })
+                .catch(error => {
+                    log('Ошибка загрузки ключей LLM: ' + error);
+                });
+        }
+        
+        function updateLLMKeysList(keys) {
+            if (Object.keys(keys).length === 0) {
+                noLlmKeys.style.display = 'block';
+                llmKeysContainer.innerHTML = '<p id="no-llm-keys">Нет добавленных ключей LLM</p>';
+                return;
+            }
+            
+            noLlmKeys.style.display = 'none';
+            let html = '';
+            
+            for (const [keyName, keyValue] of Object.entries(keys)) {
+                const maskedKey = '••••••••' + keyValue.slice(-8);
+                html += `
+                    <div class="key-item">
+                        <div>
+                            <strong>${keyName}</strong>: ${maskedKey}
+                        </div>
+                        <div class="key-actions">
+                            <button class="key-action-btn test-btn" data-key="${keyValue}">Тест</button>
+                            <button class="key-action-btn delete-btn" data-key="${keyName}">Удалить</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            llmKeysContainer.innerHTML = html;
+            
+            // Добавляем обработчики для кнопок
+            document.querySelectorAll('.key-action-btn.test-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyValue = this.getAttribute('data-key');
+                    testApiKey('llm', keyValue);
+                });
+            });
+            
+            document.querySelectorAll('.key-action-btn.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyName = this.getAttribute('data-key');
+                    deleteLLMKey(keyName);
+                });
+            });
+        }
+        
+        function addLLMKey() {
+            const keyName = llmKeyNameInput.value;
+            const keyValue = llmKeyValueInput.value;
+            
+            if (!keyValue) {
+                showStatus(llmKeyStatus, 'Введите значение API ключа', false);
+                return;
+            }
+            
+            saveApiKey('llm', keyValue, keyName);
+            llmKeyValueInput.value = '';
+        }
+        
+        function deleteLLMKey(keyName) {
+            if (!confirm(`Вы уверены, что хотите удалить ключ "${keyName}"?`)) {
+                return;
+            }
+            
+            fetch(`/api/config/llm_keys/${keyName}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(llmKeyStatus, data.message);
+                    loadLLMKeys();
+                } else {
+                    showStatus(llmKeyStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showStatus(llmKeyStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
+        
+        function generateLLMKeyName() {
+            fetch('/api/config/llm_keys')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        llmKeyNameInput.value = data.next_key_name;
+                    }
+                })
+                .catch(error => {
+                    log('Ошибка генерации имени ключа: ' + error);
+                });
         }
         
         // Функции для работы с режимом LLM
@@ -815,7 +1018,7 @@
         
         // Загрузка изображения с повторами
         function loadImage(src, retries = 3) {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve, reject) {
                 const img = new Image();
                 img.onload = () => resolve(img);
                 img.onerror = () => {
@@ -1001,11 +1204,10 @@
         }
         
         // Инициализация
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', function() {
             // Загружаем API ключи при загрузке страницы
             loadApiKeys();
-            
-            // Загружаем режим LLM при загрузке страницы
+            loadLLMKeys();
             loadLLMMode();
             
             // Инициализация комнаты по умолчанию
@@ -1015,12 +1217,22 @@
             loadAvatars();
             
             // Обработчики для API ключей
-            saveOpenrouterBtn.addEventListener('click', () => {
+            saveOpenrouterBtn.addEventListener('click', function() {
                 saveApiKey('openrouter', openrouterKeyInput.value);
             });
             
-            testOpenrouterBtn.addEventListener('click', () => {
+            testOpenrouterBtn.addEventListener('click', function() {
                 testApiKey('openrouter', openrouterKeyInput.value);
+            });
+            
+            // Обработчики для LLM ключей
+            addLlmKeyBtn.addEventListener('click', addLLMKey);
+            generateLlmNameBtn.addEventListener('click', generateLLMKeyName);
+            testLlmKeyBtn.addEventListener('click', function() {
+                const keyValue = llmKeyValueInput.value;
+                if (keyValue) {
+                    testApiKey('llm', keyValue);
+                }
             });
             
             // Обработчики для режима LLM
