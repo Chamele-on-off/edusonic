@@ -10,7 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_all_llm_keys, delete_llm_key, get_next_llm_key_name, get_llm_keys_count
+from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
 import requests
 import json
 from datetime import datetime
@@ -58,7 +58,7 @@ def reset_speaking_state(room_id):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст с анимацией и добавляет его в историю"""
+    """Озвучивает текст с анимацией и добавляет его в историе"""
     if not text.strip():
         return
         
@@ -467,67 +467,6 @@ def set_llm_mode_api():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/config/llm_keys', methods=['GET'])
-def get_llm_keys():
-    """Получение всех LLM ключей"""
-    try:
-        llm_keys = get_all_llm_keys()
-        keys_count = get_llm_keys_count()
-        
-        return jsonify({
-            "success": True,
-            "keys": llm_keys,
-            "total_keys": keys_count,
-            "next_key_name": get_next_llm_key_name()
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/llm_keys', methods=['POST'])
-def add_llm_key():
-    """Добавление нового LLM ключа"""
-    try:
-        data = request.json
-        api_key = data.get('api_key')
-        key_name = data.get('key_name') or get_next_llm_key_name()
-        
-        if not api_key:
-            return jsonify({"success": False, "error": "API key is required"})
-        
-        success = update_api_key('llm', api_key, key_name)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "message": f"API ключ '{key_name}' успешно добавлен",
-                "key_name": key_name,
-                "total_keys": get_llm_keys_count()
-            })
-        else:
-            return jsonify({"success": False, "error": "Failed to save API key"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/llm_keys/<key_name>', methods=['DELETE'])
-def delete_llm_key_api(key_name):
-    """Удаление LLM ключа"""
-    try:
-        success = delete_llm_key(key_name)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "message": f"API ключ '{key_name}' успешно удален",
-                "deleted_key": key_name,
-                "total_keys": get_llm_keys_count()
-            })
-        else:
-            return jsonify({"success": False, "error": "Key not found or failed to delete"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
 @app.route('/api/knowledge/stats', methods=['GET'])
 def get_knowledge_stats():
     """Получение статистики базы знаний для комнаты"""
@@ -796,15 +735,12 @@ def get_api_keys():
     """Получение текущих API ключей"""
     try:
         config = load_config()
-        llm_keys = get_all_llm_keys()
-        
         return jsonify({
             "success": True,
             "keys": {
                 "openrouter": config.get("openrouter", {}).get("api_key", ""),
-                "llm": llm_keys
-            },
-            "llm_keys_count": len(llm_keys)
+                "llm": config.get("llm", {}).get("api_key", "")
+            }
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -816,7 +752,6 @@ def set_api_key():
         data = request.json
         provider = data.get('provider')
         api_key = data.get('api_key')
-        key_name = data.get('key_name')
         
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
@@ -824,14 +759,13 @@ def set_api_key():
         if provider not in ['openrouter', 'llm']:
             return jsonify({"success": False, "error": "Invalid provider. Use 'openrouter' or 'llm'"})
         
-        success = update_api_key(provider, api_key, key_name)
+        success = update_api_key(provider, api_key)
         
         if success:
             return jsonify({
                 "success": True,
                 "message": f"API ключ для {provider} успешно обновлен",
-                "provider": provider,
-                "key_name": key_name
+                "provider": provider
             })
         else:
             return jsonify({"success": False, "error": "Failed to update API key"})
