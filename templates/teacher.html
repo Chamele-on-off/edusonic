@@ -408,7 +408,6 @@
             }
         }
     </style>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -602,7 +601,7 @@
                         <option value="общее">Общее</option>
                     </select>
                     <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ddd;">
-                    <textarea id="lesson-content" placeholder="Содержание урока (разделяйте абзацы пустыми строками)"></textarea>
+                    <textarea id="lesson-content" placeholder="Содержание урока (разделяйте абзацы пустыми строкаи)"></textarea>
                     <button id="add-lesson-btn">Добавить урок</button>
                     <div id="lesson-status" class="success-message"></div>
                 </div>
@@ -643,6 +642,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Конфигурация
         const FPS = 10;
@@ -708,7 +708,7 @@
             fetch('/api/config/keys')
                 .then(response => response.json())
                 .then(data => {
-                    if data.success) {
+                    if (data.success) {
                         openrouterKeyInput.value = data.keys.openrouter || '';
                         log('API ключи загружены');
                     } else {
@@ -926,7 +926,7 @@
         
         // Загрузка изображения с повторами
         function loadImage(src, retries = 3) {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve, reject) {
                 const img = new Image();
                 img.onload = () => resolve(img);
                 img.onerror = () => {
