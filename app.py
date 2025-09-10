@@ -10,8 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from demodialogue import DemoDialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
+from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_system_mode, set_system_mode
 import requests
 import json
 from datetime import datetime
@@ -35,8 +34,9 @@ room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
+room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())  # Режим LLM для каждой комнаты
-room_dialogue_mode = defaultdict(lambda: "default")  # Режим диалога: "default" или "demo"
+room_system_mode = defaultdict(lambda: get_system_mode())  # Режим системы для каждой комнаты
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -199,26 +199,15 @@ def handle_join_room(data):
     join_room(room_id)
     room_participants[room_id].add(request.sid)
     
-    # Определяем режим диалога для комнаты
-    dialogue_mode = room_dialogue_mode[room_id]
-    
     if room_id not in room_dialogue:
-        # Создаем соответствующий менеджер диалога в зависимости от режима
-        if dialogue_mode == "demo":
-            room_dialogue[room_id] = DemoDialogueManager(socketio)
-            print(f"Создан DemoDialogueManager для комнаты {room_id}")
-        else:
-            room_dialogue[room_id] = DialogueManager(socketio)
-            print(f"Создан стандартный DialogueManager для комнаты {room_id}")
+        room_dialogue[room_id] = DialogueManager(socketio)
     
-    # Устанавливаем режим LLM для диалог менеджера комнаты
+    # Устанавливаем режимы для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+    room_dialogue[room_id].set_system_mode(room_system_mode[room_id])
     
     if len(room_participants[room_id]) == 1:
-        if dialogue_mode == "demo":
-            greeting = "Привет! Я ваш демо-учитель. Давайте исследуем мир знаний вместе!"
-        else:
-            greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
+        greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
@@ -360,22 +349,13 @@ def handle_recognized_speech(data):
 def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
+    room_dialogue[room_id] = DialogueManager(socketio)
     
-    # Создаем соответствующий менеджер диалога в зависимости от режима
-    dialogue_mode = room_dialogue_mode[room_id]
-    if dialogue_mode == "demo":
-        room_dialogue[room_id] = DemoDialogueManager(socketio)
-    else:
-        room_dialogue[room_id] = DialogueManager(socketio)
-    
-    # Устанавливаем режим LLM для нового диалог менеджера
+    # Устанавливаем режимы для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+    room_dialogue[room_id].set_system_mode(room_system_mode[room_id])
     
-    if dialogue_mode == "demo":
-        greeting = "Привет! Я ваш демо-учитель. Давайте исследуем мир знаний вместе!"
-    else:
-        greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-    
+    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
@@ -397,30 +377,22 @@ def handle_set_llm_mode(data):
         
         print(f"Режим LLM изменен в комнате {room_id}: {mode}")
 
-@socketio.on('set_dialogue_mode')
-def handle_set_dialogue_mode(data):
+@socketio.on('set_system_mode')
+def handle_set_system_mode(data):
     room_id = data['room_id']
     mode = data['mode']
     
-    if mode in ["default", "demo"]:
-        room_dialogue_mode[room_id] = mode
-        
-        # Пересоздаем менеджер диалога, если комната уже существует
+    if mode in ["normal", "demo"]:
+        room_system_mode[room_id] = mode
         if room_id in room_dialogue:
-            if mode == "demo":
-                room_dialogue[room_id] = DemoDialogueManager(socketio)
-            else:
-                room_dialogue[room_id] = DialogueManager(socketio)
-            
-            # Восстанавливаем настройки LLM режима
-            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+            room_dialogue[room_id].set_system_mode(mode)
         
-        emit('dialogue_mode_changed', {
+        emit('system_mode_changed', {
             'mode': mode,
             'room': room_id
         }, room=room_id)
         
-        print(f"Режим диалога изменен в комнате {room_id}: {mode}")
+        print(f"Режим системы изменен в комнате {room_id}: {mode}")
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
@@ -507,6 +479,52 @@ def set_llm_mode_api():
             return jsonify({
                 "success": True,
                 "message": f"Режим LLM успешно изменен на '{mode}'",
+                "mode": mode
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to save config"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/config/system_mode', methods=['GET'])
+def get_system_mode_api():
+    """Получение текущего режима работы системы"""
+    try:
+        config = load_config()
+        return jsonify({
+            "success": True,
+            "mode": config.get("system_mode", {}).get("default_mode", "normal"),
+            "available_modes": config.get("system_mode", {}).get("available_modes", ["normal", "demo"])
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/config/system_mode', methods=['POST'])
+def set_system_mode_api():
+    """Установка режима работы системы"""
+    try:
+        data = request.json
+        mode = data.get('mode')
+        
+        if not mode:
+            return jsonify({"success": False, "error": "Mode not specified"})
+        
+        if mode not in ["normal", "demo"]:
+            return jsonify({"success": False, "error": "Invalid mode. Use 'normal' or 'demo'"})
+        
+        success = set_system_mode(mode)
+        
+        if success:
+            # Обновляем режим для всех активных комнат
+            for room_id in room_system_mode:
+                room_system_mode[room_id] = mode
+                if room_id in room_dialogue:
+                    room_dialogue[room_id].set_system_mode(mode)
+            
+            return jsonify({
+                "success": True,
+                "message": f"Режим системы успешно изменен на '{mode}'",
                 "mode": mode
             })
         else:
