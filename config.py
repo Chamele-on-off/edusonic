@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
         "default_mode": "traditional",  # "traditional" или "llm_first"
         "available_modes": ["traditional", "llm_first"]
     },
-    "system_mode": {
+    "initialization_mode": {
         "default_mode": "normal",  # "normal" или "demo"
         "available_modes": ["normal", "demo"]
     }
@@ -91,22 +91,22 @@ def set_llm_mode(mode):
     config['llm_query_mode']['default_mode'] = mode
     return save_config(config)
 
-def get_system_mode():
-    """Получение режима работы системы"""
+def get_initialization_mode():
+    """Получение режима инициализации"""
     config = load_config()
-    return config.get("system_mode", {}).get("default_mode", "normal")
+    return config.get("initialization_mode", {}).get("default_mode", "normal")
 
-def set_system_mode(mode):
-    """Установка режима работы системы"""
+def set_initialization_mode(mode):
+    """Установка режима инициализации"""
     if mode not in ["normal", "demo"]:
         return False
         
     config = load_config()
     
-    if 'system_mode' not in config:
-        config['system_mode'] = {}
+    if 'initialization_mode' not in config:
+        config['initialization_mode'] = {}
     
-    config['system_mode']['default_mode'] = mode
+    config['initialization_mode']['default_mode'] = mode
     return save_config(config)
 
 # Загружаем конфигурацию при импорте
