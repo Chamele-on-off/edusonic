@@ -6,8 +6,7 @@ import random
 import re
 from knowledge.knowledge_base import KnowledgeBase
 from llm import LLMIntegration
-from config import get_llm_mode, get_system_mode
-import os
+from config import get_llm_mode, get_initialization_mode
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -15,7 +14,9 @@ class DialogueManager:
         self.dialogue_states = {
             "greeting": self._handle_greeting,
             "subject_selection": self._handle_subject_selection,
-            "lesson_reading": self._handle_lesson_reading
+            "lesson_reading": self._handle_lesson_reading,
+            "demo_subject_selection": self._handle_demo_subject_selection,
+            "topic_processing": self._handle_topic_processing
         }
         self.current_state = "greeting"
         self.current_subject = None
@@ -28,36 +29,71 @@ class DialogueManager:
         self.llm = LLMIntegration()
         self.conversation_counter = 0
         self.llm_query_mode = get_llm_mode()  # Загружаем режим из конфига
-        self.system_mode = get_system_mode()  # Загружаем режим системы из конфига
-        self.conversation_history = []  # Для сохранения контекста в демо-режиме
-        self.demo_lessons_dir = self.lessons_dir / "demo"  # Папка для демо-уроков
+        self.initialization_mode = get_initialization_mode()  # Режим инициализации
+        self.requested_topic = None
         self._load_lessons()
-        self._ensure_demo_lessons_dir()
+        self.demo_lessons_available = self._load_demo_lessons()
         
         # Расширенные локальные шаблоны для более естественного общения
         self.local_patterns = {
-            "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
-            "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
-            "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
-            "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
-            "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
-            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
-            "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
-            "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
-            "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
-            "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
-            "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
-            "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
-                      "AI-учитель, который сделает ваше обучение интересным и эффективным."],
-            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
-                          "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
-            "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
-                               "Моя задача - помочь вам учиться с удовольствием и пониманием."]
+            "привет": ["Привет! Рад вас видеть.", "Здравствуйте! Готовы к уроку?"],
+            "как дела": ["Все прекрасно! Готов помочь.", "Отлично! А у вас?"],
+            "спасибо": ["Всегда пожалуйста!", "Не стоит благодарности!"],
+            "не понимаю": ["Давайте разберем еще раз.", "Объясню по-другому."],
+            "повтори": ["Конечно, повторяю.", "Скажу еще раз."],
+            "скучно": ["Давайте сделаем интереснее!", "Предлагаю сменить активность!"],
+            "трудно": ["Не переживайте! Я помогу.", "Вместе справимся!"],
+            "молодец": ["Спасибо! Вы тоже молодец!"],
+            "хорошо": ["Прекрасно! Продолжаем.", "Отлично! Двигаемся дальше."],
+            "не знаю": ["Это нормально! Сейчас разберемся.", "Отличный повод узнать!"],
+            "стоп": ["Останавливаю урок.", "Прерываю чтение."],
+            "кто ты": ["Я ваш AI-учитель! Готов помочь."],
+            "что умеешь": ["Могу проводить уроки и отвечать на вопросы!"],
+            "расскажи о себе": ["Я цифровой преподаватель для вашего обучения!"]
         }
 
-    def _ensure_demo_lessons_dir(self):
-        """Создает папку demo если ее нет"""
-        os.makedirs(self.demo_lessons_dir, exist_ok=True)
+    def _load_demo_lessons(self):
+        """Загрузка демо-уроков из папки lessons/demo"""
+        demo_lessons = {}
+        demo_dir = self.lessons_dir / "demo"
+        
+        if not demo_dir.exists():
+            demo_dir.mkdir(parents=True)
+            self._create_default_demo_lessons(demo_dir)
+        
+        try:
+            for lesson_file in demo_dir.glob("*.txt"):
+                subject = self._detect_subject(lesson_file.stem)
+                
+                if subject not in demo_lessons:
+                    demo_lessons[subject] = []
+                
+                demo_lessons[subject].append({
+                    'id': f"demo/{lesson_file.stem}",
+                    'title': lesson_file.stem.replace('_', ' ').title(),
+                    'description': f"Демо-урок по {subject}",
+                    'file_path': lesson_file,
+                    'type': 'text',
+                    'is_demo': True
+                })
+        except Exception as e:
+            print(f"Ошибка загрузки демо-уроков: {e}")
+        
+        return demo_lessons
+
+    def _create_default_demo_lessons(self, demo_dir):
+        """Создание демо-уроков по умолчанию"""
+        demo_topics = {
+            "математика": "Введение в алгебру: основы уравнений.",
+            "история": "Древний Рим: от республики к империи.",
+            "физика": "Законы Ньютона: основы механики.",
+            "биология": "Клеточное строение организмов."
+        }
+        
+        for subject, content in demo_topics.items():
+            filename = f"demo_{subject.lower()}.txt"
+            with open(demo_dir / filename, 'w', encoding='utf-8') as f:
+                f.write(f"{content}\n\nЭто демо-урок по предмету '{subject}'.")
 
     def _load_lessons(self):
         """Загружает список доступных уроков"""
@@ -155,37 +191,14 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа"""
         text_lower = text.lower().strip()
         
-        # Добавляем реплику пользователя в историю (для демо-режима)
-        if self.system_mode == "demo":
-            self.conversation_history.append({"role": "user", "content": text})
-            # Ограничиваем длину истории, чтобы не перегружать LLM
-            if len(self.conversation_history) > 10:
-                self.conversation_history = self.conversation_history[-10:]
-        
-        # 1. Если пользователь называет предмет - автоматически начинаем урок
-        # Логика отличается в зависимости от режима
-        available_subjects = self.get_available_subjects()
-        subject_detected = None
-        for subject in available_subjects:
-            if subject.lower() in text_lower:
-                subject_detected = subject
-                break
-                
-        if subject_detected:
-            if self.system_mode == "normal":
-                return self._handle_subject_selection_direct(subject_detected)
-            else:
-                # В демо-режиме ищем урок в демо-папке
-                return self._handle_demo_subject_selection(subject_detected, text)
-        
-        # 2. Если это демо-режим и пользователь называет тему, а не предмет
-        if self.system_mode == "demo" and not self.lesson_started:
-            # Эвристика: если фраза короткая и не похожа на вопрос, возможно, это тема
-            if len(text_lower.split()) < 5 and not any(word in text_lower for word in ['что', 'как', 'почему', 'зачем', '?']):
-                # Проверяем через LLM, является ли это темой для урока
-                return self._handle_potential_topic_selection(text)
-        
-        # 3. Если урок уже начат, обрабатываем как вопрос/команду
+        # Обработка в зависимости от режима инициализации
+        if self.initialization_mode == "demo":
+            return self._process_demo_mode(text_lower)
+        else:
+            return self._process_normal_mode(text_lower)
+
+    def _process_normal_mode(self, text_lower: str) -> Optional[str]:
+        """Обработка в нормальном режиме"""
         if self.lesson_started:
             if any(word in text_lower for word in ["стоп", "останови", "хватит", "закончи"]):
                 return self._handle_lesson_reading(text_lower)
@@ -193,31 +206,37 @@ class DialogueManager:
             
         self.conversation_counter += 1
         
-        # 4. Если есть база знаний по предмету, проверяем там
+        # 1. Если пользователь называет предмет - автоматически начинаем урок
+        available_subjects = self.get_available_subjects()
+        for subject in available_subjects:
+            if subject.lower() in text_lower:
+                return self._handle_subject_selection_direct(subject)
+        
+        # 2. Если есть база знаний по предмету, проверяем там
         if self.knowledge_base:
             knowledge_response = self.knowledge_base.get_dialogue_response(text_lower)
             if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                return knowledge_response
+                return self._limit_response_length(knowledge_response)
         
-        # 5. Быстрая проверка локальных шаблонов
+        # 3. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
         
-        # 6. Проверка диалоговых шаблонов из базы знаний
+        # 4. Проверка диалоговых шаблонов из базы знаний
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
             if dialogue_response:
-                return dialogue_response
+                return self._limit_response_length(dialogue_response)
         
-        # 7. Обработка по текущему состоянию
+        # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
         if handler:
             response = handler(text_lower)
             if response:
-                return response
+                return self._limit_response_length(response)
         
-        # 8. Fallback с учетом состояния и счетчика разговора
+        # 6. Fallback с учетом состояния и счетчика разговора
         fallbacks = {
             "greeting": [
                 "Привет! Давайте познакомимся. Какой предмет вас интересует?",
@@ -236,155 +255,177 @@ class DialogueManager:
             ]
         }
         
-        # Добавляем вариативность в ответы
         fallback_responses = fallbacks.get(self.current_state, ["Продолжим наш урок."])
         response = random.choice(fallback_responses)
         
         # После 3-х реплик без прогресса - мягко направляем к выбору предмета
         if self.conversation_counter >= 3 and self.current_state == "greeting":
-            if self.system_mode == "demo":
-                demo_lessons = self._get_demo_lessons()
-                subject_list = ", ".join([subj.capitalize() for subj in demo_lessons.keys()])
-                response = f"Давайте выберем, что хочешь изучить! На выбор есть такие предметы: {subject_list}. Также можешь сказать свою тему, которая тебя интересует."
-            else:
-                response += " Кстати, какой предмет вас интересует?"
+            response += " Кстати, какой предмет вас интересует?"
             
         return response
 
-    def _handle_demo_subject_selection(self, subject: str, user_input: str) -> Optional[str]:
-        """Обработка выбора предмета в демо-режиме"""
-        self.current_subject = subject
-        lessons = self._get_demo_lessons().get(subject, [])
-        
-        if lessons:
-            # Выбираем первый демо-урок по предмету
-            self.selected_lesson = lessons[0]
-            self._start_lesson()
+    def _process_demo_mode(self, text_lower: str) -> Optional[str]:
+        """Обработка в демо-режиме"""
+        if self.lesson_started:
             return None
-        else:
-            # В демо-режиме нет урока по этому предмету
-            # Можно предложить создать его или выбрать другой
-            return f"В демо-режиме пока нет урока по предмету '{subject}'. Можешь выбрать другой предмет или назвать конкретную тему."
-
-    def _handle_potential_topic_selection(self, topic: str) -> Optional[str]:
-        """Обработка потенциальной темы через LLM в демо-режиме"""
-        # Используем LLM, чтобы проверить, является ли ввод темой для урока
-        prompt = f"""
-        Пользователь сказал: "{topic}". 
-        Может ли это быть темой для образовательного урока? Ответь только "ДА" или "НЕТ".
-        Учти, что тема должна быть достаточно общей для урока (например, "квадратные уравнения", "Вторая мировая война", "фотосинтез").
-        """
-        
-        # Делаем запрос к LLM БЕЗ контекста истории, т.к. это изолированный вопрос
-        llm_response = self.llm.query(prompt, "", "общее")
-        
-        if llm_response and "ДА" in llm_response.upper():
-            # Генерируем урок по теме
-            return self._generate_lesson_from_topic(topic)
-        else:
-            # Если LLM решила, что это не тема, продолжаем диалог как обычно
-            return None
-
-    def _generate_lesson_from_topic(self, topic: str) -> str:
-        """Генерация урока по теме с помощью LLM"""
-        # Создаем промпт для генерации урока
-        lesson_prompt = f"""
-        Сгенерируй содержание образовательного урока на тему: "{topic}".
-        Формат: текст, разбитый на абзацы (разделяй абзацы двумя переносами строки).
-        Будь информативным и понятным. Первая строка - заголовок урока.
-        """
-        
-        # Добавляем в промпт последние реплики для контекста
-        context = "Контекст разговора:\n"
-        for msg in self.conversation_history[-3:]:  # Берем последние 3 реплики
-            role = "Ученик" if msg["role"] == "user" else "Учитель"
-            context += f"{role}: {msg['content']}\n"
-        
-        full_prompt = context + "\n" + lesson_prompt
-        
-        # Делаем запрос к LLM
-        llm_response = self.llm.query(full_prompt, "", "общее")
-        
-        if llm_response:
-            # Сохраняем сгенерированный урок в демо-папку
-            filename = f"demo_{topic.lower().replace(' ', '_')}.txt"
-            lesson_path = self.demo_lessons_dir / filename
             
-            try:
-                with open(lesson_path, 'w', encoding='utf-8') as f:
-                    f.write(llm_response)
+        self.conversation_counter += 1
+        
+        # 1. Приветствие и предложение выбора
+        if self.current_state == "greeting":
+            if any(word in text_lower for word in ["привет", "здравствуй", "начать", "старт", "готов"]):
+                self.current_state = "demo_subject_selection"
+                return self._get_demo_greeting_response()
+        
+        # 2. Выбор предмета или темы
+        elif self.current_state == "demo_subject_selection":
+            # Проверяем, выбрал ли пользователь существующий предмет
+            for subject in self.demo_lessons_available.keys():
+                if subject.lower() in text_lower:
+                    return self._handle_subject_selection_direct(subject)
+            
+            # Если пользователь называет тему, а не предмет
+            if self._is_topic_request(text_lower):
+                self.requested_topic = text_lower
+                self.current_state = "topic_processing"
+                return self._handle_topic_request(text_lower)
+            
+            # Если это не выбор предмета/темы, предлагаем варианты
+            return self._get_demo_options_response()
+        
+        return None
+
+    def _limit_response_length(self, response: str, max_sentences: int = 2) -> str:
+        """Ограничивает длину ответа до 1-3 предложений для быстродействия"""
+        if not response:
+            return response
+            
+        # Разбиваем на предложения
+        sentences = re.split(r'(?<=[.!?])\s+', response)
+        
+        # Берем только первые max_sentences предложений
+        if len(sentences) > max_sentences:
+            return ' '.join(sentences[:max_sentences]).strip()
+        
+        return response
+
+    def _get_demo_greeting_response(self) -> str:
+        """Приветственное сообщение для демо-режима"""
+        subjects = list(self.demo_lessons_available.keys())
+        subject_list = ", ".join([subj.capitalize() for subj in subjects])
+        
+        return self._limit_response_length(
+            f"Привет! Это демо-режим обучения. "
+            f"У меня есть демо-уроки по: {subject_list}. "
+            f"Также ты можешь предложить свою тему! "
+            f"Что тебя интересует?"
+        )
+
+    def _get_demo_options_response(self) -> str:
+        """Сообщение с вариантами выбора для демо-режима"""
+        subjects = list(self.demo_lessons_available.keys())
+        subject_list = ", ".join([subj.capitalize() for subj in subjects])
+        
+        return self._limit_response_length(
+            f"На выбор есть: {subject_list}. "
+            f"Или назови тему, которую хочешь изучить!"
+        )
+
+    def _is_topic_request(self, text: str) -> bool:
+        """Определяет, является ли запрос темой для изучения"""
+        # Исключаем названия предметов
+        subjects = list(self.demo_lessons_available.keys())
+        for subject in subjects:
+            if subject.lower() in text.lower():
+                return False
+        
+        # Запросы, которые скорее всего являются темами
+        topic_indicators = [
+            "расскажи о", "что такое", "объясни", "урок про", 
+            "тема", "изучим", "хочу узнать о", "про "
+        ]
+        
+        return any(indicator in text.lower() for indicator in topic_indicators)
+
+    def _handle_topic_request(self, topic: str) -> str:
+        """Обработка запроса темы"""
+        return self._limit_response_length(
+            f"Отличная тема! '{topic}' - это интересно. "
+            f"Сейчас подготовлю для тебя специальный урок."
+        )
+
+    def generate_topic_lesson(self, topic: str) -> Optional[str]:
+        """Генерация урока по теме через LLM"""
+        try:
+            # Используем LLM для генерации краткого урока
+            prompt = f"""Создай краткий образовательный урок на тему "{topic}". 
+Максимум 3-4 предложения. Формат: понятное объяснение для ученика.
+Пиши на русском языке. Будь лаконичным."""
+
+            lesson_content = self.llm.query(prompt, "", "общее")
+            
+            if lesson_content:
+                # Сохраняем сгенерированный урок
+                lesson_id = f"demo/generated_{hash(topic) % 1000}"
+                demo_dir = self.lessons_dir / "demo"
+                lesson_file = demo_dir / f"generated_{hash(topic) % 1000}.txt"
                 
-                # Создаем запись об уроке и начинаем его
+                with open(lesson_file, 'w', encoding='utf-8') as f:
+                    f.write(lesson_content)
+                
+                # Загружаем урок в систему
+                subject = self._detect_subject(topic) or "общее"
                 self.selected_lesson = {
-                    'id': f"demo_{topic}",
-                    'title': topic,
-                    'file_path': lesson_path,
-                    'is_demo': True,
-                    'is_generated': True  # Новый флаг
+                    'id': lesson_id,
+                    'title': f"Урок по теме: {topic}",
+                    'file_path': lesson_file,
+                    'is_demo': True
                 }
                 
-                self._start_lesson()
-                return None # Начинаем урок без дополнительного сообщения
+                self.lesson_started = True
+                self.current_state = "lesson_reading"
+                self.current_paragraph = 0
+                self.lesson_content = self._load_lesson_content(lesson_file)
+                self.knowledge_base = KnowledgeBase(subject)
                 
-            except Exception as e:
-                print(f"Ошибка сохранения урока: {e}")
-                return "Извините, не удалось создать урок по этой теме. Попробуйте другую тему или предмет."
-        else:
-            return "Извините, не удалось создать урок по этой теме. Попробуйте другую тему или предмет."
+                return None
+            else:
+                return "Извините, не удалось создать урок. Попробуйте другой предмет."
+                
+        except Exception as e:
+            print(f"Ошибка генерации урока: {e}")
+            return "Произошла ошибка. Попробуйте еще раз."
 
-    def _start_lesson(self):
-        """Общая функция для начала урока"""
+    def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
+        """Прямая обработка выбора предмета"""
+        self.current_subject = subject
+        
+        # Выбираем урок в зависимости от режима
+        if self.initialization_mode == "demo":
+            lessons = self.demo_lessons_available.get(subject, [])
+        else:
+            lessons = self.lessons.get(subject, [])
+            demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+            
+            if demo_lessons:
+                self.selected_lesson = demo_lessons[0]
+            elif lessons:
+                self.selected_lesson = lessons[0]
+            else:
+                # Создаем временный урок
+                self.selected_lesson = {
+                    'id': f"demo_{subject}",
+                    'title': f"Демо-урок по {subject}",
+                    'file_path': self.lessons_dir / f"demo_{subject}.txt",
+                    'is_demo': True
+                }
+        
         self.lesson_started = True
         self.current_state = "lesson_reading"
         self.current_paragraph = 0
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
-
-    def _get_demo_lessons(self) -> dict:
-        """Получает только демо-уроки из папки demo"""
-        demo_lessons = {}
-        try:
-            for lesson_file in self.demo_lessons_dir.glob("*.txt"):
-                subject = self._detect_subject(lesson_file.stem)
-                
-                if subject not in demo_lessons:
-                    demo_lessons[subject] = []
-                
-                demo_lessons[subject].append({
-                    'id': lesson_file.stem,
-                    'title': lesson_file.stem.replace('_', ' ').title(),
-                    'description': f"Демо-урок по {subject}",
-                    'file_path': lesson_file,
-                    'type': 'text',
-                    'is_demo': True
-                })
-        except Exception as e:
-            print(f"Ошибка загрузки демо-уроков: {e}")
         
-        return demo_lessons
-
-    def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """Прямая обработка выбора предмета (без поиска в базе знаний)"""
-        self.current_subject = subject
-        # Автоматически выбираем первый доступный урок (демо-урок если есть)
-        lessons = self.lessons.get(subject, [])
-        demo_lessons = [l for l in lessons if l.get('is_demo', False)]
-        
-        if demo_lessons:
-            self.selected_lesson = demo_lessons[0]
-        elif lessons:
-            self.selected_lesson = lessons[0]
-        else:
-            # Создаем временный урок
-            self.selected_lesson = {
-                'id': f"demo_{subject}",
-                'title': f"Демо-урок по {subject}",
-                'file_path': self.lessons_dir / f"demo_{subject}.txt",
-                'is_demo': True
-            }
-        
-        self._start_lesson()
-        # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
@@ -397,7 +438,7 @@ class DialogueManager:
                 return "К сожалению, уроки еще не загружены. Попробуйте позже."
                 
             subject_list = ", ".join([subj.capitalize() for subj in subjects])
-            return f"Отлично! Давайте выберем предмет для урока. У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета!"
+            return f"Отлично! Давайте выберем предмет для урока. У меня есть: {subject_list}. Что вас интересует?"
         return None
 
     def _handle_subject_selection(self, text: str) -> Optional[str]:
@@ -406,10 +447,7 @@ class DialogueManager:
         # Поиск по названию предмета
         for subject in subjects:
             if subject.lower() in text.lower():
-                if self.system_mode == "normal":
-                    return self._handle_subject_selection_direct(subject)
-                else:
-                    return self._handle_demo_subject_selection(subject, text)
+                return self._handle_subject_selection_direct(subject)
                 
         # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
@@ -418,7 +456,7 @@ class DialogueManager:
             
         # Если пользователь просто говорит "да" или соглашается
         if any(word in text for word in ["да", "ага", 'угу', "ладно", "хорошо"]):
-            return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
+            return "Отлично! Какой предмет вас заинтересовал?"
             
         return None
 
@@ -429,12 +467,29 @@ class DialogueManager:
             self.current_state = "greeting"
             self.conversation_counter = 0
             self.knowledge_base = None
-            if self.system_mode == "demo":
-                self.conversation_history = []
-            return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
+            return "Урок остановлен. Скажите 'привет' когда захотите продолжить."
             
-        # Если это не команда управления чтением, обрабатываем как вопрос
         return None
+
+    def _handle_demo_subject_selection(self, text: str) -> Optional[str]:
+        """Обработка выбора в демо-режиме"""
+        # Проверяем выбор существующего предмета
+        for subject in self.demo_lessons_available.keys():
+            if subject.lower() in text.lower():
+                return self._handle_subject_selection_direct(subject)
+        
+        # Проверяем запрос темы
+        if self._is_topic_request(text):
+            self.requested_topic = text
+            self.current_state = "topic_processing"
+            return self._handle_topic_request(text)
+        
+        return self._get_demo_options_response()
+
+    def _handle_topic_processing(self, text: str) -> Optional[str]:
+        """Обработка состояния генерации темы"""
+        # В этом состоянии просто ждем завершения генерации
+        return "Создаю урок для вас. Один момент..."
 
     def _get_next_paragraph(self) -> Optional[str]:
         """Возвращает следующий абзац урока"""
@@ -447,169 +502,97 @@ class DialogueManager:
             self.current_state = "greeting"
             self.conversation_counter = 0
             self.knowledge_base = None
-            if self.system_mode == "demo":
-                self.conversation_history = []
-            return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
+            return "Урок завершен! Скажите 'привет' чтобы начать новый урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока с учетом выбранного режима"""
         if not question.strip():
-            return "Повторите вопрос пожалуйста, я не расслышал."
+            return "Повторите вопрос пожалуйста."
             
         question_lower = question.lower().strip()
         
-        # В ДЕМО-РЕЖИМЕ добавляем контекст к запросу LLM
-        context = ""
-        if self.system_mode == "demo" and self.lesson_content:
-            # Берем текущий и предыдущий абзацы для контекста урока
-            context_start = max(0, self.current_paragraph - 2)
-            context = " ".join(self.lesson_content[context_start:self.current_paragraph])
-            
-            # Добавляем историю диалога для контекста
-            if self.conversation_history:
-                context += "\n\nКонтекст диалога:\n"
-                for msg in self.conversation_history[-5:]:  # Берем последние 5 реплик
-                    role = "Ученик" if msg["role"] == "user" else "Учитель"
-                    context += f"{role}: {msg['content']}\n"
+        # Ограничиваем ответ для быстродействия
+        def limited_response(response):
+            return self._limit_response_length(response, max_sentences=2)
         
         # Режим "LLM в первую очередь"
         if self.llm_query_mode == "llm_first":
-            print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
-            
             # 1. Сначала пробуем запрос к LLM
-            llm_response = self.llm.query(question, context, self.current_subject)
+            current_context = ""
+            if self.lesson_content and self.current_paragraph > 0:
+                context_start = max(0, self.current_paragraph - 2)
+                current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+            
+            llm_response = self.llm.query(question, current_context, self.current_subject)
             if llm_response and not llm_response.startswith("Интересный вопрос!"):
-                # Сохраняем ответ и возвращаем его
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
                 if self.knowledge_base:
-                    # Сохраняем ответ в базу знаний для будущего использования
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
-                
-                # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                if self.system_mode == "demo":
-                    self.conversation_history.append({"role": "assistant", "content": llm_response})
-                
-                print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
-                return llm_response
+                return limited_response(llm_response)
             
             # 2. Если LLM не дал ответ, проверяем базу знаний
             if self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                    print(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": knowledge_response})
-                    
-                    return knowledge_response
+                    return limited_response(knowledge_response)
             
             # 3. Проверяем базу ответов LLM
             if self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
-                    print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": llm_answer})
-                    
-                    return llm_answer
+                    return limited_response(llm_answer)
             
             # 4. Финальный fallback
-            response = "Извините, не удалось найти ответ на ваш вопрос. Давайте продолжим урок."
-            
-            # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-            if self.system_mode == "demo":
-                self.conversation_history.append({"role": "assistant", "content": response})
-            
-            return response
+            return "Не удалось найти ответ. Давайте продолжим урок."
         
-        # Традиционный режим (оригинальная логика)
+        # Традиционный режим
         else:
-            print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
-            
             # 1. Сначала проверяем базу знаний по предмету
             if self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": knowledge_response})
-                    
-                    return knowledge_response
+                    return limited_response(knowledge_response)
             
             # 2. Быстрая проверка локальных шаблонов
             for pattern, responses in self.local_patterns.items():
                 if pattern in question_lower:
-                    response = random.choice(responses)
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": response})
-                    
-                    return response
+                    return random.choice(responses)
             
             # 3. Проверка диалоговых шаблонов из базы знаний
             if self.knowledge_base:
                 dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if dialogue_response:
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": dialogue_response})
-                    
-                    return dialogue_response
+                    return limited_response(dialogue_response)
             
-            # 4. Поиск в предметной базе знаний с повышенным порогом схожести
+            # 4. Поиск в предметной базе знаний
             if self.knowledge_base:
                 answer = self.knowledge_base.find_answer(question, threshold=0.5)
                 if answer and not answer.startswith("Интересный вопрос!"):
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": answer})
-                    
-                    return answer
+                    return limited_response(answer)
             
-            # 5. Проверяем базу ответов LLM с высокой точностью (порог 0.8)
+            # 5. Проверяем базу ответов LLM
             if self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
-                    print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
-                    
-                    # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                    if self.system_mode == "demo":
-                        self.conversation_history.append({"role": "assistant", "content": llm_answer})
-                    
-                    return llm_answer
+                    return limited_response(llm_answer)
             
-            # 6. Запрос к LLM с контекстом текущего урока
-            llm_response = self.llm.query(question, context, self.current_subject)
+            # 6. Запрос к LLM с контекстом
+            current_context = ""
+            if self.lesson_content and self.current_paragraph > 0:
+                context_start = max(0, self.current_paragraph - 2)
+                current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+            
+            llm_response = self.llm.query(question, current_context, self.current_subject)
             if llm_response:
-                # Сохраняем в кэш LLM и базу знаний ответов
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
                 if self.knowledge_base:
-                    # Сохраняем ответ в базу знаний для будущего использования
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
-                
-                # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-                if self.system_mode == "demo":
-                    self.conversation_history.append({"role": "assistant", "content": llm_response})
-                
-                return llm_response
+                return limited_response(llm_response)
             
             # 7. Финальный fallback
-            response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
-            
-            # В ДЕМО-РЕЖИМЕ добавляем ответ учителя в историю
-            if self.system_mode == "demo":
-                self.conversation_history.append({"role": "assistant", "content": response})
-            
-            return response
+            return "Интересный вопрос! Обсудим после урока."
 
     def get_selected_lesson(self) -> Optional[dict]:
         """Возвращает данные выбранного урока"""
@@ -637,28 +620,17 @@ class DialogueManager:
         self.current_paragraph = 0
         self.knowledge_base = None
         self.conversation_counter = 0
-        if self.system_mode == "demo":
-            self.conversation_history = []
 
     def get_available_subjects(self) -> List[str]:
         """Возвращает список доступных предметов"""
-        if self.system_mode == "demo":
-            demo_lessons = self._get_demo_lessons()
-            subjects = list(demo_lessons.keys())
-        else:
-            subjects = list(self.lessons.keys())
-        
-        # Всегда добавляем обществознание, даже если нет уроков
+        subjects = list(self.lessons.keys())
         if "обществознание" not in subjects:
             subjects.append("обществознание")
         return subjects
 
     def get_lessons_for_subject(self, subject: str) -> List[dict]:
         """Возвращает уроки для указанного предмета"""
-        if self.system_mode == "demo":
-            return self._get_demo_lessons().get(subject, [])
-        else:
-            return self.lessons.get(subject, [])
+        return self.lessons.get(subject, [])
 
     def set_llm_model(self, model: str):
         """Установка модели LLM"""
@@ -671,17 +643,6 @@ class DialogueManager:
             self.llm_query_mode = mode
             print(f"Установлен режим LLM: {mode}")
 
-    def set_system_mode(self, mode: str):
-        """Установка режима работы системы"""
-        if mode in ["normal", "demo"]:
-            self.system_mode = mode
-            print(f"Установлен режим системы: {mode}")
-            # При смене режима сбрасываем историю диалога
-            if mode == "normal":
-                self.conversation_history = []
-
-    def get_knowledge_stats(self) -> Optional[Dict]:
-        """Получение статистики базы знаний"""
-        if self.knowledge_base:
-            return self.knowledge_base.get_stats()
-        return None
+    def set_initialization_mode(self, mode: str):
+        """Установка режима инициализации"""
+        if mode in
