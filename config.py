@@ -24,6 +24,10 @@ DEFAULT_CONFIG = {
     "llm_query_mode": {
         "default_mode": "traditional",  # "traditional" или "llm_first"
         "available_modes": ["traditional", "llm_first"]
+    },
+    "system_mode": {
+        "default_mode": "normal",  # "normal" или "demo"
+        "available_modes": ["normal", "demo"]
     }
 }
 
@@ -85,6 +89,24 @@ def set_llm_mode(mode):
         config['llm_query_mode'] = {}
     
     config['llm_query_mode']['default_mode'] = mode
+    return save_config(config)
+
+def get_system_mode():
+    """Получение режима работы системы"""
+    config = load_config()
+    return config.get("system_mode", {}).get("default_mode", "normal")
+
+def set_system_mode(mode):
+    """Установка режима работы системы"""
+    if mode not in ["normal", "demo"]:
+        return False
+        
+    config = load_config()
+    
+    if 'system_mode' not in config:
+        config['system_mode'] = {}
+    
+    config['system_mode']['default_mode'] = mode
     return save_config(config)
 
 # Загружаем конфигурацию при импорте
