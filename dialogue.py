@@ -645,4 +645,12 @@ class DialogueManager:
 
     def set_initialization_mode(self, mode: str):
         """Установка режима инициализации"""
-        if mode in
+        if mode in ["normal", "demo"]:
+            self.initialization_mode = mode
+            print(f"Установлен режим инициализации: {mode}")
+
+    def get_knowledge_stats(self) -> Optional[Dict]:
+        """Получение статистики базы знаний"""
+        if self.knowledge_base:
+            return self.knowledge_base.get_stats()
+        return None
