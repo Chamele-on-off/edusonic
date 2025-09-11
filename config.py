@@ -25,9 +25,10 @@ DEFAULT_CONFIG = {
         "default_mode": "traditional",  # "traditional" или "llm_first"
         "available_modes": ["traditional", "llm_first"]
     },
-    "initialization_mode": {
-        "default_mode": "normal",  # "normal" или "demo"
-        "available_modes": ["normal", "demo"]
+    "dialogue_settings": {
+        "max_response_length": 3,  # Максимальное количество предложений в ответе до выбора урока
+        "context_window": 5,  # Количество предыдущих реплик для контекста
+        "subject_selection_prompt": "Сейчас ученик выбирает предмет для изучения. Будь дружелюбным учителем и помоги выбрать предмет или тему."
     }
 }
 
@@ -91,25 +92,13 @@ def set_llm_mode(mode):
     config['llm_query_mode']['default_mode'] = mode
     return save_config(config)
 
-def get_initialization_mode():
-    """Получение режима инициализации"""
+def get_dialogue_settings():
+    """Получение настроек диалога"""
     config = load_config()
-    return config.get("initialization_mode", {}).get("default_mode", "normal")
-
-def set_initialization_mode(mode):
-    """Установка режима инициализации"""
-    if mode not in ["normal", "demo"]:
-        return False
-        
-    config = load_config()
-    
-    if 'initialization_mode' not in config:
-        config['initialization_mode'] = {}
-    
-    config['initialization_mode']['default_mode'] = mode
-    return save_config(config)
+    return config.get("dialogue_settings", DEFAULT_CONFIG["dialogue_settings"])
 
 # Загружаем конфигурацию при импорте
 LLM_CONFIG = load_config().get("llm", DEFAULT_CONFIG["llm"])
 OPENROUTER_CONFIG = load_config().get("openrouter", DEFAULT_CONFIG["openrouter"])
 FALLBACK_CONFIG = load_config().get("fallback", DEFAULT_CONFIG["fallback"])
+DIALOGUE_SETTINGS = get_dialogue_settings()
