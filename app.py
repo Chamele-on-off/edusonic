@@ -10,7 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_initialization_mode, set_initialization_mode
+from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
 import requests
 import json
 from datetime import datetime
@@ -21,11 +21,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 LESSONS_DIR = BASE_DIR / 'lessons'
-DEMO_LESSONS_DIR = LESSONS_DIR / 'demo'
 MATERIALS_DIR = BASE_DIR / 'materials'
 
 # Создаем необходимые папки
-for folder in [LESSONS_DIR, DEMO_LESSONS_DIR, MATERIALS_DIR]:
+for folder in [LESSONS_DIR, MATERIALS_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Глобальные состояния
@@ -37,7 +36,6 @@ room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())  # Режим LLM для каждой комнаты
-room_initialization_mode = defaultdict(lambda: get_initialization_mode())  # Режим инициализации
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -203,17 +201,11 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
     
-    # Устанавливаем режимы для диалог менеджера комнаты
+    # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-    room_dialogue[room_id].set_initialization_mode(room_initialization_mode[room_id])
     
-    # Разное приветствие в зависимости от режима
     if len(room_participants[room_id]) == 1:
-        if room_initialization_mode[room_id] == "demo":
-            greeting = "Привет! Добро пожаловать в демо-режим обучения! Давай выберем интересную тему для изучения."
-        else:
-            greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
-        
+        greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
@@ -272,46 +264,20 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # Обработка состояния обработки темы в демо-режиме
-        if dialogue.get_current_state() == "topic_processing":
-            # Генерируем урок по теме
-            response = dialogue.generate_topic_lesson(dialogue.requested_topic)
-            if response:  # Если вернулась ошибка
-                emit('speech_text', {
-                    'text': f"Учитель: {response}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
-            else:  # Если урок успешно создан и начат
-                lesson_data = dialogue.get_selected_lesson()
-                emit('lesson_started', {
-                    'lesson_id': lesson_data['id'],
-                    'title': lesson_data['title'],
-                    'subject': dialogue.get_current_subject()
-                }, room=room_id)
-                
-                first_paragraph = dialogue._get_next_paragraph()
-                if first_paragraph:
-                    emit('speech_text', {
-                        'text': f"Учитель: {first_paragraph}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
-            return
-        
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
             # Сначала проверяем команды управления
             if any(word in text.lower() for word in ["записал", "дальше", "продолжай", "следующий", "продолжить"]):
+                # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
+                    # Отправляем текст
                     emit('speech_text', {
                         'text': f"Учитель: {next_paragraph}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
+                    # Озвучиваем следующий абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
                 return
             
@@ -319,22 +285,26 @@ def handle_recognized_speech(data):
             if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
                 stop_response = dialogue.process_input(text)
                 if stop_response:
+                    # Отправляем текст
                     emit('speech_text', {
                         'text': f"Учитель: {stop_response}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
+                    # Озвучиваем ответ на остановку
                     speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
                 return
             
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
+                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
@@ -342,6 +312,7 @@ def handle_recognized_speech(data):
             
             # Если response None - это значит был выбран предмет и нужно начать урок
             if response is None:
+                # Урок выбран, начинаем чтение
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data:
                     emit('lesson_started', {
@@ -350,20 +321,26 @@ def handle_recognized_speech(data):
                         'subject': dialogue.get_current_subject()
                     }, room=room_id)
                     
+                    # Немедленно начинаем чтение первого абзаца урока
                     first_paragraph = dialogue._get_next_paragraph()
                     if first_paragraph:
+                        # Отправляем текст
                         emit('speech_text', {
                             'text': f"Учитель: {first_paragraph}",
                             'sid': 'teacher',
                             'is_teacher': True
                         }, room=room_id)
+                        # Озвучиваем первый абзац
                         speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
             elif response:
+                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                
+                # Озвучиваем ответ (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
@@ -372,16 +349,10 @@ def handle_activate_ai_teacher(data):
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
     
-    # Устанавливаем режимы для нового диалог менеджера
+    # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-    room_dialogue[room_id].set_initialization_mode(room_initialization_mode[room_id])
     
-    # Разное приветствие в зависимости от режима
-    if room_initialization_mode[room_id] == "demo":
-        greeting = "Привет! Добро пожаловать в демо-режим обучения! Давай выберем интересную тему для изучения."
-    else:
-        greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-    
+    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
@@ -402,23 +373,6 @@ def handle_set_llm_mode(data):
         }, room=room_id)
         
         print(f"Режим LLM изменен в комнате {room_id}: {mode}")
-
-@socketio.on('set_init_mode')
-def handle_set_init_mode(data):
-    room_id = data['room_id']
-    mode = data['mode']
-    
-    if mode in ["normal", "demo"]:
-        room_initialization_mode[room_id] = mode
-        if room_id in room_dialogue:
-            room_dialogue[room_id].set_initialization_mode(mode)
-        
-        emit('init_mode_changed', {
-            'mode': mode,
-            'room': room_id
-        }, room=room_id)
-        
-        print(f"Режим инициализации изменен в комнате {room_id}: {mode}")
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
@@ -496,6 +450,7 @@ def set_llm_mode_api():
         success = set_llm_mode(mode)
         
         if success:
+            # Обновляем режим для всех активных комнат
             for room_id in room_llm_mode:
                 room_llm_mode[room_id] = mode
                 if room_id in room_dialogue:
@@ -504,51 +459,6 @@ def set_llm_mode_api():
             return jsonify({
                 "success": True,
                 "message": f"Режим LLM успешно изменен на '{mode}'",
-                "mode": mode
-            })
-        else:
-            return jsonify({"success": False, "error": "Failed to save config"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/init_mode', methods=['GET'])
-def get_init_mode_api():
-    """Получение текущего режима инициализации"""
-    try:
-        config = load_config()
-        return jsonify({
-            "success": True,
-            "mode": config.get("initialization_mode", {}).get("default_mode", "normal"),
-            "available_modes": config.get("initialization_mode", {}).get("available_modes", ["normal", "demo"])
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/init_mode', methods=['POST'])
-def set_init_mode_api():
-    """Установка режима инициализации"""
-    try:
-        data = request.json
-        mode = data.get('mode')
-        
-        if not mode:
-            return jsonify({"success": False, "error": "Mode not specified"})
-        
-        if mode not in ["normal", "demo"]:
-            return jsonify({"success": False, "error": "Invalid mode. Use 'normal' or 'demo'"})
-        
-        success = set_initialization_mode(mode)
-        
-        if success:
-            for room_id in room_initialization_mode:
-                room_initialization_mode[room_id] = mode
-                if room_id in room_dialogue:
-                    room_dialogue[room_id].set_initialization_mode(mode)
-            
-            return jsonify({
-                "success": True,
-                "message": f"Режим инициализации успешно изменен на '{mode}'",
                 "mode": mode
             })
         else:
@@ -619,18 +529,14 @@ def get_llm_answers():
 def get_lesson_content(lesson_id):
     """Получение содержания урока"""
     try:
-        # Обработка демо-уроков из подпапки
-        if lesson_id.startswith('demo/'):
-            lesson_file = LESSONS_DIR / lesson_id.replace('demo/', 'demo/') + '.txt'
-        else:
-            lesson_file = LESSONS_DIR / f"{lesson_id}.txt"
-            
+        lesson_file = LESSONS_DIR / f"{lesson_id}.txt"
         if not lesson_file.exists():
             return jsonify({"error": "Lesson not found"}), 404
         
         with open(lesson_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
+        # Разбиваем на абзацы
         paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
         
         return jsonify({
@@ -648,36 +554,17 @@ def get_available_lessons():
     """Получение списка доступных уроков"""
     try:
         lessons = {}
-        
-        # Загрузка обычных уроков
         for lesson_file in LESSONS_DIR.glob("*.txt"):
-            if 'demo' not in str(lesson_file):  # Исключаем демо-уроки
-                subject = _detect_subject(lesson_file.stem)
-                
-                if subject not in lessons:
-                    lessons[subject] = []
-                
-                lessons[subject].append({
-                    'id': lesson_file.stem,
-                    'title': lesson_file.stem.replace('_', ' ').title(),
-                    'file_path': lesson_file.name,
-                    'type': 'text',
-                    'is_demo': False
-                })
-        
-        # Загрузка демо-уроков
-        for lesson_file in DEMO_LESSONS_DIR.glob("*.txt"):
             subject = _detect_subject(lesson_file.stem)
             
             if subject not in lessons:
                 lessons[subject] = []
             
             lessons[subject].append({
-                'id': f"demo/{lesson_file.stem}",
-                'title': lesson_file.stem.replace('_', ' ').title() + " (Демо)",
-                'file_path': f"demo/{lesson_file.name}",
-                'type': 'text',
-                'is_demo': True
+                'id': lesson_file.stem,
+                'title': lesson_file.stem.replace('_', ' ').title(),
+                'file_path': lesson_file.name,
+                'type': 'text'
             })
         
         return jsonify({
@@ -721,6 +608,7 @@ def add_knowledge():
         if not text.strip():
             return jsonify({"success": False, "error": "Text is required"})
         
+        # Создаем базу знаний для предмета если ее нет
         knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
         if knowledge_file.exists():
             with open(knowledge_file, 'r', encoding='utf-8') as f:
@@ -738,6 +626,7 @@ def add_knowledge():
                 }
             }
         
+        # Парсим текст и добавляем в базу знаний
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         for line in lines:
             if ' - ' in line:
@@ -746,10 +635,12 @@ def add_knowledge():
             elif line.endswith('?'):
                 knowledge_data["questions"][line.strip().lower()] = "Ответ будет добавлен автоматически"
             else:
+                # Просто добавляем как общую информацию
                 if "general_info" not in knowledge_data:
                     knowledge_data["general_info"] = []
                 knowledge_data["general_info"].append(line.strip())
         
+        # Сохраняем обновленную базу знаний
         with open(knowledge_file, 'w', encoding='utf-8') as f:
             json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
         
@@ -766,22 +657,18 @@ def add_lesson():
         subject = data.get('subject', 'общее')
         title = data.get('title', '')
         content = data.get('content', '')
-        is_demo = data.get('is_demo', False)
         
         if not title or not content:
             return jsonify({"success": False, "error": "Title and content are required"})
         
-        if is_demo:
-            filename = f"demo_{subject}_{title.lower().replace(' ', '_')}.txt"
-            lesson_path = DEMO_LESSONS_DIR / filename
-        else:
-            filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
-            lesson_path = LESSONS_DIR / filename
+        # Создаем имя файла
+        filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
+        lesson_path = LESSONS_DIR / filename
         
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        return jsonify({"success": True, "filename": filename, "subject": subject, "title": title, "is_demo": is_demo})
+        return jsonify({"success": True, "filename": filename, "subject": subject, "title": title})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -796,6 +683,7 @@ def download_knowledge():
     if not knowledge_file.exists() and not llm_answers_file.exists():
         return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
     
+    # Создаем временный файл для скачивания
     import tempfile
     import zipfile
     
@@ -819,9 +707,10 @@ def download_knowledge():
 @app.route('/api/download_lessons')
 def download_lessons():
     """Скачивание всех уроков"""
-    if not any(LESSONS_DIR.iterdir()) and not any(DEMO_LESSONS_DIR.iterdir()):
+    if not any(LESSONS_DIR.iterdir()):
         return jsonify({"success": False, "error": "Уроки не найдены"})
     
+    # Создаем временный zip-файл
     import tempfile
     import zipfile
     
@@ -830,8 +719,6 @@ def download_lessons():
     with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
         for lesson_file in LESSONS_DIR.glob("*.txt"):
             zipf.write(lesson_file, lesson_file.name)
-        for lesson_file in DEMO_LESSONS_DIR.glob("*.txt"):
-            zipf.write(lesson_file, f"demo/{lesson_file.name}")
     
     temp_zip.close()
     
@@ -842,6 +729,7 @@ def download_lessons():
         mimetype='application/zip'
     )
 
+# Новые API эндпоинты для управления API ключами
 @app.route('/api/config/keys', methods=['GET'])
 def get_api_keys():
     """Получение текущих API ключей"""
@@ -896,6 +784,7 @@ def test_api_key():
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
         
+        # Тестируем ключ через простой запрос к OpenRouter
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
