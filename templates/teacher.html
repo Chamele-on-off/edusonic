@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель управления AI-учителем</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -305,14 +306,6 @@
             border: 1px solid #eee;
         }
         
-        .system-mode-panel {
-            background: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #eee;
-        }
-        
         .mode-description {
             background: white;
             padding: 15px;
@@ -323,10 +316,6 @@
         
         .mode-description.llm-first {
             border-left-color: #e74c3c;
-        }
-        
-        .mode-description.demo-mode {
-            border-left-color: #9b59b6;
         }
         
         .mode-description h4 {
@@ -408,6 +397,7 @@
             }
         }
     </style>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
@@ -467,41 +457,43 @@
                     </ol>
                 </div>
             </div>
+        </div>
+        
+        <!-- Секция управления режимом инициализации -->
+        <div class="management-panel">
+            <h2>Режим инициализации конференции</h2>
             
-            <!-- Новая секция для управления режимом системы -->
-            <div class="system-mode-panel">
-                <h3>Режим работы системы</h3>
-                
+            <div class="llm-mode-panel">
                 <div class="form-group">
-                    <label for="system-mode-select">Тип работы системы:</label>
-                    <select id="system-mode-select" class="subject-select">
-                        <option value="normal">Обычный режим</option>
-                        <option value="demo">Демо-режим</option>
+                    <label for="init-mode-select">Режим начала диалога:</label>
+                    <select id="init-mode-select" class="subject-select">
+                        <option value="normal">Обычный режим (назначение уроков)</option>
+                        <option value="demo">Демо-режим (выбор из демо-уроков)</option>
                     </select>
                 </div>
                 
-                <button id="set-system-mode-btn" style="margin-top: 10px;">Применить режим</button>
+                <button id="set-init-mode-btn" style="margin-top: 10px;">Применить режим</button>
                 
-                <div id="system-mode-status" class="success-message"></div>
+                <div id="init-mode-status" class="success-message"></div>
                 
                 <div class="mode-description">
-                    <h4>🎓 Обычный режим</h4>
-                    <p>Стандартная работа системы с назначенными уроками:</p>
+                    <h4>🎯 Обычный режим</h4>
+                    <p>Стандартный процесс обучения с назначенными уроками:</p>
                     <ol class="mode-steps">
-                        <li>Уроки назначаются ученику на странице teacher.html</li>
-                        <li>Короткий диалог при подключении</li>
-                        <li>Система начинает чтение урока по выбранному предмету</li>
+                        <li>Краткое приветствие</li>
+                        <li>Назначение урока из базы</li>
+                        <li>Систематическое изучение материала</li>
                     </ol>
                 </div>
                 
-                <div class="mode-description demo-mode">
-                    <h4>🎪 Демо-режим</h4>
-                    <p>Интерактивный режим с генерацией уроков на лету:</p>
+                <div class="mode-description llm-first">
+                    <h4>🎮 Демо-ре режим</h4>
+                    <p>Интерактивный выбор тем для ознакомления:</p>
                     <ol class="mode-steps">
-                        <li>Доступны только демо-уроки из папки lessons/demo</li>
-                        <li>Диалог через LLM с сохранением контекста</li>
-                        <li>Система предлагает выбор предметов или тем</li>
-                        <li>Автоматическая генерация уроков по запрошенным темам</li>
+                        <li>Предложение доступных демо-уроков</li>
+                        <li>Возможность выбора любой темы</li>
+                        <li>Автоматическая генерация уроков через LLM</li>
+                        <li>Сохранение контекста диалога</li>
                     </ol>
                 </div>
             </div>
@@ -601,7 +593,12 @@
                         <option value="общее">Общее</option>
                     </select>
                     <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ddd;">
-                    <textarea id="lesson-content" placeholder="Содержание урока (разделяйте абзацы пустыми строкаи)"></textarea>
+                    <textarea id="lesson-content" placeholder="Содержание урока (разделяйте абзацы пустыми строками)"></textarea>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="lesson-demo"> Демо-урок
+                        </label>
+                    </div>
                     <button id="add-lesson-btn">Добавить урок</button>
                     <div id="lesson-status" class="success-message"></div>
                 </div>
@@ -642,7 +639,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Конфигурация
         const FPS = 10;
@@ -676,10 +672,10 @@
         const setLlmModeBtn = document.getElementById('set-llm-mode-btn');
         const llmModeStatus = document.getElementById('llm-mode-status');
         
-        // Элементы для управления режимом системы
-        const systemModeSelect = document.getElementById('system-mode-select');
-        const setSystemModeBtn = document.getElementById('set-system-mode-btn');
-        const systemModeStatus = document.getElementById('system-mode-status');
+        // Элементы для управления режимом инициализации
+        const initModeSelect = document.getElementById('init-mode-select');
+        const setInitModeBtn = document.getElementById('set-init-mode-btn');
+        const initModeStatus = document.getElementById('init-mode-status');
         
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
@@ -825,8 +821,9 @@
             })
             .then(response => response.json())
             .then(data => {
+                const statusElement = llmModeStatus;
                 if (data.success) {
-                    showStatus(llmModeStatus, data.message);
+                    showStatus(statusElement, data.message);
                     log(data.message);
                     
                     // Также отправляем сокет-запрос для применения режима ко всем активным комнатам
@@ -837,31 +834,31 @@
                         });
                     }
                 } else {
-                    showStatus(llmModeStatus, 'Ошибка: ' + data.error, false);
+                    showStatus(statusElement, 'Ошибка: ' + data.error, false);
                 }
             })
             .catch(error => {
-                showStatus(llmModeStatus, 'Ошибка сети: ' + error, false);
+                showStatus(statusElement, 'Ошибка сети: ' + error, false);
             });
         }
         
-        // Функции для работы с режимом системы
-        function loadSystemMode() {
-            fetch('/api/config/system_mode')
+        // Функции для работы с режимом инициализации
+        function loadInitMode() {
+            fetch('/api/config/init_mode')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        systemModeSelect.value = data.mode;
-                        log(`Текущий режим системы: ${data.mode}`);
+                        initModeSelect.value = data.mode;
+                        log(`Текущий режим инициализации: ${data.mode}`);
                     }
                 })
                 .catch(error => {
-                    log('Ошибка загрузки режима системы: ' + error);
+                    log('Ошибка загрузки режима инициализации: ' + error);
                 });
         }
         
-        function setSystemMode(mode) {
-            fetch('/api/config/system_mode', {
+        function setInitMode(mode) {
+            fetch('/api/config/init_mode', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -870,23 +867,24 @@
             })
             .then(response => response.json())
             .then(data => {
+                const statusElement = initModeStatus;
                 if (data.success) {
-                    showStatus(systemModeStatus, data.message);
+                    showStatus(statusElement, data.message);
                     log(data.message);
                     
                     // Также отправляем сокет-запрос для применения режима ко всем активным комнатам
                     if (socket) {
-                        socket.emit('set_system_mode', { 
+                        socket.emit('set_init_mode', { 
                             room_id: currentRoom,
                             mode: mode
                         });
                     }
                 } else {
-                    showStatus(systemModeStatus, 'Ошибка: ' + data.error, false);
+                    showStatus(statusElement, 'Ошибка: ' + data.error, false);
                 }
             })
             .catch(error => {
-                showStatus(systemModeStatus, 'Ошибка сети: ' + error, false);
+                showStatus(statusElement, 'Ошибка сети: ' + error, false);
             });
         }
         
@@ -911,17 +909,6 @@
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
-        }
-        
-        // Показать статус сообщение
-        function showStatus(element, message, isSuccess = true) {
-            element.textContent = message;
-            element.className = isSuccess ? 'success-message' : 'error-message';
-            element.style.display = 'block';
-            
-            setTimeout(() => {
-                element.style.display = 'none';
-            }, 5000);
         }
         
         // Загрузка изображения с повторами
@@ -1100,6 +1087,17 @@
             }
         }
         
+        // Показать статус сообщение
+        function showStatus(element, message, isSuccess = true) {
+            element.textContent = message;
+            element.className = isSuccess ? 'success-message' : 'error-message';
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             // Загружаем API ключи при загрузке страницы
@@ -1108,8 +1106,8 @@
             // Загружаем режим LLM при загрузке страницы
             loadLLMMode();
             
-            // Загружаем режим системы при загрузке страницы
-            loadSystemMode();
+            // Загружаем режим инициализации при загрузке страницы
+            loadInitMode();
             
             // Инициализация комнаты по умолчанию
             initRoom('default');
@@ -1132,10 +1130,10 @@
                 setLLMMode(mode);
             });
             
-            // Обработчики для режима системы
-            setSystemModeBtn.addEventListener('click', function() {
-                const mode = systemModeSelect.value;
-                setSystemMode(mode);
+            // Обработчики для режима инициализации
+            setInitModeBtn.addEventListener('click', function() {
+                const mode = initModeSelect.value;
+                setInitMode(mode);
             });
             
             // Выбор аватара
@@ -1217,6 +1215,7 @@
                 const subject = document.getElementById('lesson-subject').value;
                 const title = document.getElementById('lesson-title').value;
                 const content = document.getElementById('lesson-content').value;
+                const isDemo = document.getElementById('lesson-demo').checked;
                 
                 if (!title.trim() || !content.trim()) {
                     showStatus(lessonStatus, 'Заполните название и содержание урока', false);
@@ -1231,7 +1230,8 @@
                     body: JSON.stringify({
                         subject: subject,
                         title: title,
-                        content: content
+                        content: content,
+                        is_demo: isDemo
                     })
                 })
                 .then(response => response.json())
@@ -1240,6 +1240,7 @@
                         showStatus(lessonStatus, `Урок "${title}" успешно добавлен по предмету "${subject}"!`);
                         document.getElementById('lesson-title').value = '';
                         document.getElementById('lesson-content').value = '';
+                        document.getElementById('lesson-demo').checked = false;
                     } else {
                         showStatus(lessonStatus, 'Ошибка: ' + data.error, false);
                     }
