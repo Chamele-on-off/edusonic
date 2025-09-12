@@ -317,6 +317,10 @@
             border-left-color: #e74c3c;
         }
         
+        .mode-description.llm-dialogue {
+            border-left-color: #9b59b6;
+        }
+        
         .mode-description h4 {
             margin-top: 0;
             color: #2c3e50;
@@ -429,6 +433,7 @@
                     <select id="llm-mode-select" class="subject-select">
                         <option value="traditional">Сначала база знаний, потом LLM</option>
                         <option value="llm_first">Сначала LLM, потом база знаний</option>
+                        <option value="llm_dialogue_first">Диалог через LLM (по умолчанию)</option>
                     </select>
                 </div>
                 
@@ -453,6 +458,17 @@
                         <li>Немедленный запрос к внешнему LLM</li>
                         <li>Поиск в локальной базе знаний (если LLM не ответил)</li>
                         <li>Проверка сохраненных ответов LLM</li>
+                    </ol>
+                </div>
+                
+                <div class="mode-description llm-dialogue">
+                    <h4>💬 Режим "Диалог через LLM" (новый)</h4>
+                    <p>Приоритет естественному общению через нейросеть:</p>
+                    <ol class="mode-steps">
+                        <li>Все диалоги обрабатываются через LLM с сохранением контекста</li>
+                        <li>Системные фразы используются только если LLM недоступен</li>
+                        <li>Максимально естественное общение с учеником</li>
+                        <li>Автоматический выбор предмета при его упоминании</li>
                     </ol>
                 </div>
             </div>
@@ -873,7 +889,7 @@
                         const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
                         loadedImages.push(img);
                         statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
-                    } catch (error) {
+                    } catch (error):
                         log(error);
                     }
                 }
