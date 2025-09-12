@@ -7,6 +7,7 @@ import re
 from knowledge.knowledge_base import KnowledgeBase
 from llm import LLMIntegration
 from config import get_llm_mode, get_dialogue_settings
+import time  # NEW: добавлен импорт
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -26,9 +27,9 @@ class DialogueManager:
         self.knowledge_base = None
         self.llm = LLMIntegration()
         self.conversation_counter = 0
-        self.llm_query_mode = get_llm_mode()  # Загружаем режим из конфига
+        self.llm_query_mode = get_llm_mode()
         self.dialogue_settings = get_dialogue_settings()
-        self.conversation_history = []  # История диалога для контекста
+        self.conversation_history = []
         self._load_lessons()
         
         # Расширенные локальные шаблоны для более естественного общения
@@ -58,14 +59,12 @@ class DialogueManager:
         try:
             if not self.lessons_dir.exists():
                 self.lessons_dir.mkdir(parents=True)
-                # Создаем демо-урок по обществознанию, если его нет
                 demo_lesson = self.lessons_dir / "social_general.txt"
                 if not demo_lesson.exists():
                     with open(demo_lesson, 'w', encoding='utf-8') as f:
                         f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - это форма правления, при которой народ является источником власти.\n\nЭкономика - это хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - это совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - это система общеобязательных норм, охраняемых государством.\n\nСоциализация - это процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - это человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - это система норм и принципов, регулирующих поведение людей.\n\nГлобализация - это процесс всемирной экономической, политической и культурной интеграции.")
                 return
                 
-            # Загрузка текстовых файлов уроков
             for lesson_file in self.lessons_dir.glob("*.txt"):
                 try:
                     subject = self._detect_subject(lesson_file.stem)
@@ -114,24 +113,20 @@ class DialogueManager:
         try:
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Разбиваем на абзацы (по пустым строкам)
                 paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
                 
-                # Если абзацев нет, разбиваем на предложения
                 if not paragraphs:
                     sentences = re.split(r'(?<=[.!?])\s+', content)
-                    # Объединяем предложения в группы по 2-3 для плавного чтения
                     current_paragraph = []
                     paragraphs = []
                     
                     for sentence in sentences:
                         if sentence.strip():
                             current_paragraph.append(sentence.strip())
-                            if len(current_paragraph) >= 2:  # Группируем по 2-3 предложения
+                            if len(current_paragraph) >= 2:
                                 paragraphs.append(' '.join(current_paragraph))
                                 current_paragraph = []
                     
-                    # Добавляем оставшиеся предложения
                     if current_paragraph:
                         paragraphs.append(' '.join(current_paragraph))
                 
@@ -152,7 +147,6 @@ class DialogueManager:
             "timestamp": time.time()
         })
         
-        # Ограничиваем размер истории
         max_history = self.dialogue_settings.get("context_window", 5)
         if len(self.conversation_history) > max_history:
             self.conversation_history = self.conversation_history[-max_history:]
@@ -192,7 +186,8 @@ class DialogueManager:
             system_prompt = self.dialogue_settings.get("subject_selection_prompt", 
                 "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным.")
         else:
-            system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения."
+            system_prompt = self.dialogue_settings.get("llm_dialogue_prompt", 
+                "Ты - дружелюбный учитель. Веди естественный диалог с учеником. Отвечай кратко и понятно, 1-2 предложения.")
         
         # Запрос к LLM
         try:
@@ -201,17 +196,15 @@ class DialogueManager:
                 context=context,
                 subject=self.current_subject or "общее",
                 system_prompt=system_prompt,
-                max_tokens=150  # Ограничиваем длину ответа
+                max_tokens=150
             )
             
             if llm_response:
-                # Ограничиваем длину ответа
                 limited_response = self._limit_response_length(
                     llm_response, 
                     self.dialogue_settings.get("max_response_length", 3)
                 )
                 
-                # Добавляем в историю
                 self._add_to_conversation_history(text, is_user=True)
                 self._add_to_conversation_history(limited_response, is_user=False)
                 
@@ -222,8 +215,8 @@ class DialogueManager:
         
         return None
 
-    def process_input(self, text: str) -> Optional[str]:
-        """Обработка входящего текста и генерация ответа"""
+    def _get_system_response(self, text: str) -> Optional[str]:
+        """Получение ответа из системных фраз (запасной вариант)"""
         text_lower = text.lower().strip()
         
         # 1. Если пользователь называет предмет - автоматически начинаем урок
@@ -233,38 +226,31 @@ class DialogueManager:
                 print(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
         
-        # 2. Приоритетная обработка через LLM для диалога
-        if not self.lesson_started:
-            llm_response = self._handle_llm_dialogue(text)
-            if llm_response:
-                print(f"✅ Ответ от LLM (диалог): {llm_response}")
-                return llm_response
-        
-        # 3. Если есть база знаний по предмету, проверяем там
+        # 2. Если есть база знаний по предмету, проверяем там
         if self.knowledge_base:
             knowledge_response = self.knowledge_base.get_dialogue_response(text_lower)
             if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                 return knowledge_response
         
-        # 4. Быстрая проверка локальных шаблонов
+        # 3. Быстрая проверка локальных шаблонов
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
         
-        # 5. Проверка диалоговых шаблонов из базы знаний
+        # 4. Проверка диалоговых шаблонов из базы знаний
         if self.knowledge_base:
             dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
             if dialogue_response:
                 return dialogue_response
         
-        # 6. Обработка по текущему состоянию
+        # 5. Обработка по текущему состоянию
         handler = self.dialogue_states.get(self.current_state)
         if handler:
             response = handler(text_lower)
             if response:
                 return response
         
-        # 7. Fallback с учетом состояния и счетчика разговора
+        # 6. Fallback с учетом состояния и счетчика разговора
         fallbacks = {
             "greeting": [
                 "Привет! Давайте познакомимся. Какой предмет вас интересует?",
@@ -283,20 +269,59 @@ class DialogueManager:
             ]
         }
         
-        # Добавляем вариативность в ответы
         fallback_responses = fallbacks.get(self.current_state, ["Продолжим наш урок."])
         response = random.choice(fallback_responses)
         
-        # После 3-х реплик без прогресса - мягко направляем к выбору предмета
         if self.conversation_counter >= 3 and self.current_state == "greeting":
             response += " Кстати, какой предмет вас интересует?"
             
         return response
 
+    def process_input(self, text: str) -> Optional[str]:
+        """Обработка входящего текста и генерация ответа"""
+        text_lower = text.lower().strip()
+        
+        # NEW: Приоритетная обработка через LLM для диалога в новом режиме
+        if self.llm_query_mode == "llm_dialogue_first" and not self.lesson_started:
+            llm_response = self._handle_llm_dialogue(text)
+            if llm_response:
+                print(f"✅ Ответ от LLM (диалог): {llm_response}")
+                return llm_response
+        
+        # Обработка через системные фразы (запасной вариант)
+        system_response = self._get_system_response(text)
+        if system_response:
+            return system_response
+        
+        # Если урок уже начат, обрабатываем специальным образом
+        if self.lesson_started:
+            return self._handle_lesson_interaction(text_lower)
+            
+        return "Извините, не совсем понял ваш вопрос. Можете переформулировать?"
+
+    def _handle_lesson_interaction(self, text: str) -> Optional[str]:
+        """Обработка взаимодействий во время урока"""
+        if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
+            self.lesson_started = False
+            self.current_state = "greeting"
+            self.conversation_counter = 0
+            self.knowledge_base = None
+            self.conversation_history = []
+            return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
+        
+        # Если это команда продолжения
+        if any(word in text for word in ["записал", "дальше", "продолжай", "следующий", "продолжить"]):
+            next_paragraph = self._get_next_paragraph()
+            if next_paragraph:
+                return next_paragraph
+            return None
+            
+        # Обработка вопросов во время урока
+        return self.handle_question_during_lesson(text)
+
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """Прямая обработка выбора предмета (без поиска в базе знаний)"""
+        """Прямая обработка выбора предмета"""
         self.current_subject = subject
-        # Автоматически выбираем первый доступный урок (демо-урок если есть)
         lessons = self.lessons.get(subject, [])
         demo_lessons = [l for l in lessons if l.get('is_demo', False)]
         
@@ -305,7 +330,6 @@ class DialogueManager:
         elif lessons:
             self.selected_lesson = lessons[0]
         else:
-            # Создаем временный урок
             self.selected_lesson = {
                 'id': f"demo_{subject}",
                 'title': f"Демо-урок по {subject}",
@@ -318,11 +342,8 @@ class DialogueManager:
         self.current_paragraph = 0
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
-        
-        # Очищаем историю диалога при начале урока
         self.conversation_history = []
         
-        # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
@@ -341,17 +362,14 @@ class DialogueManager:
     def _handle_subject_selection(self, text: str) -> Optional[str]:
         subjects = self.get_available_subjects()
         
-        # Поиск по названию предмета
         for subject in subjects:
             if subject.lower() in text.lower():
                 return self._handle_subject_selection_direct(subject)
                 
-        # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
             self.current_state = "greeting"
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
-        # Если пользователь просто говорит "да" или соглашается
         if any(word in text for word in ["да", "ага", 'угу', "ладно", "хорошо"]):
             return "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
             
@@ -359,15 +377,6 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
-        if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
-            self.lesson_started = False
-            self.current_state = "greeting"
-            self.conversation_counter = 0
-            self.knowledge_base = None
-            self.conversation_history = []  # Очищаем историю при завершении урока
-            return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
-            
-        # Если это не команда управления чтением, обрабатываем как вопрос
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
@@ -381,7 +390,7 @@ class DialogueManager:
             self.current_state = "greeting"
             self.conversation_counter = 0
             self.knowledge_base = None
-            self.conversation_history = []  # Очищаем историю при завершении урока
+            self.conversation_history = []
             return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
@@ -395,113 +404,91 @@ class DialogueManager:
         if self.llm_query_mode == "llm_first":
             print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
             
-            # 1. Сначала пробуем запрос к LLM
             current_context = ""
             if self.lesson_content and self.current_paragraph > 0:
-                # Берем текущий и предыдущий абзацы для контекста
                 context_start = max(0, self.current_paragraph - 2)
                 current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
             
             llm_response = self.llm.query(question, current_context, self.current_subject)
             if llm_response and not llm_response.startswith("Интересный вопрос!"):
-                # Сохраняем ответ и возвращаем его
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
                 if self.knowledge_base:
-                    # Сохраняем ответ в базу знаний для будущего использования
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
                 print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
                 return llm_response
             
-            # 2. Если LLM не дал ответ, проверяем базу знаний
             if self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                     print(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
                     return knowledge_response
             
-            # 3. Проверяем базу ответов LLM
             if self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
                     print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
                     return llm_answer
             
-            # 4. Финальный fallback
             return "Извините, не удалось найти ответ на ваш вопрос. Давайте продолжим урок."
         
-        # Традиционный режим (оригинальная логика)
+        # Традиционный режим
         else:
             print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
             
-            # 1. Сначала проверяем базу знаний по предмету
             if self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                     return knowledge_response
             
-            # 2. Быстрая проверка локальных шаблонов
             for pattern, responses in self.local_patterns.items():
                 if pattern in question_lower:
                     return random.choice(responses)
             
-            # 3. Проверка диалоговых шаблонов из базы знаний
             if self.knowledge_base:
                 dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if dialogue_response:
                     return dialogue_response
             
-            # 4. Поиск в предметной базе знаний с повышенным порогом схожести
             if self.knowledge_base:
                 answer = self.knowledge_base.find_answer(question, threshold=0.5)
                 if answer and not answer.startswith("Интересный вопрос!"):
                     return answer
             
-            # 5. Проверяем базу ответов LLM с высокой точностью (порог 0.8)
             if self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
                     print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
                     return llm_answer
             
-            # 6. Запрос к LLM с контекстом текущего урока
             current_context = ""
             if self.lesson_content and self.current_paragraph > 0:
-                # Берем текущий и предыдущий абзацы для контекста
                 context_start = max(0, self.current_paragraph - 2)
                 current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
             
             llm_response = self.llm.query(question, current_context, self.current_subject)
             if llm_response:
-                # Сохраняем в кэш LLM и базу знаний ответов
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
                 if self.knowledge_base:
-                    # Сохраняем ответ в базу знаний для будущего использования
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
                 return llm_response
             
-            # 7. Финальный fallback
             return "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
 
     def get_selected_lesson(self) -> Optional[dict]:
-        """Возвращает данные выбранного урока"""
         return self.selected_lesson
 
     def is_lesson_started(self) -> bool:
-        """Проверяет, начат ли урок"""
         return self.lesson_started
 
     def get_current_subject(self) -> Optional[str]:
-        """Возвращает текущий предмет"""
         return self.current_subject
 
     def get_current_state(self) -> str:
-        """Возвращает текущее состояние диалога"""
         return self.current_state
 
     def reset(self):
-        """Сброс состояния диалога"""
         self.current_state = "greeting"
         self.current_subject = None
         self.selected_lesson = None
@@ -510,36 +497,27 @@ class DialogueManager:
         self.current_paragraph = 0
         self.knowledge_base = None
         self.conversation_counter = 0
-        self.conversation_history = []  # Очищаем историю диалога
+        self.conversation_history = []
 
     def get_available_subjects(self) -> List[str]:
-        """Возвращает список доступных предметов"""
         subjects = list(self.lessons.keys())
-        # Всегда добавляем обществознание, даже если нет уроков
         if "обществознание" not in subjects:
             subjects.append("обществознание")
         return subjects
 
     def get_lessons_for_subject(self, subject: str) -> List[dict]:
-        """Возвращает уроки для указанного предмета"""
         return self.lessons.get(subject, [])
 
     def set_llm_model(self, model: str):
-        """Установка модели LLM"""
         self.llm.set_model(model)
         print(f"Установлена модель LLM: {model}")
 
     def set_llm_mode(self, mode: str):
-        """Установка режима запросов к LLM"""
-        if mode in ["traditional", "llm_first"]:
+        if mode in ["traditional", "llm_first", "llm_dialogue_first"]:  # NEW: добавлен новый режим
             self.llm_query_mode = mode
             print(f"Установлен режим LLM: {mode}")
 
     def get_knowledge_stats(self) -> Optional[Dict]:
-        """Получение статистики базы знаний"""
         if self.knowledge_base:
             return self.knowledge_base.get_stats()
         return None
-
-# Импорт для работы с временными метками
-import time
