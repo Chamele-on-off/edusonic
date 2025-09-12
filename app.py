@@ -10,6 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
+from llmdialogue import LLMDialogueManager  # Добавлен новый импорт
 from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
 import requests
 import json
@@ -34,6 +35,7 @@ room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
+room_llm_dialogue = defaultdict(lambda: LLMDialogueManager())  # Новое состояние для диалога
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())  # Режим LLM для каждой комнаты
 
@@ -201,6 +203,9 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
     
+    if room_id not in room_llm_dialogue:
+        room_llm_dialogue[room_id] = LLMDialogueManager()
+    
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
@@ -263,6 +268,7 @@ def handle_recognized_speech(data):
     
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
+        llm_dialogue = room_llm_dialogue[room_id]
         
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
@@ -307,18 +313,47 @@ def handle_recognized_speech(data):
                 # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
-            # Обработка диалога выбора урока
-            response = dialogue.process_input(text)
+            # Обработка диалога выбора урока через LLMDialogueManager
+            response = llm_dialogue.process_input(text)
             
             # Если response None - это значит был выбран предмет и нужно начать урок
             if response is None:
-                # Урок выбран, начинаем чтение
-                lesson_data = dialogue.get_selected_lesson()
-                if lesson_data:
+                # Определяем выбранный предмет
+                detected_subject = llm_dialogue.get_detected_subject(text)
+                if detected_subject:
+                    # Устанавливаем предмет в основном диалог менеджере
+                    dialogue.current_subject = detected_subject
+                    # Автоматически выбираем первый доступный урок
+                    lessons = dialogue.lessons.get(detected_subject, [])
+                    demo_lessons = [l for l in lessons if l.get('is_demo', False)]
+                    
+                    if demo_lessons:
+                        dialogue.selected_lesson = demo_lessons[0]
+                    elif lessons:
+                        dialogue.selected_lesson = lessons[0]
+                    else:
+                        # Создаем временный урок
+                        dialogue.selected_lesson = {
+                            'id': f"demo_{detected_subject}",
+                            'title': f"Демо-урок по {detected_subject}",
+                            'file_path': dialogue.lessons_dir / f"demo_{detected_subject}.txt",
+                            'is_demo': True
+                        }
+                    
+                    dialogue.lesson_started = True
+                    dialogue.current_state = "lesson_reading"
+                    dialogue.current_paragraph = 0
+                    dialogue.lesson_content = dialogue._load_lesson_content(dialogue.selected_lesson['file_path'])
+                    dialogue.knowledge_base = KnowledgeBase(detected_subject)
+                    
+                    # Очищаем историю диалога при начале урока
+                    dialogue.conversation_history = []
+                    
+                    # Отправляем событие начала урока
                     emit('lesson_started', {
-                        'lesson_id': lesson_data['id'],
-                        'title': lesson_data['title'],
-                        'subject': dialogue.get_current_subject()
+                        'lesson_id': dialogue.selected_lesson['id'],
+                        'title': dialogue.selected_lesson['title'],
+                        'subject': detected_subject
                     }, room=room_id)
                     
                     # Немедленно начинаем чтение первого абзаца урока
@@ -348,6 +383,7 @@ def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
+    room_llm_dialogue[room_id] = LLMDialogueManager()  # Инициализируем новый диалог менеджер
     
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
