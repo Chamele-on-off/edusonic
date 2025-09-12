@@ -1,12 +1,14 @@
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import time
 from datetime import datetime
 from pathlib import Path
 import re
+import random
 
 from llm import LLMIntegration
 from config import get_dialogue_settings, load_config
+from knowledge.knowledge_base import KnowledgeBase
 
 
 class LLMDialogueManager:
@@ -14,15 +16,20 @@ class LLMDialogueManager:
         self.llm = LLMIntegration()
         self.dialogue_settings = get_dialogue_settings()
         self.conversation_history = []
-        self.max_history = self.dialogue_settings.get("context_window", 5)
-        self.subject_selection_prompt = self.dialogue_settings.get(
-            "subject_selection_prompt", 
-            "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. "
-            "Будь кратким и понятным, максимум 2-3 предложения. "
-            "Цель - подвести ученика к выбору предмета для урока."
-        )
+        self.max_history = self.dialogue_settings.get("context_window", 8)
+        self.general_knowledge_base = KnowledgeBase("общее")
         self.last_interaction_time = time.time()
-        self.inactivity_timeout = 300  # 5 минут бездействия
+        self.inactivity_timeout = 300
+        self.subject_suggested = False
+        
+        # Промпты для разных типов диалога
+        self.prompts = {
+            "general": "Ты - дружелюбный учитель. Отвечай на вопросы ученика кратко и понятно, 1-2 предложения. ",
+            "subject_selection": "Ты - учитель помогающий выбрать предмет. Подведи ученика к выбору урока, " 
+                               "но сначала ответь на его вопрос если он есть. Будь кратким.",
+            "greeting": "Ты - приветливый учитель. Познакомься с учеником, спроси как дела, " 
+                       "и мягко подведи к выбору предмета для урока."
+        }
         
     def _add_to_conversation_history(self, text: str, is_user: bool = True):
         """Добавляет реплику в историю диалога"""
@@ -40,10 +47,10 @@ class LLMDialogueManager:
     def _get_conversation_context(self) -> str:
         """Возвращает контекст диалога для LLM"""
         if not self.conversation_history:
-            return ""
+            return "Новый диалог. Ученик только что присоединился."
             
-        context_lines = []
-        for msg in self.conversation_history:
+        context_lines = ["Предыдущий диалог:"]
+        for msg in self.conversation_history[-4:]:  # Берем последние 4 сообщения
             speaker = "Ученик" if msg["is_user"] else "Учитель"
             context_lines.append(f"{speaker}: {msg['text']}")
         
@@ -64,14 +71,14 @@ class LLMDialogueManager:
         text_lower = text.lower()
         
         subject_keywords = {
-            "математика": ["математик", "матема", "алгебр", "геометри", "цифр", "числ", "уравнен"],
-            "история": ["истори", "истор", "прошлое", "древн", "войн", "сражен", "цар", "император"],
-            "физика": ["физик", "физ", "механи", "электри", "магнит", "теплот", "оптик", "атом"],
-            "химия": ["хими", "хим", "веществ", "реакц", "элемент", "периодическ", "молекул", "атом"],
-            "обществознание": ["обществ", "общест", "социум", "государств", "право", "экономик", "политик", "культур"],
-            "биология": ["биолог", "био", "животн", "растен", "клетк", "организм", "ген", "эволюц"],
-            "литература": ["литератур", "лит", "книг", "писатель", "поэт", "стих", "роман", "рассказ"],
-            "русский язык": ["русск", "язык", "грамматик", "орфограф", "пунктуац", "слов", "предложен"]
+            "математика": ["математик", "матема", "алгебр", "геометри", "цифр", "числ", "уравнен", "счет"],
+            "история": ["истори", "истор", "прошлое", "древн", "войн", "сражен", "цар", "император", "историческ"],
+            "физика": ["физик", "физ", "механи", "электри", "магнит", "теплот", "оптик", "атом", "физическ"],
+            "химия": ["хими", "хим", "веществ", "реакц", "элемент", "периодическ", "молекул", "атом", "химическ"],
+            "обществознание": ["обществ", "общест", "социум", "государств", "право", "экономик", "политик", "культур", "общество"],
+            "биология": ["биолог", "био", "животн", "растен", "клетк", "организм", "ген", "эволюц", "биологическ"],
+            "литература": ["литератур", "лит", "книг", "писатель", "поэт", "стих", "роман", "рассказ", "литературн"],
+            "русский язык": ["русск", "язык", "грамматик", "орфограф", "пунктуац", "слов", "предложен", "русский"]
         }
         
         for subject, keywords in subject_keywords.items():
@@ -80,61 +87,94 @@ class LLMDialogueManager:
         
         return None
     
-    def _generate_subject_suggestion(self, detected_subject: str) -> str:
-        """Генерирует предложение по выбранному предмету"""
-        suggestions = {
-            "математика": [
-                "Отлично! Математика - это увлекательный мир чисел и закономерностей.",
-                "Прекрасный выбор! Математика развивает логическое мышление.",
-                "Математика! Отличный предмет для развития аналитических способностей."
-            ],
-            "история": [
-                "История - это увлекательное путешествие в прошлое!",
-                "Отлично! История помогает понять настоящее через прошлое.",
-                "История! Замечательный выбор для изучения развития человечества."
-            ],
-            "физика": [
-                "Физика - это наука о природе и её законах!",
-                "Отлично! Физика объясняет, как устроен мир вокруг нас.",
-                "Физика! Прекрасный выбор для любознательных умов."
-            ],
-            "химия": [
-                "Химия - это магия превращения веществ!",
-                "Отлично! Химия помогает понять состав всего вокруг.",
-                "Химия! Увлекательный мир молекул и реакций."
-            ],
-            "обществознание": [
-                "Обществознание - ключ к пониманию общества!",
-                "Отлично! Обществознание помогает разобраться в социальных процессах.",
-                "Обществознание! Важный предмет для современного человека."
-            ],
-            "биология": [
-                "Биология - это наука о жизни во всём её разнообразии!",
-                "Отлично! Биология раскрывает тайны живых организмов.",
-                "Биология! Увлекательное изучение природы и человека."
-            ],
-            "литература": [
-                "Литература - это искусство слова и мир воображения!",
-                "Отлично! Литература развивает эмоциональный интеллект.",
-                "Литература! Прекрасный выбор для ценителей прекрасного."
-            ],
-            "русский язык": [
-                "Русский язык - это фундамент нашей культуры!",
-                "Отлично! Грамотность открывает многие двери.",
-                "Русский язык! Важная основа для эффективного общения."
-            ]
-        }
-        
-        import random
-        if detected_subject in suggestions:
-            return random.choice(suggestions[detected_subject])
-        
-        return "Интересный выбор! Давайте начнем урок."
+    def _is_greeting(self, text: str) -> bool:
+        """Проверяет, является ли текст приветствием"""
+        greetings = ["привет", "здравствуй", "здравствуйте", "добрый", "хай", "hello", "hi", 
+                    "начать", "старт", "готов", "поехали", "давай", "началом", "здорова"]
+        return any(greet in text.lower() for greet in greetings)
     
-    def process_input(self, text: str) -> Optional[str]:
-        """Обработка входящего текста и генерация ответа через LLM"""
+    def _is_subject_selection(self, text: str) -> bool:
+        """Проверяет, является ли текст выбором предмета"""
+        subject_words = ["урок", "предмет", "занятие", "изучать", "учить", "хочу", "выбираю", 
+                        "математик", "истори", "физик", "хими", "обществ", "биолог", "литератур", "русск"]
+        return any(word in text.lower() for word in subject_words)
+    
+    def _get_dialogue_response(self, text: str) -> Optional[str]:
+        """Пытается получить ответ из базы знаний диалога"""
+        try:
+            # Проверяем общую базу знаний
+            response = self.general_knowledge_base.get_dialogue_response(text)
+            if response and not response.startswith("Интересный вопрос!"):
+                return response
+                
+            # Проверяем сохраненные ответы LLM
+            llm_answer = self.general_knowledge_base.find_llm_answer(text, threshold=0.7)
+            if llm_answer:
+                return llm_answer
+                
+        except Exception as e:
+            print(f"Ошибка при поиске в базе знаний: {e}")
+            
+        return None
+    
+    def _query_llm_with_fallback(self, text: str, context: str = "") -> Optional[str]:
+        """Запрос к LLM с fallback на базу знаний"""
+        # Сначала пробуем базу знаний
+        knowledge_response = self._get_dialogue_response(text)
+        if knowledge_response:
+            return knowledge_response
+            
+        # Затем пробуем LLM
+        try:
+            # Определяем тип промпта
+            if self._is_greeting(text):
+                system_prompt = self.prompts["greeting"]
+            elif self._is_subject_selection(text) or self.subject_suggested:
+                system_prompt = self.prompts["subject_selection"]
+            else:
+                system_prompt = self.prompts["general"]
+            
+            llm_response = self.llm._query_llm_api(
+                prompt=text,
+                context=context,
+                subject="общее",
+                system_prompt=system_prompt,
+                max_tokens=150
+            )
+            
+            if llm_response:
+                # Сохраняем ответ в базу знаний для будущего использования
+                try:
+                    self.general_knowledge_base.add_llm_answer(text, llm_response)
+                    self.general_knowledge_base.add_knowledge(question=text, answer=llm_response)
+                except Exception as e:
+                    print(f"Ошибка сохранения ответа в базу знаний: {e}")
+                
+                return llm_response
+                
+        except Exception as e:
+            print(f"Ошибка запроса к LLM: {e}")
+            
+        return None
+    
+    def _generate_subject_suggestion(self) -> str:
+        """Генерирует предложение выбрать предмет"""
+        suggestions = [
+            "Кстати, какой предмет тебя интересует?",
+            "Давай выберем предмет для урока! Что хочешь изучать?",
+            "Какой предмет тебе интересен?",
+            "Что бы ты хотел изучить?",
+            "Какой урок выберем?"
+        ]
+        return random.choice(suggestions)
+    
+    def process_input(self, text: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Обработка входящего текста
+        Возвращает: (ответ, выбранный_предмет)
+        """
         if not text.strip():
-            return "Не расслышал, повторите пожалуйста."
+            return "Не расслышал, повторите пожалуйста.", None
         
         # Обновляем время последнего взаимодействия
         self.last_interaction_time = time.time()
@@ -142,66 +182,49 @@ class LLMDialogueManager:
         # Добавляем пользовательский ввод в историю
         self._add_to_conversation_history(text, is_user=True)
         
-        # Пытаемся определить намерение выбора предмета
-        detected_subject = self._detect_subject_intent(text)
-        
-        # Если обнаружен явный выбор предмета, возвращаем None для начала урока
-        if detected_subject and any(word in text.lower() for word in 
-                                  ["хочу", "выбираю", "давай", "начнем", "урок", "занятие"]):
-            return None
-        
         # Получаем контекст диалога
         context = self._get_conversation_context()
         
-        # Формируем промпт для LLM
-        system_prompt = self.subject_selection_prompt
+        # Пытаемся получить ответ из LLM или базы знаний
+        response = self._query_llm_with_fallback(text, context)
         
-        # Если обнаружен предмет, добавляем это в промпт
-        if detected_subject:
-            system_prompt += f"\nУченик проявил интерес к предмету: {detected_subject}. " \
-                           f"Поддержи этот интерес и мягко подведи к началу урока."
-        
-        # Запрос к LLM
-        try:
-            llm_response = self.llm._query_llm_api(
-                prompt=text,
-                context=context,
-                subject="выбор предмета",
-                system_prompt=system_prompt,
-                max_tokens=100  # Ограничиваем длину ответа для быстрого диалога
+        # Если ответ получен, добавляем предложение выбора предмета если это уместно
+        if response:
+            # Проверяем, был ли это выбор предмета
+            detected_subject = self._detect_subject_intent(text)
+            if detected_subject:
+                # Если пользователь явно выбрал предмет, возвращаем его
+                self.subject_suggested = True
+                self._add_to_conversation_history(response, is_user=False)
+                return response, detected_subject
+            
+            # Добавляем мягкое предложение выбора предмета (но не всегда)
+            should_suggest_subject = (
+                not self.subject_suggested and 
+                random.random() < 0.3 and  # 30% chance
+                not self._is_subject_selection(text) and
+                len(self.conversation_history) >= 2
             )
             
-            if llm_response:
-                # Ограничиваем длину ответа
-                limited_response = self._limit_response_length(
-                    llm_response, 
-                    self.dialogue_settings.get("max_response_length", 2)
-                )
-                
-                # Добавляем ответ в историю
-                self._add_to_conversation_history(limited_response, is_user=False)
-                
-                # Если обнаружен предмет, добавляем предложение
-                if detected_subject:
-                    subject_suggestion = self._generate_subject_suggestion(detected_subject)
-                    return f"{subject_suggestion} {limited_response}"
-                
-                return limited_response
-                
-        except Exception as e:
-            print(f"Ошибка запроса к LLM для диалога: {e}")
+            if should_suggest_subject:
+                response = f"{response} {self._generate_subject_suggestion()}"
+                self.subject_suggested = True
+            
+            self._add_to_conversation_history(response, is_user=False)
+            return response, None
         
-        # Fallback ответ если LLM недоступен
+        # Fallback если ни LLM ни база знаний не ответили
         fallback_responses = [
-            "Интересно! Давайте выберем предмет для урока. Что вас интересует?",
-            "Понятно. Какой предмет хотели бы изучить?",
-            "Хорошо! Давайте определимся с темой для нашего урока.",
-            "Отлично! Какой предмет вас привлекает больше всего?",
-            "Прекрасно! Выбор за вами - какой предмет изучаем?"
+            "Интересный вопрос! Давайте об этом поговорим. Кстати, какой предмет тебя интересует?",
+            "Понятно. Что еще хочешь узнать? И давай выберем урок!",
+            "Хорошо! Какой предмет хочешь изучить?",
+            "Я готов помочь! Что будем изучать?"
         ]
         
-        import random
-        return random.choice(fallback_responses)
+        response = random.choice(fallback_responses)
+        self.subject_suggested = True
+        self._add_to_conversation_history(response, is_user=False)
+        return response, None
     
     def get_conversation_history(self) -> List[Dict]:
         """Возвращает историю диалога"""
@@ -210,6 +233,7 @@ class LLMDialogueManager:
     def clear_history(self):
         """Очищает историю диалога"""
         self.conversation_history = []
+        self.subject_suggested = False
     
     def is_inactive(self) -> bool:
         """Проверяет, был ли диалог неактивен слишком долго"""
