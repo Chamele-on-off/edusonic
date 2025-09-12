@@ -58,7 +58,7 @@ def reset_speaking_state(room_id):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст с анимацией и добавляет его в историе"""
+    """Озвучивает текст с анимацией и добавляет его в историю"""
     if not text.strip():
         return
         
@@ -152,7 +152,7 @@ def get_speech_frames(avatar_name, phoneme):
             if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комната"""
+    """Основной цикл анимации для комнаты"""
     blink_counter = 0
     blink_frames = get_blink_frames(avatar_name)
     neutral_frames = get_neutral_frames(avatar_name)
@@ -362,7 +362,7 @@ def handle_set_llm_mode(data):
     room_id = data['room_id']
     mode = data['mode']
     
-    if mode in ["traditional", "llm_first"]:
+    if mode in ["traditional", "llm_first", "llm_dialogue_first"]:
         room_llm_mode[room_id] = mode
         if room_id in room_dialogue:
             room_dialogue[room_id].set_llm_mode(mode)
@@ -429,7 +429,7 @@ def get_llm_mode_api():
         return jsonify({
             "success": True,
             "mode": config.get("llm_query_mode", {}).get("default_mode", "traditional"),
-            "available_modes": config.get("llm_query_mode", {}).get("available_modes", ["traditional", "llm_first"])
+            "available_modes": config.get("llm_query_mode", {}).get("available_modes", ["traditional", "llm_first", "llm_dialogue_first"])
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -444,8 +444,8 @@ def set_llm_mode_api():
         if not mode:
             return jsonify({"success": False, "error": "Mode not specified"})
         
-        if mode not in ["traditional", "llm_first"]:
-            return jsonify({"success": False, "error": "Invalid mode. Use 'traditional' or 'llm_first'"})
+        if mode not in ["traditional", "llm_first", "llm_dialogue_first"]:
+            return jsonify({"success": False, "error": "Invalid mode. Use 'traditional', 'llm_first' or 'llm_dialogue_first'"})
         
         success = set_llm_mode(mode)
         
@@ -469,7 +469,7 @@ def set_llm_mode_api():
 
 @app.route('/api/knowledge/stats', methods=['GET'])
 def get_knowledge_stats():
-    """Получение статистики базы знаний для комнаты"""
+    """Получение статистики базы знаний для комната"""
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
