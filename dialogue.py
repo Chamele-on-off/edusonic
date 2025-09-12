@@ -145,7 +145,7 @@ class DialogueManager:
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
     def _add_to_conversation_history(self, text: str, is_user: bool = True):
-        """Добавляет реплику в историю диалога"""
+        """Добавляет реплику в истории диалога"""
         self.conversation_history.append({
             "text": text,
             "is_user": is_user,
