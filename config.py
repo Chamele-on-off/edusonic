@@ -22,14 +22,13 @@ DEFAULT_CONFIG = {
         "model": "meta-llama/llama-3.3-8b-instruct:free"
     },
     "llm_query_mode": {
-        "default_mode": "llm_dialogue_first",  # NEW: "traditional", "llm_first" или "llm_dialogue_first"
-        "available_modes": ["traditional", "llm_first", "llm_dialogue_first"]  # NEW: добавлен новый режим
+        "default_mode": "traditional",  # "traditional" или "llm_first"
+        "available_modes": ["traditional", "llm_first"]
     },
     "dialogue_settings": {
-        "max_response_length": 3,
-        "context_window": 5,
-        "subject_selection_prompt": "Сейчас ученик выбирает предмет для изучения. Будь дружелюбным учителем и помоги выбрать предмет или тему.",
-        "llm_dialogue_prompt": "Ты - дружелюбный учитель. Веди естественный диалог с учеником, помогай выбрать тему для изучения. Отвечай кратко и понятно, 1-2 предложения."  # NEW
+        "max_response_length": 3,  # Максимальное количество предложений в ответе до выбора урока
+        "context_window": 5,  # Количество предыдущих реплик для контекста
+        "subject_selection_prompt": "Сейчас ученик выбирает предмет для изучения. Будь дружелюбным учителем и помоги выбрать предмет или тему."
     }
 }
 
@@ -42,6 +41,7 @@ def load_config():
     except Exception as e:
         print(f"Ошибка загрузки конфигурации: {e}")
     
+    # Если файла нет или ошибка, возвращаем конфигурацию по умолчанию
     return DEFAULT_CONFIG
 
 def save_config(config):
@@ -81,7 +81,7 @@ def get_llm_mode():
 
 def set_llm_mode(mode):
     """Установка режима работы LLM"""
-    if mode not in ["traditional", "llm_first", "llm_dialogue_first"]:  # NEW: добавлен новый режим
+    if mode not in ["traditional", "llm_first"]:
         return False
         
     config = load_config()
