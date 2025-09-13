@@ -16,20 +16,12 @@ class LLMDialogueManager:
         self.llm = LLMIntegration()
         self.dialogue_settings = get_dialogue_settings()
         self.conversation_history = []
-        self.max_history = self.dialogue_settings.get("context_window", 8)
+        self.max_history = self.dialogue_settings.get("context_window", 10)
         self.general_knowledge_base = KnowledgeBase("общее")
         self.last_interaction_time = time.time()
         self.inactivity_timeout = 300
         self.subject_suggested = False
-        
-        # Промпты для разных типов диалога
-        self.prompts = {
-            "general": "Ты - дружелюбный учитель. Отвечай на вопросы ученика кратко и понятно, 1-2 предложения. ",
-            "subject_selection": "Ты - учитель помогающий выбрать предмет. Подведи ученика к выбору урока, " 
-                               "но сначала ответь на его вопрос если он есть. Будь кратким.",
-            "greeting": "Ты - приветливый учитель. Познакомься с учеником, спроси как дела, " 
-                       "и мягко подведи к выбору предмета для урока."
-        }
+        self.force_llm = True  # Принудительно использовать LLM для всех запросов
         
     def _add_to_conversation_history(self, text: str, is_user: bool = True):
         """Добавляет реплику в историю диалога"""
@@ -50,13 +42,13 @@ class LLMDialogueManager:
             return "Новый диалог. Ученик только что присоединился."
             
         context_lines = ["Предыдущий диалог:"]
-        for msg in self.conversation_history[-4:]:  # Берем последние 4 сообщения
+        for msg in self.conversation_history[-6:]:  # Берем последние 6 сообщений
             speaker = "Ученик" if msg["is_user"] else "Учитель"
             context_lines.append(f"{speaker}: {msg['text']}")
         
         return "\n".join(context_lines)
     
-    def _limit_response_length(self, response: str, max_sentences: int = 2) -> str:
+    def _limit_response_length(self, response: str, max_sentences: int = 3) -> str:
         """Ограничивает длину ответа количеством предложений"""
         if not response:
             return response
@@ -108,7 +100,7 @@ class LLMDialogueManager:
                 return response
                 
             # Проверяем сохраненные ответы LLM
-            llm_answer = self.general_knowledge_base.find_llm_answer(text, threshold=0.7)
+            llm_answer = self.general_knowledge_base.find_llm_answer(text, threshold=0.6)
             if llm_answer:
                 return llm_answer
                 
@@ -117,29 +109,23 @@ class LLMDialogueManager:
             
         return None
     
-    def _query_llm_with_fallback(self, text: str, context: str = "") -> Optional[str]:
-        """Запрос к LLM с fallback на базу знаний"""
-        # Сначала пробуем базу знаний
-        knowledge_response = self._get_dialogue_response(text)
-        if knowledge_response:
-            return knowledge_response
-            
-        # Затем пробуем LLM
+    def _query_llm_directly(self, text: str, context: str = "") -> Optional[str]:
+        """Прямой запрос к LLM без проверки базы знаний"""
         try:
             # Определяем тип промпта
             if self._is_greeting(text):
-                system_prompt = self.prompts["greeting"]
-            elif self._is_subject_selection(text) or self.subject_suggested:
-                system_prompt = self.prompts["subject_selection"]
+                system_prompt = "Ты - приветливый учитель. Ответь на приветствие и спроси что интересует ученика."
+            elif self._is_subject_selection(text):
+                system_prompt = "Ты - учитель помогающий выбрать предмет. Ответь на вопрос и подведи к выбору урока."
             else:
-                system_prompt = self.prompts["general"]
+                system_prompt = "Ты - helpful учитель. Ответь на вопрос ученика кратко и информативно."
             
             llm_response = self.llm._query_llm_api(
                 prompt=text,
                 context=context,
                 subject="общее",
                 system_prompt=system_prompt,
-                max_tokens=150
+                max_tokens=200
             )
             
             if llm_response:
@@ -156,6 +142,22 @@ class LLMDialogueManager:
             print(f"Ошибка запроса к LLM: {e}")
             
         return None
+    
+    def _should_suggest_subject(self, text: str) -> bool:
+        """Определяет, нужно ли предлагать выбор предмета"""
+        text_lower = text.lower()
+        
+        # Не предлагаем выбор предмета если:
+        if any(word in text_lower for word in ["нет", "не хочу", "не сейчас", "потом", "позже", "не надо"]):
+            return False
+            
+        if any(word in text_lower for word in ["урок", "предмет", "занятие", "изучать", "математик", "истори"]):
+            return False
+            
+        # Предлагаем с вероятностью 30% после 2+ реплик
+        return (len(self.conversation_history) >= 2 and 
+                random.random() < 0.3 and
+                not self.subject_suggested)
     
     def _generate_subject_suggestion(self) -> str:
         """Генерирует предложение выбрать предмет"""
@@ -185,44 +187,38 @@ class LLMDialogueManager:
         # Получаем контекст диалога
         context = self._get_conversation_context()
         
-        # Пытаемся получить ответ из LLM или базы знаний
-        response = self._query_llm_with_fallback(text, context)
+        # ВСЕГДА используем LLM для генерации ответа
+        response = self._query_llm_directly(text, context)
         
-        # Если ответ получен, добавляем предложение выбора предмета если это уместно
-        if response:
-            # Проверяем, был ли это выбор предмета
-            detected_subject = self._detect_subject_intent(text)
-            if detected_subject:
-                # Если пользователь явно выбрал предмет, возвращаем его
-                self.subject_suggested = True
-                self._add_to_conversation_history(response, is_user=False)
-                return response, detected_subject
-            
-            # Добавляем мягкое предложение выбора предмета (но не всегда)
-            should_suggest_subject = (
-                not self.subject_suggested and 
-                random.random() < 0.3 and  # 30% chance
-                not self._is_subject_selection(text) and
-                len(self.conversation_history) >= 2
-            )
-            
-            if should_suggest_subject:
-                response = f"{response} {self._generate_subject_suggestion()}"
-                self.subject_suggested = True
-            
+        # Если LLM не ответил, используем базу знаний как fallback
+        if not response:
+            response = self._get_dialogue_response(text)
+        
+        # Если все еще нет ответа, используем fallback
+        if not response:
+            fallbacks = [
+                "Интересный вопрос! Что еще хочешь узнать?",
+                "Понятно! Расскажи что тебя интересует?",
+                "Хорошо! О чем еще хочешь поговорить?",
+                "Я слушаю! Что тебя интересует?"
+            ]
+            response = random.choice(fallbacks)
+        
+        # Проверяем, был ли это выбор предмета
+        detected_subject = self._detect_subject_intent(text)
+        if detected_subject and any(word in text.lower() for word in 
+                                  ["хочу", "выбираю", "давай", "начнем", "урок", "занятие"]):
+            # Если пользователь явно выбрал предмет, возвращаем его
+            self.subject_suggested = True
             self._add_to_conversation_history(response, is_user=False)
-            return response, None
+            return response, detected_subject
         
-        # Fallback если ни LLM ни база знаний не ответили
-        fallback_responses = [
-            "Интересный вопрос! Давайте об этом поговорим. Кстати, какой предмет тебя интересует?",
-            "Понятно. Что еще хочешь узнать? И давай выберем урок!",
-            "Хорошо! Какой предмет хочешь изучить?",
-            "Я готов помочь! Что будем изучать?"
-        ]
+        # Добавляем мягкое предложение выбора предмета если нужно
+        if self._should_suggest_subject(text):
+            subject_suggestion = self._generate_subject_suggestion()
+            response = f"{response} {subject_suggestion}"
+            self.subject_suggested = True
         
-        response = random.choice(fallback_responses)
-        self.subject_suggested = True
         self._add_to_conversation_history(response, is_user=False)
         return response, None
     
