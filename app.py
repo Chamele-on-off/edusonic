@@ -314,7 +314,7 @@ def handle_recognized_speech(data):
                 # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
-            # Обработка диалога выбора урока через LLMDialogueManager
+            # ВСЕГДА обрабатываем через LLM диалог менеджер
             response, selected_subject = llm_dialogue.process_input(text)
             
             # Если выбран предмет, начинаем урок
@@ -456,7 +456,7 @@ def get_llm_models():
 
 @app.route('/api/llm/status', methods=['GET'])
 def get_llm_status():
-    """Получение статуса LLM для комната"""
+    """Получение статуса LLM для комнаты"""
     room_id = request.args.get('room_id', 'default')
     
     if room_id in room_dialogue:
@@ -698,7 +698,7 @@ def add_knowledge():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/add_lesson', methods=['POST'])
+@app.route('/api/add_lesson', methods['POST'])
 def add_lesson():
     """Добавление нового урока"""
     try:
