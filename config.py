@@ -22,19 +22,13 @@ DEFAULT_CONFIG = {
         "model": "meta-llama/llama-3.3-8b-instruct:free"
     },
     "llm_query_mode": {
-        "default_mode": "traditional",
+        "default_mode": "traditional",  # "traditional" или "llm_first"
         "available_modes": ["traditional", "llm_first"]
     },
     "dialogue_settings": {
-        "max_response_length": 3,
-        "context_window": 8,
-        "subject_selection_prompt": "Ты - дружелюбный учитель. Сначала ответь на вопрос ученика кратко и понятно (1-2 предложения), "
-                                  "а затем мягко подведи к выбору предмета для урока. "
-                                  "Не переключайся резко на выбор урока, сначала ответь на вопрос.",
-        "general_prompt": "Ты - helpful учитель. Отвечай на вопросы ученика кратко и информативно (1-2 предложения). "
-                         "Будь дружелюбным и поддерживающим.",
-        "greeting_prompt": "Ты - приветливый учитель. Познакомься с учеником, ответь на приветствие, "
-                          "спроси как дела или что интересует, и мягко подведи к выбору предмета."
+        "max_response_length": 3,  # Максимальное количество предложений в ответе до выбора урока
+        "context_window": 5,  # Количество предыдущих реплик для контекста
+        "subject_selection_prompt": "Сейчас ученик выбирает предмет для изучения. Будь дружелюбным учителем и помоги выбрать предмет или тему."
     }
 }
 
@@ -47,6 +41,7 @@ def load_config():
     except Exception as e:
         print(f"Ошибка загрузки конфигурации: {e}")
     
+    # Если файла нет или ошибка, возвращаем конфигурацию по умолчанию
     return DEFAULT_CONFIG
 
 def save_config(config):
