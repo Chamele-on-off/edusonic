@@ -15,13 +15,28 @@ class KnowledgeBase:
         self.knowledge_path = Path(f"materials/{subject}_knowledge.json")
         self.llm_answers_path = Path(f"materials/{subject}_llm_answers.json")
         self.dialogue_path = Path("materials/dialogue_knowledge.json")
+        self.extended_dialogue_path = Path("knowledge/dialogue_knowledge.json")
         self.vectorizer = TfidfVectorizer(max_features=1000, stop_words=['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это'])
         self.llm_vectorizer = TfidfVectorizer(max_features=1000, stop_words=['и', 'в', 'на', 'с', 'по', 'для', 'что', 'это'])
         self.data = self._load_knowledge()
         self.llm_answers_data = self._load_llm_answers()
         self.dialogue_data = self._load_dialogue_knowledge()
+        self.extended_dialogue_data = self._load_extended_dialogue_knowledge()
         self._init_vectorizers()
         
+    def _load_extended_dialogue_knowledge(self) -> Dict:
+        """Загрузка расширенной базы диалоговых шаблонов"""
+        try:
+            if self.extended_dialogue_path.exists():
+                with open(self.extended_dialogue_path, 'r', encoding='utf-8') as f:
+                    print(f"✅ Загружена расширенная база диалоговых шаблонов")
+                    return json.load(f)
+        except Exception as e:
+            print(f"❌ Ошибка загрузки расширенных диалоговых шаблонов: {e}")
+        
+        print("⚠️ Расширенная база диалоговых шаблонов не найдена, используется базовая")
+        return {}
+
     def _load_llm_answers(self) -> Dict:
         """Загрузка ответов LLM из файла"""
         try:
@@ -207,40 +222,54 @@ class KnowledgeBase:
         
         return None
 
-    def get_dialogue_response(self, text: str) -> Optional[str]:
-        """Получение ответа из диалоговых шаблонов"""
+    def get_dialogue_response(self, text: str, context: List[str] = None) -> Optional[str]:
+        """Получение ответа на основе диалоговых шаблонов с учетом контекста"""
         if not text.strip():
             return None
             
         text_lower = text.lower().strip()
         
-        # Сначала проверяем, есть ли ответ в базе знаний предмета
-        knowledge_answer = self.find_answer(text_lower)
-        if knowledge_answer and not knowledge_answer.startswith("Интересный вопрос!"):
-            print(f"Найден ответ в базе знаний: {knowledge_answer[:100]}...")
-            return knowledge_answer
+        # 1. Сначала проверяем расширенную базу диалоговых шаблонов
+        if self.extended_dialogue_data:
+            for category, patterns in self.extended_dialogue_data.items():
+                if category.endswith('_patterns') and isinstance(patterns, dict):
+                    for pattern, responses in patterns.items():
+                        if pattern in text_lower and responses:
+                            response = random.choice(responses)
+                            print(f"📖 Найден в расширенных шаблонах: {pattern} -> {response}")
+                            return response
         
-        # Затем проверяем базу ответов LLM с высокой точностью
+        # 2. Проверяем базовую базу диалоговых шаблонов
+        for pattern, responses in self.dialogue_data.get("patterns", {}).items():
+            if pattern in text_lower and responses:
+                response = random.choice(responses)
+                print(f"📖 Найден в базовых шаблонах: {pattern} -> {response}")
+                return response
+        
+        # 3. Контекстный поиск (если предоставлен контекст)
+        if context:
+            context_text = ' '.join(context).lower()
+            contextual_patterns = self.extended_dialogue_data.get('contextual_patterns', {}) or self.dialogue_data.get('contexts', {})
+            
+            for pattern, responses in contextual_patterns.items():
+                if pattern in context_text and responses:
+                    response = random.choice(responses)
+                    print(f"📖 Найден контекстный шаблон: {pattern} -> {response}")
+                    return response
+        
+        # 4. Проверяем базу знаний предмета
+        knowledge_response = self.find_answer(text_lower)
+        if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
+            print(f"📚 Найден ответ в базе знаний: {knowledge_response[:100]}...")
+            return knowledge_response
+        
+        # 5. Проверяем базу ответов LLM с высокой точностью
         llm_answer = self.find_llm_answer(text_lower, threshold=0.8)
         if llm_answer:
             print(f"💾 Найден ответ в базе LLM: {llm_answer[:100]}...")
             return llm_answer
-        
-        # Затем проверяем диалоговые шаблоны
-        for pattern, responses in self.dialogue_data.get("patterns", {}).items():
-            if pattern in text_lower and responses:
-                response = random.choice(responses)
-                print(f"Найден диалоговый шаблон: {pattern} -> {response}")
-                return response
-        
-        # Поиск по контекстам
-        for context, responses in self.dialogue_data.get("contexts", {}).items():
-            if context in text_lower and responses:
-                response = random.choice(responses)
-                print(f"Найден контекстный шаблон: {context} -> {response}")
-                return response
-                
-        print(f"Ответ не найден для: {text_lower}")
+            
+        print(f"❌ Ответ не найден в диалоговых шаблонах для: {text_lower}")
         return None
 
     def _clean_text(self, text: str) -> str:
@@ -438,7 +467,9 @@ class KnowledgeBase:
             "examples_count": len(self.data["examples"]),
             "llm_answers_count": len(self.llm_answers_data.get("answers", {})),
             "dialogue_patterns": len(self.dialogue_data.get("patterns", {})),
-            "dialogue_contexts": len(self.dialogue_data.get("contexts", {}))
+            "dialogue_contexts": len(self.dialogue_data.get("contexts", {})),
+            "extended_dialogue_patterns": sum(len(patterns) for category, patterns in self.extended_dialogue_data.items() 
+                                           if category.endswith('_patterns') and isinstance(patterns, dict))
         }
 
     def search_similar(self, query: str, max_results: int = 5) -> List[Dict]:
