@@ -69,12 +69,15 @@ class LLMIntegration:
         
         return content.strip()
 
-    def _query_llm_api(self, prompt: str, context: str = "", subject: str = "") -> Optional[str]:
-        """Запрос к LLM API через OpenRouter"""
+    def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
+                       system_prompt: str = "", max_tokens: int = 1000) -> Optional[str]:
+        """Запрос к LLM API через OpenRouter с улучшенной обработкой ошибок"""
+        
+        # Если нет API ключа, используем fallback ответ
         if not self.api_key:
-            print("API ключ не установлен для LLM")
-            return None
-            
+            print("⚠️ API ключ не установлен, использую fallback ответ")
+            return self._get_fallback_response(prompt, subject)
+        
         # Добавляем задержку между запросами
         current_time = time.time()
         time_since_last_request = current_time - self.last_request_time
@@ -89,7 +92,7 @@ class LLMIntegration:
         }
         
         # Улучшенный промпт для учителя
-        system_prompt = f"""Ты - профессиональный учитель и эксперт по предмету "{subject}". 
+        final_system_prompt = system_prompt or f"""Ты - профессиональный учитель и эксперт по предмету "{subject}". 
 Твоя задача - давать четкие, понятные и информативные ответы на вопросы учеников.
 
 Важные правила:
@@ -98,26 +101,41 @@ class LLMIntegration:
 3. Приводи примеры если это уместно
 4. Будь дружелюбным и поддерживающим
 5. Отвечай на русском языке
-6. Не используй форматирование markdown (звездочки, жирный шрифт и т.д.)
+6. Не используй форматирование markdown
 7. Не говори общие фразы типа "расскажу подробнее" - сразу давай конкретный ответ
 8. Если вопрос короткий, дай развернутый ответ
 9. Структурируй ответ если это необходимо
 
-Контекст текущего урока: {context}"""
+Контекст: {context}"""
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
+        messages = []
+        
+        # Добавляем системный промпт
+        if final_system_prompt:
+            messages.append({"role": "system", "content": final_system_prompt})
+        
+        # Добавляем контекст если есть
+        if context and context.strip():
+            messages.append({"role": "system", "content": f"Контекст разговора: {context}"})
+        
+        # Добавляем пользовательский запрос
+        messages.append({"role": "user", "content": prompt})
 
         data = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
-            "max_tokens": 1000,
+            "max_tokens": max_tokens,
             "stream": False
         }
 
+        print(f"🔧 Данные для запроса LLM:")
+        print(f"   Модель: {self.model}")
+        print(f"   Промпт: {prompt[:100]}...")
+        if context:
+            print(f"   Контекст: {context[:100]}...")
+        print(f"   Предмет: {subject}")
+        
         for attempt in range(self.max_retries):
             try:
                 print(f"🔄 Попытка {attempt + 1}: Отправка запроса к {self.model}")
@@ -132,6 +150,7 @@ class LLMIntegration:
                 
                 if response.status_code == 200:
                     result = response.json()
+                    
                     if 'choices' in result and len(result['choices']) > 0:
                         answer = result['choices'][0]['message']['content']
                         processed_answer = self._clean_llm_response(answer)
@@ -139,7 +158,7 @@ class LLMIntegration:
                         return processed_answer
                     else:
                         print("❌ Неверный формат ответа от API")
-                        return None
+                        return self._get_fallback_response(prompt, subject)
                         
                 elif response.status_code == 429:
                     wait_time = self.retry_delay * (attempt + 1)
@@ -152,23 +171,40 @@ class LLMIntegration:
                     if attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay)
                         continue
-                    return None
+                    return self._get_fallback_response(prompt, subject)
                     
             except requests.exceptions.Timeout:
                 print(f"⏰ Таймаут запроса. Попытка {attempt + 1}/{self.max_retries}")
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay)
                     continue
-                return None
+                return self._get_fallback_response(prompt, subject)
                 
             except Exception as e:
                 print(f"❌ Ошибка при запросе (попытка {attempt + 1}): {e}")
                 if attempt < self.max_retries - 1:
                     time.sleep(self.retry_delay)
                     continue
-                return None
+                return self._get_fallback_response(prompt, subject)
         
-        return None
+        return self._get_fallback_response(prompt, subject)
+
+    def _get_fallback_response(self, prompt: str, subject: str = "") -> str:
+        """Возвращает fallback ответ когда LLM недоступен"""
+        prompt_lower = prompt.lower()
+        
+        # Определяем тип вопроса для более релевантного ответа
+        if any(word in prompt_lower for word in ['что', 'как', 'почему', 'зачем']):
+            return f"Интересный вопрос! По теме {subject if subject else 'этого'} есть много интересной информации. Давайте обсудим это подробнее!"
+        
+        if any(word in prompt_lower for word in ['объясни', 'расскажи', 'покажи']):
+            return f"С удовольствием объясню! Это важный аспект {subject if subject else 'темы'}. Давайте разберем вместе."
+        
+        # Общий fallback ответ
+        subjects = ["математика", "история", "обществознание", "физика", "химия"]
+        subject_list = ", ".join(subjects[:3]) + " и другие"
+        
+        return f"Извините, возникли временные технические трудности. Но я готов помочь вам с учебой! У меня есть уроки по: {subject_list}. Что вас интересует?"
 
     def query(self, question: str, context: str = "", subject: str = "") -> Optional[str]:
         """Запрос к LLM API с гарантированным ответом"""
@@ -196,19 +232,11 @@ class LLMIntegration:
         
         # Fallback на локальные ответы если LLM недоступен
         print("⚠️ LLM недоступен, использую fallback ответ")
-        fallback_responses = [
-            f"Это интересный вопрос по {subject}! Давайте разберем его подробнее.",
-            f"По теме {subject} это важный аспект. Я подготовлю подробное объяснение.",
-            f"Хороший вопрос! В контексте {subject} это требует детального изучения.",
-            f"Записал ваш вопрос по {subject}. Вернемся к нему в подходящий момент.",
-            f"В рамках {subject} этот вопрос очень важен. Давайте обсудим его дополнительно."
-        ]
-        
-        answer = fallback_responses[hash(question_lower) % len(fallback_responses)]
-        self.cache[cache_key] = answer
+        fallback_response = self._get_fallback_response(question, subject)
+        self.cache[cache_key] = fallback_response
         self._save_cache()
         
-        return answer
+        return fallback_response
 
     def add_to_cache(self, question: str, answer: str, subject: str = ""):
         """Добавление ответа в кэш"""
