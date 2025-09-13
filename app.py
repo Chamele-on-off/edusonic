@@ -10,12 +10,10 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from llmdialogue import LLMDialogueManager
 from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
 import requests
 import json
 from datetime import datetime
-from knowledge.knowledge_base import KnowledgeBase
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -36,9 +34,8 @@ room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
-room_llm_dialogue = defaultdict(lambda: LLMDialogueManager())
 room_lessons = defaultdict(dict)
-room_llm_mode = defaultdict(lambda: get_llm_mode())
+room_llm_mode = defaultdict(lambda: get_llm_mode())  # Режим LLM для каждой комнаты
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -204,9 +201,6 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
     
-    if room_id not in room_llm_dialogue:
-        room_llm_dialogue[room_id] = LLMDialogueManager()
-    
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
@@ -253,7 +247,7 @@ def handle_recognized_speech(data):
 
     # Игнорируем распознавание системных сообщений и короткие фразы
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
-        len(text.strip()) < 2 or text.lower() in ["привет", "здравствуйте", "здравствуй"]):
+        len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
         return
     
     room_speech_data[room_id].append({
@@ -269,7 +263,6 @@ def handle_recognized_speech(data):
     
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
-        llm_dialogue = room_llm_dialogue[room_id]
         
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
@@ -314,74 +307,33 @@ def handle_recognized_speech(data):
                 # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
-            # ВСЕГДА обрабатываем через LLM диалог менеджер
-            response, selected_subject = llm_dialogue.process_input(text)
+            # Обработка диалога выбора урока
+            response = dialogue.process_input(text)
             
-            # Если выбран предмет, начинаем урок
-            if selected_subject:
-                print(f"Выбран предмет: {selected_subject}")
-                
-                # Устанавливаем предмет в основном диалог менеджере
-                dialogue.current_subject = selected_subject
-                
-                # Автоматически выбираем первый доступный урок
-                lessons = dialogue.lessons.get(selected_subject, [])
-                demo_lessons = [l for l in lessons if l.get('is_demo', False)]
-                
-                if demo_lessons:
-                    dialogue.selected_lesson = demo_lessons[0]
-                elif lessons:
-                    dialogue.selected_lesson = lessons[0]
-                else:
-                    # Создаем временный урок
-                    dialogue.selected_lesson = {
-                        'id': f"demo_{selected_subject}",
-                        'title': f"Демо-урок по {selected_subject}",
-                        'file_path': dialogue.lessons_dir / f"demo_{selected_subject}.txt",
-                        'is_demo': True
-                    }
-                
-                dialogue.lesson_started = True
-                dialogue.current_state = "lesson_reading"
-                dialogue.current_paragraph = 0
-                dialogue.lesson_content = dialogue._load_lesson_content(dialogue.selected_lesson['file_path'])
-                dialogue.knowledge_base = KnowledgeBase(selected_subject)
-                
-                # Очищаем историю диалога при начале урока
-                dialogue.conversation_history = []
-                
-                # Отправляем событие начала урока
-                emit('lesson_started', {
-                    'lesson_id': dialogue.selected_lesson['id'],
-                    'title': dialogue.selected_lesson['title'],
-                    'subject': selected_subject
-                }, room=room_id)
-                
-                # Сначала отправляем ответ на вопрос пользователя
-                if response:
-                    emit('speech_text', {
-                        'text': f"Учитель: {response}",
-                        'sid': 'teacher',
-                        'is_teacher': True
+            # Если response None - это значит был выбран предмет и нужно начать урок
+            if response is None:
+                # Урок выбран, начинаем чтение
+                lesson_data = dialogue.get_selected_lesson()
+                if lesson_data:
+                    emit('lesson_started', {
+                        'lesson_id': lesson_data['id'],
+                        'title': lesson_data['title'],
+                        'subject': dialogue.get_current_subject()
                     }, room=room_id)
-                    speak_text(room_id, response, voice_type='female', is_teacher=True)
-                
-                # Затем начинаем чтение первого абзаца урока
-                first_paragraph = dialogue._get_next_paragraph()
-                if first_paragraph:
-                    # Небольшая пауза перед началом урока
-                    time.sleep(1)
                     
-                    # Отправляем текст
-                    emit('speech_text', {
-                        'text': f"Учитель: {first_paragraph}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    # Озвучиваем первый абзац
-                    speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
+                    # Немедленно начинаем чтение первого абзаца урока
+                    first_paragraph = dialogue._get_next_paragraph()
+                    if first_paragraph:
+                        # Отправляем текст
+                        emit('speech_text', {
+                            'text': f"Учитель: {first_paragraph}",
+                            'sid': 'teacher',
+                            'is_teacher': True
+                        }, room=room_id)
+                        # Озвучиваем первый абзац
+                        speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
             elif response:
-                # Отправляем текст ответа
+                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
@@ -396,7 +348,6 @@ def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
-    room_llm_dialogue[room_id] = LLMDialogueManager()
     
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -698,7 +649,7 @@ def add_knowledge():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/add_lesson', methods['POST'])
+@app.route('/api/add_lesson', methods=['POST'])
 def add_lesson():
     """Добавление нового урока"""
     try:
