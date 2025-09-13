@@ -7,6 +7,7 @@ import re
 from knowledge.knowledge_base import KnowledgeBase
 from llm import LLMIntegration
 from config import get_llm_mode, get_dialogue_settings
+import time
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -26,9 +27,11 @@ class DialogueManager:
         self.knowledge_base = None
         self.llm = LLMIntegration()
         self.conversation_counter = 0
-        self.llm_query_mode = get_llm_mode()  # Загружаем режим из конфига
+        self.llm_query_mode = get_llm_mode()
         self.dialogue_settings = get_dialogue_settings()
-        self.conversation_history = []  # История диалога для контекста
+        self.conversation_history = []
+        self.dialogue_knowledge = self._load_dialogue_knowledge()
+        self.conversation_context = []
         self._load_lessons()
         
         # Расширенные локальные шаблоны для более естественного общения
@@ -50,6 +53,40 @@ class DialogueManager:
                           "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
             "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
                                "Моя задача - помочь вам учиться с удовольствием и пониманием."]
+        }
+
+    def _load_dialogue_knowledge(self) -> Dict:
+        """Загрузка расширенной базы диалоговых шаблонов"""
+        try:
+            dialogue_path = Path("knowledge/dialogue_knowledge.json")
+            if dialogue_path.exists():
+                with open(dialogue_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки диалоговых шаблонов: {e}")
+        
+        return self._get_default_dialogue_patterns()
+
+    def _get_default_dialogue_patterns(self) -> Dict:
+        """Возвращает базовые диалоговые шаблоны по умолчанию"""
+        return {
+            "greeting_patterns": {
+                "привет": ["Привет! Рад тебя видеть!", "Здравствуй! Готов к учебе?"],
+                "здравствуй": ["Привет! Как настроение?", "Здравствуй! Что будем изучать?"]
+            },
+            "mood_patterns": {
+                "как дела": ["Отлично! А у тебя как?", "Прекрасно! Готов к уроку."]
+            },
+            "learning_patterns": {
+                "хочу учиться": ["Отлично! Какой предмет тебя интересует?", "Супер! Давай выберем тему!"]
+            },
+            "subject_questions": {
+                "что преподаешь": ["У меня есть уроки по разным предметам! Что хочешь изучить?"]
+            },
+            "metadata": {
+                "version": "1.0",
+                "type": "default_dialogue_patterns"
+            }
         }
 
     def _load_lessons(self):
@@ -153,9 +190,14 @@ class DialogueManager:
         })
         
         # Ограничиваем размер истории
-        max_history = self.dialogue_settings.get("context_window", 5)
+        max_history = self.dialogue_settings.get("context_window", 10)
         if len(self.conversation_history) > max_history:
             self.conversation_history = self.conversation_history[-max_history:]
+            
+        # Обновляем контекст (последние 3 реплики пользователя)
+        if is_user:
+            user_messages = [msg['text'] for msg in self.conversation_history if msg['is_user']]
+            self.conversation_context = user_messages[-3:] if len(user_messages) > 3 else user_messages
 
     def _get_conversation_context(self) -> str:
         """Возвращает контекст диалога для LLM"""
@@ -163,7 +205,7 @@ class DialogueManager:
             return ""
             
         context = []
-        for msg in self.conversation_history:
+        for msg in self.conversation_history[-6:]:  # Последние 6 реплик
             speaker = "Ученик" if msg["is_user"] else "Учитель"
             context.append(f"{speaker}: {msg['text']}")
         
@@ -179,8 +221,36 @@ class DialogueManager:
             return ' '.join(sentences[:max_sentences])
         return response
 
+    def _get_dialogue_response(self, text: str) -> Optional[str]:
+        """Поиск ответа в диалоговых шаблонах с учетом контекста"""
+        text_lower = text.lower().strip()
+        
+        # 1. Поиск точного совпадения в расширенной базе
+        for category, patterns in self.dialogue_knowledge.items():
+            if category.endswith('_patterns') and isinstance(patterns, dict):
+                for pattern, responses in patterns.items():
+                    if pattern in text_lower and responses:
+                        return random.choice(responses)
+        
+        # 2. Контекстный поиск (если есть история разговора)
+        if self.conversation_context:
+            last_user_messages = ' '.join(self.conversation_context).lower()
+            
+            # Поиск контекстных паттернов
+            contextual_patterns = self.dialogue_knowledge.get('contextual_patterns', {})
+            for pattern, responses in contextual_patterns.items():
+                if pattern in last_user_messages and responses:
+                    return random.choice(responses)
+        
+        # 3. Поиск в локальных шаблонах (fallback)
+        for pattern, responses in self.local_patterns.items():
+            if pattern in text_lower:
+                return random.choice(responses)
+        
+        return None
+
     def _handle_llm_dialogue(self, text: str) -> Optional[str]:
-        """Обработка диалога через LLM с контекстом"""
+        """Гарантированная обработка диалога через LLM с контекстом"""
         if not self.llm.api_key:
             return None
             
@@ -190,18 +260,18 @@ class DialogueManager:
         # Формируем промпт в зависимости от состояния
         if self.current_state == "greeting":
             system_prompt = self.dialogue_settings.get("subject_selection_prompt", 
-                "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным.")
+                "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным. Отвечай на русском языке.")
         else:
-            system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения."
+            system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
         
-        # Запрос к LLM
+        # Гарантированный запрос к LLM
         try:
             llm_response = self.llm._query_llm_api(
                 prompt=text,
                 context=context,
                 subject=self.current_subject or "общее",
                 system_prompt=system_prompt,
-                max_tokens=150  # Ограничиваем длину ответа
+                max_tokens=150
             )
             
             if llm_response:
@@ -211,20 +281,49 @@ class DialogueManager:
                     self.dialogue_settings.get("max_response_length", 3)
                 )
                 
-                # Добавляем в историю
-                self._add_to_conversation_history(text, is_user=True)
-                self._add_to_conversation_history(limited_response, is_user=False)
-                
                 return limited_response
                 
         except Exception as e:
             print(f"Ошибка запроса к LLM для диалога: {e}")
+            # Даже при ошибке возвращаем fallback ответ
+            return "Извините, возникла техническая ошибка. Давайте продолжим разговор."
         
-        return None
+        # Fallback если LLM не ответил
+        return "Интересный вопрос! Давайте обсудим это подробнее."
+
+    def _get_contextual_fallback(self) -> str:
+        """Возвращает контекстно-зависимый ответ когда ничего не найдено"""
+        if not self.conversation_history:
+            return "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
+        
+        # Анализ контекста разговора
+        user_messages = [msg['text'] for msg in self.conversation_history if msg['is_user']]
+        last_user_message = user_messages[-1].lower() if user_messages else ""
+        
+        # Определяем тему разговора по последним сообщениям
+        if any(word in last_user_message for word in ['имя', 'зовут', 'меня']):
+            return "Приятно познакомиться! Теперь давайте выберем предмет для изучения. Что вас интересует?"
+        
+        if any(word in last_user_message for word in ['дела', 'настроение', 'чувств']):
+            return "Рад это слышать! Так какой предмет хотите изучить сегодня?"
+        
+        if any(word in last_user_message for word in ['предмет', 'урок', 'учеба', 'изучать']):
+            subjects = self.get_available_subjects()
+            subject_list = ", ".join([s.capitalize() for s in subjects[:3]]) + " и другие"
+            return f"Отлично! У меня есть: {subject_list}. Что выбираете?"
+        
+        # Стандартный ответ с напоминанием о выборе
+        subjects = self.get_available_subjects()
+        subject_list = ", ".join([s.capitalize() for s in subjects[:3]]) + " и другие"
+        
+        return f"Извините, не совсем понял. Давайте выберем предмет для урока? У меня есть: {subject_list}. Что вас интересует?"
 
     def process_input(self, text: str) -> Optional[str]:
-        """Обработка входящего текста и генерация ответа"""
+        """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
+        
+        # Добавляем в историю диалога ВСЕГДА
+        self._add_to_conversation_history(text, is_user=True)
         
         # 1. Если пользователь называет предмет - автоматически начинаем урок
         available_subjects = self.get_available_subjects()
@@ -233,65 +332,32 @@ class DialogueManager:
                 print(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
         
-        # 2. Приоритетная обработка через LLM для диалога
-        if not self.lesson_started:
-            llm_response = self._handle_llm_dialogue(text)
-            if llm_response:
-                print(f"✅ Ответ от LLM (диалог): {llm_response}")
-                return llm_response
+        # 2. Если урок уже начат - используем стандартную логику
+        if self.lesson_started:
+            handler = self.dialogue_states.get(self.current_state)
+            if handler:
+                response = handler(text_lower)
+                if response:
+                    self._add_to_conversation_history(response, is_user=False)
+                    return response
+            return None
         
-        # 3. Если есть база знаний по предмету, проверяем там
-        if self.knowledge_base:
-            knowledge_response = self.knowledge_base.get_dialogue_response(text_lower)
-            if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                return knowledge_response
+        # 3. Поиск в диалоговых шаблонах (до выбора урока)
+        dialogue_response = self._get_dialogue_response(text_lower)
+        if dialogue_response:
+            self._add_to_conversation_history(dialogue_response, is_user=False)
+            return dialogue_response
         
-        # 4. Быстрая проверка локальных шаблонов
-        for pattern, responses in self.local_patterns.items():
-            if pattern in text_lower:
-                return random.choice(responses)
+        # 4. ГАРАНТИРОВАННЫЙ запрос к LLM если не найден в шаблонах
+        llm_response = self._handle_llm_dialogue(text)
+        if llm_response:
+            self._add_to_conversation_history(llm_response, is_user=False)
+            return llm_response
         
-        # 5. Проверка диалоговых шаблонов из базы знаний
-        if self.knowledge_base:
-            dialogue_response = self.knowledge_base.get_dialogue_response(text_lower)
-            if dialogue_response:
-                return dialogue_response
-        
-        # 6. Обработка по текущему состоянию
-        handler = self.dialogue_states.get(self.current_state)
-        if handler:
-            response = handler(text_lower)
-            if response:
-                return response
-        
-        # 7. Fallback с учетом состояния и счетчика разговора
-        fallbacks = {
-            "greeting": [
-                "Привет! Давайте познакомимся. Какой предмет вас интересует?",
-                "Здравствуйте! Я готов помочь с обучением. О чем хотите узнать?",
-                "Рад вас видеть! Давайте выберем интересную тему для урока."
-            ],
-            "subject_selection": [
-                "У меня есть уроки по разным предметов. Что вас интересует?",
-                "Могу предложить: обществознание, математика, история. Что выбираете?",
-                "Какой предмет хотите изучить? Выбирайте - я найду подходящий урок!"
-            ],
-            "lesson_reading": [
-                "Продолжаем наш увлекательный урок.",
-                "Слушайте внимательно, это интересно!",
-                "Продолжаем изучение материала."
-            ]
-        }
-        
-        # Добавляем вариативность в ответы
-        fallback_responses = fallbacks.get(self.current_state, ["Продолжим наш урок."])
-        response = random.choice(fallback_responses)
-        
-        # После 3-х реплик без прогресса - мягко направляем к выбору предмета
-        if self.conversation_counter >= 3 and self.current_state == "greeting":
-            response += " Кстати, какой предмет вас интересует?"
-            
-        return response
+        # 5. Финальный fallback с учетом контекста
+        fallback_response = self._get_contextual_fallback()
+        self._add_to_conversation_history(fallback_response, is_user=False)
+        return fallback_response
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """Прямая обработка выбора предмета (без поиска в базе знаний)"""
@@ -321,6 +387,7 @@ class DialogueManager:
         
         # Очищаем историю диалога при начале урока
         self.conversation_history = []
+        self.conversation_context = []
         
         # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
         return None
@@ -364,7 +431,8 @@ class DialogueManager:
             self.current_state = "greeting"
             self.conversation_counter = 0
             self.knowledge_base = None
-            self.conversation_history = []  # Очищаем историю при завершении урока
+            self.conversation_history = []
+            self.conversation_context = []
             return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
             
         # Если это не команда управления чтением, обрабатываем как вопрос
@@ -381,7 +449,8 @@ class DialogueManager:
             self.current_state = "greeting"
             self.conversation_counter = 0
             self.knowledge_base = None
-            self.conversation_history = []  # Очищаем историю при завершении урока
+            self.conversation_history = []
+            self.conversation_context = []
             return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
@@ -510,7 +579,8 @@ class DialogueManager:
         self.current_paragraph = 0
         self.knowledge_base = None
         self.conversation_counter = 0
-        self.conversation_history = []  # Очищаем историю диалога
+        self.conversation_history = []
+        self.conversation_context = []
 
     def get_available_subjects(self) -> List[str]:
         """Возвращает список доступных предметов"""
@@ -540,6 +610,3 @@ class DialogueManager:
         if self.knowledge_base:
             return self.knowledge_base.get_stats()
         return None
-
-# Импорт для работы с временными метками
-import time
