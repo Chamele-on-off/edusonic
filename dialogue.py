@@ -251,21 +251,19 @@ class DialogueManager:
 
     def _handle_llm_dialogue(self, text: str) -> Optional[str]:
         """Гарантированная обработка диалога через LLM с контекстом"""
-        if not self.llm.api_key:
-            return None
-            
-        # Собираем контекст диалога
-        context = self._get_conversation_context()
-        
-        # Формируем промпт в зависимости от состояния
-        if self.current_state == "greeting":
-            system_prompt = self.dialogue_settings.get("subject_selection_prompt", 
-                "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным. Отвечай на русском языке.")
-        else:
-            system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
-        
-        # Гарантированный запрос к LLM
+        # Всегда пытаемся сделать запрос к LLM, даже если API ключа нет
         try:
+            # Собираем контекст диалога
+            context = self._get_conversation_context()
+            
+            # Формируем промпт в зависимости от состояния
+            if self.current_state == "greeting":
+                system_prompt = self.dialogue_settings.get("subject_selection_prompt", 
+                    "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным. Отвечай на русском языке.")
+            else:
+                system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
+            
+            # Гарантированный запрос к LLM
             llm_response = self.llm._query_llm_api(
                 prompt=text,
                 context=context,
@@ -285,11 +283,23 @@ class DialogueManager:
                 
         except Exception as e:
             print(f"Ошибка запроса к LLM для диалога: {e}")
-            # Даже при ошибке возвращаем fallback ответ
-            return "Извините, возникла техническая ошибка. Давайте продолжим разговор."
+            # При ошибке возвращаем естественный ответ, а не сообщение об ошибке
         
-        # Fallback если LLM не ответил
-        return "Интересный вопрос! Давайте обсудим это подробнее."
+        # Fallback если LLM не ответил - предлагаем выбор предмета
+        return self._get_subject_selection_prompt()
+
+    def _get_subject_selection_prompt(self) -> str:
+        """Возвращает предложение выбора предмета"""
+        subjects = self.get_available_subjects()
+        
+        if not subjects:
+            return "К сожалению, уроки еще не загружены. Попробуйте позже."
+        
+        subject_list = ", ".join([subj.capitalize() for subj in subjects[:4]])  # Ограничиваем количество
+        if len(subjects) > 4:
+            subject_list += " и другие"
+        
+        return f"Отлично! Давайте выберем предмет для урока. У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета!"
 
     def _get_contextual_fallback(self) -> str:
         """Возвращает контекстно-зависимый ответ когда ничего не найдено"""
@@ -313,10 +323,7 @@ class DialogueManager:
             return f"Отлично! У меня есть: {subject_list}. Что выбираете?"
         
         # Стандартный ответ с напоминанием о выборе
-        subjects = self.get_available_subjects()
-        subject_list = ", ".join([s.capitalize() for s in subjects[:3]]) + " и другие"
-        
-        return f"Извините, не совсем понял. Давайте выберем предмет для урока? У меня есть: {subject_list}. Что вас интересует?"
+        return self._get_subject_selection_prompt()
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -354,8 +361,8 @@ class DialogueManager:
             self._add_to_conversation_history(llm_response, is_user=False)
             return llm_response
         
-        # 5. Финальный fallback с учетом контекста
-        fallback_response = self._get_contextual_fallback()
+        # 5. Финальный fallback с предложением выбора предмета
+        fallback_response = self._get_subject_selection_prompt()
         self._add_to_conversation_history(fallback_response, is_user=False)
         return fallback_response
 
@@ -396,13 +403,7 @@ class DialogueManager:
         greeting_words = ["привет", "здравствуй", 'начать', "старт", " готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
-            subjects = self.get_available_subjects()
-            
-            if not subjects:
-                return "К сожалению, уроки еще не загружены. Попробуйте позже."
-                
-            subject_list = ", ".join([subj.capitalize() for subj in subjects])
-            return f"Отлично! Давайте выберем предмет для урока. У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета!"
+            return self._get_subject_selection_prompt()
         return None
 
     def _handle_subject_selection(self, text: str) -> Optional[str]:
