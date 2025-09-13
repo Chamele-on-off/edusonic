@@ -242,7 +242,7 @@ class DialogueManager:
                 if pattern in last_user_messages and responses:
                     return random.choice(responses)
         
-        # 3. Поиск в локальных шаблоны (fallback)
+        # 3. Поиск в локальных шаблонах (fallback)
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
@@ -295,11 +295,41 @@ class DialogueManager:
         if not subjects:
             return "К сожалению, уроки еще не загружены. Попробуйте позже."
         
-        subject_list = ", ".join([subj.capitalize() for subj in subjects[:4]])  # Ограничиваем количество
+        subject_list = ", ".join([subj.capitalize() for subj in subjects[:4]])
         if len(subjects) > 4:
             subject_list += " и другие"
         
-        return f"Отлично! Давайте выберем предмет для урока. У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета!"
+        return f"Давайте выберем предмет для урока! У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета! Или может интересует иная тема - наука, культура - что угодно."
+
+    def _add_subject_suggestion(self, original_response: str) -> str:
+        """Добавляет предложение выбора предмета к любому ответу ДО начала урока"""
+        
+        # НИКОГДА не добавляем предложение выбора во время урока
+        if self.lesson_started:
+            return original_response
+        
+        # Если ответ уже содержит предложение о выборе предмета, не дублируем
+        if any(word in original_response.lower() for word in ['предмет', 'урок', 'выберем', 'изучать', 'интересует']):
+            return original_response
+        
+        subjects = self.get_available_subjects()
+        
+        if not subjects:
+            return original_response + " К сожалению, уроки еще не загружены."
+        
+        subject_list = ", ".join([subj.capitalize() for subj in subjects[:4]])
+        if len(subjects) > 4:
+            subject_list += " и другие"
+        
+        suggestion = f" Давайте выберем предмет для урока! У меня есть: {subject_list}. Что вас интересует? Можете просто сказать название предмета! Или может интересует иная тема - наука, культура - что угодно."
+        
+        # Ограничиваем общую длину ответа
+        max_length = 500
+        if len(original_response) + len(suggestion) > max_length:
+            shortened_response = original_response[:max_length - len(suggestion) - 3] + "..."
+            return shortened_response + suggestion
+        
+        return original_response + suggestion
 
     def _get_contextual_fallback(self) -> str:
         """Возвращает контекстно-зависимый ответ когда ничего не найдено"""
@@ -352,14 +382,18 @@ class DialogueManager:
         # 3. Поиск в диалоговых шаблонах (до выбора урока)
         dialogue_response = self._get_dialogue_response(text_lower)
         if dialogue_response:
-            self._add_to_conversation_history(dialogue_response, is_user=False)
-            return dialogue_response
+            # ДОБАВЛЯЕМ предложение выбора предмета к любому ответу
+            final_response = self._add_subject_suggestion(dialogue_response)
+            self._add_to_conversation_history(final_response, is_user=False)
+            return final_response
         
         # 4. ГАРАНТИРОВАННЫЙ запрос к LLM если не найден в шаблонах
         llm_response = self._handle_llm_dialogue(text)
         if llm_response:
-            self._add_to_conversation_history(llm_response, is_user=False)
-            return llm_response
+            # ДОБАВЛЯЕМ предложение выбора предмета к ответу LLM
+            final_response = self._add_subject_suggestion(llm_response)
+            self._add_to_conversation_history(final_response, is_user=False)
+            return final_response
         
         # 5. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_subject_selection_prompt()
