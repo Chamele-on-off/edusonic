@@ -6,7 +6,6 @@
     <title>Виртуальный класс</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
-    <script src="https://miro.com/app/static/sdk/v2/miro.js"></script>
     <style>
         :root {
             --primary: #4263EB;
@@ -22,9 +21,6 @@
             --board-text: #333333;
             --board-border: #E6E9EF;
             --board-shadow: rgba(0, 0, 0, 0.1);
-            --miro-blue: #4263EB;
-            --miro-gray: #6B778C;
-            --miro-light-gray: #F4F5F7;
         }
         
         * {
@@ -113,18 +109,19 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         
-        .miro-toolbar {
+        .board-toolbar {
             display: flex;
             align-items: center;
             padding: 12px 16px;
             background: white;
             border-bottom: 1px solid var(--board-border);
             gap: 8px;
+            flex-wrap: wrap;
         }
         
         .toolbar-btn {
-            width: 32px;
-            height: 32px;
+            width: 40px;
+            height: 40px;
             border-radius: 8px;
             border: 1px solid var(--board-border);
             background: white;
@@ -133,12 +130,14 @@
             justify-content: center;
             cursor: pointer;
             transition: all 0.2s ease;
-            color: var(--miro-gray);
+            color: var(--gray);
+            font-size: 16px;
         }
         
-        .toolbar-btn:hover {
-            background: var(--miro-light-gray);
-            color: var(--miro-blue);
+        .toolbar-btn:hover, .toolbar-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
         }
         
         .toolbar-separator {
@@ -155,6 +154,7 @@
             padding: 30px;
             background: var(--board-bg);
             position: relative;
+            touch-action: none;
         }
         
         .text-widget {
@@ -192,14 +192,14 @@
             height: 24px;
             border-radius: 6px;
             border: none;
-            background: var(--miro-light-gray);
-            color: var(--miro-gray);
+            background: var(--light);
+            color: var(--gray);
             cursor: pointer;
             font-size: 12px;
         }
         
         .handle-btn:hover {
-            background: var(--miro-blue);
+            background: var(--primary);
             color: white;
         }
         
@@ -216,7 +216,7 @@
             background: transparent;
         }
         
-        .miro-grid {
+        .board-grid {
             position: absolute;
             top: 0;
             left: 0;
@@ -234,7 +234,7 @@
             display: inline-block;
             width: 2px;
             height: 1.2em;
-            background-color: var(--miro-blue);
+            background-color: var(--primary);
             margin-left: 2px;
             animation: blink 1s infinite;
             vertical-align: middle;
@@ -243,6 +243,72 @@
         @keyframes blink {
             0%, 50% { opacity: 1; }
             51%, 100% { opacity: 0; }
+        }
+        
+        #answer-input-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 20;
+            display: none;
+            width: 80%;
+            max-width: 500px;
+        }
+        
+        #answer-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--board-border);
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+        
+        #submit-answer {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        #drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: none;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        
+        .color-picker {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            margin-left: 10px;
+        }
+        
+        .color-option {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        
+        .color-option.active {
+            border-color: var(--dark);
         }
         
         #teacher-video-container {
@@ -485,59 +551,13 @@
             justify-content: center;
             cursor: pointer;
             font-size: 16px;
-            color: var(--miro-gray);
+            color: var(--gray);
             transition: all 0.2s ease;
         }
         
         .zoom-btn:hover {
-            background: var(--miro-light-gray);
-            color: var(--miro-blue);
-        }
-        
-        #miro-board {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80%;
-            height: 70%;
-            border-radius: 16px;
-            overflow: hidden;
-            z-index: 5;
-            display: none;
-            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
-            background: white;
-        }
-        
-        #miro-board iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        
-        #miro-toggle {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 12px 24px;
-            background: var(--miro-blue);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-size: 16px;
-            cursor: pointer;
-            z-index: 10;
-            box-shadow: 0 4px 12px rgba(66, 99, 235, 0.3);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        
-        #miro-toggle:active {
-            transform: translateX(-50%) scale(0.95);
+            background: var(--light);
+            color: var(--primary);
         }
         
         @media (max-width: 768px) {
@@ -563,14 +583,14 @@
                 max-width: 400px;
             }
             
-            .miro-toolbar {
+            .board-toolbar {
                 padding: 10px 12px;
             }
             
             .toolbar-btn {
-                width: 28px;
-                height: 28px;
-                font-size: 12px;
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
             }
             
             #teacher-video-container {
@@ -615,15 +635,14 @@
                 font-size: 16px;
             }
             
-            #miro-board {
+            #answer-input-container {
                 width: 90%;
-                height: 60%;
+                padding: 12px;
             }
             
-            #miro-toggle {
-                padding: 10px 20px;
+            #answer-input {
+                padding: 10px;
                 font-size: 14px;
-                bottom: 15px;
             }
         }
         
@@ -693,15 +712,23 @@
                 font-size: 14px;
             }
             
-            #miro-board {
-                width: 95%;
-                height: 55%;
+            .board-toolbar {
+                gap: 5px;
             }
             
-            #miro-toggle {
-                padding: 8px 16px;
+            .toolbar-btn {
+                width: 32px;
+                height: 32px;
                 font-size: 12px;
-                bottom: 10px;
+            }
+            
+            .color-picker {
+                margin-left: 5px;
+            }
+            
+            .color-option {
+                width: 16px;
+                height: 16px;
             }
         }
         
@@ -789,29 +816,29 @@
             <div id="background-animation"></div>
             
             <div id="lesson-content">
-                <div class="miro-toolbar">
-                    <button class="toolbar-btn" title="Выделение">
-                        <i class="fas fa-mouse-pointer"></i>
-                    </button>
-                    <button class="toolbar-btn" title="Текст">
+                <div class="board-toolbar">
+                    <button class="toolbar-btn" id="text-tool" title="Текст">
                         <i class="fas fa-font"></i>
                     </button>
-                    <button class="toolbar-btn" title="Фигуры">
-                        <i class="fas fa-square"></i>
+                    <button class="toolbar-btn" id="draw-tool" title="Рисование">
+                        <i class="fas fa-pen"></i>
                     </button>
-                    <button class="toolbar-btn" title="Стикеры">
-                        <i class="fas fa-sticky-note"></i>
+                    <button class="toolbar-btn" id="answer-tool" title="Ответить">
+                        <i class="fas fa-comment-dots"></i>
                     </button>
                     <div class="toolbar-separator"></div>
-                    <button class="toolbar-btn" title="Комментировать">
-                        <i class="fas fa-comment"></i>
+                    <button class="toolbar-btn" id="clear-drawing" title="Очистить рисунок">
+                        <i class="fas fa-trash"></i>
                     </button>
-                    <button class="toolbar-btn" title="Презентация">
-                        <i class="fas fa-presentation"></i>
-                    </button>
+                    <div class="color-picker">
+                        <div class="color-option active" style="background-color: #000000;" data-color="#000000"></div>
+                        <div class="color-option" style="background-color: #ff0000;" data-color="#ff0000"></div>
+                        <div class="color-option" style="background-color: #0000ff;" data-color="#0000ff"></div>
+                        <div class="color-option" style="background-color: #00aa00;" data-color="#00aa00"></div>
+                    </div>
                 </div>
                 <div id="lesson-canvas">
-                    <div class="miro-grid"></div>
+                    <div class="board-grid"></div>
                     <div class="text-widget" id="main-text-widget">
                         <div class="widget-handle">
                             <button class="handle-btn">
@@ -820,6 +847,7 @@
                         </div>
                         <div id="lesson-text"></div>
                     </div>
+                    <canvas id="drawing-canvas"></canvas>
                 </div>
                 <div class="zoom-controls">
                     <button class="zoom-btn" id="zoom-out" title="Уменьшить">
@@ -832,16 +860,12 @@
                         <i class="fas fa-plus"></i>
                     </button>
                 </div>
+                
+                <div id="answer-input-container">
+                    <input type="text" id="answer-input" placeholder="Введите ваш ответ...">
+                    <button id="submit-answer">Отправить</button>
+                </div>
             </div>
-            
-            <div id="miro-board">
-                <iframe id="miro-iframe" src="about:blank"></iframe>
-            </div>
-            
-            <button id="miro-toggle" class="fade-in">
-                <i class="fas fa-chalkboard"></i>
-                <span>Открыть доску Miro</span>
-            </button>
             
             <div id="teacher-video-container" class="fade-in">
                 <img id="teacher-video" src="" alt="Аватар учителя">
@@ -925,10 +949,16 @@
         const zoomOutBtn = document.getElementById('zoom-out');
         const zoomResetBtn = document.getElementById('zoom-reset');
         const zoomInBtn = document.getElementById('zoom-in');
-        const miroBoard = document.getElementById('miro-board');
-        const miroIframe = document.getElementById('miro-iframe');
-        const miroToggle = document.getElementById('miro-toggle');
         const audioFix = document.getElementById('audio-fix');
+        const drawingCanvas = document.getElementById('drawing-canvas');
+        const textToolBtn = document.getElementById('text-tool');
+        const drawToolBtn = document.getElementById('draw-tool');
+        const answerToolBtn = document.getElementById('answer-tool');
+        const clearDrawingBtn = document.getElementById('clear-drawing');
+        const answerInputContainer = document.getElementById('answer-input-container');
+        const answerInput = document.getElementById('answer-input');
+        const submitAnswerBtn = document.getElementById('submit-answer');
+        const colorOptions = document.querySelectorAll('.color-option');
 
         let userStream = null;
         let socket = null;
@@ -949,10 +979,15 @@
         let scale = 1;
         let isDragging = false;
         let startX, startY, scrollLeft, scrollTop;
-        let isMiroActive = false;
         let audioContext = null;
         let audioQueue = [];
         let isPlayingAudio = false;
+        let isDrawing = false;
+        let currentTool = 'text';
+        let drawingCtx = null;
+        let currentColor = '#000000';
+        let lastX = 0;
+        let lastY = 0;
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -985,6 +1020,123 @@
             }
         }
 
+        function initDrawingCanvas() {
+            drawingCanvas.width = lessonCanvas.offsetWidth;
+            drawingCanvas.height = lessonCanvas.offsetHeight;
+            drawingCtx = drawingCanvas.getContext('2d');
+            drawingCtx.lineWidth = 3;
+            drawingCtx.lineCap = 'round';
+            drawingCtx.strokeStyle = currentColor;
+            
+            // Set up drawing events
+            drawingCanvas.addEventListener('mousedown', startDrawing);
+            drawingCanvas.addEventListener('mousemove', draw);
+            drawingCanvas.addEventListener('mouseup', stopDrawing);
+            drawingCanvas.addEventListener('mouseout', stopDrawing);
+            
+            // Touch events for mobile
+            drawingCanvas.addEventListener('touchstart', handleTouchStart);
+            drawingCanvas.addEventListener('touchmove', handleTouchMove);
+            drawingCanvas.addEventListener('touchend', handleTouchEnd);
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            drawingCanvas.dispatchEvent(mouseEvent);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            drawingCanvas.dispatchEvent(mouseEvent);
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            const mouseEvent = new MouseEvent('mouseup', {});
+            drawingCanvas.dispatchEvent(mouseEvent);
+        }
+
+        function startDrawing(e) {
+            if (currentTool !== 'draw') return;
+            
+            isDrawing = true;
+            const rect = drawingCanvas.getBoundingClientRect();
+            lastX = e.clientX - rect.left;
+            lastY = e.clientY - rect.top;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const rect = drawingCanvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            drawingCtx.beginPath();
+            drawingCtx.moveTo(lastX, lastY);
+            drawingCtx.lineTo(currentX, currentY);
+            drawingCtx.stroke();
+            
+            lastX = currentX;
+            lastY = currentY;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function clearDrawing() {
+            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+        }
+
+        function setTool(tool) {
+            currentTool = tool;
+            
+            // Update UI
+            textToolBtn.classList.remove('active');
+            drawToolBtn.classList.remove('active');
+            answerToolBtn.classList.remove('active');
+            
+            // Hide all tools
+            drawingCanvas.style.display = 'none';
+            answerInputContainer.style.display = 'none';
+            
+            // Enable selected tool
+            if (tool === 'text') {
+                textToolBtn.classList.add('active');
+            } else if (tool === 'draw') {
+                drawToolBtn.classList.add('active');
+                drawingCanvas.style.display = 'block';
+            } else if (tool === 'answer') {
+                answerToolBtn.classList.add('active');
+                answerInputContainer.style.display = 'block';
+                answerInput.focus();
+            }
+        }
+
+        function submitAnswer() {
+            const answer = answerInput.value.trim();
+            if (answer) {
+                socket.emit('recognized_speech', {
+                    room_id: roomId,
+                    text: answer
+                });
+                answerInput.value = '';
+                setTool('text');
+                showStudentSpeech(answer, 'me');
+            }
+        }
+
         function initDragging() {
             textWidget.addEventListener('mousedown', startDrag);
             textWidget.addEventListener('touchstart', startDrag);
@@ -996,6 +1148,8 @@
             document.addEventListener('touchend', endDrag);
             
             function startDrag(e) {
+                if (currentTool !== 'text') return;
+                
                 isDragging = true;
                 startX = e.pageX || e.touches[0].pageX;
                 startY = e.pageY || e.touches[0].pageY;
@@ -1350,28 +1504,9 @@
             }, 5000);
         }
 
-        function toggleMiroBoard() {
-            isMiroActive = !isMiroActive;
-            
-            if (isMiroActive) {
-                // Load Miro board
-                miroIframe.src = "https://miro.com/app/live-embed/";
-                miroBoard.style.display = 'block';
-                lessonContent.style.display = 'none';
-                miroToggle.innerHTML = '<i class="fas fa-times"></i><span>Закрыть доску Miro</span>';
-            } else {
-                // Hide Miro board
-                miroBoard.style.display = 'none';
-                miroIframe.src = "about:blank";
-                miroToggle.innerHTML = '<i class="fas fa-chalkboard"></i><span>Открыть доску Miro</span>';
-            }
-        }
-
         activateAiBtn.addEventListener('click', () => {
             socket.emit('activate_ai_teacher', { room_id: roomId });
         });
-
-        miroToggle.addEventListener('click', toggleMiroBoard);
 
         async function toggleMicrophone() {
             try {
@@ -1551,6 +1686,27 @@
             initSpeechRecognition();
             initDragging();
             initZoom();
+            initDrawingCanvas();
+            
+            // Set up tool buttons
+            textToolBtn.addEventListener('click', () => setTool('text'));
+            drawToolBtn.addEventListener('click', () => setTool('draw'));
+            answerToolBtn.addEventListener('click', () => setTool('answer'));
+            clearDrawingBtn.addEventListener('click', clearDrawing);
+            submitAnswerBtn.addEventListener('click', submitAnswer);
+            answerInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') submitAnswer();
+            });
+            
+            // Set up color picker
+            colorOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    colorOptions.forEach(opt => opt.classList.remove('active'));
+                    option.classList.add('active');
+                    currentColor = option.dataset.color;
+                    drawingCtx.strokeStyle = currentColor;
+                });
+            });
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
@@ -1571,6 +1727,10 @@
                 animationCircles.forEach(circle => circle.remove());
                 animationCircles = [];
                 createBackgroundAnimation();
+                
+                // Resize drawing canvas
+                drawingCanvas.width = lessonCanvas.offsetWidth;
+                drawingCanvas.height = lessonCanvas.offsetHeight;
             });
             
             // iOS audio workaround - preload audio context
@@ -1581,6 +1741,9 @@
                     }
                 }, { once: true });
             }
+            
+            // Set default tool
+            setTool('text');
         });
 
         document.addEventListener('fullscreenchange', () => {
