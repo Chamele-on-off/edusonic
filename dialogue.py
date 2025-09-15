@@ -58,7 +58,7 @@ class DialogueManager:
             "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
             "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
             "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
-            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменим активность!"],
+            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
             "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
             "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
             "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
@@ -367,7 +367,7 @@ class DialogueManager:
         
         humanities_keywords = ['история', 'литература', 'философия', 'психология', 'социология',
                               'культура', 'искусство', 'музыка', 'живопись', 'театр', 'кино',
-                              'поэзия', 'проза', 'роман', ' стих', 'картина', 'скульптура']
+                              'поэзия', 'проза', 'роман', 'стих', 'картина', 'скульптура']
         
         language_keywords = ['английский', 'русский', 'немецкий', 'французский', 'испанский',
                             'китайский', 'японский', 'язык', 'грамматика', 'словарь', 'перевод',
@@ -469,6 +469,7 @@ class DialogueManager:
         """Определяет, является ли запрос просьбой сгенерировать урок, и возвращает тему"""
         text_lower = text.lower().strip()
         
+        # Расширенные паттерны для распознавания запросов
         patterns = [
             r'хочу изучить (.+)',
             r'хочу узнать про (.+)', 
@@ -501,14 +502,18 @@ class DialogueManager:
             r'познакомимся с (.+)'
         ]
         
+        # Проверяем все паттерны
         for pattern in patterns:
             match = re.search(pattern, text_lower)
             if match:
                 topic = match.group(1).strip()
+                # Фильтруем слишком короткие или бессмысленные темы
                 if len(topic) > 2 and not any(stop_word in topic for stop_word in 
                                             ['тебе', 'мне', 'вам', 'нам', 'это', 'то', 'как']):
                     return topic
         
+        # Если не нашли по паттернам, проверяем прямые упоминания тем
+        # Исключаем общие слова и местоимения
         stop_words = {'я', 'ты', 'вы', 'мы', 'он', 'она', 'они', 'это', 'то', 'как', 'что', 
                      'где', 'когда', 'почему', 'зачем', 'какой', 'какая', 'какое', 'какие'}
         
@@ -516,6 +521,7 @@ class DialogueManager:
         meaningful_words = [word for word in words if word not in stop_words and len(word) > 3]
         
         if len(meaningful_words) >= 1 and len(meaningful_words) <= 5:
+            # Если это не команда и не общий вопрос, вероятно это тема
             if not any(cmd in text_lower for cmd in ['как дела', 'что делаешь', 'привет', 'пока', 'стоп']):
                 potential_topic = ' '.join(meaningful_words)
                 return potential_topic
@@ -528,13 +534,16 @@ class DialogueManager:
         
         self._add_to_conversation_history(text, is_user=True)
         
+        # 1. Проверяем запрос на генерацию урока (ПЕРВЫЙ ПРИОРИТЕТ)
         if not self.lesson_started:
             topic = self._is_lesson_generation_request(text)
             if topic:
                 print(f"🎯 Обнаружен запрос на генерацию урока по теме: '{topic}'")
                 
+                # Немедленный ответ
                 confirmation = f"Отлично! Хочешь изучить {topic}? Сейчас создам для тебя подробный урок по этой теме!"
                 
+                # Запускаем генерацию в фоне
                 def generate_lesson_async():
                     try:
                         generated_lesson = self.generate_lesson_on_demand(topic)
@@ -545,6 +554,7 @@ class DialogueManager:
                                     'question': text,
                                     'answer': f"✅ Готово! Я создал урок по теме '{topic}'. Скажите 'начать' или 'поехали' чтобы начать изучение!"
                                 })
+                                # Автоматически выбираем сгенерированный урок
                                 self._handle_subject_selection_direct(generated_lesson['category'])
                         else:
                             if self.socketio and self.room_id:
@@ -562,12 +572,14 @@ class DialogueManager:
                 
                 return confirmation
         
+        # 2. Если пользователь называет существующий предмет
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower:
                 print(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
         
+        # 3. Если урок уже начат
         if self.lesson_started:
             handler = self.dialogue_states.get(self.current_state)
             if handler:
@@ -577,6 +589,7 @@ class DialogueManager:
                     return response
             return None
         
+        # 4. Поиск в диалоговых шаблонах
         dialogue_response = self._get_dialogue_response(text_lower)
         if dialogue_response:
             final_response = self._add_subject_suggestion(dialogue_response)
@@ -584,6 +597,7 @@ class DialogueManager:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
+        # 5. Запрос к LLM
         llm_response = self._handle_llm_dialogue(text)
         if llm_response:
             final_response = self._add_subject_suggestion(llm_response)
@@ -591,6 +605,7 @@ class DialogueManager:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
+        # 6. Финальный fallback
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
             self._add_to_conversation_history(fallback_response, is_user=False)
@@ -628,7 +643,7 @@ class DialogueManager:
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
-        greeting_words = ["привет", 'начать', "старт", " готов", "поехали", "давай", "началом"]
+        greeting_words = ["привет", "здравствуй", 'начать', "старт", " готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             prompt = self._get_subject_selection_prompt()
@@ -690,11 +705,8 @@ class DialogueManager:
         def process_question_async():
             try:
                 final_response = None
-                question_lower = question.lower()
                 
                 if self.llm_query_mode == "llm_first":
-                    print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
-                    
                     current_context = ""
                     if self.lesson_content and self.current_paragraph > 0:
                         context_start = max(0, self.current_paragraph - 2)
@@ -707,37 +719,32 @@ class DialogueManager:
                             self.knowledge_base.add_llm_answer(question, llm_response)
                             self.knowledge_base.add_knowledge(question=question, answer=llm_response)
                             self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
-                        print(f"✅ Ответ получен от LLM: {llm_response[:100]}...")
                         final_response = llm_response
                     
                     if not final_response and self.knowledge_base:
-                        knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
+                        knowledge_response = self.knowledge_base.get_dialogue_response(question.lower())
                         if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                            print(f"📚 Ответ найден в базе знаний: {knowledge_response[:100]}...")
                             final_response = knowledge_response
                     
                     if not final_response and self.knowledge_base:
                         llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                         if llm_answer:
-                            print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
                             final_response = llm_answer
                 
                 else:
-                    print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
-                    
                     if self.knowledge_base:
-                        knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
+                        knowledge_response = self.knowledge_base.get_dialogue_response(question.lower())
                         if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                             final_response = knowledge_response
                     
                     if not final_response:
                         for pattern, responses in self.local_patterns.items():
-                            if pattern in question_lower:
+                            if pattern in question.lower():
                                 final_response = random.choice(responses)
                                 break
                     
                     if not final_response and self.knowledge_base:
-                        dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
+                        dialogue_response = self.knowledge_base.get_dialogue_response(question.lower())
                         if dialogue_response:
                             final_response = dialogue_response
                     
@@ -749,7 +756,6 @@ class DialogueManager:
                     if not final_response and self.knowledge_base:
                         llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                         if llm_answer:
-                            print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
                             final_response = llm_answer
                     
                     if not final_response:
@@ -768,11 +774,9 @@ class DialogueManager:
                             final_response = llm_response
                 
                 if not final_response:
-                    final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
+                    final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала."
                 
-                # ВАЖНО: Отправляем ответ через сокет
                 if self.socketio and self.room_id:
-                    print(f"📤 Отправляю ответ через сокет: {final_response[:100]}...")
                     self.socketio.emit('llm_response_ready', {
                         'room_id': self.room_id,
                         'question': question,
@@ -780,15 +784,8 @@ class DialogueManager:
                     })
                     
             except Exception as e:
-                print(f"❌ Ошибка асинхронной обработки вопроса: {e}")
-                if self.socketio and self.room_id:
-                    self.socketio.emit('llm_response_ready', {
-                        'room_id': self.room_id,
-                        'question': question,
-                        'answer': "Извините, возникла ошибка при обработке вашего вопроса. Попробуйте задать его позже."
-                    })
-    
-        # Запускаем асинхронную обработку
+                print(f"Ошибка асинхронной обработки вопроса: {e}")
+        
         thread = threading.Thread(target=process_question_async)
         thread.daemon = True
         thread.start()
