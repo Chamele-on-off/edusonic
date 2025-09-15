@@ -6,6 +6,7 @@
     <title>Виртуальный класс</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <script src="https://miro.com/app/static/sdk/v2/miro.js"></script>
     <style>
         :root {
             --primary: #4263EB;
@@ -493,6 +494,52 @@
             color: var(--miro-blue);
         }
         
+        #miro-board {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 70%;
+            border-radius: 16px;
+            overflow: hidden;
+            z-index: 5;
+            display: none;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+            background: white;
+        }
+        
+        #miro-board iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        #miro-toggle {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            background: var(--miro-blue);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(66, 99, 235, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        #miro-toggle:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+        
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -567,6 +614,17 @@
                 padding: 12px 24px;
                 font-size: 16px;
             }
+            
+            #miro-board {
+                width: 90%;
+                height: 60%;
+            }
+            
+            #miro-toggle {
+                padding: 10px 20px;
+                font-size: 14px;
+                bottom: 15px;
+            }
         }
         
         @media (max-width: 480px) {
@@ -634,6 +692,17 @@
                 height: 32px;
                 font-size: 14px;
             }
+            
+            #miro-board {
+                width: 95%;
+                height: 55%;
+            }
+            
+            #miro-toggle {
+                padding: 8px 16px;
+                font-size: 12px;
+                bottom: 10px;
+            }
         }
         
         .fade-in {
@@ -691,6 +760,18 @@
             .control-btn {
                 cursor: default;
             }
+            
+            /* iOS audio fix */
+            audio {
+                display: none;
+            }
+        }
+        
+        /* Mobile audio fix */
+        .audio-fix {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -753,6 +834,15 @@
                 </div>
             </div>
             
+            <div id="miro-board">
+                <iframe id="miro-iframe" src="about:blank"></iframe>
+            </div>
+            
+            <button id="miro-toggle" class="fade-in">
+                <i class="fas fa-chalkboard"></i>
+                <span>Открыть доску Miro</span>
+            </button>
+            
             <div id="teacher-video-container" class="fade-in">
                 <img id="teacher-video" src="" alt="Аватар учителя">
                 <div id="teacher-speech"></div>
@@ -777,6 +867,9 @@
                 <p>Разрешите доступ к камере и микрофону для участия в конференции</p>
                 <button id="enable-camera-btn">Разрешить доступ</button>
             </div>
+            
+            <!-- Audio fix for iOS -->
+            <audio id="audio-fix" class="audio-fix" controls></audio>
         </div>
     </div>
 
@@ -832,6 +925,10 @@
         const zoomOutBtn = document.getElementById('zoom-out');
         const zoomResetBtn = document.getElementById('zoom-reset');
         const zoomInBtn = document.getElementById('zoom-in');
+        const miroBoard = document.getElementById('miro-board');
+        const miroIframe = document.getElementById('miro-iframe');
+        const miroToggle = document.getElementById('miro-toggle');
+        const audioFix = document.getElementById('audio-fix');
 
         let userStream = null;
         let socket = null;
@@ -852,6 +949,10 @@
         let scale = 1;
         let isDragging = false;
         let startX, startY, scrollLeft, scrollTop;
+        let isMiroActive = false;
+        let audioContext = null;
+        let audioQueue = [];
+        let isPlayingAudio = false;
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -994,21 +1095,20 @@
             
             socket.on('speech_audio', (data) => {
                 try {
-                    const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
-                    const playPromise = audio.play();
-                    if (playPromise !== undefined) {
-                        playPromise
-                            .then(() => {
-                                if (!isLessonActive) {
-                                    showTeacherSpeech(data.text);
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Ошибка автовоспроизведения:', error);
-                                if (!isLessonActive) {
-                                    showTeacherSpeech(data.text);
-                                }
-                            });
+                    // iOS audio fix - use a different approach
+                    if (isIOS) {
+                        playAudioForIOS(data.audio);
+                    } else {
+                        const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+                        audio.preload = 'auto';
+                        
+                        // Add to queue and play sequentially
+                        audioQueue.push(audio);
+                        playNextAudio();
+                    }
+                    
+                    if (!isLessonActive) {
+                        showTeacherSpeech(data.text);
                     }
                 } catch (error) {
                     console.error('Ошибка воспроизведения аудио:', error);
@@ -1017,6 +1117,50 @@
                     }
                 }
             });
+            
+            function playNextAudio() {
+                if (isPlayingAudio || audioQueue.length === 0) return;
+                
+                isPlayingAudio = true;
+                const audio = audioQueue.shift();
+                
+                const playPromise = audio.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            audio.onended = () => {
+                                isPlayingAudio = false;
+                                setTimeout(playNextAudio, 100);
+                            };
+                        })
+                        .catch(error => {
+                            console.error('Ошибка автовоспроизведения:', error);
+                            isPlayingAudio = false;
+                            setTimeout(playNextAudio, 100);
+                        });
+                }
+            }
+            
+            function playAudioForIOS(base64Audio) {
+                // iOS requires user interaction to play audio
+                // We'll use the hidden audio element and trigger it
+                audioFix.src = `data:audio/mp3;base64,${base64Audio}`;
+                
+                const playPromise = audioFix.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            // Audio started successfully
+                        })
+                        .catch(error => {
+                            console.error('iOS audio play failed:', error);
+                            // Show the speech text as fallback
+                            if (!isLessonActive) {
+                                showTeacherSpeech(data.text);
+                            }
+                        });
+                }
+            }
             
             socket.on('speech_text', (data) => {
                 if (data.is_teacher) {
@@ -1206,9 +1350,28 @@
             }, 5000);
         }
 
+        function toggleMiroBoard() {
+            isMiroActive = !isMiroActive;
+            
+            if (isMiroActive) {
+                // Load Miro board
+                miroIframe.src = "https://miro.com/app/live-embed/";
+                miroBoard.style.display = 'block';
+                lessonContent.style.display = 'none';
+                miroToggle.innerHTML = '<i class="fas fa-times"></i><span>Закрыть доску Miro</span>';
+            } else {
+                // Hide Miro board
+                miroBoard.style.display = 'none';
+                miroIframe.src = "about:blank";
+                miroToggle.innerHTML = '<i class="fas fa-chalkboard"></i><span>Открыть доску Miro</span>';
+            }
+        }
+
         activateAiBtn.addEventListener('click', () => {
             socket.emit('activate_ai_teacher', { room_id: roomId });
         });
+
+        miroToggle.addEventListener('click', toggleMiroBoard);
 
         async function toggleMicrophone() {
             try {
@@ -1409,6 +1572,15 @@
                 animationCircles = [];
                 createBackgroundAnimation();
             });
+            
+            // iOS audio workaround - preload audio context
+            if (isIOS) {
+                document.addEventListener('touchstart', function() {
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                }, { once: true });
+            }
         });
 
         document.addEventListener('fullscreenchange', () => {
