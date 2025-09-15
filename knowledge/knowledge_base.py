@@ -165,6 +165,40 @@ class KnowledgeBase:
             self.llm_vectorizer.fit(["демо вопрос ответ"])
             print(f"LLM векторайзер инициализирован с демо-данными")
 
+    def add_to_dialogue_knowledge(self, question: str, answer: str) -> bool:
+        """Добавляет вопрос-ответ в диалоговую базу знаний"""
+        try:
+            dialogue_path = Path("materials/dialogue_knowledge.json")
+            if dialogue_path.exists():
+                with open(dialogue_path, 'r', encoding='utf-8') as f:
+                    dialogue_data = json.load(f)
+            else:
+                dialogue_data = {"patterns": {}, "metadata": {"version": "1.0", "last_updated": datetime.now().isoformat()}}
+            
+            # Создаем ключ для вопроса (ограничиваем длину)
+            question_key = question.lower().strip()[:100]
+            
+            # Добавляем или обновляем ответ
+            if question_key not in dialogue_data["patterns"]:
+                dialogue_data["patterns"][question_key] = []
+            
+            # Добавляем ответ если его еще нет
+            if answer not in dialogue_data["patterns"][question_key]:
+                dialogue_data["patterns"][question_key].append(answer)
+            
+            dialogue_data["metadata"]["last_updated"] = datetime.now().isoformat()
+            
+            # Сохраняем
+            with open(dialogue_path, 'w', encoding='utf-8') as f:
+                json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"✅ Ответ сохранен в диалоговую базу знаний: {question_key}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка сохранения в диалоговую базу: {e}")
+            return False
+
     def add_llm_answer(self, question: str, answer: str):
         """Добавление ответа LLM в базу"""
         clean_question = self._clean_text(question)
