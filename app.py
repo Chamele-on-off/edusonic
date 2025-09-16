@@ -395,6 +395,14 @@ def handle_llm_response_ready(data):
     question = data['question']
     answer = data['answer']
     
+    # Сбрасываем состояние речи учителя, чтобы гарантированно озвучить ответ
+    reset_speaking_state(room_id, is_teacher=True)
+    room_teacher_speaking[room_id] = False
+    room_speaking[room_id] = False
+    
+    # Небольшая задержка для гарантии сброса состояния
+    time.sleep(0.3)
+    
     # Отправляем ответ в комнату
     emit('speech_text', {
         'text': f"Учитель: {answer}",
