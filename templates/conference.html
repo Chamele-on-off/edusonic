@@ -1021,78 +1021,125 @@
         }
 
         function initDrawingCanvas() {
-            drawingCanvas.width = lessonCanvas.offsetWidth;
-            drawingCanvas.height = lessonCanvas.offsetHeight;
+            // Устанавливаем правильные размеры canvas
+            const resizeCanvas = () => {
+                drawingCanvas.width = lessonCanvas.offsetWidth;
+                drawingCanvas.height = lessonCanvas.offsetHeight;
+            };
+            
+            resizeCanvas();
+            
             drawingCtx = drawingCanvas.getContext('2d');
             drawingCtx.lineWidth = 3;
             drawingCtx.lineCap = 'round';
+            drawingCtx.lineJoin = 'round';
             drawingCtx.strokeStyle = currentColor;
             
-            // Set up drawing events
+            // События для мыши
             drawingCanvas.addEventListener('mousedown', startDrawing);
             drawingCanvas.addEventListener('mousemove', draw);
             drawingCanvas.addEventListener('mouseup', stopDrawing);
             drawingCanvas.addEventListener('mouseout', stopDrawing);
             
-            // Touch events for mobile
-            drawingCanvas.addEventListener('touchstart', handleTouchStart);
-            drawingCanvas.addEventListener('touchmove', handleTouchMove);
+            // События для touch-устройств
+            drawingCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            drawingCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             drawingCanvas.addEventListener('touchend', handleTouchEnd);
+            
+            // Ресайз при изменении размера окна
+            window.addEventListener('resize', resizeCanvas);
         }
 
-        function handleTouchStart(e) {
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            drawingCanvas.dispatchEvent(mouseEvent);
-        }
-
-        function handleTouchMove(e) {
-            e.preventDefault();
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousemove', {
-                clientX: touch.clientX,
-                clientY: touch.clientY
-            });
-            drawingCanvas.dispatchEvent(mouseEvent);
-        }
-
-        function handleTouchEnd(e) {
-            e.preventDefault();
-            const mouseEvent = new MouseEvent('mouseup', {});
-            drawingCanvas.dispatchEvent(mouseEvent);
+        function getCanvasCoordinates(e) {
+            const rect = drawingCanvas.getBoundingClientRect();
+            const scaleX = drawingCanvas.width / rect.width;
+            const scaleY = drawingCanvas.height / rect.height;
+            
+            let clientX, clientY;
+            
+            if (e.type.includes('touch')) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
         }
 
         function startDrawing(e) {
             if (currentTool !== 'draw') return;
             
             isDrawing = true;
-            const rect = drawingCanvas.getBoundingClientRect();
-            lastX = e.clientX - rect.left;
-            lastY = e.clientY - rect.top;
+            const coords = getCanvasCoordinates(e);
+            lastX = coords.x;
+            lastY = coords.y;
+            
+            // Начинаем новый путь
+            drawingCtx.beginPath();
+            drawingCtx.moveTo(lastX, lastY);
+            
+            e.preventDefault();
         }
 
         function draw(e) {
             if (!isDrawing) return;
             
-            const rect = drawingCanvas.getBoundingClientRect();
-            const currentX = e.clientX - rect.left;
-            const currentY = e.clientY - rect.top;
+            const coords = getCanvasCoordinates(e);
+            const currentX = coords.x;
+            const currentY = coords.y;
             
-            drawingCtx.beginPath();
-            drawingCtx.moveTo(lastX, lastY);
+            // Рисуем линию
             drawingCtx.lineTo(currentX, currentY);
             drawingCtx.stroke();
             
             lastX = currentX;
             lastY = currentY;
+            
+            e.preventDefault();
         }
 
         function stopDrawing() {
+            if (!isDrawing) return;
+            
             isDrawing = false;
+            drawingCtx.closePath();
+        }
+
+        function handleTouchStart(e) {
+            if (currentTool !== 'draw') return;
+            
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            
+            startDrawing(mouseEvent);
+            e.preventDefault();
+        }
+
+        function handleTouchMove(e) {
+            if (!isDrawing) return;
+            
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            
+            draw(mouseEvent);
+            e.preventDefault();
+        }
+
+        function handleTouchEnd() {
+            if (!isDrawing) return;
+            
+            stopDrawing();
         }
 
         function clearDrawing() {
@@ -1139,10 +1186,10 @@
 
         function initDragging() {
             textWidget.addEventListener('mousedown', startDrag);
-            textWidget.addEventListener('touchstart', startDrag);
+            textWidget.addEventListener('touchstart', startDrag, { passive: true });
             
             document.addEventListener('mousemove', drag);
-            document.addEventListener('touchmove', drag);
+            document.addEventListener('touchmove', drag, { passive: true });
             
             document.addEventListener('mouseup', endDrag);
             document.addEventListener('touchend', endDrag);
@@ -1156,18 +1203,25 @@
                 scrollLeft = lessonCanvas.scrollLeft;
                 scrollTop = lessonCanvas.scrollTop;
                 textWidget.style.cursor = 'grabbing';
-                e.preventDefault();
+                
+                if (e.type === 'touchstart') {
+                    e.preventDefault();
+                }
             }
             
             function drag(e) {
                 if (!isDragging) return;
-                e.preventDefault();
+                
                 const x = e.pageX || e.touches[0].pageX;
                 const y = e.pageY || e.touches[0].pageY;
                 const walkX = (x - startX) * 2;
                 const walkY = (y - startY) * 2;
                 lessonCanvas.scrollLeft = scrollLeft - walkX;
                 lessonCanvas.scrollTop = scrollTop - walkY;
+                
+                if (e.type === 'touchmove') {
+                    e.preventDefault();
+                }
             }
             
             function endDrag() {
@@ -1727,10 +1781,6 @@
                 animationCircles.forEach(circle => circle.remove());
                 animationCircles = [];
                 createBackgroundAnimation();
-                
-                // Resize drawing canvas
-                drawingCanvas.width = lessonCanvas.offsetWidth;
-                drawingCanvas.height = lessonCanvas.offsetHeight;
             });
             
             // iOS audio workaround - preload audio context
