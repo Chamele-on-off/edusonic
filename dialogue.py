@@ -395,6 +395,7 @@ class DialogueManager:
             )
             
             if not lesson_content:
+                print("Ошибка: LLM не вернул содержание урока")
                 return None
             
             # Создаем файл урока
@@ -432,10 +433,17 @@ class DialogueManager:
         Проверяет, хочет ли пользователь сгенерировать новый урок по теме.
         Возвращает True, если урок был успешно сгенерирован.
         """
+        # Сначала проверяем, не запрашивает ли пользователь существующий предмет
+        available_subjects = self.get_available_subjects()
+        for subject in available_subjects:
+            if subject.lower() in text_lower and len(subject) > 3:  # Исключаем короткие совпадения
+                print(f"Обнаружен существующий предмет: {subject}, пропускаем генерацию")
+                return False
+        
         # Шаблоны фраз, которые означают "создай урок"
         generation_patterns = [
             r'хочу изучить (.+)',
-            r'можешь рассказать про (.+)',
+            r'можешь рассказать про (.+)', 
             r'урок по (.+)',
             r'изучим (.+)',
             r'расскажи про (.+)',
@@ -452,11 +460,15 @@ class DialogueManager:
                 topic = match.group(1).strip()
                 # Удаляем возможные вопросительные слова в конце
                 topic = re.sub(r'[.?]$', '', topic)
-                if topic:
+                if topic and len(topic) > 2:  # Минимальная длина темы
                     print(f"Обнаружен запрос на генерацию урока по теме: '{topic}'")
                     # Пытаемся сгенерировать урок
                     generated_lesson = self.generate_lesson_on_demand(topic)
-                    return generated_lesson is not None # Возвращаем True, если генерация прошла успешно
+                    if generated_lesson:
+                        print(f"Урок успешно сгенерирован: {generated_lesson['id']}")
+                        return True
+                    else:
+                        print("Ошибка генерации урока")
         return False
 
     def process_input(self, text: str) -> Optional[str]:
@@ -510,7 +522,7 @@ class DialogueManager:
         # 6. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
-            self._add_to_conversation_history(fallback_response, is_teacher=False)
+            self._add_to_conversation_history(fallback_response, is_user=False)
             return fallback_response
         
         return None
@@ -612,12 +624,16 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         
+        # Сохраняем room_id для использования в асинхронном потоке
+        current_room_id = self.room_id
+        
         # Немедленный ответ для обработки задержек
         immediate_response = "Давайте зафиксируем этот вопрос. Сейчас подумаю над ответом..."
         
         # Запускаем асинхронную обработку в отдельном потоке
         def process_question_async():
             try:
+                print(f"Асинхронная обработка вопроса в комнате {current_room_id}: '{question}'")
                 final_response = None
                 
                 # Режим "LLM в первую очередь"
@@ -719,19 +735,19 @@ class DialogueManager:
                     final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
                 
                 # Отправляем готовый ответ через сокет
-                if self.socketio and self.room_id:
-                    print(f"Отправка ответа LLM в комнату {self.room_id}: {final_response[:100]}...")
+                if self.socketio and current_room_id:
+                    print(f"Отправка ответа LLM в комнату {current_room_id}: {final_response[:100]}...")
                     self.socketio.emit('llm_response_ready', {
-                        'room_id': self.room_id,
+                        'room_id': current_room_id,
                         'question': question,
                         'answer': final_response
                     })
                     
             except Exception as e:
                 print(f"Ошибка асинхронной обработки вопроса: {e}")
-                if self.socketio and self.room_id:
+                if self.socketio and current_room_id:
                     self.socketio.emit('llm_response_ready', {
-                        'room_id': self.room_id,
+                        'room_id': current_room_id,
                         'question': question,
                         'answer': "Извините, возникла ошибка при обработке вашего вопроса."
                     })
