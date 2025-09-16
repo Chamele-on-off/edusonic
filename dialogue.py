@@ -427,6 +427,38 @@ class DialogueManager:
             print(f"Ошибка генерации урока: {e}")
             return None
 
+    def _check_for_lesson_generation_intent(self, text_lower: str) -> bool:
+        """
+        Проверяет, хочет ли пользователь сгенерировать новый урок по теме.
+        Возвращает True, если урок был успешно сгенерирован.
+        """
+        # Шаблоны фраз, которые означают "создай урок"
+        generation_patterns = [
+            r'хочу изучить (.+)',
+            r'можешь рассказать про (.+)',
+            r'урок по (.+)',
+            r'изучим (.+)',
+            r'расскажи про (.+)',
+            r'хочу узнать про (.+)',
+            r'объясни тему (.+)',
+            r'создай урок про (.+)',
+            r'сгенерируй урок о (.+)',
+            r'научи меня (.+)'
+        ]
+        
+        for pattern in generation_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                topic = match.group(1).strip()
+                # Удаляем возможные вопросительные слова в конце
+                topic = re.sub(r'[.?]$', '', topic)
+                if topic:
+                    print(f"Обнаружен запрос на генерацию урока по теме: '{topic}'")
+                    # Пытаемся сгенерировать урок
+                    generated_lesson = self.generate_lesson_on_demand(topic)
+                    return generated_lesson is not None # Возвращаем True, если генерация прошла успешно
+        return False
+
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
@@ -434,38 +466,18 @@ class DialogueManager:
         # Добавляем в историю диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
-        # 1. Если пользователь называет предмет - автоматически начинаем урок
+        # 1. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (ДО всего остального)
+        generated_lesson = self._check_for_lesson_generation_intent(text_lower)
+        if generated_lesson:
+            # Если урок сгенерирован, начинаем его
+            return self._handle_subject_selection_direct("общее")
+        
+        # 2. Если пользователь называет предмет - автоматически начинаем урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower:
                 print(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
-        
-        # 2. Проверяем, не запрашивает ли пользователь особую тему
-        if not self.lesson_started:
-            lesson_request_patterns = [
-                r'хочу изучить (.+)',
-                r'можешь рассказать про (.+)',
-                r'урок по (.+)',
-                r'изучим (.+)',
-                r'расскажи про (.+)',
-                r'хочу узнать про (.+)',
-                r'объясни тему (.+)'
-            ]
-            
-            for pattern in lesson_request_patterns:
-                match = re.search(pattern, text_lower)
-                if match:
-                    topic = match.group(1).strip()
-                    print(f"Обнаружен запрос на тему: {topic}")
-                    
-                    # Пытаемся сгенерировать урок
-                    generated_lesson = self.generate_lesson_on_demand(topic)
-                    if generated_lesson:
-                        # Если урок успешно сгенерирован, начинаем его
-                        return self._handle_subject_selection_direct("общее")
-                    else:
-                        return "К сожалению, я не смог создать урок по этой теме. Попробуйте другую тему или выберите из существующих предметов."
         
         # 3. Если урок уже начат - используем стандартную логику
         if self.lesson_started:
@@ -498,7 +510,7 @@ class DialogueManager:
         # 6. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
-            self._add_to_conversation_history(fallback_response, is_user=False)
+            self._add_to_conversation_history(fallback_response, is_teacher=False)
             return fallback_response
         
         return None
@@ -708,6 +720,7 @@ class DialogueManager:
                 
                 # Отправляем готовый ответ через сокет
                 if self.socketio and self.room_id:
+                    print(f"Отправка ответа LLM в комнату {self.room_id}: {final_response[:100]}...")
                     self.socketio.emit('llm_response_ready', {
                         'room_id': self.room_id,
                         'question': question,
