@@ -264,7 +264,7 @@ class DialogueManager:
         return None
 
     def _handle_llm_dialogue(self, text: str) -> Optional[str]:
-        """Гарантированная обработка диалога через LLM с контекстом"""
+        """Гарантированная обработка диалога через LLM с контекста"""
         # Всегда пытаемся сделать запрос к LLM, даже если API ключа нет
         try:
             # Собираем контекст диалога
@@ -624,140 +624,110 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         
-        # Сохраняем room_id для использования в асинхронном потоке
-        current_room_id = self.room_id
+        # НЕМЕДЛЕННАЯ обработка вопроса (без асинхронности)
+        print(f"Немедленная обработка вопроса: '{question}'")
+        final_response = None
         
-        # Немедленный ответ для обработки задержек
-        immediate_response = "Давайте зафиксируем этот вопрос. Сейчас подумаю над ответом..."
+        # Режим "LLM в первую очередь"
+        if self.llm_query_mode == "llm_first":
+            print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
+            
+            # 1. Сначала пробуем запрос к LLM
+            current_context = ""
+            if self.lesson_content and self.current_paragraph > 0:
+                # Берем текущий и предыдущий абзацы для контекста
+                context_start = max(0, self.current_paragraph - 2)
+                current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+            
+            llm_response = self.llm.query(question, current_context, self.current_subject)
+            if llm_response and not llm_response.startswith("Интересный вопрос!"):
+                # Сохраняем ответ и возвращаем его
+                self.llm.add_to_cache(question, llm_response, self.current_subject)
+                if self.knowledge_base:
+                    # Сохраняем ответ в базу знаний для будущего использования
+                    self.knowledge_base.add_llm_answer(question, llm_response)
+                    self.knowledge_base.add_knowledge(question=question, answer=llm_response)
+                    # Сохраняем в диалоговую базу
+                    self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
+                print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
+                final_response = llm_response
+            
+            # 2. Если LLM не дал ответ, проверяем базу знаний
+            if not final_response and self.knowledge_base:
+                knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
+                if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
+                    print(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
+                    final_response = knowledge_response
+            
+            # 3. Проверяем базу ответов LLM
+            if not final_response and self.knowledge_base:
+                llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
+                if llm_answer:
+                    print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
+                    final_response = llm_answer
         
-        # Запускаем асинхронную обработку в отдельном потоке
-        def process_question_async():
-            try:
-                print(f"Асинхронная обработка вопроса в комнате {current_room_id}: '{question}'")
-                final_response = None
+        # Традиционный режим (оригинальная логика)
+        else:
+            print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
+            
+            # 1. Сначала проверяем базу знаний по предмету
+            if self.knowledge_base:
+                knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
+                if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
+                    final_response = knowledge_response
+            
+            # 2. Быстрая проверка локальных шаблонов
+            if not final_response:
+                for pattern, responses in self.local_patterns.items():
+                    if pattern in question_lower:
+                        final_response = random.choice(responses)
+                        break
+            
+            # 3. Проверка диалоговых шаблонов из базы знаний
+            if not final_response and self.knowledge_base:
+                dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
+                if dialogue_response:
+                    final_response = dialogue_response
+            
+            # 4. Поиск в предметной базе знаний с повышенным порогом схожести
+            if not final_response and self.knowledge_base:
+                answer = self.knowledge_base.find_answer(question, threshold=0.5)
+                if answer and not answer.startswith("Интересный вопрос!"):
+                    final_response = answer
+            
+            # 5. Проверяем базу ответов LLM с высокой точностью (порог 0.8)
+            if not final_response and self.knowledge_base:
+                llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
+                if llm_answer:
+                    print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
+                    final_response = llm_answer
+            
+            # 6. Запрос к LLM с контекстом текущего урока
+            if not final_response:
+                current_context = ""
+                if self.lesson_content and self.current_paragraph > 0:
+                    # Берем текущий и предыдущий абзацы для контекста
+                    context_start = max(0, self.current_paragraph - 2)
+                    current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
                 
-                # Режим "LLM в первую очередь"
-                if self.llm_query_mode == "llm_first":
-                    print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
-                    
-                    # 1. Сначала пробуем запрос к LLM
-                    current_context = ""
-                    if self.lesson_content and self.current_paragraph > 0:
-                        # Берем текущий и предыдущий абзацы для контекста
-                        context_start = max(0, self.current_paragraph - 2)
-                        current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
-                    
-                    llm_response = self.llm.query(question, current_context, self.current_subject)
-                    if llm_response and not llm_response.startswith("Интересный вопрос!"):
-                        # Сохраняем ответ и возвращаем его
-                        self.llm.add_to_cache(question, llm_response, self.current_subject)
-                        if self.knowledge_base:
-                            # Сохраняем ответ в базу знаний для будущего использования
-                            self.knowledge_base.add_llm_answer(question, llm_response)
-                            self.knowledge_base.add_knowledge(question=question, answer=llm_response)
-                            # Сохраняем в диалоговую базу
-                            self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
-                        print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
-                        final_response = llm_response
-                    
-                    # 2. Если LLM не дал ответ, проверяем базу знаний
-                    if not final_response and self.knowledge_base:
-                        knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
-                        if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                            print(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
-                            final_response = knowledge_response
-                    
-                    # 3. Проверяем базу ответов LLM
-                    if not final_response and self.knowledge_base:
-                        llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
-                        if llm_answer:
-                            print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
-                            final_response = llm_answer
-                
-                # Традиционный режим (оригинальная логика)
-                else:
-                    print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
-                    
-                    # 1. Сначала проверяем базу знаний по предмету
+                llm_response = self.llm.query(question, current_context, self.current_subject)
+                if llm_response:
+                    # Сохраняем в кэш LLM и базу знаний ответов
+                    self.llm.add_to_cache(question, llm_response, self.current_subject)
                     if self.knowledge_base:
-                        knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
-                        if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                            final_response = knowledge_response
-                    
-                    # 2. Быстрая проверка локальных шаблонов
-                    if not final_response:
-                        for pattern, responses in self.local_patterns.items():
-                            if pattern in question_lower:
-                                final_response = random.choice(responses)
-                                break
-                    
-                    # 3. Проверка диалоговых шаблонов из базы знаний
-                    if not final_response and self.knowledge_base:
-                        dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
-                        if dialogue_response:
-                            final_response = dialogue_response
-                    
-                    # 4. Поиск в предметной базе знаний с повышенным порогом схожести
-                    if not final_response and self.knowledge_base:
-                        answer = self.knowledge_base.find_answer(question, threshold=0.5)
-                        if answer and not answer.startswith("Интересный вопрос!"):
-                            final_response = answer
-                    
-                    # 5. Проверяем базу ответов LLM с высокой точностью (порог 0.8)
-                    if not final_response and self.knowledge_base:
-                        llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
-                        if llm_answer:
-                            print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
-                            final_response = llm_answer
-                    
-                    # 6. Запрос к LLM с контекстом текущего урока
-                    if not final_response:
-                        current_context = ""
-                        if self.lesson_content and self.current_paragraph > 0:
-                            # Берем текущий и предыдущий абзацы для контекста
-                            context_start = max(0, self.current_paragraph - 2)
-                            current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
-                        
-                        llm_response = self.llm.query(question, current_context, self.current_subject)
-                        if llm_response:
-                            # Сохраняем в кэш LLM и базу знаний ответов
-                            self.llm.add_to_cache(question, llm_response, self.current_subject)
-                            if self.knowledge_base:
-                                # Сохраняем ответ в базу знаний для будущего использования
-                                self.knowledge_base.add_llm_answer(question, llm_response)
-                                self.knowledge_base.add_knowledge(question=question, answer=llm_response)
-                                # Сохраняем в диалоговую базу
-                                self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
-                            final_response = llm_response
-                
-                # 7. Финальный fallback
-                if not final_response:
-                    final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
-                
-                # Отправляем готовый ответ через сокет
-                if self.socketio and current_room_id:
-                    print(f"Отправка ответа LLM в комнату {current_room_id}: {final_response[:100]}...")
-                    self.socketio.emit('llm_response_ready', {
-                        'room_id': current_room_id,
-                        'question': question,
-                        'answer': final_response
-                    })
-                    
-            except Exception as e:
-                print(f"Ошибка асинхронной обработки вопроса: {e}")
-                if self.socketio and current_room_id:
-                    self.socketio.emit('llm_response_ready', {
-                        'room_id': current_room_id,
-                        'question': question,
-                        'answer': "Извините, возникла ошибка при обработке вашего вопроса."
-                    })
+                        # Сохраняем ответ в базу знаний для будущего использования
+                        self.knowledge_base.add_llm_answer(question, llm_response)
+                        self.knowledge_base.add_knowledge(question=question, answer=llm_response)
+                        # Сохраняем в диалоговую базу
+                        self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
+                    final_response = llm_response
         
-        # Запускаем асинхронную обработку
-        thread = threading.Thread(target=process_question_async)
-        thread.daemon = True
-        thread.start()
+        # 7. Финальный fallback
+        if not final_response:
+            final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
-        return immediate_response
+        # Возвращаем ответ сразу для озвучивания
+        return final_response
 
     def get_selected_lesson(self) -> Optional[dict]:
         """Возвращает данные выбранного урока"""
