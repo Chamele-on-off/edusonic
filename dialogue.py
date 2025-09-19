@@ -18,7 +18,7 @@ class DialogueManager:
             "greeting": self._handle_greeting,
             "subject_selection": self._handle_subject_selection,
             "lesson_reading": self._handle_lesson_reading,
-            "practice_session": self._handle_practice_session  # Новое состояние для практики
+            "practice_session": self._handle_practice_session
         }
         self.current_state = "greeting"
         self.current_subject = None
@@ -37,17 +37,6 @@ class DialogueManager:
         self.conversation_context = []
         self.room_id = None
         
-        # КРИТИЧЕСКИЕ ПОЛЯ ДЛЯ ДИАЛОГА - ДОБАВЛЕНО
-        self.last_subject_prompt_time = 0
-        self.subject_prompt_cooldown = 30  # секунд между предложениями выбора предмета
-        self.subject_prompt_variants = [
-            "Давайте выберем предмет для урока! У меня есть: {subjects}. Что вас интересует?",
-            "Какой предмет хотите изучить сегодня? Доступно: {subjects}.",
-            "Сказать, какие предметы я преподаю? Или может ты хочешь изучить что-то определенное? У меня есть: {subjects}.",
-            "Что будем изучать? Выбирайте из: {subjects}.",
-            "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
-        ]
-        
         # Менеджер практики
         self.practice_manager = PracticeManager(self.llm)
         
@@ -55,6 +44,12 @@ class DialogueManager:
         self.practice_active = False
         self.current_question_index = 0
         self.current_expected_answer = ""
+        self.current_question = None
+        
+        # Для генерации уроков
+        self.generated_lessons_cache = {}  # Кэш сгенерированных уроков
+        self.last_lesson_generation_time = 0
+        self.lesson_generation_cooldown = 30  # 30 секунд кд между генерациями
         
         self._load_lessons()
         
@@ -78,6 +73,18 @@ class DialogueManager:
             "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
                                "Моя задача - помочь вам учиться с удовольствием и пониманием."]
         }
+
+        # Варианты предложения выбора предмета
+        self.subject_prompt_variants = [
+            "Отлично! У меня есть уроки по: {subjects}. Что вас интересует?",
+            "Прекрасно! Вот какие предметы я могу предложить: {subjects}. Что выберем?",
+            "Отлично! Давайте выберем предмет для изучения. У меня есть: {subjects}.",
+            "Замечательно! Я могу провести урок по: {subjects}. Что вас привлекает?",
+            "Отлично! Вот доступные предметы: {subjects}. Что будем изучать?"
+        ]
+        
+        self.last_subject_prompt_time = 0
+        self.subject_prompt_cooldown = 10  # 10 секунд кд между предложениями выбора
 
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка расширенной базы диалоговых шаблонов"""
@@ -173,7 +180,7 @@ class DialogueManager:
     def _load_lesson_content(self, lesson_file: Path) -> List[str]:
         """Загружает содержание урока из текстового файла"""
         try:
-            with open(lesson_file, 'r', encoding='utf-8') f:
+            with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
                 # Разбиваем на абзацы (по пустым строкам)
                 paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
@@ -256,7 +263,7 @@ class DialogueManager:
                     if pattern in text_lower and responses:
                         return random.choice(responses)
         
-        # 2. Контекстный поиск (если есть история разговора)
+        # 2. Контекстный поиск (есть история разговора)
         if self.conversation_context:
             last_user_messages = ' '.join(self.conversation_context).lower()
             
@@ -335,8 +342,8 @@ class DialogueManager:
     def _add_subject_suggestion(self, original_response: str) -> str:
         """Добавляет предложение выбора предмета к любому ответу ДО начала урока"""
         
-        # НИКОГДА не добавляем предложение выбора во время урока или практики
-        if self.lesson_started or self.practice_active:
+        # НИКОГДА не добавляем предложение выбора во время урока
+        if self.lesson_started:
             return original_response
         
         # Если ответ уже содержит предложение о выборе предмета, не дублируем
@@ -384,24 +391,32 @@ class DialogueManager:
     def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
         """Генерирует урок по запрошенной теме с помощью LLM"""
         try:
+            current_time = time.time()
+            if current_time - self.last_lesson_generation_time < self.lesson_generation_cooldown:
+                # Проверяем кэш на наличие недавно сгенерированного урока
+                if topic.lower() in self.generated_lessons_cache:
+                    cached_lesson = self.generated_lessons_cache[topic.lower()]
+                    if current_time - cached_lesson['timestamp'] < 3600:  # 1 час кэша
+                        print(f"Используем кэшированный урок по теме: {topic}")
+                        return cached_lesson['lesson_data']
+            
             print(f"Генерация урока по теме: {topic}")
             
-            # Улучшенный промпт для генерации урока с требованием структурирования на абзацы
+            # Формируем улучшенный промпт для генерации урока с разбивкой на абзацы
             system_prompt = """Ты - эксперт по созданию образовательных материалов. 
 Создай структурированный урок по заданной теме. Урок должен быть:
 1. Информативным и точным
-2. Разделен на логические абзацы (разделяй пустыми строками после каждых 3-5 предложений)
+2. Разделен на логические абзацы (разделяй пустыми строками, по 4-5 предложений в абзаце)
 3. Адаптирован для учеников
 4. На русском языке
 5. Содержать практические примеры если уместно
-6. Каждый абзац должен быть законченной мыслью
-7. Используй пустые строки для разделения абзацев, а не символы \\n\\n
+6. Иметь четкую структуру: введение, основная часть, заключение
 
-ВАЖНО: Разделяй текст пустыми строки после каждых 4-5 предложений!"""
+Важно: Разделяй текст на абзацы пустыми строками! Каждый абзац должен содержать 4-5 предложений."""
 
             # Запрос к LLM
             lesson_content = self.llm._query_llm_api(
-                prompt=f"Создай подробный урок на тему: {topic}",
+                prompt=f"Создай подробный урок на тему: {topic}. Важно: раздели текст на абзацы пустыми строками, каждый абзац по 4-5 предложений.",
                 context="",
                 subject="общее",
                 system_prompt=system_prompt,
@@ -435,6 +450,14 @@ class DialogueManager:
                 self.lessons[subject] = []
             self.lessons[subject].append(lesson_data)
             
+            # Сохраняем в кэш
+            self.generated_lessons_cache[topic.lower()] = {
+                'lesson_data': lesson_data,
+                'timestamp': current_time
+            }
+            
+            self.last_lesson_generation_time = current_time
+            
             print(f"Урок успешно сгенерирован: {lesson_id}")
             return lesson_data
             
@@ -465,7 +488,10 @@ class DialogueManager:
             r'объясни тему (.+)',
             r'создай урок про (.+)',
             r'сгенерируй урок о (.+)',
-            r'научи меня (.+)'
+            r'научи меня (.+)',
+            r'давай изучим (.+)',  # Добавлен новый паттерн
+            r'давай изучать (.+)',  # Добавлен новый паттерн
+            r'изучаем (.+)'        # Добавлен новый паттерн
         ]
         
         for pattern in generation_patterns:
@@ -489,17 +515,7 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
-        # ИСПРАВЛЕНО: Правильная логика сброса состояния
-        # Сбрасываем состояние урока только если он завершен И пользователь явно запрашивает новый
-        if (self.lesson_started and not self.practice_active and 
-            any(word in text_lower for word in ["новый урок", "другой урок", "стоп", "останови", "хватит"])):
-            self.lesson_started = False
-            self.current_state = "subject_selection"
-            self.current_paragraph = 0
-            self.lesson_content = []
-            print("Сброшено состояние урока для нового запроса")
-        
-        # Добавляем в истории диалога ВСЕГДА
+        # Добавляем в историю диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
         # 1. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (ДО всего остального)
@@ -515,8 +531,8 @@ class DialogueManager:
                 print(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
         
-        # 3. Если урок уже начат ИЛИ идет практика - используем стандартную логику соответствующих состояний
-        if self.lesson_started or self.practice_active:
+        # 3. Если урок уже начат - используем стандартную логику
+        if self.lesson_started:
             handler = self.dialogue_states.get(self.current_state)
             if handler:
                 response = handler(text_lower)
@@ -690,7 +706,16 @@ class DialogueManager:
         
         if question:
             self.current_question_index += 1
+            self.current_question = question
             self.current_expected_answer = question.get('expected_answer', '')
+            
+            # Отправляем вопрос через сокет для отображения на клиенте
+            if self.room_id:
+                self.socketio.emit('practice_question', {
+                    'room_id': self.room_id,
+                    'question': question
+                })
+            
             return f"Вопрос для практики: {question['question']}"
         else:
             # Вопросы закончились
@@ -844,7 +869,6 @@ class DialogueManager:
         # Возвращаем ответ сразу для озвучивания
         return final_response
 
-    # Остальные методы остаются без изменений...
     def get_selected_lesson(self) -> Optional[dict]:
         """Возвращает данные выбранного урока"""
         return self.selected_lesson
