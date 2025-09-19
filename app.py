@@ -38,7 +38,8 @@ room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
-room_practice_active = defaultdict(bool)  # Новый флаг для практики
+room_practice_active = defaultdict(bool)
+room_current_practice_question = defaultdict(dict)  # Новое: текущий вопрос практики
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -469,6 +470,14 @@ def handle_practice_ended(data):
     room_practice_active[room_id] = False
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
+
+@socketio.on('practice_question')
+def handle_practice_question(data):
+    """Обработчик получения вопроса практики"""
+    room_id = data['room_id']
+    question_data = data['question']
+    room_current_practice_question[room_id] = question_data
+    print(f"Установлен текущий вопрос практики для комнаты {room_id}")
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
