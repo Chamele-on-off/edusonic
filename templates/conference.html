@@ -1053,6 +1053,7 @@
         let lastX = 0;
         let lastY = 0;
         let isPracticeActive = false;
+        let audioElements = []; // Массив для хранения всех аудио элементов
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -1424,19 +1425,35 @@
             }
             
             function playAudioForIOS(base64Audio) {
-                // iOS requires user interaction to play audio
-                // We'll use the hidden audio element and trigger it
-                audioFix.src = `data:audio/mp3;base64,${base64Audio}`;
+                // iOS требует пользовательского взаимодействия для воспроизведения аудио
+                // Создаем новый элемент audio для каждого воспроизведения
+                const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+                audio.preload = 'auto';
                 
-                const playPromise = audioFix.play();
+                // Добавляем в массив для предотвращения garbage collection
+                audioElements.push(audio);
+                
+                // Ограничиваем количество хранимых элементов
+                if (audioElements.length > 10) {
+                    audioElements.shift();
+                }
+                
+                const playPromise = audio.play();
                 if (playPromise !== undefined) {
                     playPromise
                         .then(() => {
-                            // Audio started successfully
+                            // Аудио успешно запущено
+                            audio.onended = () => {
+                                // Удаляем из массива после завершения
+                                const index = audioElements.indexOf(audio);
+                                if (index > -1) {
+                                    audioElements.splice(index, 1);
+                                }
+                            };
                         })
                         .catch(error => {
                             console.error('iOS audio play failed:', error);
-                            // Show the speech text as fallback
+                            // Показываем текст речи как запасной вариант
                             if (!isLessonActive) {
                                 showTeacherSpeech(data.text);
                             }
