@@ -9,7 +9,6 @@ from llm import LLMIntegration
 from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
-from practice_manager import PracticeManager
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -17,8 +16,7 @@ class DialogueManager:
         self.dialogue_states = {
             "greeting": self._handle_greeting,
             "subject_selection": self._handle_subject_selection,
-            "lesson_reading": self._handle_lesson_reading,
-            "practice_session": self._handle_practice_session
+            "lesson_reading": self._handle_lesson_reading
         }
         self.current_state = "greeting"
         self.current_subject = None
@@ -35,25 +33,22 @@ class DialogueManager:
         self.conversation_history = []
         self.dialogue_knowledge = self._load_dialogue_knowledge()
         self.conversation_context = []
-        self.room_id = None
+        self.room_id = None  # Для доступа к ID комнаты извне
         
-        # Менеджер практики
-        self.practice_manager = PracticeManager(self.llm)
-        
-        # Новые поля для практики
-        self.practice_active = False
-        self.current_question_index = 0
-        self.current_expected_answer = ""
-        self.current_question = None
-        
-        # Для генерации уроков
-        self.generated_lessons_cache = {}  # Кэш сгенерированных уроков
-        self.last_lesson_generation_time = 0
-        self.lesson_generation_cooldown = 30  # 30 секунд кд между генерациями
+        # Новые поля для улучшенного диалога
+        self.last_subject_prompt_time = 0
+        self.subject_prompt_cooldown = 30  # секунд между предложениями выбора предмета
+        self.subject_prompt_variants = [
+            "Давайте выберем предмет для урока! У меня есть: {subjects}. Что вас интересует?",
+            "Какой предмет хотите изучить сегодня? Доступно: {subjects}.",
+            "Сказать, какие предметы я преподаю? Или может ты хочешь изучить что-то определенное? У меня есть: {subjects}.",
+            "Что будем изучать? Выбирайте из: {subjects}.",
+            "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
+        ]
         
         self._load_lessons()
         
-        # Расширенные локальные шаблоны
+        # Расширенные локальные шаблоны для более естественного общения
         self.local_patterns = {
             "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
             "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
@@ -73,18 +68,6 @@ class DialogueManager:
             "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
                                "Моя задача - помочь вам учиться с удовольствием и пониманием."]
         }
-
-        # Варианты предложения выбора предмета
-        self.subject_prompt_variants = [
-            "Отлично! У меня есть уроки по: {subjects}. Что вас интересует?",
-            "Прекрасно! Вот какие предметы я могу предложить: {subjects}. Что выберем?",
-            "Отлично! Давайте выберем предмет для изучения. У меня есть: {subjects}.",
-            "Замечательно! Я могу провести урок по: {subjects}. Что вас привлекает?",
-            "Отлично! Вот доступные предметы: {subjects}. Что будем изучать?"
-        ]
-        
-        self.last_subject_prompt_time = 0
-        self.subject_prompt_cooldown = 10  # 10 секунд кд между предложениями выбора
 
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка расширенной базы диалоговых шаблонов"""
@@ -263,7 +246,7 @@ class DialogueManager:
                     if pattern in text_lower and responses:
                         return random.choice(responses)
         
-        # 2. Контекстный поиск (есть история разговора)
+        # 2. Контекстный поиск (если есть история разговора)
         if self.conversation_context:
             last_user_messages = ' '.join(self.conversation_context).lower()
             
@@ -391,32 +374,20 @@ class DialogueManager:
     def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
         """Генерирует урок по запрошенной теме с помощью LLM"""
         try:
-            current_time = time.time()
-            if current_time - self.last_lesson_generation_time < self.lesson_generation_cooldown:
-                # Проверяем кэш на наличие недавно сгенерированного урока
-                if topic.lower() in self.generated_lessons_cache:
-                    cached_lesson = self.generated_lessons_cache[topic.lower()]
-                    if current_time - cached_lesson['timestamp'] < 3600:  # 1 час кэша
-                        print(f"Используем кэшированный урок по теме: {topic}")
-                        return cached_lesson['lesson_data']
-            
             print(f"Генерация урока по теме: {topic}")
             
-            # Формируем улучшенный промпт для генерации урока с разбивкой на абзацы
+            # Формируем промпт для генерации урока
             system_prompt = """Ты - эксперт по созданию образовательных материалов. 
 Создай структурированный урок по заданной теме. Урок должен быть:
 1. Информативным и точным
-2. Разделен на логические абзацы (разделяй пустыми строками, по 4-5 предложений в абзаце)
+2. Разделен на логические абзацы (разделяй пустыми строками)
 3. Адаптирован для учеников
 4. На русском языке
-5. Содержать практические примеры если уместно
-6. Иметь четкую структуру: введение, основная часть, заключение
-
-Важно: Разделяй текст на абзацы пустыми строками! Каждый абзац должен содержать 4-5 предложений."""
+5. Содержать практические примеры если уместно"""
 
             # Запрос к LLM
             lesson_content = self.llm._query_llm_api(
-                prompt=f"Создай подробный урок на тему: {topic}. Важно: раздели текст на абзацы пустыми строками, каждый абзац по 4-5 предложений.",
+                prompt=f"Создай подробный урок на тему: {topic}",
                 context="",
                 subject="общее",
                 system_prompt=system_prompt,
@@ -450,14 +421,6 @@ class DialogueManager:
                 self.lessons[subject] = []
             self.lessons[subject].append(lesson_data)
             
-            # Сохраняем в кэш
-            self.generated_lessons_cache[topic.lower()] = {
-                'lesson_data': lesson_data,
-                'timestamp': current_time
-            }
-            
-            self.last_lesson_generation_time = current_time
-            
             print(f"Урок успешно сгенерирован: {lesson_id}")
             return lesson_data
             
@@ -488,10 +451,7 @@ class DialogueManager:
             r'объясни тему (.+)',
             r'создай урок про (.+)',
             r'сгенерируй урок о (.+)',
-            r'научи меня (.+)',
-            r'давай изучим (.+)',  # Добавлен новый паттерн
-            r'давай изучать (.+)',  # Добавлен новый паттерн
-            r'изучаем (.+)'        # Добавлен новый паттерн
+            r'научи меня (.+)'
         ]
         
         for pattern in generation_patterns:
@@ -642,24 +602,6 @@ class DialogueManager:
         # Если это не команда управления чтением, обрабатываем как вопрос
         return None
 
-    def _handle_practice_session(self, text: str) -> Optional[str]:
-        """Обработка во время фазы практики"""
-        if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
-            self.practice_active = False
-            self.current_state = "greeting"
-            self.conversation_counter = 0
-            self.conversation_history = []
-            self.conversation_context = []
-            
-            # Отправляем событие завершения практики
-            if self.room_id:
-                self.socketio.emit('practice_ended', {'room_id': self.room_id})
-            
-            return "Практика остановлена. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
-            
-        # Обрабатываем ответ ученика на вопрос практики
-        return self.handle_practice_answer(text)
-
     def _get_next_paragraph(self) -> Optional[str]:
         """Возвращает следующий абзац урока"""
         if self.current_paragraph < len(self.lesson_content):
@@ -667,95 +609,13 @@ class DialogueManager:
             self.current_paragraph += 1
             return paragraph
         else:
-            # Урок завершен - запускаем практику
-            return self._start_practice_session()
-
-    def _start_practice_session(self) -> str:
-        """Запускает фазу практики после окончания урока"""
-        self.lesson_started = False
-        self.current_state = "practice_session"
-        self.practice_active = True
-        self.current_question_index = 0
-        
-        # Загружаем практические задания
-        practice_loaded = self.practice_manager.load_practice(self.selected_lesson['id'])
-        
-        if not practice_loaded:
-            # Если не удалось загрузить, генерируем на лету
-            lesson_text = " ".join(self.lesson_content)
-            practice_generated = self.practice_manager.generate_practice(lesson_text, self.current_subject)
-            
-            if not practice_generated:
-                # Если и генерация не удалась, завершаем сессию
-                self.current_state = "greeting"
-                self.conversation_counter = 0
-                self.conversation_history = []
-                self.conversation_context = []
-                return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
-        
-        # Отправляем событие начала практики
-        if self.room_id:
-            self.socketio.emit('practice_started', {'room_id': self.room_id})
-        
-        # Получаем первый вопрос
-        return self._get_next_practice_question()
-
-    def _get_next_practice_question(self) -> str:
-        """Возвращает следующий вопрос для практики"""
-        question = self.practice_manager.get_question(self.current_question_index)
-        
-        if question:
-            self.current_question_index += 1
-            self.current_question = question
-            self.current_expected_answer = question.get('expected_answer', '')
-            
-            # Отправляем вопрос через сокет для отображения на клиенте
-            if self.room_id:
-                self.socketio.emit('practice_question', {
-                    'room_id': self.room_id,
-                    'question': question
-                })
-            
-            return f"Вопрос для практики: {question['question']}"
-        else:
-            # Вопросы закончились
-            self.practice_active = False
+            self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
+            self.knowledge_base = None
             self.conversation_history = []
             self.conversation_context = []
-            
-            # Отправляем событие завершения практики
-            if self.room_id:
-                self.socketio.emit('practice_ended', {'room_id': self.room_id})
-            
-            return "Практика завершена! Отличная работа. Скажите 'привет' для выбора нового урока."
-
-    def handle_practice_answer(self, answer: str) -> str:
-        """Обрабатывает ответ ученика во время практики"""
-        if not self.practice_active or self.current_question_index == 0:
-            return "Сначала начните практику."
-        
-        # Получаем текущий вопрос
-        current_question_index = self.current_question_index - 1
-        question = self.practice_manager.get_question(current_question_index)
-        
-        if not question:
-            return "Вопрос не найден."
-        
-        # Проверяем ответ через LLM
-        evaluation = self.practice_manager.check_answer(
-            question['question'],
-            answer,
-            question.get('expected_answer', ''),
-            self.current_subject
-        )
-        
-        # Получаем следующий вопрос
-        next_question = self._get_next_practice_question()
-        
-        # Объединяем оценку и следующий вопрос
-        return f"{evaluation}. {next_question}"
+            return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока с учетом выбранного режима"""
@@ -897,8 +757,6 @@ class DialogueManager:
         self.conversation_counter = 0
         self.conversation_history = []
         self.conversation_context = []
-        self.practice_active = False
-        self.current_question_index = 0
 
     def get_available_subjects(self) -> List[str]:
         """Возвращает список доступных предметов"""
