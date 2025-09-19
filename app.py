@@ -256,9 +256,9 @@ def handle_student_answer(data):
     answer = data['answer']
     user_sid = request.sid
 
-    # ИГНОРИРУЕМ ответ, если учитель говорит или практика не активна
-    if room_teacher_speaking[room_id] or not room_practice_active[room_id]:
-        print(f"Игнорирую ответ ученика: {answer}")
+    # Разрешаем ответы во время практики, даже если учитель говорит
+    if not room_practice_active[room_id]:
+        print(f"Игнорирую ответ ученика, практика не активна: {answer}")
         return
 
     # Добавляем ответ в историю
@@ -292,8 +292,8 @@ def handle_recognized_speech(data):
     text = data['text']
     user_sid = request.sid
 
-    # ИГНОРИРУЕМ распознанную речь, если учитель говорит
-    if room_teacher_speaking[room_id]:
+    # НЕ игнорируем распознанную речь во время практики, даже если учитель говорит
+    if room_teacher_speaking[room_id] and not room_practice_active[room_id]:
         print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
         return
 
