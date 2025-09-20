@@ -16,7 +16,8 @@ class DialogueManager:
         self.dialogue_states = {
             "greeting": self._handle_greeting,
             "subject_selection": self._handle_subject_selection,
-            "lesson_reading": self._handle_lesson_reading
+            "lesson_reading": self._handle_lesson_reading,
+            "practice": self._handle_practice  # Новое состояние для практики
         }
         self.current_state = "greeting"
         self.current_subject = None
@@ -66,7 +67,11 @@ class DialogueManager:
             "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
                           "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
             "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
-                               "Моя задача - помочь вам учиться с удовольствием и пониманием."]
+                               "Моя задача - помочь вам учиться с удовольствием и пониманием."],
+            "практика": ["Отлично! Давайте перейдем к практике для закрепления материала.", 
+                        "Прекрасная идея! Практика поможет лучше усвоить материал."],
+            "задания": ["Готовлю практические задания на основе пройденного материала.", 
+                       "Сейчас подготовлю вопросы и задания для практики."]
         }
 
     def _load_dialogue_knowledge(self) -> Dict:
@@ -96,6 +101,10 @@ class DialogueManager:
             },
             "subject_questions": {
                 "что преподаешь": ["У меня есть уроки по разным предметам! Что хочешь изучить?"]
+            },
+            "practice_patterns": {
+                "практика": ["Отлично! Переходим к практическим заданиям.", "Начинаем практику для закрепления материала!"],
+                "задания": ["Готовлю задания для практики...", "Сейчас подготовлю практические вопросы."]
             },
             "metadata": {
                 "version": "1.0",
@@ -246,7 +255,7 @@ class DialogueManager:
                     if pattern in text_lower and responses:
                         return random.choice(responses)
         
-        # 2. Контекстный поиск (если есть история разговора)
+        # 2. Контекстный поиск (есть есть история разговора)
         if self.conversation_context:
             last_user_messages = ' '.join(self.conversation_context).lower()
             
@@ -522,7 +531,7 @@ class DialogueManager:
         # 6. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
-            self._add_to_conversation_history(fallback_response, is_user=False)
+            self._add_to_conversation_history(fallback_response, is_teacher=False)
             return fallback_response
         
         return None
@@ -590,6 +599,22 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         """Обработка во время чтения урока"""
+        # Проверяем команды начала практики
+        practice_words = ["практика", "задания", "упражнения", "потренироваться", "проверка"]
+        if any(word in text for word in practice_words):
+            # Завершаем урок и начинаем практику
+            self.lesson_started = False
+            self.current_state = "practice"
+            
+            # Сообщаем о начале практики
+            practice_msg = "Отлично! Завершаем урок и переходим к практическим заданиям для закрепления материала."
+            
+            # Отправляем сигнал для начала практики
+            if self.socketio and self.room_id:
+                self.socketio.emit('start_practice', {'room_id': self.room_id})
+            
+            return practice_msg
+            
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
             self.lesson_started = False
             self.current_state = "greeting"
@@ -602,6 +627,16 @@ class DialogueManager:
         # Если это не команда управления чтением, обрабатываем как вопрос
         return None
 
+    def _handle_practice(self, text: str) -> Optional[str]:
+        """Обработка во время практики"""
+        # Пока просто возвращаемся к приветствию после практики
+        # Реальная обработка практики происходит в PracticeManager
+        if any(word in text for word in ["стоп", "закончить", "хватит"]):
+            self.current_state = "greeting"
+            return "Практика завершена. Скажите 'привет' для выбора нового урока."
+            
+        return "Сейчас время практики. Отвечайте на вопросы для закрепления материала."
+
     def _get_next_paragraph(self) -> Optional[str]:
         """Возвращает следующий абзац урока"""
         if self.current_paragraph < len(self.lesson_content):
@@ -609,13 +644,22 @@ class DialogueManager:
             self.current_paragraph += 1
             return paragraph
         else:
+            # Урок завершен, предлагаем практику
             self.lesson_started = False
-            self.current_state = "greeting"
-            self.conversation_counter = 0
-            self.knowledge_base = None
-            self.conversation_history = []
-            self.conversation_context = []
-            return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
+            self.current_state = "practice"
+            
+            # Сообщаем о завершении урока и начале практики
+            practice_invitation = (
+                "Урок завершен! Отлично поработали. "
+                "Теперь давайте перейдем к практическим заданиям для закрепления материала. "
+                "Готовы начать практику?"
+            )
+            
+            # Отправляем сигнал для начала практики
+            if self.socketio and self.room_id:
+                self.socketio.emit('start_practice', {'room_id': self.room_id})
+            
+            return practice_invitation
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока с учетом выбранного режима"""
