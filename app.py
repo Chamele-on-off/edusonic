@@ -14,7 +14,6 @@ from config import update_api_key, get_api_key, load_config, get_model_config, g
 import requests
 import json
 from datetime import datetime
-from practice_manager import PracticeManager  # Новый импорт
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -23,9 +22,10 @@ BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 LESSONS_DIR = BASE_DIR / 'lessons'
 MATERIALS_DIR = BASE_DIR / 'materials'
+PRACTICE_DIR = BASE_DIR / 'materials' / 'practice'
 
 # Создаем необходимые папки
-for folder in [LESSONS_DIR, MATERIALS_DIR]:
+for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Глобальные состояния
@@ -37,8 +37,8 @@ room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
-room_teacher_speaking = defaultdict(bool)  # Новый флаг для отслеживания речи учителя
-room_practice = defaultdict(lambda: None)  # Новое состояние для практики
+room_teacher_speaking = defaultdict(bool)
+room_practice_active = defaultdict(bool)  # Новый флаг для практики
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -63,7 +63,7 @@ def reset_speaking_state(room_id, is_teacher=False):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст с анимацией и добавляет его в историе"""
+    """Озвучивает текст с анимацией и добавляет его в историю"""
     if not text.strip():
         return
         
@@ -161,7 +161,7 @@ def get_speech_frames(avatar_name, phoneme):
             if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комната"""
+    """Основной цикл анимации для комнаты"""
     blink_counter = 0
     blink_frames = get_blink_frames(avatar_name)
     neutral_frames = get_neutral_frames(avatar_name)
@@ -214,10 +214,6 @@ def handle_join_room(data):
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    # Инициализируем менеджер практики для комнаты если его нет
-    if room_id not in room_practice:
-        room_practice[room_id] = PracticeManager(socketio, room_dialogue[room_id])
-    
     if len(room_participants[room_id]) == 1:
         greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
@@ -253,6 +249,43 @@ def handle_generate_speech(data):
     voice_type = data.get('voice', 'male')
     speak_text(room_id, text, voice_type)
 
+@socketio.on('student_answer')
+def handle_student_answer(data):
+    """Обработчик ответов ученика во время практики"""
+    room_id = data['room_id']
+    answer = data['answer']
+    user_sid = request.sid
+
+    # ИГНОРИРУЕМ ответ, если учитель говорит или практика не активна
+    if room_teacher_speaking[room_id] or not room_practice_active[room_id]:
+        print(f"Игнорирую ответ ученика: {answer}")
+        return
+
+    # Добавляем ответ в историю
+    room_speech_data[room_id].append({
+        'text': f"Ответ ученика: {answer}",
+        'timestamp': time.time(),
+        'type': 'practice_answer',
+        'sid': user_sid
+    })
+    if len(room_speech_data[room_id]) > 50:
+        room_speech_data[room_id].pop(0)
+    
+    emit('speech_text', {'text': answer, 'sid': user_sid}, room=room_id)
+    
+    # Обрабатываем ответ через диалог менеджер
+    if room_id in room_dialogue:
+        response = room_dialogue[room_id].handle_practice_answer(answer)
+        if response:
+            # Отправляем ответ учителя
+            emit('speech_text', {
+                'text': f"Учитель: {response}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            # Озвучиваем ответ
+            speak_text(room_id, response, voice_type='female', is_teacher=True)
+
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
     room_id = data['room_id']
@@ -262,13 +295,6 @@ def handle_recognized_speech(data):
     # ИГНОРИРУЕМ распознанную речь, если учитель говорит
     if room_teacher_speaking[room_id]:
         print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
-        return
-
-    # Проверяем, активна ли практика в этой комнате
-    practice_manager = room_practice.get(room_id)
-    if practice_manager and practice_manager.is_practice_active:
-        print(f"Обработка ответа во время практики: {text}")
-        practice_manager.process_student_response(room_id, text)
         return
 
     # Игнорируем распознавание системных сообщений и короткие фразы
@@ -379,55 +405,10 @@ def handle_activate_ai_teacher(data):
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    # Инициализируем менеджер практики
-    room_practice[room_id] = PracticeManager(socketio, room_dialogue[room_id])
-    
     greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
-
-@socketio.on('start_practice')
-def handle_start_practice(data):
-    """Обработчик начала практики после урока"""
-    room_id = data['room_id']
-    dialogue = room_dialogue.get(room_id)
-    practice_manager = room_practice.get(room_id)
-    
-    if not dialogue or not practice_manager:
-        return
-    
-    if dialogue.is_lesson_started() and dialogue.lesson_content:
-        lesson_data = dialogue.get_selected_lesson()
-        success = practice_manager.start_practice_session(
-            dialogue.current_subject,
-            lesson_data['id'],
-            dialogue.lesson_content
-        )
-        
-        if success:
-            # Завершаем урок и начинаем практику
-            dialogue.lesson_started = False
-            dialogue.current_state = "greeting"
-            
-            first_question = practice_manager.get_next_question()
-            if first_question:
-                practice_manager.ask_question(room_id, first_question)
-                emit('practice_started', {'room_id': room_id}, room=room_id)
-        else:
-            error_msg = "Не удалось начать практику. Попробуйте позже."
-            speak_text(room_id, error_msg, voice_type='female', is_teacher=True)
-
-@socketio.on('skip_to_practice')
-def handle_skip_to_practice(data):
-    """Пропустить урок и сразу начать практику (для тестирования)"""
-    room_id = data['room_id']
-    practice_manager = room_practice.get(room_id)
-    
-    if practice_manager:
-        success = practice_manager.skip_to_practice(room_id)
-        if success:
-            emit('practice_started', {'room_id': room_id}, room=room_id)
 
 @socketio.on('set_llm_mode')
 def handle_set_llm_mode(data):
@@ -472,6 +453,22 @@ def handle_llm_response_ready(data):
     
     # Озвучиваем ответ
     speak_text(room_id, answer, voice_type='female', is_teacher=True)
+
+@socketio.on('practice_started')
+def handle_practice_started(data):
+    """Обработчик начала фазы практики"""
+    room_id = data['room_id']
+    room_practice_active[room_id] = True
+    emit('practice_started', {}, room=room_id)
+    print(f"Практика начата в комнате {room_id}")
+
+@socketio.on('practice_ended')
+def handle_practice_ended(data):
+    """Обработчик завершения фазы практики"""
+    room_id = data['room_id']
+    room_practice_active[room_id] = False
+    emit('practice_ended', {}, room=room_id)
+    print(f"Практика завершена в комнате {room_id}")
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
@@ -674,6 +671,27 @@ def get_available_lessons():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/practice_content/<lesson_id>')
+def get_practice_content(lesson_id):
+    """Получение практических заданий для урока"""
+    try:
+        practice_file = PRACTICE_DIR / f"{lesson_id}.json"
+        if not practice_file.exists():
+            return jsonify({"error": "Practice not found"}), 404
+        
+        with open(practice_file, 'r', encoding='utf-8') as f:
+            content = json.load(f)
+        
+        return jsonify({
+            "success": True,
+            "lesson_id": lesson_id,
+            "content": content,
+            "question_count": len(content.get('questions', []))
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 def _detect_subject(filename: str) -> str:
     """Определяет предмет по названию файла"""
     filename_lower = filename.lower()
@@ -772,6 +790,28 @@ def add_lesson():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@app.route('/api/add_practice', methods=['POST'])
+def add_practice():
+    """Добавление практических заданий"""
+    try:
+        data = request.json
+        lesson_id = data.get('lesson_id', '')
+        practice_data = data.get('practice_data', {})
+        
+        if not lesson_id or not practice_data:
+            return jsonify({"success": False, "error": "Lesson ID and practice data are required"})
+        
+        # Создаем файл практики
+        practice_file = PRACTICE_DIR / f"{lesson_id}.json"
+        
+        with open(practice_file, 'w', encoding='utf-8') as f:
+            json.dump(practice_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({"success": True, "lesson_id": lesson_id, "question_count": len(practice_data.get('questions', []))})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route('/api/download_knowledge')
 def download_knowledge():
     """Скачивание базы знаний"""
@@ -825,6 +865,31 @@ def download_lessons():
         temp_zip.name,
         as_attachment=True,
         download_name="ai_teacher_lessons.zip",
+        mimetype='application/zip'
+    )
+
+@app.route('/api/download_practice')
+def download_practice():
+    """Скачивание всех практических заданий"""
+    if not any(PRACTICE_DIR.iterdir()):
+        return jsonify({"success": False, "error": "Практические задания не найдены"})
+    
+    # Создаем временный zip-файл
+    import tempfile
+    import zipfile
+    
+    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    
+    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+        for practice_file in PRACTICE_DIR.glob("*.json"):
+            zipf.write(practice_file, practice_file.name)
+    
+    temp_zip.close()
+    
+    return send_file(
+        temp_zip.name,
+        as_attachment=True,
+        download_name="ai_teacher_practice.zip",
         mimetype='application/zip'
     )
 
