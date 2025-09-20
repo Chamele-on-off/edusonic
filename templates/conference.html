@@ -21,8 +21,6 @@
             --board-text: #333333;
             --board-border: #E6E9EF;
             --board-shadow: rgba(0, 0, 0, 0.1);
-            --practice-color: #7209b7;
-            --practice-bg: #f3e8fd;
         }
         
         * {
@@ -424,17 +422,6 @@
             gap: 5px;
         }
         
-        #practice-indicator {
-            display: none;
-            align-items: center;
-            gap: 5px;
-            color: var(--practice-color);
-            background: var(--practice-bg);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-        
         #controls {
             background: rgba(0, 0, 0, 0.7);
             padding: 15px;
@@ -573,32 +560,6 @@
             color: var(--primary);
         }
         
-        .practice-notification {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: var(--practice-bg);
-            color: var(--practice-color);
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-weight: bold;
-            z-index: 15;
-            display: none;
-            box-shadow: 0 4px 12px rgba(114, 9, 183, 0.3);
-            animation: slideInRight 0.5s ease-out;
-        }
-        
-        @keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translateX(100%);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-        
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -682,13 +643,6 @@
             #answer-input {
                 padding: 10px;
                 font-size: 14px;
-            }
-            
-            .practice-notification {
-                top: 70px;
-                right: 15px;
-                font-size: 14px;
-                padding: 10px 16px;
             }
         }
         
@@ -775,13 +729,6 @@
             .color-option {
                 width: 16px;
                 height: 16px;
-            }
-            
-            .practice-notification {
-                top: 60px;
-                right: 10px;
-                font-size: 12px;
-                padding: 8px 14px;
             }
         }
         
@@ -936,15 +883,6 @@
                     <i class="fas fa-users"></i>
                     <span id="participants-count">1</span> участников
                 </div>
-                <div id="practice-indicator">
-                    <i class="fas fa-graduation-cap"></i>
-                    <span>Практика</span>
-                </div>
-            </div>
-            
-            <div id="practice-notification" class="practice-notification">
-                <i class="fas fa-graduation-cap"></i>
-                <span>Началась практическая часть!</span>
             </div>
             
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
@@ -1021,8 +959,6 @@
         const answerInput = document.getElementById('answer-input');
         const submitAnswerBtn = document.getElementById('submit-answer');
         const colorOptions = document.querySelectorAll('.color-option');
-        const practiceIndicator = document.getElementById('practice-indicator');
-        const practiceNotification = document.getElementById('practice-notification');
 
         let userStream = null;
         let socket = null;
@@ -1052,8 +988,6 @@
         let currentColor = '#000000';
         let lastX = 0;
         let lastY = 0;
-        let isPracticeActive = false;
-        let audioElements = []; // Массив для хранения всех аудио элементов
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -1240,19 +1174,10 @@
         function submitAnswer() {
             const answer = answerInput.value.trim();
             if (answer) {
-                if (isPracticeActive) {
-                    // Отправляем ответ для практики
-                    socket.emit('student_answer', {
-                        room_id: roomId,
-                        answer: answer
-                    });
-                } else {
-                    // Отправляем как обычную речь
-                    socket.emit('recognized_speech', {
-                        room_id: roomId,
-                        text: answer
-                    });
-                }
+                socket.emit('recognized_speech', {
+                    room_id: roomId,
+                    text: answer
+                });
                 answerInput.value = '';
                 setTool('text');
                 showStudentSpeech(answer, 'me');
@@ -1425,35 +1350,19 @@
             }
             
             function playAudioForIOS(base64Audio) {
-                // iOS требует пользовательского взаимодействия для воспроизведения аудио
-                // Создаем новый элемент audio для каждого воспроизведения
-                const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
-                audio.preload = 'auto';
+                // iOS requires user interaction to play audio
+                // We'll use the hidden audio element and trigger it
+                audioFix.src = `data:audio/mp3;base64,${base64Audio}`;
                 
-                // Добавляем в массив для предотвращения garbage collection
-                audioElements.push(audio);
-                
-                // Ограничиваем количество хранимых элементов
-                if (audioElements.length > 10) {
-                    audioElements.shift();
-                }
-                
-                const playPromise = audio.play();
+                const playPromise = audioFix.play();
                 if (playPromise !== undefined) {
                     playPromise
                         .then(() => {
-                            // Аудио успешно запущено
-                            audio.onended = () => {
-                                // Удаляем из массива после завершения
-                                const index = audioElements.indexOf(audio);
-                                if (index > -1) {
-                                    audioElements.splice(index, 1);
-                                }
-                            };
+                            // Audio started successfully
                         })
                         .catch(error => {
                             console.error('iOS audio play failed:', error);
-                            // Показываем текст речи как запасной вариант
+                            // Show the speech text as fallback
                             if (!isLessonActive) {
                                 showTeacherSpeech(data.text);
                             }
@@ -1501,35 +1410,9 @@
             
             socket.on('lesson_started', (data) => {
                 isLessonActive = true;
-                isPracticeActive = false;
                 currentLesson = data;
                 currentParagraph = 0;
-                practiceIndicator.style.display = 'none';
                 loadLessonContent(data.lesson_id);
-            });
-            
-            socket.on('practice_started', (data) => {
-                isPracticeActive = true;
-                practiceIndicator.style.display = 'flex';
-                statusDiv.textContent = 'Практическая часть началась';
-                
-                // Показываем уведомление о начале практики
-                practiceNotification.style.display = 'flex';
-                setTimeout(() => {
-                    practiceNotification.style.display = 'none';
-                }, 5000);
-                
-                // Автоматически активируем инструмент ответа
-                setTool('answer');
-            });
-            
-            socket.on('practice_ended', (data) => {
-                isPracticeActive = false;
-                practiceIndicator.style.display = 'none';
-                statusDiv.textContent = 'Практика завершена';
-                
-                // Скрываем поле для ответа
-                answerInputContainer.style.display = 'none';
             });
         }
 
@@ -1829,19 +1712,10 @@
                     }
 
                     if (finalTranscript) {
-                        if (isPracticeActive) {
-                            // Во время практики отправляем как ответ
-                            socket.emit('student_answer', {
-                                room_id: roomId,
-                                answer: finalTranscript
-                            });
-                        } else {
-                            // В обычном режиме как распознанную речь
-                            socket.emit('recognized_speech', {
-                                room_id: roomId,
-                                text: finalTranscript
-                            });
-                        }
+                        socket.emit('recognized_speech', {
+                            room_id: roomId,
+                            text: finalTranscript
+                        });
                         showStudentSpeech(finalTranscript, 'me');
                     }
                 };
