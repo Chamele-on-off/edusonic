@@ -14,6 +14,7 @@ from config import update_api_key, get_api_key, load_config, get_model_config, g
 import requests
 import json
 from datetime import datetime
+from practice_manager import PracticeManager  # Новый импорт
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -37,6 +38,7 @@ room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)  # Новый флаг для отслеживания речи учителя
+room_practice = defaultdict(lambda: None)  # Новое состояние для практики
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -212,6 +214,10 @@ def handle_join_room(data):
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
+    # Инициализируем менеджер практики для комнаты если его нет
+    if room_id not in room_practice:
+        room_practice[room_id] = PracticeManager(socketio, room_dialogue[room_id])
+    
     if len(room_participants[room_id]) == 1:
         greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
@@ -256,6 +262,13 @@ def handle_recognized_speech(data):
     # ИГНОРИРУЕМ распознанную речь, если учитель говорит
     if room_teacher_speaking[room_id]:
         print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
+        return
+
+    # Проверяем, активна ли практика в этой комнате
+    practice_manager = room_practice.get(room_id)
+    if practice_manager and practice_manager.is_practice_active:
+        print(f"Обработка ответа во время практики: {text}")
+        practice_manager.process_student_response(room_id, text)
         return
 
     # Игнорируем распознавание системных сообщений и короткие фразы
@@ -366,10 +379,55 @@ def handle_activate_ai_teacher(data):
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
+    # Инициализируем менеджер практики
+    room_practice[room_id] = PracticeManager(socketio, room_dialogue[room_id])
+    
     greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
+
+@socketio.on('start_practice')
+def handle_start_practice(data):
+    """Обработчик начала практики после урока"""
+    room_id = data['room_id']
+    dialogue = room_dialogue.get(room_id)
+    practice_manager = room_practice.get(room_id)
+    
+    if not dialogue or not practice_manager:
+        return
+    
+    if dialogue.is_lesson_started() and dialogue.lesson_content:
+        lesson_data = dialogue.get_selected_lesson()
+        success = practice_manager.start_practice_session(
+            dialogue.current_subject,
+            lesson_data['id'],
+            dialogue.lesson_content
+        )
+        
+        if success:
+            # Завершаем урок и начинаем практику
+            dialogue.lesson_started = False
+            dialogue.current_state = "greeting"
+            
+            first_question = practice_manager.get_next_question()
+            if first_question:
+                practice_manager.ask_question(room_id, first_question)
+                emit('practice_started', {'room_id': room_id}, room=room_id)
+        else:
+            error_msg = "Не удалось начать практику. Попробуйте позже."
+            speak_text(room_id, error_msg, voice_type='female', is_teacher=True)
+
+@socketio.on('skip_to_practice')
+def handle_skip_to_practice(data):
+    """Пропустить урок и сразу начать практику (для тестирования)"""
+    room_id = data['room_id']
+    practice_manager = room_practice.get(room_id)
+    
+    if practice_manager:
+        success = practice_manager.skip_to_practice(room_id)
+        if success:
+            emit('practice_started', {'room_id': room_id}, room=room_id)
 
 @socketio.on('set_llm_mode')
 def handle_set_llm_mode(data):
@@ -395,13 +453,15 @@ def handle_llm_response_ready(data):
     question = data['question']
     answer = data['answer']
     
+    print(f"Получен ответ LLM для комнаты {room_id}: {answer[:100]}...")
+    
     # Сбрасываем состояние речи учителя, чтобы гарантированно озвучить ответ
     reset_speaking_state(room_id, is_teacher=True)
     room_teacher_speaking[room_id] = False
     room_speaking[room_id] = False
     
     # Небольшая задержка для гарантии сброса состояния
-    time.sleep(0.3)
+    time.sleep(0.5)
     
     # Отправляем ответ в комнату
     emit('speech_text', {
