@@ -18,7 +18,7 @@ class DialogueManager:
             "greeting": self._handle_greeting,
             "subject_selection": self._handle_subject_selection,
             "lesson_reading": self._handle_lesson_reading,
-            "practice_session": self._handle_practice_session  # Новое состояние для практики
+            "practice_session": self._handle_practice_session
         }
         self.current_state = "greeting"
         self.current_subject = None
@@ -44,6 +44,17 @@ class DialogueManager:
         self.practice_active = False
         self.current_question_index = 0
         self.current_expected_answer = ""
+        
+        # Новые поля для улучшенного диалога
+        self.last_subject_prompt_time = 0
+        self.subject_prompt_cooldown = 30
+        self.subject_prompt_variants = [
+            "Давайте выберем предмет для урока! У меня есть: {subjects}. Что вас интересует?",
+            "Какой предмет хотите изучить сегодня? Доступно: {subjects}.",
+            "Сказать, какие предметы я преподаю? Или может ты хочешь изучить что-то определенное? У меня есть: {subjects}.",
+            "Что будем изучать? Выбирайте из: {subjects}.",
+            "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
+        ]
         
         self._load_lessons()
         
@@ -264,7 +275,6 @@ class DialogueManager:
 
     def _handle_llm_dialogue(self, text: str) -> Optional[str]:
         """Гарантированная обработка диалога через LLM с контекста"""
-        # Всегда пытаемся сделать запрос к LLM, даже если API ключа нет
         try:
             # Собираем контекст диалога
             context = self._get_conversation_context()
@@ -276,7 +286,7 @@ class DialogueManager:
             else:
                 system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
             
-            # Гарантированный запрос к LLM
+            # ГАРАНТИРОВАННЫЙ запрос к LLM - даже если API ключа нет!
             llm_response = self.llm._query_llm_api(
                 prompt=text,
                 context=context,
