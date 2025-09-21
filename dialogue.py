@@ -84,7 +84,7 @@ class DialogueManager:
         try:
             dialogue_path = Path("knowledge/dialogue_knowledge.json")
             if dialogue_path.exists():
-                with open(dialogue_path, 'r', encoding='utf-8') as f:
+                with open(dialogue_path, 'r', encoding='utf-8') f:
                     return json.load(f)
         except Exception as e:
             print(f"Ошибка загрузки диалоговых шаблонов: {e}")
@@ -385,20 +385,21 @@ class DialogueManager:
         try:
             print(f"Генерация урока по теме: {topic}")
             
-            # Формируем промпт для генерации урока
+            # Формируем промпт для генерации урока с четким указанием формата
             system_prompt = """Ты - эксперт по созданию образовательных материалов. 
 Создай структурированный урок по заданной теме. Урок должен быть:
 1. Информативным и точным
-2. Разделен на логические абзацы (разделяй пустыми строками)
+2. Разделен на логические абзацы (разделяй пустыми строками - ДВОЙНЫМИ ПЕРЕНОСАМИ СТРОКИ)
 3. Адаптирован для учеников
 4. На русском языке
 5. Содержать практические примеры если уместно
 
-ВОЗРАЩАЙ ТЕКСТ, ГДЕ КАЖДЫЙ АБЗАЦ РАЗДЕЛЕН ДВУМЯ ПЕРЕНОСАМИ СТРОКИ (\\n\\n)."""
+ВАЖНО: Каждый абзац должен быть разделен ДВУМЯ ПЕРЕНОСАМИ СТРОКИ (\\n\\n).
+Не используй маркдаун, только чистый текст с правильным форматированием."""
 
             # Запрос к LLM
             lesson_content = self.llm._query_llm_api(
-                prompt=f"Создай подробный урок на тему: {topic}",
+                prompt=f"Создай подробный урок на тему: {topic}. Убедись, что текст разделен на абзацы двойными переносами строки.",
                 context="",
                 subject="общее",
                 system_prompt=system_prompt,
@@ -408,6 +409,27 @@ class DialogueManager:
             if not lesson_content:
                 print("Ошибка: LLM не вернул содержание урока")
                 return None
+            
+            # Очищаем ответ от возможных маркдаун-форматирований
+            lesson_content = re.sub(r'\*\*(.*?)\*\*', r'\1', lesson_content)  # Удаляем **жирный**
+            lesson_content = re.sub(r'\*(.*?)\*', r'\1', lesson_content)      # Удаляем *курсив*
+            lesson_content = re.sub(r'`(.*?)`', r'\1', lesson_content)        # Удаляем `код`
+            lesson_content = re.sub(r'#+\s*', '', lesson_content)             # Удаляем заголовки
+            
+            # Убеждаемся, что есть двойные переносы строк
+            if '\\n\\n' not in lesson_content and '\n\n' not in lesson_content:
+                # Если нет двойных переносов, добавляем их после каждых 3-4 предложений
+                sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
+                paragraphs = []
+                current_paragraph = []
+                
+                for i, sentence in enumerate(sentences):
+                    current_paragraph.append(sentence)
+                    if len(current_paragraph) >= 3 or i == len(sentences) - 1:
+                        paragraphs.append(' '.join(current_paragraph))
+                        current_paragraph = []
+                
+                lesson_content = '\n\n'.join(paragraphs)
             
             # Создаем файл урока
             lesson_id = f"generated_{topic.lower().replace(' ', '_')}_{int(time.time())}"
@@ -700,7 +722,8 @@ class DialogueManager:
         
         # 4. Сформировать ответ
         if next_question:
-            # Если есть следующий вопрос, возвращаем оценку + следующий вопрос
+            # Если есть следующий вопрос, возвращаем только оценку + следующий вопрос
+            # НЕ добавляем предложения выбора предмета!
             return f"{evaluation}. Следующий вопрос: {next_question['question']}"
         else:
             # Если вопросов больше нет, завершаем практику
