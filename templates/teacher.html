@@ -172,7 +172,7 @@
             resize: vertical;
         }
         
-        .knowledge-form, .lesson-form {
+        .knowledge-form, .lesson-form, .practice-form {
             margin-bottom: 25px;
             padding: 15px;
             background: #f9f9f9;
@@ -332,6 +332,92 @@
             line-height: 1.4;
         }
         
+        .file-list {
+            margin: 15px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: bold;
+            color: #2c3e50;
+            word-break: break-all;
+        }
+        
+        .file-size {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .file-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .file-btn.delete {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .file-btn.delete:hover {
+            background: #c82333;
+        }
+        
+        .upload-form {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px dashed #ddd;
+            margin: 15px 0;
+            text-align: center;
+        }
+        
+        .upload-form.dragover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+        
+        .upload-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .upload-btn:hover {
+            background: #138496;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -369,6 +455,16 @@
                 margin-bottom: 0;
                 border-radius: 4px 4px 0 0;
             }
+            
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .file-actions {
+                align-self: flex-end;
+            }
         }
         
         @media (max-width: 480px) {
@@ -393,6 +489,11 @@
             
             .tab-content {
                 padding: 15px;
+            }
+            
+            .file-actions {
+                align-self: stretch;
+                justify-content: flex-end;
             }
         }
     </style>
@@ -500,7 +601,7 @@
 
         <div id="conference-link">
             <a id="conference-link-a" href="/conference?room=default" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
-                📹 Перейти в конференцию
+                📹 Перейти в конференции
             </a>
         </div>
         
@@ -511,6 +612,7 @@
             <div class="tab-container">
                 <div class="tab active" data-tab="knowledge">База знаний</div>
                 <div class="tab" data-tab="lessons">Уроки</div>
+                <div class="tab" data-tab="practice">Практика</div>
                 <div class="tab" data-tab="download">Скачать</div>
             </div>
             
@@ -558,6 +660,35 @@
                 </div>
             </div>
             
+            <div class="tab-content" id="practice-tab">
+                <h3>Управление файлами практики</h3>
+                
+                <div class="practice-form">
+                    <h4>📝 Загрузить файл практики</h4>
+                    <div class="upload-form" id="upload-area">
+                        <p>Перетащите JSON файл сюда или</p>
+                        <input type="file" id="practice-file" accept=".json" style="display: none;">
+                        <button class="upload-btn" id="select-file-btn">Выбрать файл</button>
+                        <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
+                            Поддерживаются только JSON файлы с вопросами для практики
+                        </p>
+                    </div>
+                    <div id="upload-status" class="success-message"></div>
+                </div>
+                
+                <div class="practice-form">
+                    <h4>📋 Список файлов практики</h4>
+                    <div id="practice-files-list" class="file-list">
+                        <div class="file-item">
+                            <div class="file-info">
+                                <div class="file-name">Загрузка...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="refresh-files-btn" style="margin-top: 10px;">🔄 Обновить список</button>
+                </div>
+            </div>
+            
             <div class="tab-content" id="download-tab">
                 <h3>Скачать материалы</h3>
                 
@@ -585,6 +716,14 @@
                     <p>Скачать все доступные уроки:</p>
                     <div class="download-buttons">
                         <button class="download-btn" id="download-lessons-btn">📥 Скачать все уроки</button>
+                    </div>
+                </div>
+                
+                <div style="padding: 15px; background: #f9f9f9; border-radius: 6px; margin-top: 20px;">
+                    <h4>🎯 Практические задания</h4>
+                    <p>Скачать все практические задания:</p>
+                    <div class="download-buttons">
+                        <button class="download-btn" id="download-practice-btn">📥 Скачать практику</button>
                     </div>
                 </div>
                 
@@ -629,11 +768,20 @@
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
         const downloadLessonsBtn = document.getElementById('download-lessons-btn');
+        const downloadPracticeBtn = document.getElementById('download-practice-btn');
         
         // Элементы статуса
         const knowledgeStatus = document.getElementById('knowledge-status');
         const lessonStatus = document.getElementById('lesson-status');
         const downloadStatus = document.getElementById('download-status');
+        
+        // Элементы для управления практикой
+        const practiceFileInput = document.getElementById('practice-file');
+        const selectFileBtn = document.getElementById('select-file-btn');
+        const uploadArea = document.getElementById('upload-area');
+        const uploadStatus = document.getElementById('upload-status');
+        const practiceFilesList = document.getElementById('practice-files-list');
+        const refreshFilesBtn = document.getElementById('refresh-files-btn');
         
         // Socket.io
         const socket = io();
@@ -752,7 +900,7 @@
                 .then(data => {
                     if (data.success) {
                         llmModeSelect.value = data.mode;
-                        log(`Текущий режим LLM: ${data.mode}`);
+                        log('Текущий режим LLM: ' + data.mode);
                     }
                 })
                 .catch(error => {
@@ -790,39 +938,149 @@
             });
         }
         
+        // Функции для работы с файлами практики
+        function loadPracticeFiles() {
+            fetch('/api/practice_files')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayPracticeFiles(data.files);
+                    } else {
+                        practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Ошибка загрузки файлов</div></div></div>';
+                    }
+                })
+                .catch(error => {
+                    practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Ошибка сети</div></div></div>';
+                    log('Ошибка загрузки файлов практики: ' + error);
+                });
+        }
+        
+        function displayPracticeFiles(files) {
+            if (files.length === 0) {
+                practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Файлы не найдены</div></div></div>';
+                return;
+            }
+            
+            practiceFilesList.innerHTML = '';
+            files.forEach(file => {
+                const fileSize = formatFileSize(file.size);
+                const fileDate = new Date(file.modified).toLocaleDateString();
+                
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <div class="file-name">${file.filename}</div>
+                        <div class="file-size">${fileSize} · ${fileDate}</div>
+                    </div>
+                    <div class="file-actions">
+                        <button class="file-btn delete" data-filename="${file.filename}">Удалить</button>
+                    </div>
+                `;
+                practiceFilesList.appendChild(fileItem);
+            });
+            
+            // Добавляем обработчики для кнопок удаления
+            document.querySelectorAll('.file-btn.delete').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const filename = this.dataset.filename;
+                    deletePracticeFile(filename);
+                });
+            });
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function deletePracticeFile(filename) {
+            if (!confirm('Удалить файл "' + filename + '"?')) return;
+            
+            fetch('/api/delete_practice/' + filename)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showStatus(uploadStatus, data.message);
+                        loadPracticeFiles();
+                    } else {
+                        showStatus(uploadStatus, 'Ошибка: ' + data.error, false);
+                    }
+                })
+                .catch(error => {
+                    showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
+                });
+        }
+        
+        function uploadPracticeFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            fetch('/api/upload_practice', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(uploadStatus, data.message);
+                    loadPracticeFiles();
+                } else {
+                    showStatus(uploadStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
+        
         // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
             roomIdSpan.textContent = roomId;
-            conferenceLink.href = `/conference?room=${roomId}`;
+            conferenceLink.href = '/conference?room=' + roomId;
             
             // Генерируем код для вставки
-            const embedCode = `<iframe src="/conference?room=${roomId}&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>`;
+            const embedCode = '<iframe src="/conference?room=' + roomId + '&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>';
             embedCodeTextarea.value = embedCode;
             
             // Сообщаем серверу о смене комнаты
             socket.emit('join_room', { room_id: roomId });
             
-            log(`Переключено в комнату: ${roomId}`);
+            log('Переключено в комнату: ' + roomId);
         }
         
         // Логирование
         function log(message) {
             const now = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += `[${now}] ${message}<br>`;
+            debugDiv.innerHTML += '[' + now + '] ' + message + '<br>';
             debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        // Показать статус сообщение
+        function showStatus(element, message, isSuccess = true) {
+            element.textContent = message;
+            element.className = isSuccess ? 'success-message' : 'error-message';
+            element.style.display = 'block';
+            
+            setTimeout(function() {
+                element.style.display = 'none';
+            }, 5000);
         }
         
         // Загрузка изображения с повторами
         function loadImage(src, retries = 3) {
-            return new Promise((resolve, reject) => {
+            return new Promise(function(resolve, reject) {
                 const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => {
+                img.onload = function() { resolve(img); };
+                img.onerror = function() {
                     if (retries > 0) {
-                        setTimeout(() => loadImage(src, retries - 1).then(resolve).catch(reject), 300);
+                        setTimeout(function() { loadImage(src, retries - 1).then(resolve).catch(reject); }, 300);
                     } else {
-                        reject(`Не удалось загрузить: ${src}`);
+                        reject('Не удалось загрузить: ' + src);
                     }
                 };
                 img.src = src;
@@ -830,68 +1088,78 @@
         }
         
         // Загрузка списка аватаров
-        async function loadAvatars() {
-            try {
-                const response = await fetch('/api/avatars');
-                if (!response.ok) throw new Error('Ошибка загрузки аватаров');
-                
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
-                data.avatars.forEach(avatar => {
-                    const option = document.createElement('option');
-                    option.value = avatar;
-                    option.textContent = avatar;
-                    avatarSelect.appendChild(option);
+        function loadAvatars() {
+            fetch('/api/avatars')
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.error) throw new Error(data.error);
+                    
+                    avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
+                    data.avatars.forEach(function(avatar) {
+                        const option = document.createElement('option');
+                        option.value = avatar;
+                        option.textContent = avatar;
+                        avatarSelect.appendChild(option);
+                    });
+                    
+                    log('Загружено аватаров: ' + data.avatars.length);
+                })
+                .catch(function(error) {
+                    log(error.message);
                 });
-                
-                log(`Загружено аватаров: ${data.avatars.length}`);
-            } catch (error) {
-                log(error.message);
-            }
         }
         
         // Загрузка кадров аватара
-        async function loadAvatarFrames(avatarName) {
-            try {
-                statusDiv.textContent = `Загрузка ${avatarName}...`;
-                loadedImages = [];
-                
-                const response = await fetch(`/api/frames/${avatarName}`);
-                if (!response.ok) throw new Error('Ошибка загрузки кадров');
-                
-                const data = await response.json();
-                if (data.error) throw new Error(data.error);
-                
-                frames = data.frames;
-                log(`Найдено кадров: ${frames.length}`);
-                
-                // Загружаем все изображения
-                for (let i = 0; i < frames.length; i++) {
-                    try {
-                        const img = await loadImage(`/frames/${avatarName}/${frames[i]}`);
-                        loadedImages.push(img);
-                        statusDiv.textContent = `${avatarName}: загружено ${i+1}/${frames.length}`;
-                    } catch (error) {
-                        log(error);
+        function loadAvatarFrames(avatarName) {
+            statusDiv.textContent = 'Загрузка ' + avatarName + '...';
+            loadedImages = [];
+            
+            fetch('/api/frames/' + avatarName)
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.error) throw new Error(data.error);
+                    
+                    frames = data.frames;
+                    log('Найдено кадров: ' + frames.length);
+                    
+                    // Загружаем все изображения последовательно
+                    let loadedCount = 0;
+                    
+                    function loadNextImage() {
+                        if (loadedCount >= frames.length) {
+                            if (loadedImages.length > 0) {
+                                statusDiv.textContent = avatarName + ': готово (' + loadedImages.length + '/' + frames.length + ')';
+                                startBtn.disabled = false;
+                                speakBtn.disabled = false;
+                                avatar.src = loadedImages[0].src;
+                                currentFrame = 0;
+                            } else {
+                                statusDiv.textContent = avatarName + ': нет загруженных кадров';
+                            }
+                            return;
+                        }
+                        
+                        const frame = frames[loadedCount];
+                        loadImage('/frames/' + avatarName + '/' + frame)
+                            .then(function(img) {
+                                loadedImages.push(img);
+                                loadedCount++;
+                                statusDiv.textContent = avatarName + ': загружено ' + loadedCount + '/' + frames.length;
+                                loadNextImage();
+                            })
+                            .catch(function(error) {
+                                loadedCount++;
+                                log(error);
+                                loadNextImage();
+                            });
                     }
-                }
-                
-                if (loadedImages.length > 0) {
-                    statusDiv.textContent = `${avatarName}: готово (${loadedImages.length}/${frames.length})`;
-                    startBtn.disabled = false;
-                    speakBtn.disabled = false;
-                    avatar.src = loadedImages[0].src;
-                    currentFrame = 0;
-                } else {
-                    statusDiv.textContent = `${avatarName}: нет загруженных кадров`;
-                }
-                
-            } catch (error) {
-                statusDiv.textContent = `Ошибка: ${error.message}`;
-                log(error.message);
-            }
+                    
+                    loadNextImage();
+                })
+                .catch(function(error) {
+                    statusDiv.textContent = 'Ошибка: ' + error.message;
+                    log(error.message);
+                });
         }
         
         // Показать текущий кадр
@@ -900,11 +1168,11 @@
             
             currentFrame = currentFrame % loadedImages.length;
             avatar.src = loadedImages[currentFrame].src;
-            statusDiv.textContent = `${currentAvatar}: кадр ${currentFrame + 1}/${loadedImages.length}`;
+            statusDiv.textContent = currentAvatar + ': кадр ' + (currentFrame + 1) + '/' + loadedImages.length;
         }
         
         // Создание видео потока из изображений
-        async function createVideoStream() {
+        function createVideoStream() {
             try {
                 const canvas = document.createElement('canvas');
                 canvas.width = loadedImages[0].width;
@@ -915,38 +1183,40 @@
                 videoPreview.srcObject = stream;
                 videoPreview.style.display = 'block';
                 
-                videoStreamInterval = setInterval(() => {
+                videoStreamInterval = setInterval(function() {
                     ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
                 }, 1000 / FPS);
                 
                 return stream;
             } catch (error) {
-                log(`Ошибка создания видео потока: ${error.message}`);
+                log('Ошибка создания видео потока: ' + error.message);
                 return null;
             }
         }
         
         // Запуск анимации
-        async function startAnimation() {
+        function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
             
             // Создаем видео поток
-            mediaStream = await createVideoStream();
-            
-            // Отправляем серверу информацию о кадрах для трансляции
-            socket.emit('start_animation', { 
-                room_id: currentRoom,
-                avatar_name: currentAvatar
+            createVideoStream().then(function(stream) {
+                mediaStream = stream;
+                
+                // Отправляем серверу информацию о кадрах для трансляции
+                socket.emit('start_animation', { 
+                    room_id: currentRoom,
+                    avatar_name: currentAvatar
+                });
+                
+                animationInterval = setInterval(function() {
+                    currentFrame++;
+                    showFrame();
+                }, 1000 / FPS);
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                log('Анимация запущена (' + FPS + ' FPS) в комнате ' + currentRoom);
             });
-            
-            animationInterval = setInterval(() => {
-                currentFrame++;
-                showFrame();
-            }, 1000 / FPS);
-            
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            log(`Анимация запущена (${FPS} FPS) в комнате ${currentRoom}`);
         }
         
         // Остановка анимации
@@ -959,7 +1229,7 @@
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 socket.emit('stop_animation', { room_id: currentRoom });
-                log("Анимация остановлена");
+                log('Анимация остановлена');
             }
             
             if (videoStreamInterval) {
@@ -968,7 +1238,7 @@
             }
             
             if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream.getTracks().forEach(function(track) { track.stop(); });
                 mediaStream = null;
                 videoPreview.style.display = 'none';
             }
@@ -984,29 +1254,21 @@
                     room_id: currentRoom,
                     voice: voiceType
                 });
-                log(`Отправлен текст для озвучивания: "${text}" (${voiceType === 'male' ? 'мужской' : 'женский'} голос) в комнату ${currentRoom}`);
+                log('Отправлен текст для озвучивания: "' + text + '" (' + (voiceType === 'male' ? 'мужской' : 'женский') + ' голос) в комнату ' + currentRoom);
                 speechText.value = '';
             }
         }
         
-        // Показать статус сообщение
-        function showStatus(element, message, isSuccess = true) {
-            element.textContent = message;
-            element.className = isSuccess ? 'success-message' : 'error-message';
-            element.style.display = 'block';
-            
-            setTimeout(() => {
-                element.style.display = 'none';
-            }, 5000);
-        }
-        
         // Инициализация
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', function() {
             // Загружаем API ключи при загрузке страницы
             loadApiKeys();
             
             // Загружаем режим LLM при загрузке страницы
             loadLLMMode();
+            
+            // Загружаем файлы практики при загрузке страницы
+            loadPracticeFiles();
             
             // Инициализация комнаты по умолчанию
             initRoom('default');
@@ -1015,11 +1277,11 @@
             loadAvatars();
             
             // Обработчики для API ключей
-            saveOpenrouterBtn.addEventListener('click', () => {
+            saveOpenrouterBtn.addEventListener('click', function() {
                 saveApiKey('openrouter', openrouterKeyInput.value);
             });
             
-            testOpenrouterBtn.addEventListener('click', () => {
+            testOpenrouterBtn.addEventListener('click', function() {
                 testApiKey('openrouter', openrouterKeyInput.value);
             });
             
@@ -1029,14 +1291,53 @@
                 setLLMMode(mode);
             });
             
+            // Обработчики для управления файлами практики
+            selectFileBtn.addEventListener('click', function() {
+                practiceFileInput.click();
+            });
+            
+            practiceFileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    uploadPracticeFile(e.target.files[0]);
+                }
+            });
+            
+            refreshFilesBtn.addEventListener('click', function() {
+                loadPracticeFiles();
+            });
+            
+            // Drag and drop для загрузки файлов
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function() {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length > 0) {
+                    const file = e.dataTransfer.files[0];
+                    if (file.name.endsWith('.json')) {
+                        uploadPracticeFile(file);
+                    } else {
+                        showStatus(uploadStatus, 'Только JSON файлы поддерживаются', false);
+                    }
+                }
+            });
+            
             // Выбор аватара
-            avatarSelect.addEventListener('change', () => {
+            avatarSelect.addEventListener('change', function() {
                 currentAvatar = avatarSelect.value;
                 loadBtn.disabled = !currentAvatar;
             });
             
             // Кнопка загрузки
-            loadBtn.addEventListener('click', () => {
+            loadBtn.addEventListener('click', function() {
                 stopAnimation();
                 loadAvatarFrames(currentAvatar);
             });
@@ -1047,22 +1348,26 @@
             
             // Генерация речи
             speakBtn.addEventListener('click', generateSpeech);
-            speechText.addEventListener('keypress', (e) => {
+            speechText.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') generateSpeech();
             });
             
             // Смена комнаты
-            changeRoomBtn.addEventListener('click', () => {
+            changeRoomBtn.addEventListener('click', function() {
                 const newRoom = roomInput.value.trim() || 'default';
                 initRoom(newRoom);
                 roomInput.value = '';
             });
             
             // Управление вкладками
-            document.querySelectorAll('.tab').forEach(tab => {
+            document.querySelectorAll('.tab').forEach(function(tab) {
                 tab.addEventListener('click', function() {
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    document.querySelectorAll('.tab').forEach(function(t) {
+                        t.classList.remove('active');
+                    });
+                    document.querySelectorAll('.tab-content').forEach(function(c) {
+                        c.classList.remove('active');
+                    });
                     
                     this.classList.add('active');
                     document.getElementById(this.dataset.tab + '-tab').classList.add('active');
@@ -1089,16 +1394,16 @@
                         text: text
                     })
                 })
-                .then(response => response.json())
-                .then(data => {
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
                     if (data.success) {
-                        showStatus(knowledgeStatus, `Данные успешно добавлены в базу знаний! Добавлено элементов: ${data.added_items}`);
+                        showStatus(knowledgeStatus, 'Данные успешно добавлены в базу знаний! Добавлено элементов: ' + data.added_items);
                         document.getElementById('knowledge-text').value = '';
                     } else {
                         showStatus(knowledgeStatus, 'Ошибка: ' + data.error, false);
                     }
                 })
-                .catch(error => {
+                .catch(function(error) {
                     showStatus(knowledgeStatus, 'Ошибка при добавлении данных: ' + error, false);
                 });
             });
@@ -1125,17 +1430,17 @@
                         content: content
                     })
                 })
-                .then(response => response.json())
-                .then(data => {
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
                     if (data.success) {
-                        showStatus(lessonStatus, `Урок "${title}" успешно добавлен по предмету "${subject}"!`);
+                        showStatus(lessonStatus, 'Урок "' + title + '" успешно добавлен по предмету "' + subject + '"!');
                         document.getElementById('lesson-title').value = '';
                         document.getElementById('lesson-content').value = '';
                     } else {
                         showStatus(lessonStatus, 'Ошибка: ' + data.error, false);
                     }
                 })
-                .catch(error => {
+                .catch(function(error) {
                     showStatus(lessonStatus, 'Ошибка при добавлении урока: ' + error, false);
                 });
             });
@@ -1144,26 +1449,26 @@
             downloadKnowledgeBtn.addEventListener('click', function() {
                 const subject = document.getElementById('download-subject').value;
                 
-                fetch(`/api/download_knowledge?subject=${encodeURIComponent(subject)}`)
-                .then(response => {
+                fetch('/api/download_knowledge?subject=' + encodeURIComponent(subject))
+                .then(function(response) {
                     if (response.ok) {
                         return response.blob();
                     }
                     throw new Error('Ошибка скачивания');
                 })
-                .then(blob => {
+                .then(function(blob) {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.style.display = 'none';
                     a.href = url;
-                    a.download = `${subject}_knowledge.zip`;
+                    a.download = subject + '_knowledge.zip';
                     document.body.appendChild(a);
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                    showStatus(downloadStatus, `База знаний по предмету "${subject}" успешно скачана!`);
+                    showStatus(downloadStatus, 'База знаний по предмету "' + subject + '" успешно скачана!');
                 })
-                .catch(error => {
+                .catch(function(error) {
                     showStatus(downloadStatus, 'Ошибка при скачивании: ' + error.message, false);
                 });
             });
@@ -1171,13 +1476,13 @@
             // Скачивание уроков
             downloadLessonsBtn.addEventListener('click', function() {
                 fetch('/api/download_lessons')
-                .then(response => {
+                .then(function(response) {
                     if (response.ok) {
                         return response.blob();
                     }
                     throw new Error('Ошибка скачивания');
                 })
-                .then(blob => {
+                .then(function(blob) {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.style.display = 'none';
@@ -1189,8 +1494,34 @@
                     document.body.removeChild(a);
                     showStatus(downloadStatus, 'Все уроки успешно скачаны!');
                 })
-                .catch(error => {
+                .catch(function(error) {
                     showStatus(downloadStatus, 'Ошибка при скачивании уроков: ' + error.message, false);
+                });
+            });
+            
+            // Скачивание практики
+            downloadPracticeBtn.addEventListener('click', function() {
+                fetch('/api/download_practice')
+                .then(function(response) {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка скачивания');
+                })
+                .then(function(blob) {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'ai_teacher_practice.zip';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showStatus(downloadStatus, 'Практические задания успешно скачаны!');
+                })
+                .catch(function(error) {
+                    showStatus(downloadStatus, 'Ошибка при скачивании практики: ' + error.message, false);
                 });
             });
         });
