@@ -512,7 +512,7 @@ def get_llm_models():
 
 @app.route('/api/llm/status', methods=['GET'])
 def get_llm_status():
-    """Получение статуса LLM для комнаты"""
+    """Получение статуса LLM для комната"""
     room_id = request.args.get('room_id', 'default')
     
     if room_id in room_dialogue:
@@ -862,7 +862,7 @@ def add_lesson():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/add_practice', methods=['POST'])
+@app.route('/api/add_practice', methods['POST'])
 def add_practice():
     """Добавление практических заданий"""
     try:
