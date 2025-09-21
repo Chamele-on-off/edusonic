@@ -14,6 +14,7 @@ from config import update_api_key, get_api_key, load_config, get_model_config, g
 import requests
 import json
 from datetime import datetime
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -38,7 +39,8 @@ room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
-room_practice_active = defaultdict(bool)  # Новый флаг для практики
+room_practice_active = defaultdict(bool)
+room_current_question_index = defaultdict(int)  # Текущий индекс вопроса для каждой комнаты
 
 # Соответствие букв кадрам анимации рта
 PHONEME_MAP = {
@@ -161,7 +163,7 @@ def get_speech_frames(avatar_name, phoneme):
             if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комнаты"""
+    """Основной цикл анимации для комната"""
     blink_counter = 0
     blink_frames = get_blink_frames(avatar_name)
     neutral_frames = get_neutral_frames(avatar_name)
@@ -209,7 +211,7 @@ def handle_join_room(data):
     
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
-        room_dialogue[room_id].room_id = room_id  # Сохраняем ID комнаты для доступа
+        room_dialogue[room_id].room_id = room_id
     
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -285,6 +287,11 @@ def handle_student_answer(data):
             }, room=room_id)
             # Озвучиваем ответ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
+        else:
+            # Если response is None, практика завершена
+            room_practice_active[room_id] = False
+            room_current_question_index[room_id] = 0
+            emit('practice_ended', {}, room=room_id)
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -319,7 +326,7 @@ def handle_recognized_speech(data):
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
             # Сначала проверяем команды управления
-            if any(word in text.lower() for word in ["записал", "дальше", "продолжай", "следующий", "продолжить"]):
+            if any(word in text.lower() for word in ["записал", "дальше", 'продолжай', "следующий", "продолжить"]):
                 # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
@@ -400,7 +407,7 @@ def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
-    room_dialogue[room_id].room_id = room_id  # Сохраняем ID комнаты
+    room_dialogue[room_id].room_id = room_id
     
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -459,6 +466,7 @@ def handle_practice_started(data):
     """Обработчик начала фазы практики"""
     room_id = data['room_id']
     room_practice_active[room_id] = True
+    room_current_question_index[room_id] = 0
     emit('practice_started', {}, room=room_id)
     print(f"Практика начата в комнате {room_id}")
 
@@ -467,6 +475,7 @@ def handle_practice_ended(data):
     """Обработчик завершения фазы практики"""
     room_id = data['room_id']
     room_practice_active[room_id] = False
+    room_current_question_index[room_id] = 0
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
 
@@ -684,13 +693,76 @@ def get_practice_content(lesson_id):
         
         return jsonify({
             "success": True,
-            "lesson_id": lesson_id,
-            "content": content,
-            "question_count": len(content.get('questions', []))
+            'lesson_id': lesson_id,
+            'content': content,
+            'question_count': len(content.get('questions', []))
         })
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/practice_files')
+def get_practice_files():
+    """Получение списка файлов практики"""
+    try:
+        practice_files = []
+        for practice_file in PRACTICE_DIR.glob("*.json"):
+            practice_files.append({
+                'filename': practice_file.name,
+                'size': practice_file.stat().st_size,
+                'modified': datetime.fromtimestamp(practice_file.stat().st_mtime).isoformat()
+            })
+        
+        return jsonify({
+            "success": True,
+            "files": practice_files
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/upload_practice', methods=['POST'])
+def upload_practice():
+    """Загрузка файла практики"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "No file provided"})
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No file selected"})
+        
+        if file and file.filename.endswith('.json'):
+            filename = secure_filename(file.filename)
+            file.save(PRACTICE_DIR / filename)
+            
+            return jsonify({
+                "success": True,
+                "message": f"File {filename} uploaded successfully",
+                "filename": filename
+            })
+        else:
+            return jsonify({"success": False, "error": "Invalid file type. Only JSON allowed"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/delete_practice/<filename>')
+def delete_practice(filename):
+    """Удаление файла практики"""
+    try:
+        practice_file = PRACTICE_DIR / filename
+        if not practice_file.exists():
+            return jsonify({"success": False, "error": "File not found"})
+        
+        practice_file.unlink()
+        return jsonify({
+            "success": True,
+            "message": f"File {filename} deleted successfully"
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 def _detect_subject(filename: str) -> str:
     """Определяет предмет по названию файла"""
