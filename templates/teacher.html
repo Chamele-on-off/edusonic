@@ -172,7 +172,7 @@
             resize: vertical;
         }
         
-        .knowledge-form, .lesson-form, .practice-form {
+        .knowledge-form, .lesson-form {
             margin-bottom: 25px;
             padding: 15px;
             background: #f9f9f9;
@@ -332,91 +332,6 @@
             line-height: 1.4;
         }
         
-        .file-list {
-            margin: 15px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            max-height: 300px;
-            overflow-y: auto;
-        }
-        
-        .file-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 15px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .file-item:last-child {
-            border-bottom: none;
-        }
-        
-        .file-info {
-            flex: 1;
-        }
-        
-        .file-name {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-        
-        .file-size {
-            font-size: 12px;
-            color: #6c757d;
-        }
-        
-        .file-actions {
-            display: flex;
-            gap: 5px;
-        }
-        
-        .file-btn {
-            padding: 5px 10px;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        
-        .file-btn.delete {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .file-btn.delete:hover {
-            background: #c82333;
-        }
-        
-        .upload-form {
-            background: white;
-            padding: 15px;
-            border-radius: 6px;
-            border: 2px dashed #ddd;
-            margin: 15px 0;
-            text-align: center;
-        }
-        
-        .upload-form.dragover {
-            border-color: #3498db;
-            background: #f8f9fa;
-        }
-        
-        .upload-btn {
-            background: #17a2b8;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-top: 10px;
-        }
-        
-        .upload-btn:hover {
-            background: #138496;
-        }
-        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -454,16 +369,6 @@
                 margin-bottom: 0;
                 border-radius: 4px 4px 0 0;
             }
-            
-            .file-item {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
-            }
-            
-            .file-actions {
-                align-self: flex-end;
-            }
         }
         
         @media (max-width: 480px) {
@@ -488,11 +393,6 @@
             
             .tab-content {
                 padding: 15px;
-            }
-            
-            .file-actions {
-                align-self: stretch;
-                justify-content: flex-end;
             }
         }
     </style>
@@ -611,7 +511,6 @@
             <div class="tab-container">
                 <div class="tab active" data-tab="knowledge">База знаний</div>
                 <div class="tab" data-tab="lessons">Уроки</div>
-                <div class="tab" data-tab="practice">Практика</div>
                 <div class="tab" data-tab="download">Скачать</div>
             </div>
             
@@ -659,35 +558,6 @@
                 </div>
             </div>
             
-            <div class="tab-content" id="practice-tab">
-                <h3>Управление файлами практики</h3>
-                
-                <div class="practice-form">
-                    <h4>📝 Загрузить файл практики</h4>
-                    <div class="upload-form" id="upload-area">
-                        <p>Перетащите JSON файл сюда или</p>
-                        <input type="file" id="practice-file" accept=".json" style="display: none;">
-                        <button class="upload-btn" id="select-file-btn">Выбрать файл</button>
-                        <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
-                            Поддерживаются только JSON файлы с вопросами для практики
-                        </p>
-                    </div>
-                    <div id="upload-status" class="success-message"></div>
-                </div>
-                
-                <div class="practice-form">
-                    <h4>📋 Список файлов практики</h4>
-                    <div id="practice-files-list" class="file-list">
-                        <div class="file-item">
-                            <div class="file-info">
-                                <div class="file-name">Загрузка...</div>
-                            </div>
-                        </div>
-                    </div>
-                    <button id="refresh-files-btn" style="margin-top: 10px;">🔄 Обновить список</button>
-                </div>
-            </div>
-            
             <div class="tab-content" id="download-tab">
                 <h3>Скачать материалы</h3>
                 
@@ -715,14 +585,6 @@
                     <p>Скачать все доступные уроки:</p>
                     <div class="download-buttons">
                         <button class="download-btn" id="download-lessons-btn">📥 Скачать все уроки</button>
-                    </div>
-                </div>
-                
-                <div style="padding: 15px; background: #f9f9f9; border-radius: 6px; margin-top: 20px;">
-                    <h4>🎯 Практические задания</h4>
-                    <p>Скачать все практические задания:</p>
-                    <div class="download-buttons">
-                        <button class="download-btn" id="download-practice-btn">📥 Скачать практику</button>
                     </div>
                 </div>
                 
@@ -767,20 +629,11 @@
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
         const downloadLessonsBtn = document.getElementById('download-lessons-btn');
-        const downloadPracticeBtn = document.getElementById('download-practice-btn');
         
         // Элементы статуса
         const knowledgeStatus = document.getElementById('knowledge-status');
         const lessonStatus = document.getElementById('lesson-status');
         const downloadStatus = document.getElementById('download-status');
-        
-        // Элементы для управления практикой
-        const practiceFileInput = document.getElementById('practice-file');
-        const selectFileBtn = document.getElementById('select-file-btn');
-        const uploadArea = document.getElementById('upload-area');
-        const uploadStatus = document.getElementById('upload-status');
-        const practiceFilesList = document.getElementById('practice-files-list');
-        const refreshFilesBtn = document.getElementById('refresh-files-btn');
         
         // Socket.io
         const socket = io();
@@ -800,7 +653,7 @@
             fetch('/api/config/keys')
                 .then(response => response.json())
                 .then(data => {
-                    if data.success) {
+                    if (data.success) {
                         openrouterKeyInput.value = data.keys.openrouter || '';
                         log('API ключи загружены');
                     } else {
@@ -937,105 +790,6 @@
             });
         }
         
-        // Функции для работы с файлами практики
-        function loadPracticeFiles() {
-            fetch('/api/practice_files')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayPracticeFiles(data.files);
-                    } else {
-                        practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Ошибка загрузки файлов</div></div></div>';
-                    }
-                })
-                .catch(error => {
-                    practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Ошибка сети</div></div></div>';
-                    log('Ошибка загрузки файлов практики: ' + error);
-                });
-        }
-        
-        function displayPracticeFiles(files) {
-            if (files.length === 0) {
-                practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Файлы не найдены</div></div></div>';
-                return;
-            }
-            
-            practiceFilesList.innerHTML = '';
-            files.forEach(file => {
-                const fileSize = formatFileSize(file.size);
-                const fileDate = new Date(file.modified).toLocaleDateString();
-                
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
-                fileItem.innerHTML = `
-                    <div class="file-info">
-                        <div class="file-name">${file.filename}</div>
-                        <div class="file-size">${fileSize} · ${fileDate}</div>
-                    </div>
-                    <div class="file-actions">
-                        <button class="file-btn delete" data-filename="${file.filename}">Удалить</button>
-                    </div>
-                `;
-                practiceFilesList.appendChild(fileItem);
-            });
-            
-            // Добавляем обработчики для кнопок удаления
-            document.querySelectorAll('.file-btn.delete').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const filename = this.dataset.filename;
-                    deletePracticeFile(filename);
-                });
-            });
-        }
-        
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-        
-        function deletePracticeFile(filename) {
-            if (!confirm(`Удалить файл "${filename}"?`)) return;
-            
-            fetch(`/api/delete_practice/${filename}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showStatus(uploadStatus, data.message);
-                        loadPracticeFiles();
-                    } else {
-                        showStatus(uploadStatus, 'Ошибка: ' + data.error, false);
-                    }
-                })
-                .catch(error => {
-                    showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
-                });
-        }
-        
-        function uploadPracticeFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            fetch('/api/upload_practice', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus(uploadStatus, data.message);
-                    loadPracticeFiles();
-                } else {
-                    showStatus(uploadStatus, 'Ошибка: ' + data.error, false);
-                }
-            })
-            .catch(error => {
-                showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
-            });
-        }
-        
         // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
@@ -1057,17 +811,6 @@
             const now = new Date().toLocaleTimeString();
             debugDiv.innerHTML += `[${now}] ${message}<br>`;
             debugDiv.scrollTop = debugDiv.scrollHeight;
-        }
-        
-        // Показать статус сообщение
-        function showStatus(element, message, isSuccess = true) {
-            element.textContent = message;
-            element.className = isSuccess ? 'success-message' : 'error-message';
-            element.style.display = 'block';
-            
-            setTimeout(() => {
-                element.style.display = 'none';
-            }, 5000);
         }
         
         // Загрузка изображения с повторами
@@ -1246,6 +989,17 @@
             }
         }
         
+        // Показать статус сообщение
+        function showStatus(element, message, isSuccess = true) {
+            element.textContent = message;
+            element.className = isSuccess ? 'success-message' : 'error-message';
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+        
         // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
             // Загружаем API ключи при загрузке страницы
@@ -1253,9 +1007,6 @@
             
             // Загружаем режим LLM при загрузке страницы
             loadLLMMode();
-            
-            // Загружаем файлы практики при загрузке страницы
-            loadPracticeFiles();
             
             // Инициализация комнаты по умолчанию
             initRoom('default');
@@ -1276,45 +1027,6 @@
             setLlmModeBtn.addEventListener('click', function() {
                 const mode = llmModeSelect.value;
                 setLLMMode(mode);
-            });
-            
-            // Обработчики для управления файлами практики
-            selectFileBtn.addEventListener('click', () => {
-                practiceFileInput.click();
-            });
-            
-            practiceFileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    uploadPracticeFile(e.target.files[0]);
-                }
-            });
-            
-            refreshFilesBtn.addEventListener('click', () => {
-                loadPracticeFiles();
-            });
-            
-            // Drag and drop для загрузки файлов
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.classList.add('dragover');
-            });
-            
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.classList.remove('dragover');
-            });
-            
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-                
-                if (e.dataTransfer.files.length > 0) {
-                    const file = e.dataTransfer.files[0];
-                    if (file.name.endsWith('.json')) {
-                        uploadPracticeFile(file);
-                    } else {
-                        showStatus(uploadStatus, 'Только JSON файлы поддерживаются', false);
-                    }
-                }
             });
             
             // Выбор аватара
@@ -1479,32 +1191,6 @@
                 })
                 .catch(error => {
                     showStatus(downloadStatus, 'Ошибка при скачивании уроков: ' + error.message, false);
-                });
-            });
-            
-            // Скачивание практики
-            downloadPracticeBtn.addEventListener('click', function() {
-                fetch('/api/download_practice')
-                .then(response => {
-                    if (response.ok) {
-                        return response.blob();
-                    }
-                    throw new Error('Ошибка скачивания');
-                })
-                .then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'ai_teacher_practice.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus(downloadStatus, 'Практические задания успешно скачаны!');
-                })
-                .catch(error => {
-                    showStatus(downloadStatus, 'Ошибка при скачивании практики: ' + error.message, false);
                 });
             });
         });
