@@ -82,6 +82,9 @@ class PracticeManager:
             self.questions = practice_data.get('questions', [])
             self.current_question_index = 0
             
+            # Сохраняем сгенерированную практику в файл
+            self.save_practice(lesson_id, {"questions": self.questions})
+            
             print(f"Сгенерировано {len(self.questions)} вопросов для практики")
             return True
             
@@ -112,14 +115,15 @@ class PracticeManager:
             system_prompt = f"""Ты — опытный учитель по предмету {subject}. 
             Анализируй ответы учеников, давай конструктивную обратную связь.
             Если ответ правильный - похвали ученика.
-            Если ответ неправильный - вежливо объясни ошибку и дай правильный ответ."""
+            Если ответ неправильный - вежливо объясни ошибку и дай правильный ответ.
+            Будь кратким и понятным."""
             
             evaluation = self.llm._query_llm_api(
                 prompt=prompt,
                 context="",
                 subject=subject,
                 system_prompt=system_prompt,
-                max_tokens=500
+                max_tokens=300  # Уменьшаем длину ответа для краткости
             )
             
             return evaluation if evaluation else "Спасибо за ответ! Давайте продолжим."
