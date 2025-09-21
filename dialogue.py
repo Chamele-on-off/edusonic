@@ -392,7 +392,9 @@ class DialogueManager:
 2. Разделен на логические абзацы (разделяй пустыми строками)
 3. Адаптирован для учеников
 4. На русском языке
-5. Содержать практические примеры если уместно"""
+5. Содержать практические примеры если уместно
+
+ВОЗРАЩАЙ ТЕКСТ, ГДЕ КАЖДЫЙ АБЗАЦ РАЗДЕЛЕН ДВУМЯ ПЕРЕНОСАМИ СТРОКИ (\\n\\n)."""
 
             # Запрос к LLM
             lesson_content = self.llm._query_llm_api(
@@ -667,55 +669,50 @@ class DialogueManager:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
         # Получаем первый вопрос
-        return self._get_next_practice_question()
-
-    def _get_next_practice_question(self) -> str:
-        """Возвращает следующий вопрос для практики"""
-        question = self.practice_manager.get_question(self.current_question_index)
-        
-        if question:
-            self.current_question_index += 1
-            self.current_expected_answer = question.get('expected_answer', '')
-            return f"Вопрос для практики: {question['question']}"
+        first_question = self.practice_manager.get_question(self.current_question_index)
+        if first_question:
+            return f"Начинаем практику! {first_question['question']}"
         else:
-            # Вопросы закончились
-            self.practice_active = False
-            self.current_state = "greeting"
-            self.conversation_counter = 0
-            self.conversation_history = []
-            self.conversation_context = []
-            
-            # Отправляем событие завершения практики
-            if self.room_id:
-                self.socketio.emit('practice_ended', {'room_id': self.room_id})
-            
-            return "Практика завершена! Отличная работа. Скажите 'привет' для выбора нового урока."
+            return "Практические задания не найдены."
 
-    def handle_practice_answer(self, answer: str) -> str:
-        """Обрабатывает ответ ученика во время практики"""
-        if not self.practice_active or self.current_question_index == 0:
-            return "Сначала начните практику."
+    def handle_practice_answer(self, answer: str) -> Optional[str]:
+        """Обрабатывает ответ ученика во время практики. Возвращает None, если практика закончилась."""
+        if not self.practice_active:
+            return None
+            
+        # 1. Получить текущий вопрос (по индексу)
+        current_question = self.practice_manager.get_question(self.current_question_index)
+        if not current_question:
+            self._end_practice_session()
+            return "Практика завершена! Отличная работа."
         
-        # Получаем текущий вопрос
-        current_question_index = self.current_question_index - 1
-        question = self.practice_manager.get_question(current_question_index)
-        
-        if not question:
-            return "Вопрос не найден."
-        
-        # Проверяем ответ через LLM
+        # 2. Проверить ответ ученика
         evaluation = self.practice_manager.check_answer(
-            question['question'],
+            current_question['question'],
             answer,
-            question.get('expected_answer', ''),
+            current_question.get('expected_answer', ''),
             self.current_subject
         )
         
-        # Получаем следующий вопрос
-        next_question = self._get_next_practice_question()
+        # 3. Перейти к следующему вопросу
+        self.current_question_index += 1
+        next_question = self.practice_manager.get_question(self.current_question_index)
         
-        # Объединяем оценку и следующий вопрос
-        return f"{evaluation}. {next_question}"
+        # 4. Сформировать ответ
+        if next_question:
+            # Если есть следующий вопрос, возвращаем оценку + следующий вопрос
+            return f"{evaluation}. Следующий вопрос: {next_question['question']}"
+        else:
+            # Если вопросов больше нет, завершаем практику
+            self._end_practice_session()
+            return f"{evaluation}. Практика завершена! Вы отлично справились."
+
+    def _end_practice_session(self):
+        """Корректно завершает сессию практики"""
+        self.practice_active = False
+        self.current_state = "greeting"
+        if self.room_id:
+            self.socketio.emit('practice_ended', {'room_id': self.room_id})
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока с учетом выбранного режима"""
