@@ -338,7 +338,7 @@ class DialogueManager:
         if self.lesson_started:
             return original_response
         
-        # Если ответ уже содержит предложение о выборе предмета, не дублируем
+        # Если ответ уже содержит предложение о выбора предмета, не дублируем
         if any(word in original_response.lower() for word in ['предмет', 'урок', 'выберем', 'изучать', 'интересует']):
             return original_response
         
@@ -494,7 +494,7 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
-        # Добавляем в историю диалога ВСЕГДА
+        # Добавляем в истории диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
         # 1. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (ДО всего остального)
