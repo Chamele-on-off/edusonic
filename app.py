@@ -641,8 +641,42 @@ def get_lesson_content(lesson_id):
         with open(lesson_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Разбиваем на абзацы
-        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        # Разбиваем на абзацы (улучшенная логика)
+        paragraphs = []
+        current_paragraph = []
+        
+        # Сначала разбиваем по двойным переводам строк
+        if '\n\n' in content:
+            raw_paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        else:
+            # Если нет двойных переводов строк, разбиваем по одиночным
+            raw_paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
+        
+        # Объединяем короткие абзацы в группы по 6 предложений
+        for paragraph in raw_paragraphs:
+            # Разбиваем на предложения
+            sentences = re.split(r'(?<=[.!?])\s+', paragraph)
+            sentences = [s.strip() for s in sentences if s.strip()]
+            
+            # Если абзац уже содержит достаточно предложений, добавляем как есть
+            if len(sentences) >= 6:
+                paragraphs.append(' '.join(sentences))
+                continue
+                
+            # Добавляем предложения в текущий абзац
+            current_paragraph.extend(sentences)
+            
+            # Если накопилось достаточно предложений, создаем новый абзац
+            if len(current_paragraph) >= 6:
+                paragraphs.append(' '.join(current_paragraph[:6]))
+                current_paragraph = current_paragraph[6:]
+        
+        # Добавляем оставшиеся предложения
+        if current_paragraph:
+            paragraphs.append(' '.join(current_paragraph))
+        
+        # Убираем \n\n из текста
+        paragraphs = [p.replace('\n\n', ' ').replace('\n', ' ') for p in paragraphs]
         
         return jsonify({
             "success": True,
@@ -686,7 +720,7 @@ def get_practice_content(lesson_id):
     try:
         practice_file = PRACTICE_DIR / f"{lesson_id}.json"
         if not practice_file.exists():
-            return jsonify({"error": "Practice not found"}), 404
+            return jsonify({"error": "Практические задания не найдены", "success": False}), 404
         
         with open(practice_file, 'r', encoding='utf-8') as f:
             content = json.load(f)
@@ -699,7 +733,7 @@ def get_practice_content(lesson_id):
         })
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "success": False}), 500
 
 @app.route('/api/practice_files')
 def get_practice_files():
