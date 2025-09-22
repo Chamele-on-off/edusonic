@@ -38,6 +38,8 @@ class PracticeManager:
     def generate_practice(self, lesson_text: str, subject: str) -> bool:
         """Генерирует практические задания на основе текста урока"""
         try:
+            print(f"Генерация практики для предмета: {subject}")
+            
             prompt = f"""
             На основе следующего учебного материала создай 3-5 практических вопросов для проверки понимания.
             Вопросы должны быть краткими, понятными и проверять ключевые моменты материала.
@@ -76,17 +78,33 @@ class PracticeManager:
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
             if not json_match:
                 print("Не удалось найти JSON в ответе LLM")
+                print(f"Ответ LLM: {llm_response}")
                 return False
                 
-            practice_data = json.loads(json_match.group())
-            self.questions = practice_data.get('questions', [])
-            self.current_question_index = 0
-            
-            # Сохраняем сгенерированную практику в файл
-            self.save_practice(lesson_id, {"questions": self.questions})
-            
-            print(f"Сгенерировано {len(self.questions)} вопросов для практики")
-            return True
+            try:
+                practice_data = json.loads(json_match.group())
+                self.questions = practice_data.get('questions', [])
+                
+                if not self.questions:
+                    print("Сгенерированный JSON не содержит вопросов")
+                    return False
+                    
+                self.current_question_index = 0
+                
+                # Сохраняем сгенерированную практику в файл
+                success = self.save_practice(lesson_id, {"questions": self.questions})
+                
+                if success:
+                    print(f"Сгенерировано и сохранено {len(self.questions)} вопросов для практики")
+                else:
+                    print("Ошибка сохранения практики")
+                    
+                return success
+                
+            except json.JSONDecodeError as e:
+                print(f"Ошибка парсинга JSON: {e}")
+                print(f"Сырой ответ LLM: {llm_response}")
+                return False
             
         except Exception as e:
             print(f"Ошибка генерации практики: {e}")
