@@ -44,6 +44,8 @@ class DialogueManager:
         self.practice_active = False
         self.current_question_index = 0
         self.current_expected_answer = ""
+        self.waiting_for_answer = False  # Флаг ожидания ответа ученика
+        self.current_practice_question = None  # Текущий вопрос практики
         
         # Новые поля для улучшенного диалога
         self.last_subject_prompt_time = 0
@@ -520,7 +522,11 @@ class DialogueManager:
                     return response
             return None
         
-        # 4. Поиск в диалоговых шаблонах (до выбора урока)
+        # 4. Если ждем ответ на вопрос практики - обрабатываем как ответ
+        if self.practice_active and self.waiting_for_answer:
+            return self._handle_practice_answer(text)
+        
+        # 5. Поиск в диалоговых шаблонах (до выбора урока)
         dialogue_response = self._get_dialogue_response(text_lower)
         if dialogue_response:
             # ДОБАВЛЯЕМ предложение выбора предмета к любому ответу
@@ -529,7 +535,7 @@ class DialogueManager:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
-        # 5. ГАРАНТИРОВАННЫЙ запрос к LLM если не найден в шаблонах
+        # 6. ГАРАНТИРОВАННЫЙ запрос к LLM если не найден в шаблонах
         llm_response = self._handle_llm_dialogue(text)
         if llm_response:
             # ДОБАВЛЯЕМ предложение выбора предмета к ответу LLM
@@ -538,7 +544,7 @@ class DialogueManager:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
-        # 6. Финальный fallback с предложением выбора предмета
+        # 7. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
             self._add_to_conversation_history(fallback_response, is_user=False)
@@ -625,6 +631,7 @@ class DialogueManager:
         """Обработка во время фазы практики"""
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
             self.practice_active = False
+            self.waiting_for_answer = False
             self.current_state = "greeting"
             self.conversation_counter = 0
             self.conversation_history = []
@@ -636,8 +643,11 @@ class DialogueManager:
             
             return "Практика остановлена. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
             
-        # Обрабатываем ответ ученика на вопрос практики
-        return self.handle_practice_answer(text)
+        # Если ждем ответ, обрабатываем как ответ на вопрос практики
+        if self.waiting_for_answer:
+            return self._handle_practice_answer(text)
+            
+        return None
 
     def _get_next_paragraph(self) -> Optional[str]:
         """Возвращает следующий абзац урока"""
@@ -655,6 +665,7 @@ class DialogueManager:
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
+        self.waiting_for_answer = False
         self.current_question_index = 0
         
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
@@ -685,17 +696,19 @@ class DialogueManager:
         first_question = self.practice_manager.get_current_question()
         if first_question:
             print(f"Начинаем практику с вопроса: {first_question['question']}")
+            self.current_practice_question = first_question
+            self.waiting_for_answer = True  # Устанавливаем флаг ожидания ответа
+            
             question_text = first_question['question']
-            return f"Отлично! Переходим к практике. {question_text}"
+            return f"Отлично! Переходим к практике. Вопрос: {question_text}"
         else:
             print("Практические вопросы не найдены")
             return "Практические задания не найдены."
 
-    def handle_practice_answer(self, answer: str) -> Optional[str]:
-        """Обрабатывает ответ ученика во время практики. Возвращает None, если практика закончилась."""
-        if not self.practice_active:
-            print("Практика не активна, игнорируем ответ")
-            return None
+    def _handle_practice_answer(self, answer: str) -> str:
+        """Обрабатывает ответ ученика во время практики"""
+        if not self.practice_active or not self.waiting_for_answer:
+            return "Практика не активна."
             
         print(f"Обработка ответа практики: {answer}")
         
@@ -715,18 +728,21 @@ class DialogueManager:
         
         # Сформировать ответ
         if next_question:
+            self.current_practice_question = next_question
+            self.waiting_for_answer = True  # Продолжаем ждать ответы
             response = f"{evaluation}. Следующий вопрос: {next_question['question']}"
             print(f"Переход к следующему вопросу: {response}")
-            return response
         else:
             self._end_practice_session()
             response = f"{evaluation}. Практика завершена! Вы отлично справились."
             print(f"Завершение практики: {response}")
-            return response
+        
+        return response
 
     def _end_practice_session(self):
         """Корректно завершает сессию практики"""
         self.practice_active = False
+        self.waiting_for_answer = False
         self.current_state = "greeting"
         self.practice_manager.reset()
         if self.room_id:
@@ -874,6 +890,7 @@ class DialogueManager:
         self.conversation_history = []
         self.conversation_context = []
         self.practice_active = False
+        self.waiting_for_answer = False
         self.current_question_index = 0
 
     def get_available_subjects(self) -> List[str]:
