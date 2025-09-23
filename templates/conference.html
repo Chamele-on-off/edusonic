@@ -937,7 +937,7 @@
                     </button>
                 </div>
                 <div class="board-toolbar">
-                    <button class="toolbar-btn" id="drawing-pen" title="Карандаш">
+                    <button class="toolbar-btn active" id="drawing-pen" title="Карандаш">
                         <i class="fas fa-pen"></i>
                     </button>
                     <button class="toolbar-btn" id="drawing-eraser" title="Ластик">
@@ -1093,6 +1093,7 @@
         let lastX = 0;
         let lastY = 0;
         let isEraser = false;
+        let isDrawingWindowOpen = false;
         
         // Переменные для перетаскивания окон
         let isDraggingWindow = false;
@@ -1152,6 +1153,13 @@
             drawingCtx.lineJoin = 'round';
             drawingCtx.strokeStyle = currentColor;
             
+            // iOS-specific fixes
+            if (isIOS) {
+                drawingCanvas.style.touchAction = 'none';
+                drawingCanvas.style.webkitUserSelect = 'none';
+                drawingCanvas.style.webkitTouchCallout = 'none';
+            }
+            
             // События для мыши
             drawingCanvas.addEventListener('mousedown', startDrawing);
             drawingCanvas.addEventListener('mousemove', draw);
@@ -1164,6 +1172,13 @@
             drawingCanvas.addEventListener('touchend', handleTouchEnd);
             
             window.addEventListener('resize', resizeCanvas);
+        }
+
+        function isDrawingWindowVisible() {
+            return isDrawingWindowOpen && 
+                   drawingWindow.style.display === 'block' &&
+                   drawingWindow.offsetWidth > 0 &&
+                   drawingWindow.offsetHeight > 0;
         }
 
         function getCanvasCoordinates(e) {
@@ -1188,7 +1203,7 @@
         }
 
         function startDrawing(e) {
-            if (!drawingWindow.style.display || drawingWindow.style.display === 'none') return;
+            if (!isDrawingWindowVisible()) return;
             
             isDrawing = true;
             const coords = getCanvasCoordinates(e);
@@ -1225,29 +1240,36 @@
         }
 
         function handleTouchStart(e) {
-            if (!drawingWindow.style.display || drawingWindow.style.display === 'none') return;
+            if (!isDrawingWindowVisible()) return;
+            
+            // Предотвращаем стандартное поведение для лучшего контроля
+            e.preventDefault();
             
             const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousedown', {
+            const customEvent = {
+                type: 'mousedown',
                 clientX: touch.clientX,
-                clientY: touch.clientY
-            });
+                clientY: touch.clientY,
+                target: drawingCanvas
+            };
             
-            startDrawing(mouseEvent);
-            e.preventDefault();
+            startDrawing(customEvent);
         }
 
         function handleTouchMove(e) {
-            if (!isDrawing) return;
+            if (!isDrawing || !isDrawingWindowVisible()) return;
+            
+            e.preventDefault();
             
             const touch = e.touches[0];
-            const mouseEvent = new MouseEvent('mousemove', {
+            const customEvent = {
+                type: 'mousemove',
                 clientX: touch.clientX,
-                clientY: touch.clientY
-            });
+                clientY: touch.clientY,
+                target: drawingCanvas
+            };
             
-            draw(mouseEvent);
-            e.preventDefault();
+            draw(customEvent);
         }
 
         function handleTouchEnd() {
@@ -1282,12 +1304,19 @@
         }
 
         function initWindowDragging() {
-            // Функция для инициализации перетаскивания окна
             function initDragForWindow(windowElement) {
                 const header = windowElement.querySelector('.window-header');
                 
                 header.addEventListener('mousedown', startDragWindow);
-                header.addEventListener('touchstart', startDragWindow, { passive: true });
+                header.addEventListener('touchstart', startDragWindow, { passive: false });
+                
+                // Запрещаем события рисования на заголовке
+                header.addEventListener('touchstart', (e) => {
+                    e.stopPropagation();
+                });
+                header.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                });
                 
                 function startDragWindow(e) {
                     isDraggingWindow = true;
@@ -1300,16 +1329,13 @@
                     } else {
                         dragOffsetX = e.touches[0].clientX - rect.left;
                         dragOffsetY = e.touches[0].clientY - rect.top;
+                        e.preventDefault();
                     }
                     
                     document.addEventListener('mousemove', dragWindow);
-                    document.addEventListener('touchmove', dragWindow, { passive: true });
+                    document.addEventListener('touchmove', dragWindow, { passive: false });
                     document.addEventListener('mouseup', stopDragWindow);
                     document.addEventListener('touchend', stopDragWindow);
-                    
-                    if (e.type === 'touchstart') {
-                        e.preventDefault();
-                    }
                 }
             }
             
@@ -1323,6 +1349,7 @@
                 } else {
                     clientX = e.touches[0].clientX;
                     clientY = e.touches[0].clientY;
+                    e.preventDefault();
                 }
                 
                 const newX = clientX - dragOffsetX;
@@ -1335,10 +1362,6 @@
                 currentDraggedWindow.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
                 currentDraggedWindow.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
                 currentDraggedWindow.style.transform = 'none';
-                
-                if (e.type === 'touchmove') {
-                    e.preventDefault();
-                }
             }
             
             function stopDragWindow() {
@@ -1356,6 +1379,9 @@
         }
 
         function setTool(tool) {
+            // Сбрасываем флаги
+            isDrawingWindowOpen = false;
+            
             // Скрываем все окна сначала
             lessonContent.style.display = 'none';
             drawingWindow.style.display = 'none';
@@ -1372,6 +1398,14 @@
             } else if (tool === 'draw') {
                 drawToolBtn.classList.add('active');
                 drawingWindow.style.display = 'block';
+                isDrawingWindowOpen = true;
+                
+                // Перерисовываем canvas для корректного отображения на iOS
+                setTimeout(() => {
+                    const rect = drawingCanvas.getBoundingClientRect();
+                    drawingCanvas.width = rect.width;
+                    drawingCanvas.height = rect.height;
+                }, 50);
             } else if (tool === 'answer') {
                 answerToolBtn.classList.add('active');
                 lessonContent.style.display = 'block';
@@ -1971,14 +2005,18 @@
                 if (e.key === 'Enter') submitAnswer();
             });
             
-            // Закрытие окон
-            closeLessonBtn.addEventListener('click', () => {
+            // Закрытие окон - ИСПРАВЛЕННАЯ ВЕРСИЯ
+            closeLessonBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 lessonContent.style.display = 'none';
                 textToolBtn.classList.remove('active');
+                answerToolBtn.classList.remove('active');
             });
             
-            closeDrawingBtn.addEventListener('click', () => {
+            closeDrawingBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 drawingWindow.style.display = 'none';
+                isDrawingWindowOpen = false;
                 drawToolBtn.classList.remove('active');
             });
             
