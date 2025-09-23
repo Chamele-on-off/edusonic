@@ -206,7 +206,7 @@ class DialogueManager:
         return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
     def _add_to_conversation_history(self, text: str, is_user: bool = True):
-        """Добавляет реплику в истории диалога"""
+        """Добавляет реплику в историю диалога"""
         self.conversation_history.append({
             "text": text,
             "is_user": is_user,
@@ -338,7 +338,7 @@ class DialogueManager:
         if self.lesson_started:
             return original_response
         
-        # Если ответ уже содержит предложение о выбора предмета, не дублируем
+        # Если ответ уже содержит предложение о выборе предмета, не дублируем
         if any(word in original_response.lower() for word in ['предмет', 'урок', 'выберем', 'изучать', 'интересует']):
             return original_response
         
@@ -494,7 +494,7 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
-        # Добавляем в истории диалога ВСЕГДА
+        # Добавляем в историю диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
         # 1. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (ДО всего остального)
@@ -647,7 +647,8 @@ class DialogueManager:
             return paragraph
         else:
             # Урок завершен - запускаем практику
-            return self._start_practice_session()
+            practice_message = self._start_practice_session()
+            return practice_message
 
     def _start_practice_session(self) -> str:
         """Запускает фазу практики после окончания урока"""
@@ -656,16 +657,20 @@ class DialogueManager:
         self.practice_active = True
         self.current_question_index = 0
         
+        print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
+        
         # Загружаем практические задания
         practice_loaded = self.practice_manager.load_practice(self.selected_lesson['id'])
         
         if not practice_loaded:
             # Если не удалось загрузить, генерируем на лету
+            print("Генерация практики на лету...")
             lesson_text = " ".join(self.lesson_content)
             practice_generated = self.practice_manager.generate_practice(lesson_text, self.current_subject)
             
             if not practice_generated:
                 # Если и генерация не удалась, завершаем сессию
+                print("Не удалось сгенерировать практику")
                 self.current_state = "greeting"
                 self.conversation_counter = 0
                 self.conversation_history = []
@@ -677,50 +682,56 @@ class DialogueManager:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
         # Получаем первый вопрос
-        first_question = self.practice_manager.get_question(self.current_question_index)
+        first_question = self.practice_manager.get_current_question()
         if first_question:
-            return f"Начинаем практику! {first_question['question']}"
+            print(f"Начинаем практику с вопроса: {first_question['question']}")
+            question_text = first_question['question']
+            return f"Отлично! Переходим к практике. {question_text}"
         else:
+            print("Практические вопросы не найдены")
             return "Практические задания не найдены."
 
     def handle_practice_answer(self, answer: str) -> Optional[str]:
         """Обрабатывает ответ ученика во время практики. Возвращает None, если практика закончилась."""
         if not self.practice_active:
+            print("Практика не активна, игнорируем ответ")
             return None
             
-        # 1. Получить текущий вопрос (по индексу)
-        current_question = self.practice_manager.get_question(self.current_question_index)
+        print(f"Обработка ответа практики: {answer}")
+        
+        # Получить текущий вопрос
+        current_question = self.practice_manager.get_current_question()
         if not current_question:
             self._end_practice_session()
             return "Практика завершена! Отличная работа."
         
-        # 2. Проверить ответ ученика
-        evaluation = self.practice_manager.check_answer(
-            current_question['question'],
-            answer,
-            current_question.get('expected_answer', ''),
-            self.current_subject
-        )
+        # Проверить ответ ученика
+        evaluation = self.practice_manager.evaluate_answer(answer)
+        print(f"Оценка ответа: {evaluation}")
         
-        # 3. Перейти к следующему вопросу
-        self.current_question_index += 1
-        next_question = self.practice_manager.get_question(self.current_question_index)
+        # Перейти к следующему вопросу
+        has_next = self.practice_manager.move_to_next_question()
+        next_question = self.practice_manager.get_current_question() if has_next else None
         
-        # 4. Сформировать ответ
+        # Сформировать ответ
         if next_question:
-            # Если есть следующий вопрос, возвращаем оценку + следующий вопрос
-            return f"{evaluation}. Следующий вопрос: {next_question['question']}"
+            response = f"{evaluation}. Следующий вопрос: {next_question['question']}"
+            print(f"Переход к следующему вопросу: {response}")
+            return response
         else:
-            # Если вопросов больше нет, завершаем практику
             self._end_practice_session()
-            return f"{evaluation}. Практика завершена! Вы отлично справились."
+            response = f"{evaluation}. Практика завершена! Вы отлично справились."
+            print(f"Завершение практики: {response}")
+            return response
 
     def _end_practice_session(self):
         """Корректно завершает сессию практики"""
         self.practice_active = False
         self.current_state = "greeting"
+        self.practice_manager.reset()
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
+        print("=== ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока с учетом выбранного режима"""
