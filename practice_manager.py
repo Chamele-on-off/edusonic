@@ -9,17 +9,16 @@ class PracticeManager:
     def __init__(self, llm_integration):
         self.llm = llm_integration
         self.practice_dir = Path("materials/practice")
-        self.questions = []  # Не кешируем все вопросы сразу
+        self.questions = []  # [{"id": 1, "question": "...", "answer": "..."}]
         self.current_question_index = 0
         self.current_lesson_text = ""
         self.current_subject = ""
-        self.current_lesson_id = ""  # Сохраняем ID урока для поточной загрузки
         
         # Создаем директорию если не существует
         self.practice_dir.mkdir(parents=True, exist_ok=True)
 
     def load_practice(self, lesson_id: str) -> bool:
-        """Проверяет наличие файлов практики, но не загружает все вопросы сразу"""
+        """Загружает практические задания из раздельных файлов вопросов и ответов"""
         try:
             questions_file = self.practice_dir / f"{lesson_id}_questions.txt"
             answers_file = self.practice_dir / f"{lesson_id}_answers.txt"
@@ -28,65 +27,29 @@ class PracticeManager:
                 print(f"Файлы практики не найдены: {questions_file} или {answers_file}")
                 return False
             
-            self.current_lesson_id = lesson_id
-            self.current_question_index = 0
-            
-            # Проверяем количество вопросов (только подсчет)
-            with open(questions_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                question_count = len(re.findall(r'^\d+\.', content, re.MULTILINE))
-            
-            print(f"Файлы практики найдены. Вопросов: {question_count}")
-            return question_count > 0
-            
-        except Exception as e:
-            print(f"Ошибка проверки практики: {e}")
-            return False
-
-    def get_current_question(self) -> Optional[Dict]:
-        """Загружает ТОЛЬКО текущий вопрос по требованию"""
-        try:
-            if not self.current_lesson_id:
-                return None
-            
-            questions_file = self.practice_dir / f"{self.current_lesson_id}_questions.txt"
-            answers_file = self.practice_dir / f"{self.current_lesson_id}_answers.txt"
-            
-            if not questions_file.exists() or not answers_file.exists():
-                return None
-            
-            # Загружаем вопросы и находим нужный
+            # Загружаем вопросы
             with open(questions_file, 'r', encoding='utf-8') as f:
                 questions_content = f.read()
-            
             questions = self._parse_questions(questions_content)
-            if self.current_question_index >= len(questions):
-                return None
             
-            current_question = questions[self.current_question_index]
-            
-            # Загружаем ответ для этого вопроса
+            # Загружаем ответы
             with open(answers_file, 'r', encoding='utf-8') as f:
                 answers_content = f.read()
-            
             answers = self._parse_answers(answers_content)
-            answer_dict = {answer["id"]: answer["answer"] for answer in answers}
             
-            question_data = {
-                "id": current_question["id"],
-                "question": current_question["question"],
-                "answer": answer_dict.get(current_question["id"], "Ответ не найден")
-            }
+            # Объединяем вопросы и ответы
+            self.questions = self._combine_questions_answers(questions, answers)
+            self.current_question_index = 0
             
-            print(f"Загружен вопрос {self.current_question_index + 1}: {question_data['question'][:50]}...")
-            return question_data
+            print(f"Загружено {len(self.questions)} вопросов для практики")
+            return len(self.questions) > 0
             
         except Exception as e:
-            print(f"Ошибка загрузки текущего вопроса: {e}")
-            return None
+            print(f"Ошибка загрузки практики: {e}")
+            return False
 
     def generate_practice(self, lesson_text: str, subject: str) -> bool:
-        """Генерирует практические задания и сохраняет в раздельные файлы"""
+        """Генерирует практические задания на основе текста урока и сохраняет в раздельные файлы"""
         try:
             self.current_lesson_text = lesson_text
             self.current_subject = subject
@@ -105,14 +68,14 @@ class PracticeManager:
                 print("Не удалось сгенерировать ответы")
                 return False
             
-            # 3. Сохраняем в раздельные файлы
-            lesson_id = f"practice_{int(time.time())}"
-            success = self._save_practice_files(lesson_id, questions, answers)
+            # 3. Объединяем вопросы и ответы
+            self.questions = self._combine_questions_answers(questions, answers)
+            
+            # 4. Сохраняем в раздельные файлы
+            success = self._save_practice_files(lesson_id="generated_practice", questions=questions, answers=answers)
             
             if success:
-                self.current_lesson_id = lesson_id
-                self.current_question_index = 0
-                print(f"Сгенерировано и сохранено {len(questions)} вопросов для практики")
+                print(f"Сгенерировано и сохранено {len(self.questions)} вопросов для практики")
             else:
                 print("Ошибка сохранения практики в файлы")
                 
@@ -145,7 +108,7 @@ class PracticeManager:
             prompt=prompt,
             context="",
             subject=subject,
-            system_prompt="Ты — помощник учителя. Создавай качественные вопросы для проверки понимания материала. Строго следуй указанному формату. Возвращай только нумерованный список вопросов.",
+            system_prompt="Ты — помощник учителя. Создавай качественные вопросы для проверки понимания материала. Строго следуй указанному формату.",
             max_tokens=1000
         )
         
@@ -164,7 +127,7 @@ class PracticeManager:
             prompt = f"""
             На основе учебного материала дай точный и краткий ответ на вопрос.
             
-            ВОПРОС: {question['question']}
+            ВОПРОС {i}: {question['question']}
             
             УЧЕБНЫЙ МАТЕРИАЛ:
             {lesson_text[:1000]}
@@ -173,7 +136,6 @@ class PracticeManager:
             - Ответ должен быть кратким (1-2 предложения)
             - Ответ должен быть точным и соответствовать материалу
             - Не добавляй дополнительные объяснения или комментарии
-            - Ответ должен быть готов к использованию в системе обучения
             
             ВЕРНИ ТОЛЬКО ОТВЕТ БЕЗ ЛИШНИХ СЛОВ.
             """
@@ -182,19 +144,18 @@ class PracticeManager:
                 prompt=prompt,
                 context="",
                 subject=subject,
-                system_prompt="Ты — эксперт по предмету. Дай точный и краткий ответ на вопрос. Не добавляй пояснений.",
+                system_prompt="Ты — эксперт по предмету. Дай точный и краткий ответ на вопрос.",
                 max_tokens=200
             )
             
             if llm_response:
-                # Очищаем ответ от лишних фраз
-                clean_answer = self._clean_answer(llm_response)
                 answers.append({
                     "id": i,
-                    "answer": clean_answer
+                    "answer": llm_response.strip()
                 })
-                print(f"Сгенерирован ответ для вопроса {i}: {clean_answer[:50]}...")
+                print(f"Сгенерирован ответ для вопроса {i}")
             else:
+                # Fallback ответ
                 answers.append({
                     "id": i,
                     "answer": "Информация по этому вопросу содержится в учебном материале."
@@ -202,26 +163,11 @@ class PracticeManager:
         
         return answers
 
-    def _clean_answer(self, answer: str) -> str:
-        """Очищает ответ от LLM от лишних фраз"""
-        # Убираем фразы вроде "Ответ:", "Правильный ответ:" и т.д.
-        patterns = [
-            r'^(Ответ|Правильный ответ|Краткий ответ|Ответ на вопрос)[:\s]*',
-            r'[.!?]\s*$'
-        ]
-        
-        clean_answer = answer.strip()
-        for pattern in patterns:
-            clean_answer = re.sub(pattern, '', clean_answer, flags=re.IGNORECASE)
-        
-        return clean_answer.strip()
-
     def _parse_questions(self, content: str) -> List[Dict]:
         """Парсит вопросы из текста"""
         questions = []
         lines = content.strip().split('\n')
         
-        current_id = 1
         for line in lines:
             line = line.strip()
             if not line:
@@ -232,19 +178,12 @@ class PracticeManager:
             if match:
                 question_id = int(match.group(1))
                 question_text = match.group(2).strip()
-                current_id = question_id
-            else:
-                # Если строка не начинается с цифры, но не пустая - это продолжение вопроса
-                if questions and line:
-                    last_question = questions[-1]
-                    last_question["question"] += " " + line
-                continue
                 
-            if question_text:
-                questions.append({
-                    "id": question_id,
-                    "question": question_text
-                })
+                if question_text:
+                    questions.append({
+                        "id": question_id,
+                        "question": question_text
+                    })
         
         print(f"Распаршено вопросов: {len(questions)}")
         return questions
@@ -274,12 +213,31 @@ class PracticeManager:
         print(f"Распаршено ответов: {len(answers)}")
         return answers
 
+    def _combine_questions_answers(self, questions: List[Dict], answers: List[Dict]) -> List[Dict]:
+        """Объединяет вопросы и ответы по ID"""
+        combined = []
+        answers_dict = {answer["id"]: answer["answer"] for answer in answers}
+        
+        for question in questions:
+            question_id = question["id"]
+            answer = answers_dict.get(question_id, "Ответ не найден")
+            
+            combined.append({
+                "id": question_id,
+                "question": question["question"],
+                "answer": answer
+            })
+        
+        # Сортируем по ID
+        combined.sort(key=lambda x: x["id"])
+        return combined
+
     def _save_practice_files(self, lesson_id: str, questions: List[Dict], answers: List[Dict]) -> bool:
         """Сохраняет вопросы и ответы в раздельные файлы"""
         try:
             # Сохраняем вопросы
             questions_content = ""
-            for q in sorted(questions, key=lambda x: x["id"]):
+            for q in questions:
                 questions_content += f"{q['id']}. {q['question']}\n\n"
             
             questions_file = self.practice_dir / f"{lesson_id}_questions.txt"
@@ -288,7 +246,7 @@ class PracticeManager:
             
             # Сохраняем ответы
             answers_content = ""
-            for a in sorted(answers, key=lambda x: x["id"]):
+            for a in answers:
                 answers_content += f"{a['id']}. {a['answer']}\n\n"
             
             answers_file = self.practice_dir / f"{lesson_id}_answers.txt"
@@ -302,8 +260,18 @@ class PracticeManager:
             print(f"Ошибка сохранения практики: {e}")
             return False
 
+    def get_question(self, index: int) -> Optional[Dict]:
+        """Возвращает вопрос по индексу"""
+        if 0 <= index < len(self.questions):
+            return self.questions[index]
+        return None
+
+    def get_current_question(self) -> Optional[Dict]:
+        """Возвращает текущий вопрос"""
+        return self.get_question(self.current_question_index)
+
     def evaluate_answer(self, student_answer: str, use_llm: bool = True) -> str:
-        """Оценивает ответ ученика с улучшенными промптами"""
+        """Оценивает ответ ученика с приоритетом LLM и fallback на сравнение"""
         current_question = self.get_current_question()
         if not current_question:
             return "Вопрос не найден."
@@ -326,60 +294,50 @@ class PracticeManager:
             return False
 
     def _evaluate_with_llm(self, question: str, student_answer: str, correct_answer: str) -> str:
-        """Оценивает ответ через LLM с улучшенным промптом"""
+        """Оценивает ответ через LLM"""
         try:
             prompt = f"""
             Вопрос: {question}
             Правильный ответ: {correct_answer}
             Ответ ученика: {student_answer}
             
-            Проанализируй ответ ученика и дай обратную связь. Будь поддерживающим учителем:
-            
-            - Если ответ правильный: похвали и подтверди правильность
-            - Если ответ частично правильный: отметь что правильно, а что нужно дополнить
-            - Если ответ неправильный: вежливо укажи на ошибку и объясни правильный ответ
-            
-            Будь кратким (2-3 предложения), дружелюбным и конструктивным.
-            Обращайся к ученику на "вы" или используй нейтральные формулировки.
+            Проанализируй ответ ученика. Будь поддерживающим учителем:
+            - Если ответ правильный или близкий к правильному - похвали
+            - Если ответ неполный - дополни и объясни
+            - Если ответ неправильный - вежливо исправь
+            - Будь кратким (1-2 предложения)
+            - Отвечай на русском языке
             """
             
-            system_prompt = f"""Ты — опытный и доброжелательный учитель по предмету {self.current_subject}. 
-            Твоя задача — дать полезную обратную связь, которая мотивирует ученика продолжать обучение.
-            Избегай фраз "ответ ученика" - используй более личные обращения."""
+            system_prompt = f"""Ты — опытный учитель по предмету {self.current_subject}. 
+            Давай конструктивную обратную связь. Будь доброжелательным и поддерживающим."""
             
             evaluation = self.llm._query_llm_api(
                 prompt=prompt,
                 context="",
                 subject=self.current_subject,
                 system_prompt=system_prompt,
-                max_tokens=250
+                max_tokens=200
             )
             
-            if evaluation:
-                # Заменяем безличные формулировки на более персональные
-                evaluation = evaluation.replace("Ответ ученика", "Ваш ответ")
-                evaluation = evaluation.replace("ученик", "вы")
-                evaluation = evaluation.replace("Ученик", "Вы")
-                return evaluation
-            else:
-                return self._evaluate_with_similarity(student_answer, correct_answer)
+            return evaluation if evaluation else self._evaluate_with_similarity(student_answer, correct_answer)
             
         except Exception as e:
             print(f"Ошибка оценки через LLM: {e}")
             return self._evaluate_with_similarity(student_answer, correct_answer)
 
     def _evaluate_with_similarity(self, student_answer: str, correct_answer: str) -> str:
-        """Оценивает ответ через сравнение схожести с улучшенными формулировками"""
+        """Оценивает ответ через сравнение схожести"""
         similarity = self._calculate_similarity(student_answer, correct_answer)
         
         if similarity > 0.8:
-            return f"Правильно! {correct_answer}"
+            return f"Да, верно! {correct_answer}"
         elif similarity > 0.6:
-            return f"Почти верно! Полный ответ: {correct_answer}"
+            return f"Почти верно! Правильно: {correct_answer}"
         elif similarity > 0.4:
-            return f"Есть неточности. Правильно: {correct_answer}"
+            return f"Частично верно. Полный ответ: {correct_answer}"
         else:
-            return f"Пока не совсем верно. Давайте разберем: {correct_answer}"
+            return f"Не совсем. Правильный ответ: {correct_answer}"
 
     def _calculate_similarity(self, text1: str, text2: str) -> float:
         """Вычисляет схожесть двух текстов"""
@@ -390,37 +348,19 @@ class PracticeManager:
     def move_to_next_question(self) -> bool:
         """Переходит к следующему вопросу"""
         self.current_question_index += 1
-        return self.current_question_index < self._get_questions_count()
-
-    def _get_questions_count(self) -> int:
-        """Возвращает общее количество вопросов"""
-        try:
-            if not self.current_lesson_id:
-                return 0
-            
-            questions_file = self.practice_dir / f"{self.current_lesson_id}_questions.txt"
-            if not questions_file.exists():
-                return 0
-            
-            with open(questions_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                return len(re.findall(r'^\d+\.', content, re.MULTILINE))
-                
-        except:
-            return 0
+        return self.current_question_index < len(self.questions)
 
     def has_more_questions(self) -> bool:
         """Проверяет, есть ли еще вопросы"""
-        return self.current_question_index < self._get_questions_count()
+        return self.current_question_index < len(self.questions)
 
     def get_questions_count(self) -> int:
         """Возвращает количество вопросов"""
-        return self._get_questions_count()
+        return len(self.questions)
 
     def get_progress(self) -> Tuple[int, int]:
         """Возвращает текущий прогресс (текущий вопрос, всего вопросов)"""
-        total = self._get_questions_count()
-        return (self.current_question_index + 1, total)
+        return (self.current_question_index + 1, len(self.questions))
 
     def reset(self):
         """Сброс состояния менеджера практики"""
@@ -428,4 +368,7 @@ class PracticeManager:
         self.current_question_index = 0
         self.current_lesson_text = ""
         self.current_subject = ""
-        self.current_lesson_id = ""
+
+    def save_practice_for_lesson(self, lesson_id: str, questions: List[Dict], answers: List[Dict]) -> bool:
+        """Сохраняет практику для конкретного урока"""
+        return self._save_practice_files(lesson_id, questions, answers)
