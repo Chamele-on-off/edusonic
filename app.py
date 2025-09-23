@@ -15,6 +15,7 @@ import requests
 import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
+import re
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -64,6 +65,12 @@ def reset_speaking_state(room_id, is_teacher=False):
         room_teacher_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
+def reset_teacher_speaking_state(room_id):
+    """Сбрасывает состояние речи учителя для указанной комнаты"""
+    room_teacher_speaking[room_id] = False
+    room_speaking[room_id] = False
+    socketio.emit('speaking_state', {'speaking': False}, room=room_id)
+
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
     """Озвучивает текст с анимацией и добавляет его в историю"""
     if not text.strip():
@@ -71,9 +78,10 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
         
     # Устанавливаем флаг, что учитель начинает говорить
     if is_teacher:
+        # ВАЖНО: Принудительно сбрасываем предыдущее состояние
         room_teacher_speaking[room_id] = True
+        room_speaking[room_id] = True
         
-    room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
     audio_data = text_to_speech(text, lang='ru')
@@ -97,8 +105,13 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
     
-    speech_duration = max(2, len(text) * 0.1)
-    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
+    # ВАЖНО: Для учителя используем отдельный таймер
+    if is_teacher:
+        speech_duration = max(2, len(text) * 0.1)
+        threading.Timer(speech_duration, lambda: reset_teacher_speaking_state(room_id)).start()
+    else:
+        speech_duration = max(2, len(text) * 0.1)
+        threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, False)).start()
 
 @app.route('/')
 def home():
@@ -163,13 +176,16 @@ def get_speech_frames(avatar_name, phoneme):
             if f.startswith(base_name)]
 
 def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комната"""
+    """Основной цикл анимации для комнаты - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     blink_counter = 0
     blink_frames = get_blink_frames(avatar_name)
     neutral_frames = get_neutral_frames(avatar_name)
     
     while animation_running[room_id]:
-        if room_speaking[room_id]:
+        # ВАЖНО: анимация речи должна работать когда говорит УЧИТЕЛЬ
+        # Используем room_teacher_speaking вместо room_speaking
+        if room_teacher_speaking[room_id]:
+            # Анимация речи учителя
             current_char = random.choice(list(PHONEME_MAP.keys()))
             speech_frames = get_speech_frames(avatar_name, current_char)
             if speech_frames:
@@ -177,14 +193,17 @@ def animation_loop(room_id, avatar_name):
                 frame_path = f'/frames/{avatar_name}/{frame}'
                 socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
         else:
+            # Анимация покоя - моргание и нейтральное состояние
             blink_counter += 1
             if blink_counter >= 30 and blink_frames:
+                # Моргание
                 for frame in blink_frames:
                     frame_path = f'/frames/{avatar_name}/{frame}'
                     socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
                     time.sleep(0.1)
                 blink_counter = 0
             elif neutral_frames:
+                # Нейтральное состояние
                 frame = random.choice(neutral_frames)
                 frame_path = f'/frames/{avatar_name}/{frame}'
                 socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
@@ -412,6 +431,18 @@ def handle_activate_ai_teacher(data):
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
+    # ВАЖНО: Принудительно запускаем анимацию если она не запущена
+    if not animation_running[room_id]:
+        animation_running[room_id] = True
+        # Получаем имя аватара из запроса или используем первое доступное
+        avatar_name = data.get('avatar_name', 'default')
+        if not os.path.exists(FRAMES_DIR / avatar_name):
+            # Если указанный аватар не существует, используем первый доступный
+            avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
+            if avatars:
+                avatar_name = avatars[0]
+        threading.Thread(target=animation_loop, args=(room_id, avatar_name)).start()
+    
     greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
@@ -443,13 +474,9 @@ def handle_llm_response_ready(data):
     
     print(f"Получен ответ LLM для комнаты {room_id}: {answer[:100]}...")
     
-    # Сбрасываем состояние речи учителя, чтобы гарантированно озвучить ответ
-    reset_speaking_state(room_id, is_teacher=True)
-    room_teacher_speaking[room_id] = False
-    room_speaking[room_id] = False
-    
-    # Небольшая задержка для гарантии сброса состояния
-    time.sleep(0.5)
+    # ВАЖНО: Не сбрасываем состояние здесь, а устанавливаем флаг что учитель будет говорить
+    room_teacher_speaking[room_id] = True
+    room_speaking[room_id] = True
     
     # Отправляем ответ в комнату
     emit('speech_text', {
