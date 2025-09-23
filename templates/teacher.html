@@ -1133,6 +1133,12 @@
                                 speakBtn.disabled = false;
                                 avatar.src = loadedImages[0].src;
                                 currentFrame = 0;
+                                
+                                // Отправляем команду на смену аватара в конференцию
+                                socket.emit('avatar_changed', {
+                                    room_id: currentRoom,
+                                    avatar_name: avatarName
+                                });
                             } else {
                                 statusDiv.textContent = avatarName + ': нет загруженных кадров';
                             }
@@ -1194,32 +1200,27 @@
             }
         }
         
-        // Запуск анимации
+        // Запуск анимации (теперь отправляет команду на клиент)
         function startAnimation() {
             if (animationInterval || loadedImages.length === 0) return;
             
-            // Создаем видео поток
-            createVideoStream().then(function(stream) {
-                mediaStream = stream;
-                
-                // Отправляем серверу информацию о кадрах для трансляции
-                socket.emit('start_animation', { 
-                    room_id: currentRoom,
-                    avatar_name: currentAvatar
-                });
-                
-                animationInterval = setInterval(function() {
-                    currentFrame++;
-                    showFrame();
-                }, 1000 / FPS);
-                
-                startBtn.disabled = true;
-                stopBtn.disabled = false;
-                log('Анимация запущена (' + FPS + ' FPS) в комнате ' + currentRoom);
+            // Отправляем команду запуска анимации в конференцию
+            socket.emit('client_start_animation', { 
+                room_id: currentRoom,
+                avatar_name: currentAvatar
             });
+            
+            animationInterval = setInterval(function() {
+                currentFrame++;
+                showFrame();
+            }, 1000 / FPS);
+            
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            log('Команда запуска анимации отправлена в комнату ' + currentRoom);
         }
         
-        // Остановка анимации
+        // Остановка анимации (теперь отправляет команду на клиент)
         function stopAnimation() {
             if (animationInterval) {
                 clearInterval(animationInterval);
@@ -1229,7 +1230,7 @@
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 socket.emit('stop_animation', { room_id: currentRoom });
-                log('Анимация остановлена');
+                log('Команда остановки анимации отправлена в комнату ' + currentRoom);
             }
             
             if (videoStreamInterval) {
