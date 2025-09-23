@@ -1,72 +1,75 @@
+import re
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
-import re
+from typing import Dict, List, Optional, Tuple
+from difflib import SequenceMatcher
+import time
 
 class PracticeManager:
     def __init__(self, llm_integration):
         self.llm = llm_integration
         self.practice_dir = Path("materials/practice")
-        self.questions = []
+        self.questions = []  # [{"question": "...", "answer": "...", "type": "text"}]
         self.current_question_index = 0
+        self.current_lesson_text = ""
+        self.current_subject = ""
         
         # Создаем директорию если не существует
         self.practice_dir.mkdir(parents=True, exist_ok=True)
 
     def load_practice(self, lesson_id: str) -> bool:
-        """Загружает практические задания из файла"""
+        """Загружает практические задания из текстового файла"""
         try:
-            practice_file = self.practice_dir / f"{lesson_id}.json"
+            practice_file = self.practice_dir / f"{lesson_id}.txt"
             
             if not practice_file.exists():
                 print(f"Файл практики не найден: {practice_file}")
                 return False
             
             with open(practice_file, 'r', encoding='utf-8') as f:
-                practice_data = json.load(f)
+                content = f.read()
             
-            self.questions = practice_data.get('questions', [])
+            self.questions = self._parse_practice_content(content)
             self.current_question_index = 0
             
             print(f"Загружено {len(self.questions)} вопросов для практики из файла")
-            return True
+            return len(self.questions) > 0
             
         except Exception as e:
             print(f"Ошибка загрузки практики: {e}")
             return False
 
     def generate_practice(self, lesson_text: str, subject: str) -> bool:
-        """Генерирует практические задания на основе текста урока"""
+        """Генерирует практические задания на основе текста урока и сохраняет в файл"""
         try:
+            self.current_lesson_text = lesson_text
+            self.current_subject = subject
+            
             print(f"Генерация практики для предмета: {subject}")
             
             prompt = f"""
-            На основе следующего учебного материала создай 3-5 практических вопросов для проверки понимания.
-            Вопросы должны быть краткими, понятными и проверять ключевые моменты материала.
-            Предмет: {subject}
+            На основе следующего учебного материала создай 5 практических вопросов для проверки понимания.
             
-            Верни ответ ТОЛЬКО в виде валидного JSON с следующей структурой:
-            {{
-                "questions": [
-                    {{
-                        "question": "текст вопроса",
-                        "expected_answer": "короткий правильный ответ"
-                    }}
-                ]
-            }}
+            ТРЕБОВАНИЯ К ФОРМАТУ:
+            - Каждый вопрос должен начинаться с "Вопрос: "
+            - После вопроса с новой строки должен быть "Ответ: "
+            - Между вопросами должна быть пустая строка
+            - Вопросы должны проверять ключевые понятия из материала
+            - Ответы должны быть краткими и точными
+            - Не добавляй никаких дополнительных комментариев
             
-            Учебный материал:
-            {lesson_text[:3000]}  # Ограничиваем длину
+            ПРЕДМЕТ: {subject}
+            УЧЕБНЫЙ МАТЕРИАЛ:
+            {lesson_text[:2000]}
+            
+            ВЕРНИ ТОЛЬКО ВОПРОСЫ И ОТВЕТЫ В УКАЗАННОМ ФОРМАТЕ БЕЗ ЛИШНИХ СЛОВ.
             """
-            
-            system_prompt = """Ты — помощник учителя. Сгенерируй качественные вопросы для проверки понимания материала.
-            Отвечай строго в формате JSON без дополнительных пояснений."""
             
             llm_response = self.llm._query_llm_api(
                 prompt=prompt,
                 context="",
                 subject=subject,
-                system_prompt=system_prompt,
+                system_prompt="Ты — помощник учителя. Создавай качественные вопросы для проверки понимания материала. Строго следуй указанному формату.",
                 max_tokens=1500
             )
             
@@ -74,40 +77,86 @@ class PracticeManager:
                 print("LLM не вернул ответ для генерации практики")
                 return False
             
-            # Пытаемся извлечь JSON из ответа
-            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
-            if not json_match:
-                print("Не удалось найти JSON в ответе LLM")
-                print(f"Ответ LLM: {llm_response}")
+            print(f"Получен ответ LLM для практики: {llm_response[:200]}...")
+            
+            # Парсим вопросы из ответа
+            self.questions = self._parse_practice_content(llm_response)
+            
+            if not self.questions:
+                print("Не удалось распарсить вопросы из ответа LLM")
                 return False
+            
+            # Сохраняем в файл
+            success = self._save_practice_to_file(lesson_id="generated_practice", content=llm_response)
+            
+            if success:
+                print(f"Сгенерировано и сохранено {len(self.questions)} вопросов для практики")
+            else:
+                print("Ошибка сохранения практики в файл")
                 
-            try:
-                practice_data = json.loads(json_match.group())
-                self.questions = practice_data.get('questions', [])
-                
-                if not self.questions:
-                    print("Сгенерированный JSON не содержит вопросов")
-                    return False
-                    
-                self.current_question_index = 0
-                
-                # Сохраняем сгенерированную практику в файл
-                success = self.save_practice(lesson_id, {"questions": self.questions})
-                
-                if success:
-                    print(f"Сгенерировано и сохранено {len(self.questions)} вопросов для практики")
-                else:
-                    print("Ошибка сохранения практики")
-                    
-                return success
-                
-            except json.JSONDecodeError as e:
-                print(f"Ошибка парсинга JSON: {e}")
-                print(f"Сырой ответ LLM: {llm_response}")
-                return False
+            return success
             
         except Exception as e:
             print(f"Ошибка генерации практики: {e}")
+            return False
+
+    def _parse_practice_content(self, content: str) -> List[Dict]:
+        """Парсит вопросы и ответы из текстового содержимого"""
+        questions = []
+        
+        # Разделяем на блоки вопрос-ответ
+        blocks = re.split(r'\n\s*\n', content.strip())
+        
+        for block in blocks:
+            if not block.strip():
+                continue
+                
+            # Ищем вопрос
+            question_match = re.search(r'Вопрос:\s*(.+?)(?=\n|$)', block, re.IGNORECASE | re.DOTALL)
+            if not question_match:
+                # Пробуем другой формат
+                question_match = re.search(r'^(.*?)\?', block)
+                if not question_match:
+                    continue
+            
+            # Ищем ответ
+            answer_match = re.search(r'Ответ:\s*(.+?)(?=\n|$)', block, re.IGNORECASE | re.DOTALL)
+            if not answer_match:
+                # Пробуем найти ответ после вопроса
+                lines = block.split('\n')
+                if len(lines) > 1:
+                    answer_match = re.match(r'^(.+)$', lines[1].strip()) if len(lines) > 1 else None
+            
+            if question_match and answer_match:
+                question_text = question_match.group(1).strip()
+                answer_text = answer_match.group(1).strip()
+                
+                # Убираем возможные маркеры в начале ответа
+                answer_text = re.sub(r'^[-\*•]\s*', '', answer_text)
+                
+                if question_text and answer_text:
+                    questions.append({
+                        'question': question_text,
+                        'answer': answer_text,
+                        'type': 'text'
+                    })
+        
+        print(f"Распаршено вопросов: {len(questions)}")
+        return questions
+
+    def _save_practice_to_file(self, lesson_id: str, content: str) -> bool:
+        """Сохраняет практику в текстовый файл"""
+        try:
+            practice_file = self.practice_dir / f"{lesson_id}.txt"
+            
+            with open(practice_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"Практика сохранена в: {practice_file}")
+            return True
+            
+        except Exception as e:
+            print(f"Ошибка сохранения практики: {e}")
             return False
 
     def get_question(self, index: int) -> Optional[Dict]:
@@ -116,64 +165,129 @@ class PracticeManager:
             return self.questions[index]
         return None
 
-    def check_answer(self, question: str, student_answer: str, expected_answer: str, subject: str) -> str:
-        """Проверяет ответ ученика через LLM"""
+    def get_current_question(self) -> Optional[Dict]:
+        """Возвращает текущий вопрос"""
+        return self.get_question(self.current_question_index)
+
+    def evaluate_answer(self, student_answer: str, use_llm: bool = True) -> str:
+        """Оценивает ответ ученика с приоритетом LLM и fallback на сравнение"""
+        current_question = self.get_current_question()
+        if not current_question:
+            return "Вопрос не найден."
+        
+        correct_answer = current_question['answer']
+        question_text = current_question['question']
+        
+        # Приоритет: оценка через LLM
+        if use_llm and self._is_llm_available():
+            return self._evaluate_with_llm(question_text, student_answer, correct_answer)
+        else:
+            # Fallback: сравнение ответов
+            return self._evaluate_with_similarity(student_answer, correct_answer)
+
+    def _is_llm_available(self) -> bool:
+        """Проверяет доступность LLM"""
+        try:
+            # Простая проверка - есть ли API ключ
+            return hasattr(self.llm, 'api_key') and bool(self.llm.api_key)
+        except:
+            return False
+
+    def _evaluate_with_llm(self, question: str, student_answer: str, correct_answer: str) -> str:
+        """Оценивает ответ через LLM"""
         try:
             prompt = f"""
-            Проанализируй ответ ученика на вопрос.
             Вопрос: {question}
-            Правильный ответ: {expected_answer}
+            Правильный ответ: {correct_answer}
             Ответ ученика: {student_answer}
             
-            Проанализируй, является ли ответ ученика правильным по смыслу. 
-            Если ответ неполный или неточный, объясни кратко и вежливо, в чем ошибка.
-            Будь поддерживающим учителем. Отвечай на русском языке.
+            Проанализируй ответ ученика. Будь поддерживающим учителем:
+            - Если ответ правильный или близкий к правильному - похвали
+            - Если ответ неполный - дополни и объясни
+            - Если ответ неправильный - вежливо исправь
+            - Будь кратким (1-2 предложения)
+            - Отвечай на русском языке
             """
             
-            system_prompt = f"""Ты — опытный учитель по предмету {subject}. 
-            Анализируй ответы учеников, давай конструктивную обратную связь.
-            Если ответ правильный - похвали ученика.
-            Если ответ неправильный - вежливо объясни ошибку и дай правильный ответ.
-            Будь кратким и понятным."""
+            system_prompt = f"""Ты — опытный учитель по предмету {self.current_subject}. 
+            Давай конструктивную обратную связь. Будь доброжелательным и поддерживающим."""
             
             evaluation = self.llm._query_llm_api(
                 prompt=prompt,
                 context="",
-                subject=subject,
+                subject=self.current_subject,
                 system_prompt=system_prompt,
-                max_tokens=300  # Уменьшаем длину ответа для краткости
+                max_tokens=200
             )
             
-            return evaluation if evaluation else "Спасибо за ответ! Давайте продолжим."
+            return evaluation if evaluation else self._evaluate_with_similarity(student_answer, correct_answer)
             
         except Exception as e:
-            print(f"Ошибка проверки ответа: {e}")
-            return "Спасибо за ответ! Давайте продолжим."
+            print(f"Ошибка оценки через LLM: {e}")
+            return self._evaluate_with_similarity(student_answer, correct_answer)
 
-    def save_practice(self, lesson_id: str, practice_data: Dict) -> bool:
-        """Сохраняет практические задания в файл"""
-        try:
-            practice_file = self.practice_dir / f"{lesson_id}.json"
-            
-            with open(practice_file, 'w', encoding='utf-8') as f:
-                json.dump(practice_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"Практические задания сохранены в: {practice_file}")
-            return True
-            
-        except Exception as e:
-            print(f"Ошибка сохранения практики: {e}")
-            return False
+    def _evaluate_with_similarity(self, student_answer: str, correct_answer: str) -> str:
+        """Оценивает ответ через сравнение схожести"""
+        similarity = self._calculate_similarity(student_answer, correct_answer)
+        
+        if similarity > 0.8:
+            return f"Да, верно! {correct_answer}"
+        elif similarity > 0.6:
+            return f"Почти верно! Правильно: {correct_answer}"
+        elif similarity > 0.4:
+            return f"Частично верно. Полный ответ: {correct_answer}"
+        else:
+            return f"Не совсем. Правильный ответ: {correct_answer}"
 
-    def get_questions_count(self) -> int:
-        """Возвращает количество вопросов"""
-        return len(self.questions)
+    def _calculate_similarity(self, text1: str, text2: str) -> float:
+        """Вычисляет схожесть двух текстов"""
+        # Приводим к нижнему регистру и убираем лишние пробелы
+        text1 = re.sub(r'\s+', ' ', text1.lower()).strip()
+        text2 = re.sub(r'\s+', ' ', text2.lower()).strip()
+        
+        # Используем SequenceMatcher для вычисления схожести
+        return SequenceMatcher(None, text1, text2).ratio()
+
+    def move_to_next_question(self) -> bool:
+        """Переходит к следующему вопросу"""
+        self.current_question_index += 1
+        return self.current_question_index < len(self.questions)
 
     def has_more_questions(self) -> bool:
         """Проверяет, есть ли еще вопросы"""
         return self.current_question_index < len(self.questions)
 
+    def get_questions_count(self) -> int:
+        """Возвращает количество вопросов"""
+        return len(self.questions)
+
+    def get_progress(self) -> Tuple[int, int]:
+        """Возвращает текущий прогресс (текущий вопрос, всего вопросов)"""
+        return (self.current_question_index + 1, len(self.questions))
+
     def reset(self):
         """Сброс состояния менеджера практики"""
         self.questions = []
         self.current_question_index = 0
+        self.current_lesson_text = ""
+        self.current_subject = ""
+
+    def save_practice_for_lesson(self, lesson_id: str, questions: List[Dict]) -> bool:
+        """Сохраняет практику для конкретного урока"""
+        try:
+            content = ""
+            for i, qa in enumerate(questions, 1):
+                content += f"Вопрос: {qa['question']}\n"
+                content += f"Ответ: {qa['answer']}\n\n"
+            
+            practice_file = self.practice_dir / f"{lesson_id}.txt"
+            
+            with open(practice_file, 'w', encoding='utf-8') as f:
+                f.write(content.strip())
+            
+            print(f"Практика для урока {lesson_id} сохранена в: {practice_file}")
+            return True
+            
+        except Exception as e:
+            print(f"Ошибка сохранения практики для урока: {e}")
+            return False
