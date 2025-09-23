@@ -17,6 +17,146 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import re
 
+# Менеджер анимации аватара
+class AvatarAnimationManager:
+    def __init__(self, socketio: SocketIO, frames_dir: Path):
+        self.socketio = socketio
+        self.frames_dir = frames_dir
+        
+        # Состояния анимации
+        self.animation_running = defaultdict(bool)
+        self.room_teacher_speaking = defaultdict(bool)
+        
+        # Соответствие букв кадрам анимации рта
+        self.PHONEME_MAP = {
+            'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
+            'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
+            'е': 'mouth_ee', 'ё': 'mouth_oo', 'ю': 'mouth_uu',
+            'я': 'mouth_aa', 'м': 'mouth_mm', 'п': 'mouth_pp',
+            'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
+            'ш': 'mouth_sh', 'ж': 'mouth_zh', 'с': 'mouth_ss',
+            'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
+            'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
+            'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
+            'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
+            'й': 'mouth_ee'
+        }
+
+    def get_neutral_frames(self, avatar_name):
+        """Возвращает список нейтральных кадров для аватара"""
+        avatar_dir = self.frames_dir / avatar_name
+        if not avatar_dir.exists():
+            return []
+        return sorted([f for f in os.listdir(avatar_dir) 
+                      if f.startswith('mouth_neutral_')])
+
+    def get_blink_frames(self, avatar_name):
+        """Возвращает список кадров моргания для аватара"""
+        avatar_dir = self.frames_dir / avatar_name
+        if not avatar_dir.exists():
+            return []
+        return sorted([f for f in os.listdir(avatar_dir) 
+                      if f.startswith('blink_')])
+
+    def get_speech_frames(self, avatar_name, phoneme):
+        """Возвращает список речевых кадров для указанной фонемы"""
+        avatar_dir = self.frames_dir / avatar_name
+        if not avatar_dir.exists():
+            return []
+        
+        base_name = self.PHONEME_MAP.get(phoneme, 'mouth_aa')
+        return [f for f in os.listdir(avatar_dir) 
+                if f.startswith(base_name)]
+
+    def set_teacher_speaking(self, room_id, speaking):
+        """Устанавливает состояние речи учителя"""
+        self.room_teacher_speaking[room_id] = speaking
+        print(f"🎤 Комната {room_id}: состояние речи учителя = {speaking}")
+
+    def animation_loop(self, room_id, avatar_name):
+        """Основной цикл анимации для комнаты"""
+        blink_counter = 0
+        blink_frames = self.get_blink_frames(avatar_name)
+        neutral_frames = self.get_neutral_frames(avatar_name)
+        
+        print(f"🚀 Анимация запущена для комнаты {room_id}, аватар: {avatar_name}")
+        print(f"📁 Кадры: нейтральные={len(neutral_frames)}, моргание={len(blink_frames)}")
+        
+        frame_counter = 0
+        
+        while self.animation_running[room_id]:
+            try:
+                frame_counter += 1
+                
+                # Анимация речи учителя
+                if self.room_teacher_speaking[room_id]:
+                    current_char = random.choice(list(self.PHONEME_MAP.keys()))
+                    speech_frames = self.get_speech_frames(avatar_name, current_char)
+                    if speech_frames:
+                        frame = random.choice(speech_frames)
+                        frame_path = f'/frames/{avatar_name}/{frame}'
+                        self.socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
+                        if frame_counter % 10 == 0:  # Логируем каждые 10 кадров
+                            print(f"🎬 Комната {room_id}: кадр речи {frame_path}")
+                else:
+                    # Анимация покоя
+                    blink_counter += 1
+                    if blink_counter >= 30 and blink_frames:
+                        # Моргание
+                        for frame in blink_frames:
+                            frame_path = f'/frames/{avatar_name}/{frame}'
+                            self.socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
+                            time.sleep(0.1)
+                        blink_counter = 0
+                        print(f"👁️ Комната {room_id}: моргание")
+                    elif neutral_frames:
+                        # Нейтральное состояние
+                        frame = random.choice(neutral_frames)
+                        frame_path = f'/frames/{avatar_name}/{frame}'
+                        self.socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
+                
+                time.sleep(0.1)
+                
+            except Exception as e:
+                print(f"❌ Ошибка в цикле анимации комнаты {room_id}: {e}")
+                time.sleep(0.5)
+
+    def start_animation(self, room_id, avatar_name):
+        """Запускает анимацию для комнаты"""
+        if not self.animation_running[room_id]:
+            self.animation_running[room_id] = True
+            self.room_teacher_speaking[room_id] = False
+            
+            # Проверяем существование аватара
+            avatar_dir = self.frames_dir / avatar_name
+            if not avatar_dir.exists():
+                avatars = [d for d in os.listdir(self.frames_dir) if (self.frames_dir / d).is_dir()]
+                if avatars:
+                    avatar_name = avatars[0]
+                    print(f"⚠️  Аватар не найден, используем: {avatar_name}")
+                else:
+                    print("❌ Нет доступных аватаров!")
+                    return False
+            
+            thread = threading.Thread(target=self.animation_loop, args=(room_id, avatar_name))
+            thread.daemon = True
+            thread.start()
+            print(f"✅ Анимация запущена для комнаты {room_id}")
+            return True
+        return False
+
+    def stop_animation(self, room_id):
+        """Останавливает анимацию для комнаты"""
+        if self.animation_running[room_id]:
+            self.animation_running[room_id] = False
+            self.room_teacher_speaking[room_id] = False
+            print(f"⏹️ Анимация остановлена для комнаты {room_id}")
+
+    def is_animation_running(self, room_id):
+        """Проверяет, запущена ли анимация"""
+        return self.animation_running[room_id]
+
+# Инициализация Flask приложения
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
@@ -30,8 +170,10 @@ PRACTICE_DIR = BASE_DIR / 'materials' / 'practice'
 for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR]:
     os.makedirs(folder, exist_ok=True)
 
+# Инициализируем менеджер анимации
+avatar_manager = AvatarAnimationManager(socketio, FRAMES_DIR)
+
 # Глобальные состояния
-animation_running = defaultdict(bool)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
@@ -39,36 +181,14 @@ room_ai_activated = defaultdict(bool)
 room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
-room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
-room_current_question_index = defaultdict(int)  # Текущий индекс вопроса для каждой комнаты
-
-# Соответствие букв кадрам анимации рта
-PHONEME_MAP = {
-    'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
-    'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
-    'е': 'mouth_ee', 'ё': 'mouth_oo', 'ю': 'mouth_uu',
-    'я': 'mouth_aa', 'м': 'mouth_mm', 'п': 'mouth_pp',
-    'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
-    'ш': 'mouth_sh', 'ж': 'mouth_zh', 'с': 'mouth_ss',
-    'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
-    'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
-    'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
-    'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
-    'й': 'mouth_ee'
-}
+room_current_question_index = defaultdict(int)
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
     if is_teacher:
-        room_teacher_speaking[room_id] = False
-    socketio.emit('speaking_state', {'speaking': False}, room=room_id)
-
-def reset_teacher_speaking_state(room_id):
-    """Сбрасывает состояние речи учителя для указанной комнаты"""
-    room_teacher_speaking[room_id] = False
-    room_speaking[room_id] = False
+        avatar_manager.set_teacher_speaking(room_id, False)
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
@@ -76,11 +196,9 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     if not text.strip():
         return
         
-    # Устанавливаем флаг, что учитель начинает говорить
     if is_teacher:
-        # ВАЖНО: Принудительно сбрасываем предыдущее состояние
-        room_teacher_speaking[room_id] = True
         room_speaking[room_id] = True
+        avatar_manager.set_teacher_speaking(room_id, True)
         
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
@@ -105,13 +223,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
     
-    # ВАЖНО: Для учителя используем отдельный таймер
-    if is_teacher:
-        speech_duration = max(2, len(text) * 0.1)
-        threading.Timer(speech_duration, lambda: reset_teacher_speaking_state(room_id)).start()
-    else:
-        speech_duration = max(2, len(text) * 0.1)
-        threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, False)).start()
+    speech_duration = max(2, len(text) * 0.1)
+    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
 @app.route('/')
 def home():
@@ -159,57 +272,6 @@ def text_to_speech(text, lang='ru'):
         print(f"Error in text_to_speech: {e}")
         return None
 
-def get_neutral_frames(avatar_name):
-    """Возвращает список нейтральных кадров для аватара"""
-    return sorted([f for f in os.listdir(FRAMES_DIR / avatar_name) 
-                  if f.startswith('mouth_neutral_')])
-
-def get_blink_frames(avatar_name):
-    """Возвращает список кадров моргания для аватара"""
-    return sorted([f for f in os.listdir(FRAMES_DIR / avatar_name) 
-                  if f.startswith('blink_')])
-
-def get_speech_frames(avatar_name, phoneme):
-    """Возвращает список речевых кадров для указанной фонемы"""
-    base_name = PHONEME_MAP.get(phoneme, 'mouth_aa')
-    return [f for f in os.listdir(FRAMES_DIR / avatar_name) 
-            if f.startswith(base_name)]
-
-def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комнаты - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-    blink_counter = 0
-    blink_frames = get_blink_frames(avatar_name)
-    neutral_frames = get_neutral_frames(avatar_name)
-    
-    while animation_running[room_id]:
-        # ВАЖНО: анимация речи должна работать когда говорит УЧИТЕЛЬ
-        # Используем room_teacher_speaking вместо room_speaking
-        if room_teacher_speaking[room_id]:
-            # Анимация речи учителя
-            current_char = random.choice(list(PHONEME_MAP.keys()))
-            speech_frames = get_speech_frames(avatar_name, current_char)
-            if speech_frames:
-                frame = random.choice(speech_frames)
-                frame_path = f'/frames/{avatar_name}/{frame}'
-                socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
-        else:
-            # Анимация покоя - моргание и нейтральное состояние
-            blink_counter += 1
-            if blink_counter >= 30 and blink_frames:
-                # Моргание
-                for frame in blink_frames:
-                    frame_path = f'/frames/{avatar_name}/{frame}'
-                    socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
-                    time.sleep(0.1)
-                blink_counter = 0
-            elif neutral_frames:
-                # Нейтральное состояние
-                frame = random.choice(neutral_frames)
-                frame_path = f'/frames/{avatar_name}/{frame}'
-                socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
-        
-        time.sleep(0.1)
-
 @socketio.on('connect')
 def handle_connect():
     print('Client connected:', request.sid)
@@ -232,7 +294,6 @@ def handle_join_room(data):
         room_dialogue[room_id] = DialogueManager(socketio)
         room_dialogue[room_id].room_id = room_id
     
-    # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
     if len(room_participants[room_id]) == 1:
@@ -254,14 +315,17 @@ def handle_join_room(data):
 def handle_start_animation(data):
     room_id = data['room_id']
     avatar_name = data['avatar_name']
-    if not animation_running[room_id]:
-        animation_running[room_id] = True
-        threading.Thread(target=animation_loop, args=(room_id, avatar_name)).start()
+    success = avatar_manager.start_animation(room_id, avatar_name)
+    if success:
+        emit('animation_started', {'success': True}, room=room_id)
+    else:
+        emit('animation_started', {'success': False}, room=room_id)
 
 @socketio.on('stop_animation')
 def handle_stop_animation(data):
     room_id = data['room_id']
-    animation_running[room_id] = False
+    avatar_manager.stop_animation(room_id)
+    emit('animation_stopped', {}, room=room_id)
 
 @socketio.on('generate_speech')
 def handle_generate_speech(data):
@@ -277,12 +341,10 @@ def handle_student_answer(data):
     answer = data['answer']
     user_sid = request.sid
 
-    # ИГНОРИРУЕМ ответ, если учитель говорит или практика не активна
-    if room_teacher_speaking[room_id] or not room_practice_active[room_id]:
+    if room_speaking[room_id] or not room_practice_active[room_id]:
         print(f"Игнорирую ответ ученика: {answer}")
         return
 
-    # Добавляем ответ в историю
     room_speech_data[room_id].append({
         'text': f"Ответ ученика: {answer}",
         'timestamp': time.time(),
@@ -294,20 +356,16 @@ def handle_student_answer(data):
     
     emit('speech_text', {'text': answer, 'sid': user_sid}, room=room_id)
     
-    # Обрабатываем ответ через диалог менеджер
     if room_id in room_dialogue:
         response = room_dialogue[room_id].handle_practice_answer(answer)
         if response:
-            # Отправляем ответ учителя
             emit('speech_text', {
                 'text': f"Учитель: {response}",
                 'sid': 'teacher',
                 'is_teacher': True
             }, room=room_id)
-            # Озвучиваем ответ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
-            # Если response is None, практика завершена
             room_practice_active[room_id] = False
             room_current_question_index[room_id] = 0
             emit('practice_ended', {}, room=room_id)
@@ -318,12 +376,10 @@ def handle_recognized_speech(data):
     text = data['text']
     user_sid = request.sid
 
-    # ИГНОРИРУЕМ распознанную речь, если учитель говорит
-    if room_teacher_speaking[room_id]:
+    if room_speaking[room_id]:
         print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
         return
 
-    # Игнорируем распознавание системных сообщений и короткие фразы
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
         len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
         return
@@ -342,55 +398,41 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
-            # Сначала проверяем команды управления
             if any(word in text.lower() for word in ["записал", "дальше", 'продолжай', "следующий", "продолжить"]):
-                # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
-                    # Отправляем текст
                     emit('speech_text', {
                         'text': f"Учитель: {next_paragraph}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    # Озвучиваем следующий абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
                 return
             
-            # Команды остановки
             if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
                 stop_response = dialogue.process_input(text)
                 if stop_response:
-                    # Отправляем текст
                     emit('speech_text', {
                         'text': f"Учитель: {stop_response}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    # Озвучиваем ответ на остановку
                     speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
                 return
             
-            # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
-            # Обработка диалога выбора урока
             response = dialogue.process_input(text)
             
-            # Если response None - это значит был выбран предмет и нужно начать урок
             if response is None:
-                # Урок выбран, начинаем чтение
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data:
                     emit('lesson_started', {
@@ -399,26 +441,20 @@ def handle_recognized_speech(data):
                         'subject': dialogue.get_current_subject()
                     }, room=room_id)
                     
-                    # Немедленно начинаем чтение первого абзаца урока
                     first_paragraph = dialogue._get_next_paragraph()
                     if first_paragraph:
-                        # Отправляем текст
                         emit('speech_text', {
                             'text': f"Учитель: {first_paragraph}",
                             'sid': 'teacher',
                             'is_teacher': True
                         }, room=room_id)
-                        # Озвучиваем первый абзац
                         speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
             elif response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                
-                # Озвучиваем ответ (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
@@ -428,20 +464,10 @@ def handle_activate_ai_teacher(data):
     room_dialogue[room_id] = DialogueManager(socketio)
     room_dialogue[room_id].room_id = room_id
     
-    # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    # ВАЖНО: Принудительно запускаем анимацию если она не запущена
-    if not animation_running[room_id]:
-        animation_running[room_id] = True
-        # Получаем имя аватара из запроса или используем первое доступное
-        avatar_name = data.get('avatar_name', 'default')
-        if not os.path.exists(FRAMES_DIR / avatar_name):
-            # Если указанный аватар не существует, используем первый доступный
-            avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
-            if avatars:
-                avatar_name = avatars[0]
-        threading.Thread(target=animation_loop, args=(room_id, avatar_name)).start()
+    avatar_name = data.get('avatar_name', 'default')
+    avatar_manager.start_animation(room_id, avatar_name)
     
     greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
@@ -467,25 +493,22 @@ def handle_set_llm_mode(data):
 
 @socketio.on('llm_response_ready')
 def handle_llm_response_ready(data):
-    """Обработчик готовых ответов от LLM (для асинхронной обработки)"""
+    """Обработчик готовых ответов от LLM"""
     room_id = data['room_id']
     question = data['question']
     answer = data['answer']
     
     print(f"Получен ответ LLM для комнаты {room_id}: {answer[:100]}...")
     
-    # ВАЖНО: Не сбрасываем состояние здесь, а устанавливаем флаг что учитель будет говорить
-    room_teacher_speaking[room_id] = True
     room_speaking[room_id] = True
+    avatar_manager.set_teacher_speaking(room_id, True)
     
-    # Отправляем ответ в комнату
     emit('speech_text', {
         'text': f"Учитель: {answer}",
         'sid': 'teacher',
         'is_teacher': True
     }, room=room_id)
     
-    # Озвучиваем ответ
     speak_text(room_id, answer, voice_type='female', is_teacher=True)
 
 @socketio.on('practice_started')
@@ -582,7 +605,6 @@ def set_llm_mode_api():
         success = set_llm_mode(mode)
         
         if success:
-            # Обновляем режим для всех активных комнат
             for room_id in room_llm_mode:
                 room_llm_mode[room_id] = mode
                 if room_id in room_dialogue:
@@ -668,41 +690,31 @@ def get_lesson_content(lesson_id):
         with open(lesson_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Разбиваем на абзацы (улучшенная логика)
         paragraphs = []
         current_paragraph = []
         
-        # Сначала разбиваем по двойным переводам строк
         if '\n\n' in content:
             raw_paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
         else:
-            # Если нет двойных переводов строк, разбиваем по одиночным
             raw_paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
         
-        # Объединяем короткие абзацы в группы по 6 предложений
         for paragraph in raw_paragraphs:
-            # Разбиваем на предложения
             sentences = re.split(r'(?<=[.!?])\s+', paragraph)
             sentences = [s.strip() for s in sentences if s.strip()]
             
-            # Если абзац уже содержит достаточно предложений, добавляем как есть
             if len(sentences) >= 6:
                 paragraphs.append(' '.join(sentences))
                 continue
                 
-            # Добавляем предложения в текущий абзац
             current_paragraph.extend(sentences)
             
-            # Если накопилось достаточно предложений, создаем новый абзац
             if len(current_paragraph) >= 6:
                 paragraphs.append(' '.join(current_paragraph[:6]))
                 current_paragraph = current_paragraph[6:]
         
-        # Добавляем оставшиеся предложения
         if current_paragraph:
             paragraphs.append(' '.join(current_paragraph))
         
-        # Убираем \n\n из текста
         paragraphs = [p.replace('\n\n', ' ').replace('\n', ' ') for p in paragraphs]
         
         return jsonify({
@@ -858,7 +870,6 @@ def add_knowledge():
         if not text.strip():
             return jsonify({"success": False, "error": "Text is required"})
         
-        # Создаем базу знаний для предмета если ее нет
         knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
         if knowledge_file.exists():
             with open(knowledge_file, 'r', encoding='utf-8') as f:
@@ -876,7 +887,6 @@ def add_knowledge():
                 }
             }
         
-        # Парсим текст и добавляем в базу знаний
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         for line in lines:
             if ' - ' in line:
@@ -885,12 +895,10 @@ def add_knowledge():
             elif line.endswith('?'):
                 knowledge_data["questions"][line.strip().lower()] = "Ответ будет добавлен автоматически"
             else:
-                # Просто добавляем как общую информацию
                 if "general_info" not in knowledge_data:
                     knowledge_data["general_info"] = []
                 knowledge_data["general_info"].append(line.strip())
         
-        # Сохраняем обновленную базу знаний
         with open(knowledge_file, 'w', encoding='utf-8') as f:
             json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
         
@@ -911,7 +919,6 @@ def add_lesson():
         if not title or not content:
             return jsonify({"success": False, "error": "Title and content are required"})
         
-        # Создаем имя файла
         filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
         lesson_path = LESSONS_DIR / filename
         
@@ -934,7 +941,6 @@ def add_practice():
         if not lesson_id or not practice_data:
             return jsonify({"success": False, "error": "Lesson ID and practice data are required"})
         
-        # Создаем файл практики
         practice_file = PRACTICE_DIR / f"{lesson_id}.json"
         
         with open(practice_file, 'w', encoding='utf-8') as f:
@@ -955,7 +961,6 @@ def download_knowledge():
     if not knowledge_file.exists() and not llm_answers_file.exists():
         return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
     
-    # Создаем временный файл для скачивания
     import tempfile
     import zipfile
     
@@ -982,7 +987,6 @@ def download_lessons():
     if not any(LESSONS_DIR.iterdir()):
         return jsonify({"success": False, "error": "Уроки не найдены"})
     
-    # Создаем временный zip-файл
     import tempfile
     import zipfile
     
@@ -1007,7 +1011,6 @@ def download_practice():
     if not any(PRACTICE_DIR.iterdir()):
         return jsonify({"success": False, "error": "Практические задания не найдены"})
     
-    # Создаем временный zip-файл
     import tempfile
     import zipfile
     
@@ -1026,7 +1029,6 @@ def download_practice():
         mimetype='application/zip'
     )
 
-# Новые API эндпоинты для управления API ключами
 @app.route('/api/config/keys', methods=['GET'])
 def get_api_keys():
     """Получение текущих API ключей"""
@@ -1081,7 +1083,6 @@ def test_api_key():
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
         
-        # Тестируем ключ через простой запрос к OpenRouter
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
