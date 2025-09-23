@@ -90,6 +90,7 @@
             opacity: 0.3;
         }
         
+        /* Основное окно урока */
         #lesson-content {
             position: absolute;
             top: 50%;
@@ -107,6 +108,59 @@
             -webkit-overflow-scrolling: touch;
             color: var(--board-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        /* Окно рисования */
+        #drawing-window {
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            background: var(--board-bg);
+            padding: 0;
+            border-radius: 16px;
+            width: 80%;
+            height: 70%;
+            overflow: hidden;
+            z-index: 6;
+            display: none;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--board-border);
+            -webkit-overflow-scrolling: touch;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        .window-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid var(--board-border);
+            cursor: move;
+            user-select: none;
+        }
+        
+        .window-title {
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        .window-close {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: none;
+            background: var(--light);
+            color: var(--gray);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .window-close:hover {
+            background: var(--danger);
+            color: white;
         }
         
         .board-toolbar {
@@ -154,6 +208,25 @@
             padding: 30px;
             background: var(--board-bg);
             position: relative;
+            touch-action: none;
+        }
+        
+        #drawing-canvas-container {
+            flex: 1;
+            height: calc(100% - 56px);
+            overflow: hidden;
+            background: var(--board-bg);
+            position: relative;
+            touch-action: none;
+        }
+        
+        #drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
             touch-action: none;
         }
         
@@ -278,18 +351,6 @@
             border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
-        }
-        
-        #drawing-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            display: none;
-            cursor: crosshair;
-            touch-action: none;
         }
         
         .color-picker {
@@ -569,7 +630,7 @@
                 font-size: 1.1rem;
             }
             
-            #lesson-content {
+            #lesson-content, #drawing-window {
                 width: 90%;
                 height: 60%;
             }
@@ -647,7 +708,7 @@
         }
         
         @media (max-width: 480px) {
-            #lesson-content {
+            #lesson-content, #drawing-window {
                 width: 95%;
                 height: 55%;
             }
@@ -815,7 +876,14 @@
         <div id="video-container">
             <div id="background-animation"></div>
             
+            <!-- Основное окно урока -->
             <div id="lesson-content">
+                <div class="window-header">
+                    <div class="window-title">Учебная доска</div>
+                    <button class="window-close" id="close-lesson">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
                 <div class="board-toolbar">
                     <button class="toolbar-btn" id="text-tool" title="Текст">
                         <i class="fas fa-font"></i>
@@ -827,27 +895,20 @@
                         <i class="fas fa-comment-dots"></i>
                     </button>
                     <div class="toolbar-separator"></div>
-                    <button class="toolbar-btn" id="clear-drawing" title="Очистить рисунок">
+                    <button class="toolbar-btn" id="clear-text" title="Очистить текст">
                         <i class="fas fa-trash"></i>
                     </button>
-                    <div class="color-picker">
-                        <div class="color-option active" style="background-color: #000000;" data-color="#000000"></div>
-                        <div class="color-option" style="background-color: #ff0000;" data-color="#ff0000"></div>
-                        <div class="color-option" style="background-color: #0000ff;" data-color="#0000ff"></div>
-                        <div class="color-option" style="background-color: #00aa00;" data-color="#00aa00"></div>
-                    </div>
                 </div>
                 <div id="lesson-canvas">
                     <div class="board-grid"></div>
                     <div class="text-widget" id="main-text-widget">
                         <div class="widget-handle">
-                            <button class="handle-btn">
+                            <button class="handle-btn" id="close-text-widget">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                         <div id="lesson-text"></div>
                     </div>
-                    <canvas id="drawing-canvas"></canvas>
                 </div>
                 <div class="zoom-controls">
                     <button class="zoom-btn" id="zoom-out" title="Уменьшить">
@@ -864,6 +925,48 @@
                 <div id="answer-input-container">
                     <input type="text" id="answer-input" placeholder="Введите ваш ответ...">
                     <button id="submit-answer">Отправить</button>
+                </div>
+            </div>
+            
+            <!-- Окно рисования -->
+            <div id="drawing-window">
+                <div class="window-header">
+                    <div class="window-title">Доска для рисования</div>
+                    <button class="window-close" id="close-drawing">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="board-toolbar">
+                    <button class="toolbar-btn" id="drawing-pen" title="Карандаш">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="toolbar-btn" id="drawing-eraser" title="Ластик">
+                        <i class="fas fa-eraser"></i>
+                    </button>
+                    <div class="toolbar-separator"></div>
+                    <button class="toolbar-btn" id="clear-drawing" title="Очистить рисунок">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <div class="color-picker">
+                        <div class="color-option active" style="background-color: #000000;" data-color="#000000"></div>
+                        <div class="color-option" style="background-color: #ff0000;" data-color="#ff0000"></div>
+                        <div class="color-option" style="background-color: #0000ff;" data-color="#0000ff"></div>
+                        <div class="color-option" style="background-color: #00aa00;" data-color="#00aa00"></div>
+                    </div>
+                </div>
+                <div id="drawing-canvas-container">
+                    <canvas id="drawing-canvas"></canvas>
+                </div>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="drawing-zoom-out" title="Уменьшить">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <button class="zoom-btn" id="drawing-zoom-reset" title="Сбросить масштаб">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="zoom-btn" id="drawing-zoom-in" title="Увеличить">
+                        <i class="fas fa-plus"></i>
+                    </button>
                 </div>
             </div>
             
@@ -940,25 +1043,27 @@
         const studentSpeech = document.getElementById('student-speech');
         const activateAiBtn = document.getElementById('activate-ai-btn');
         const lessonContent = document.getElementById('lesson-content');
+        const drawingWindow = document.getElementById('drawing-window');
         const lessonText = document.getElementById('lesson-text');
         const lessonCanvas = document.getElementById('lesson-canvas');
         const backgroundAnimation = document.getElementById('background-animation');
         const cameraPermission = document.getElementById('camera-permission');
         const enableCameraBtn = document.getElementById('enable-camera-btn');
         const textWidget = document.getElementById('main-text-widget');
-        const zoomOutBtn = document.getElementById('zoom-out');
-        const zoomResetBtn = document.getElementById('zoom-reset');
-        const zoomInBtn = document.getElementById('zoom-in');
         const audioFix = document.getElementById('audio-fix');
         const drawingCanvas = document.getElementById('drawing-canvas');
         const textToolBtn = document.getElementById('text-tool');
         const drawToolBtn = document.getElementById('draw-tool');
         const answerToolBtn = document.getElementById('answer-tool');
         const clearDrawingBtn = document.getElementById('clear-drawing');
+        const clearTextBtn = document.getElementById('clear-text');
         const answerInputContainer = document.getElementById('answer-input-container');
         const answerInput = document.getElementById('answer-input');
         const submitAnswerBtn = document.getElementById('submit-answer');
         const colorOptions = document.querySelectorAll('.color-option');
+        const closeLessonBtn = document.getElementById('close-lesson');
+        const closeDrawingBtn = document.getElementById('close-drawing');
+        const closeTextWidgetBtn = document.getElementById('close-text-widget');
 
         let userStream = null;
         let socket = null;
@@ -976,18 +1081,24 @@
         let devicesEnabled = false;
         let currentAvatarAspectRatio = 1;
         let isLessonActive = false;
-        let scale = 1;
-        let isDragging = false;
-        let startX, startY, scrollLeft, scrollTop;
         let audioContext = null;
         let audioQueue = [];
         let isPlayingAudio = false;
+        
+        // Переменные для рисования
         let isDrawing = false;
-        let currentTool = 'text';
+        let currentTool = 'pen';
         let drawingCtx = null;
         let currentColor = '#000000';
         let lastX = 0;
         let lastY = 0;
+        let isEraser = false;
+        
+        // Переменные для перетаскивания окон
+        let isDraggingWindow = false;
+        let currentDraggedWindow = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
 
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -1021,10 +1132,16 @@
         }
 
         function initDrawingCanvas() {
-            // Устанавливаем правильные размеры canvas
             const resizeCanvas = () => {
-                drawingCanvas.width = lessonCanvas.offsetWidth;
-                drawingCanvas.height = lessonCanvas.offsetHeight;
+                drawingCanvas.width = drawingCanvas.offsetWidth;
+                drawingCanvas.height = drawingCanvas.offsetHeight;
+                
+                if (drawingCtx) {
+                    drawingCtx.lineWidth = isEraser ? 20 : 3;
+                    drawingCtx.lineCap = 'round';
+                    drawingCtx.lineJoin = 'round';
+                    drawingCtx.strokeStyle = isEraser ? '#F5F6F8' : currentColor;
+                }
             };
             
             resizeCanvas();
@@ -1046,7 +1163,6 @@
             drawingCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             drawingCanvas.addEventListener('touchend', handleTouchEnd);
             
-            // Ресайз при изменении размера окна
             window.addEventListener('resize', resizeCanvas);
         }
 
@@ -1072,14 +1188,13 @@
         }
 
         function startDrawing(e) {
-            if (currentTool !== 'draw') return;
+            if (!drawingWindow.style.display || drawingWindow.style.display === 'none') return;
             
             isDrawing = true;
             const coords = getCanvasCoordinates(e);
             lastX = coords.x;
             lastY = coords.y;
             
-            // Начинаем новый путь
             drawingCtx.beginPath();
             drawingCtx.moveTo(lastX, lastY);
             
@@ -1093,7 +1208,6 @@
             const currentX = coords.x;
             const currentY = coords.y;
             
-            // Рисуем линию
             drawingCtx.lineTo(currentX, currentY);
             drawingCtx.stroke();
             
@@ -1111,7 +1225,7 @@
         }
 
         function handleTouchStart(e) {
-            if (currentTool !== 'draw') return;
+            if (!drawingWindow.style.display || drawingWindow.style.display === 'none') return;
             
             const touch = e.touches[0];
             const mouseEvent = new MouseEvent('mousedown', {
@@ -1146,26 +1260,121 @@
             drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
         }
 
-        function setTool(tool) {
+        function setDrawingTool(tool) {
             currentTool = tool;
+            isEraser = (tool === 'eraser');
             
             // Update UI
+            document.getElementById('drawing-pen').classList.remove('active');
+            document.getElementById('drawing-eraser').classList.remove('active');
+            
+            if (tool === 'pen') {
+                document.getElementById('drawing-pen').classList.add('active');
+                drawingCtx.lineWidth = 3;
+                drawingCtx.strokeStyle = currentColor;
+                drawingCtx.globalCompositeOperation = 'source-over';
+            } else if (tool === 'eraser') {
+                document.getElementById('drawing-eraser').classList.add('active');
+                drawingCtx.lineWidth = 20;
+                drawingCtx.strokeStyle = '#F5F6F8';
+                drawingCtx.globalCompositeOperation = 'destination-out';
+            }
+        }
+
+        function initWindowDragging() {
+            // Функция для инициализации перетаскивания окна
+            function initDragForWindow(windowElement) {
+                const header = windowElement.querySelector('.window-header');
+                
+                header.addEventListener('mousedown', startDragWindow);
+                header.addEventListener('touchstart', startDragWindow, { passive: true });
+                
+                function startDragWindow(e) {
+                    isDraggingWindow = true;
+                    currentDraggedWindow = windowElement;
+                    
+                    const rect = windowElement.getBoundingClientRect();
+                    if (e.type === 'mousedown') {
+                        dragOffsetX = e.clientX - rect.left;
+                        dragOffsetY = e.clientY - rect.top;
+                    } else {
+                        dragOffsetX = e.touches[0].clientX - rect.left;
+                        dragOffsetY = e.touches[0].clientY - rect.top;
+                    }
+                    
+                    document.addEventListener('mousemove', dragWindow);
+                    document.addEventListener('touchmove', dragWindow, { passive: true });
+                    document.addEventListener('mouseup', stopDragWindow);
+                    document.addEventListener('touchend', stopDragWindow);
+                    
+                    if (e.type === 'touchstart') {
+                        e.preventDefault();
+                    }
+                }
+            }
+            
+            function dragWindow(e) {
+                if (!isDraggingWindow || !currentDraggedWindow) return;
+                
+                let clientX, clientY;
+                if (e.type === 'mousemove') {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                } else {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                }
+                
+                const newX = clientX - dragOffsetX;
+                const newY = clientY - dragOffsetY;
+                
+                // Ограничение перемещения в пределах экрана
+                const maxX = window.innerWidth - currentDraggedWindow.offsetWidth;
+                const maxY = window.innerHeight - currentDraggedWindow.offsetHeight;
+                
+                currentDraggedWindow.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+                currentDraggedWindow.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+                currentDraggedWindow.style.transform = 'none';
+                
+                if (e.type === 'touchmove') {
+                    e.preventDefault();
+                }
+            }
+            
+            function stopDragWindow() {
+                isDraggingWindow = false;
+                currentDraggedWindow = null;
+                document.removeEventListener('mousemove', dragWindow);
+                document.removeEventListener('touchmove', dragWindow);
+                document.removeEventListener('mouseup', stopDragWindow);
+                document.removeEventListener('touchend', stopDragWindow);
+            }
+            
+            // Инициализируем перетаскивание для обоих окон
+            initDragForWindow(lessonContent);
+            initDragForWindow(drawingWindow);
+        }
+
+        function setTool(tool) {
+            // Скрываем все окна сначала
+            lessonContent.style.display = 'none';
+            drawingWindow.style.display = 'none';
+            answerInputContainer.style.display = 'none';
+            
+            // Сбрасываем активные кнопки
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
             
-            // Hide all tools
-            drawingCanvas.style.display = 'none';
-            answerInputContainer.style.display = 'none';
-            
-            // Enable selected tool
             if (tool === 'text') {
                 textToolBtn.classList.add('active');
+                lessonContent.style.display = 'block';
             } else if (tool === 'draw') {
                 drawToolBtn.classList.add('active');
-                drawingCanvas.style.display = 'block';
+                drawingWindow.style.display = 'block';
             } else if (tool === 'answer') {
                 answerToolBtn.classList.add('active');
+                lessonContent.style.display = 'block';
                 answerInputContainer.style.display = 'block';
                 answerInput.focus();
             }
@@ -1174,92 +1383,69 @@
         function submitAnswer() {
             const answer = answerInput.value.trim();
             if (answer) {
-                socket.emit('recognized_speech', {
-                    room_id: roomId,
-                    text: answer
-                });
+                if (socket) {
+                    socket.emit('recognized_speech', {
+                        room_id: roomId,
+                        text: answer
+                    });
+                }
                 answerInput.value = '';
                 setTool('text');
                 showStudentSpeech(answer, 'me');
             }
         }
 
-        function initDragging() {
-            textWidget.addEventListener('mousedown', startDrag);
-            textWidget.addEventListener('touchstart', startDrag, { passive: true });
-            
-            document.addEventListener('mousemove', drag);
-            document.addEventListener('touchmove', drag, { passive: true });
-            
-            document.addEventListener('mouseup', endDrag);
-            document.addEventListener('touchend', endDrag);
-            
-            function startDrag(e) {
-                if (currentTool !== 'text') return;
-                
-                isDragging = true;
-                startX = e.pageX || e.touches[0].pageX;
-                startY = e.pageY || e.touches[0].pageY;
-                scrollLeft = lessonCanvas.scrollLeft;
-                scrollTop = lessonCanvas.scrollTop;
-                textWidget.style.cursor = 'grabbing';
-                
-                if (e.type === 'touchstart') {
-                    e.preventDefault();
-                }
-            }
-            
-            function drag(e) {
-                if (!isDragging) return;
-                
-                const x = e.pageX || e.touches[0].pageX;
-                const y = e.pageY || e.touches[0].pageY;
-                const walkX = (x - startX) * 2;
-                const walkY = (y - startY) * 2;
-                lessonCanvas.scrollLeft = scrollLeft - walkX;
-                lessonCanvas.scrollTop = scrollTop - walkY;
-                
-                if (e.type === 'touchmove') {
-                    e.preventDefault();
-                }
-            }
-            
-            function endDrag() {
-                isDragging = false;
-                textWidget.style.cursor = 'grab';
-            }
-        }
-
         function initZoom() {
-            let currentScale = 1;
+            // Масштабирование для основного окна
+            let lessonScale = 1;
+            const zoomInBtn = document.getElementById('zoom-in');
+            const zoomOutBtn = document.getElementById('zoom-out');
+            const zoomResetBtn = document.getElementById('zoom-reset');
             
             zoomInBtn.addEventListener('click', () => {
-                currentScale = Math.min(currentScale + 0.1, 2);
-                updateZoom();
+                lessonScale = Math.min(lessonScale + 0.1, 2);
+                updateLessonZoom();
             });
             
             zoomOutBtn.addEventListener('click', () => {
-                currentScale = Math.max(currentScale - 0.1, 0.5);
-                updateZoom();
+                lessonScale = Math.max(lessonScale - 0.1, 0.5);
+                updateLessonZoom();
             });
             
             zoomResetBtn.addEventListener('click', () => {
-                currentScale = 1;
-                updateZoom();
+                lessonScale = 1;
+                updateLessonZoom();
             });
             
-            lessonCanvas.addEventListener('wheel', (e) => {
-                if (e.ctrlKey) {
-                    e.preventDefault();
-                    currentScale += e.deltaY * -0.01;
-                    currentScale = Math.max(0.5, Math.min(2, currentScale));
-                    updateZoom();
-                }
-            });
-            
-            function updateZoom() {
-                lessonCanvas.style.transform = `scale(${currentScale})`;
+            function updateLessonZoom() {
+                lessonCanvas.style.transform = `scale(${lessonScale})`;
                 lessonCanvas.style.transformOrigin = 'center center';
+            }
+            
+            // Масштабирование для окна рисования
+            let drawingScale = 1;
+            const drawingZoomInBtn = document.getElementById('drawing-zoom-in');
+            const drawingZoomOutBtn = document.getElementById('drawing-zoom-out');
+            const drawingZoomResetBtn = document.getElementById('drawing-zoom-reset');
+            
+            drawingZoomInBtn.addEventListener('click', () => {
+                drawingScale = Math.min(drawingScale + 0.1, 2);
+                updateDrawingZoom();
+            });
+            
+            drawingZoomOutBtn.addEventListener('click', () => {
+                drawingScale = Math.max(drawingScale - 0.1, 0.5);
+                updateDrawingZoom();
+            });
+            
+            drawingZoomResetBtn.addEventListener('click', () => {
+                drawingScale = 1;
+                updateDrawingZoom();
+            });
+            
+            function updateDrawingZoom() {
+                drawingCanvas.style.transform = `scale(${drawingScale})`;
+                drawingCanvas.style.transformOrigin = 'center center';
             }
         }
 
@@ -1303,14 +1489,11 @@
             
             socket.on('speech_audio', (data) => {
                 try {
-                    // iOS audio fix - use a different approach
                     if (isIOS) {
                         playAudioForIOS(data.audio);
                     } else {
                         const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
                         audio.preload = 'auto';
-                        
-                        // Add to queue and play sequentially
                         audioQueue.push(audio);
                         playNextAudio();
                     }
@@ -1350,23 +1533,12 @@
             }
             
             function playAudioForIOS(base64Audio) {
-                // iOS requires user interaction to play audio
-                // We'll use the hidden audio element and trigger it
                 audioFix.src = `data:audio/mp3;base64,${base64Audio}`;
-                
                 const playPromise = audioFix.play();
                 if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            // Audio started successfully
-                        })
-                        .catch(error => {
-                            console.error('iOS audio play failed:', error);
-                            // Show the speech text as fallback
-                            if (!isLessonActive) {
-                                showTeacherSpeech(data.text);
-                            }
-                        });
+                    playPromise.catch(error => {
+                        console.error('iOS audio play failed:', error);
+                    });
                 }
             }
             
@@ -1398,6 +1570,15 @@
                 aiTeacherActivated = true;
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
+                
+                // Задержка для iOS перед запуском распознавания
+                if (isIOS) {
+                    setTimeout(() => {
+                        if (recognition && isMicOn) {
+                            recognition.start();
+                        }
+                    }, 2000);
+                }
             });
             
             socket.on('speaking_state', (data) => {
@@ -1442,8 +1623,17 @@
                 micBtn.classList.add('active');
                 micBtn.querySelector('span').textContent = 'Выкл';
                 
+                // Запускаем распознавание речи с задержкой для iOS
                 if (recognition) {
-                    recognition.start();
+                    if (isIOS) {
+                        setTimeout(() => {
+                            if (isMicOn) {
+                                recognition.start();
+                            }
+                        }, 1000);
+                    } else {
+                        recognition.start();
+                    }
                 }
                 
                 statusDiv.textContent = 'Камера и микрофон включены';
@@ -1464,17 +1654,13 @@
         }
 
         function loadLessonContent(lessonId) {
-            fetch(`/api/lesson_content/${lessonId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.content && data.content.length > 0) {
-                        currentLessonContent = data.content;
-                        displayLessonParagraph(0);
-                    }
-                })
-                .catch(error => {
-                    console.error('Ошибка загрузки урока:', error);
-                });
+            // Заглушка для демонстрации
+            currentLessonContent = [
+                "Добро пожаловать на урок!",
+                "Сегодня мы изучим основы работы с виртуальным классом.",
+                "Вы можете использовать текстовую доску для заметок и отдельное окно для рисования."
+            ];
+            displayLessonParagraph(0);
         }
 
         function displayLessonParagraph(paragraphIndex) {
@@ -1583,7 +1769,14 @@
                     statusDiv.textContent = 'Микрофон включен';
                     
                     if (recognition) {
-                        recognition.start();
+                        // Задержка для iOS
+                        if (isIOS) {
+                            setTimeout(() => {
+                                recognition.start();
+                            }, 500);
+                        } else {
+                            recognition.start();
+                        }
                     }
                 } else {
                     if (userStream) {
@@ -1711,7 +1904,7 @@
                         }
                     }
 
-                    if (finalTranscript) {
+                    if (finalTranscript && socket) {
                         socket.emit('recognized_speech', {
                             room_id: roomId,
                             text: finalTranscript
@@ -1725,10 +1918,15 @@
                 };
 
                 recognition.onend = () => {
-                    if (isMicOn) {
+                    if (isMicOn && !isIOS) {
                         recognition.start();
                     }
                 };
+                
+                // Для iOS запускаем распознавание только после явного действия пользователя
+                if (!isIOS && isMicOn) {
+                    recognition.start();
+                }
             } else {
                 console.warn('Распознавание речи не поддерживается в этом браузере');
             }
@@ -1738,30 +1936,57 @@
             initSocket();
             createBackgroundAnimation();
             initSpeechRecognition();
-            initDragging();
+            initWindowDragging();
             initZoom();
             initDrawingCanvas();
             
-            // Set up tool buttons
+            // Инициализация инструментов
             textToolBtn.addEventListener('click', () => setTool('text'));
             drawToolBtn.addEventListener('click', () => setTool('draw'));
             answerToolBtn.addEventListener('click', () => setTool('answer'));
+            
+            // Инструменты рисования
+            document.getElementById('drawing-pen').addEventListener('click', () => setDrawingTool('pen'));
+            document.getElementById('drawing-eraser').addEventListener('click', () => setDrawingTool('eraser'));
             clearDrawingBtn.addEventListener('click', clearDrawing);
-            submitAnswerBtn.addEventListener('click', submitAnswer);
-            answerInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') submitAnswer();
+            clearTextBtn.addEventListener('click', () => {
+                lessonText.textContent = '';
             });
             
-            // Set up color picker
+            // Цвета рисования
             colorOptions.forEach(option => {
                 option.addEventListener('click', () => {
                     colorOptions.forEach(opt => opt.classList.remove('active'));
                     option.classList.add('active');
                     currentColor = option.dataset.color;
-                    drawingCtx.strokeStyle = currentColor;
+                    if (!isEraser) {
+                        drawingCtx.strokeStyle = currentColor;
+                    }
                 });
             });
             
+            // Ответы
+            submitAnswerBtn.addEventListener('click', submitAnswer);
+            answerInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') submitAnswer();
+            });
+            
+            // Закрытие окон
+            closeLessonBtn.addEventListener('click', () => {
+                lessonContent.style.display = 'none';
+                textToolBtn.classList.remove('active');
+            });
+            
+            closeDrawingBtn.addEventListener('click', () => {
+                drawingWindow.style.display = 'none';
+                drawToolBtn.classList.remove('active');
+            });
+            
+            closeTextWidgetBtn.addEventListener('click', () => {
+                textWidget.style.display = 'none';
+            });
+            
+            // Управление камерой/микрофоном
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
             fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -1783,7 +2008,7 @@
                 createBackgroundAnimation();
             });
             
-            // iOS audio workaround - preload audio context
+            // iOS audio workaround
             if (isIOS) {
                 document.addEventListener('touchstart', function() {
                     if (!audioContext) {
@@ -1792,8 +2017,8 @@
                 }, { once: true });
             }
             
-            // Set default tool
-            setTool('text');
+            // Устанавливаем инструмент по умолчанию
+            setDrawingTool('pen');
         });
 
         document.addEventListener('fullscreenchange', () => {
