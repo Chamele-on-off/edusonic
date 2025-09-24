@@ -387,8 +387,8 @@
         
         #teacher-video {
             display: block;
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
         }
         
@@ -1032,13 +1032,13 @@
                 this.videoElement = videoElement;
                 this.socket = socket;
                 this.isAnimating = false;
-                this.currentFrame = 0;
+                this.isSpeaking = false;
                 this.frames = [];
                 this.loadedFrames = [];
-                this.blinkCounter = 0;
-                this.isSpeaking = false;
+                this.currentFrameIndex = 0;
                 this.animationInterval = null;
                 this.blinkInterval = null;
+                this.blinkCounter = 0;
                 
                 // Карта фонем для русской речи
                 this.PHONEME_MAP = {
@@ -1058,14 +1058,15 @@
 
             async loadFrames() {
                 try {
+                    console.log(`Загрузка аватара: ${this.avatarName}`);
                     const response = await fetch(`/api/frames/${this.avatarName}`);
                     const data = await response.json();
                     
                     if (data.error) throw new Error(data.error);
                     
                     this.frames = data.frames;
+                    console.log(`Найдено кадров: ${this.frames.length}`);
                     await this.preloadFrames();
-                    console.log(`Загружено ${this.loadedFrames.length} кадров для аватара ${this.avatarName}`);
                     return true;
                 } catch (error) {
                     console.error('Ошибка загрузки кадров:', error);
@@ -1098,101 +1099,131 @@
                 }
                 
                 await Promise.all(loadPromises);
+                console.log(`Успешно загружено кадров: ${this.loadedFrames.length}`);
             }
 
             startAnimation() {
                 if (this.isAnimating) return;
                 
                 this.isAnimating = true;
+                this.currentFrameIndex = 0;
+                this.blinkCounter = 0;
+                
+                console.log('Запуск анимации аватара');
                 this.animationLoop();
-                console.log('Анимация аватара запущена');
             }
 
             stopAnimation() {
                 this.isAnimating = false;
                 if (this.animationInterval) {
-                    clearInterval(this.animationInterval);
+                    clearTimeout(this.animationInterval);
                     this.animationInterval = null;
                 }
                 if (this.blinkInterval) {
                     clearInterval(this.blinkInterval);
                     this.blinkInterval = null;
                 }
-                console.log('Анимация аватара остановлена');
+                console.log('Анимация остановлена');
             }
 
             setSpeaking(speaking) {
                 this.isSpeaking = speaking;
-                if (speaking) {
-                    this.blinkCounter = 0; // Сброс счетчика моргания при начале речи
-                }
+                this.blinkCounter = 0; // Сброс при начале речи
+                console.log(`Режим речи: ${speaking ? 'ВКЛ' : 'ВЫКЛ'}`);
             }
 
             getNeutralFrames() {
                 return this.loadedFrames.filter(frame => 
-                    frame.name.includes('mouth_neutral_'));
+                    frame.name.includes('mouth_neutral') || 
+                    frame.name.includes('neutral')
+                );
             }
 
             getBlinkFrames() {
                 return this.loadedFrames.filter(frame => 
-                    frame.name.includes('blink_'));
+                    frame.name.includes('blink')
+                ).sort((a, b) => a.name.localeCompare(b.name));
             }
 
             getSpeechFrames(phoneme) {
                 const baseName = this.PHONEME_MAP[phoneme] || 'mouth_aa';
                 return this.loadedFrames.filter(frame => 
-                    frame.name.includes(baseName));
+                    frame.name.includes(baseName)
+                );
             }
 
             animationLoop() {
                 if (!this.isAnimating) return;
 
                 if (this.isSpeaking) {
-                    // Анимация речи - случайная фонема
-                    const randomPhoneme = this.getRandomPhoneme();
-                    const speechFrames = this.getSpeechFrames(randomPhoneme);
-                    if (speechFrames.length > 0) {
-                        const randomIndex = Math.floor(Math.random() * speechFrames.length);
-                        this.showFrame(speechFrames[randomIndex]);
-                    }
+                    // РЕЖИМ РЕЧИ: случайные фонемы
+                    this.handleSpeechAnimation();
                 } else {
-                    // Анимация покоя с морганием
-                    this.blinkCounter++;
-                    
-                    if (this.blinkCounter >= 30 && this.getBlinkFrames().length > 0) {
-                        // Моргание
-                        this.playBlinkAnimation();
-                        this.blinkCounter = 0;
-                    } else {
-                        // Нейтральное выражение
-                        const neutralFrames = this.getNeutralFrames();
-                        if (neutralFrames.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * neutralFrames.length);
-                            this.showFrame(neutralFrames[randomIndex]);
-                        }
-                    }
+                    // РЕЖИМ ПОКОЯ: нейтральные кадры + моргание
+                    this.handleIdleAnimation();
                 }
 
                 // Следующий кадр через 100мс (10 FPS)
                 this.animationInterval = setTimeout(() => this.animationLoop(), 100);
             }
 
+            handleSpeechAnimation() {
+                const randomPhoneme = this.getRandomPhoneme();
+                const speechFrames = this.getSpeechFrames(randomPhoneme);
+                
+                if (speechFrames.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * speechFrames.length);
+                    this.showFrame(speechFrames[randomIndex]);
+                } else {
+                    // Fallback: нейтральные кадры если нет речевых
+                    const neutralFrames = this.getNeutralFrames();
+                    if (neutralFrames.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * neutralFrames.length);
+                        this.showFrame(neutralFrames[randomIndex]);
+                    }
+                }
+            }
+
+            handleIdleAnimation() {
+                this.blinkCounter++;
+                
+                // Моргаем каждые 3 секунды (30 кадров при 10 FPS)
+                if (this.blinkCounter >= 30) {
+                    this.playBlinkAnimation();
+                    this.blinkCounter = 0;
+                } else {
+                    // Нормальное состояние: циклическое переключение нейтральных кадров
+                    const neutralFrames = this.getNeutralFrames();
+                    if (neutralFrames.length > 0) {
+                        this.currentFrameIndex = (this.currentFrameIndex + 1) % neutralFrames.length;
+                        this.showFrame(neutralFrames[this.currentFrameIndex]);
+                    } else if (this.loadedFrames.length > 0) {
+                        // Fallback: все кадры по порядку
+                        this.currentFrameIndex = (this.currentFrameIndex + 1) % this.loadedFrames.length;
+                        this.showFrame(this.loadedFrames[this.currentFrameIndex]);
+                    }
+                }
+            }
+
             playBlinkAnimation() {
                 const blinkFrames = this.getBlinkFrames();
                 if (blinkFrames.length === 0) return;
 
-                const sequence = [...blinkFrames].sort((a, b) => a.name.localeCompare(b.name));
-                let currentBlinkIndex = 0;
-
-                const playNextBlinkFrame = () => {
-                    if (currentBlinkIndex < sequence.length) {
-                        this.showFrame(sequence[currentBlinkIndex]);
-                        currentBlinkIndex++;
-                        this.blinkInterval = setTimeout(playNextBlinkFrame, 100);
+                let blinkIndex = 0;
+                const originalInterval = this.animationInterval;
+                
+                const playBlink = () => {
+                    if (blinkIndex < blinkFrames.length && this.isAnimating && !this.isSpeaking) {
+                        this.showFrame(blinkFrames[blinkIndex]);
+                        blinkIndex++;
+                        this.blinkInterval = setTimeout(playBlink, 100);
+                    } else {
+                        // Возвращаемся к нормальной анимации
+                        this.blinkInterval = null;
                     }
                 };
-
-                playNextBlinkFrame();
+                
+                playBlink();
             }
 
             showFrame(frame) {
@@ -1204,14 +1235,6 @@
             getRandomPhoneme() {
                 const phonemes = Object.keys(this.PHONEME_MAP);
                 return phonemes[Math.floor(Math.random() * phonemes.length)];
-            }
-
-            // Метод для принудительной установки конкретного кадра (для отладки)
-            setFrame(frameName) {
-                const frame = this.loadedFrames.find(f => f.name === frameName);
-                if (frame) {
-                    this.showFrame(frame);
-                }
             }
         }
 
@@ -1298,7 +1321,7 @@
         // Функция инициализации аниматора аватара
         async function initAvatarAnimator(avatarName = 'teacher') {
             try {
-                // Останавливаем предыдущий аниматор, если есть
+                // Останавливаем предыдущий аниматор
                 if (avatarAnimator) {
                     avatarAnimator.stopAnimation();
                 }
@@ -1309,15 +1332,19 @@
                 
                 if (loaded && avatarAnimator.loadedFrames.length > 0) {
                     avatarAnimator.startAnimation();
-                    console.log(`Аниматор аватара "${avatarName}" успешно инициализирован`);
-                    return true;
+                    console.log(`✅ Аниматор аватара "${avatarName}" запущен`);
+                    
+                    // Показываем первый кадр сразу
+                    const neutralFrames = avatarAnimator.getNeutralFrames();
+                    if (neutralFrames.length > 0) {
+                        avatarAnimator.showFrame(neutralFrames[0]);
+                    }
                 } else {
-                    console.error('Не удалось загрузить кадры для аватара');
-                    return false;
+                    console.error('❌ Не удалось загрузить кадры для аватара');
+                    teacherVideo.src = ''; // Очищаем изображение при ошибке
                 }
             } catch (error) {
-                console.error('Ошибка инициализации аниматора аватара:', error);
-                return false;
+                console.error('❌ Ошибка инициализации аниматора:', error);
             }
         }
 
@@ -1723,10 +1750,10 @@
                 statusDiv.textContent = 'Отключено от сервера';
             });
             
-            // Убраны обработчики animation_frame - теперь анимация на клиенте
-            
+            // Обработчик речи - ВКЛЮЧАЕМ анимацию речи
             socket.on('speech_audio', (data) => {
                 try {
+                    // ВКЛЮЧАЕМ режим речи ДО воспроизведения аудио
                     if (avatarAnimator) {
                         avatarAnimator.setSpeaking(true);
                     }
@@ -1823,6 +1850,7 @@
             });
             
             socket.on('speaking_state', (data) => {
+                // ВЫКЛЮЧАЕМ режим речи когда сервер сообщает о завершении
                 if (avatarAnimator) {
                     avatarAnimator.setSpeaking(data.speaking);
                 }
@@ -1841,8 +1869,9 @@
                 loadLessonContent(data.lesson_id);
             });
             
-            // Новый обработчик для смены аватара
+            // Обработчик смены аватара
             socket.on('avatar_changed', (data) => {
+                console.log(`Получена команда смены аватара на: ${data.avatar_name}`);
                 initAvatarAnimator(data.avatar_name);
             });
         }
