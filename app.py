@@ -15,6 +15,7 @@ import requests
 import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
+import re
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -30,7 +31,6 @@ for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Глобальные состояния
-animation_running = defaultdict(bool)
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
@@ -40,22 +40,7 @@ room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
-room_current_question_index = defaultdict(int)  # Текущий индекс вопроса для каждой комнаты
-
-# Соответствие букв кадрам анимации рта
-PHONEME_MAP = {
-    'а': 'mouth_aa', 'о': 'mouth_oo', 'у': 'mouth_uu',
-    'и': 'mouth_ee', 'э': 'mouth_ee', 'ы': 'mouth_aa',
-    'е': 'mouth_ee', 'ё': 'mouth_oo', 'ю': 'mouth_uu',
-    'я': 'mouth_aa', 'м': 'mouth_mm', 'п': 'mouth_pp',
-    'б': 'mouth_bb', 'ф': 'mouth_ff', 'в': 'mouth_vv',
-    'ш': 'mouth_sh', 'ж': 'mouth_zh', 'с': 'mouth_ss',
-    'з': 'mouth_zz', 'р': 'mouth_rr', 'л': 'mouth_ll',
-    'н': 'mouth_nn', 'т': 'mouth_tt', 'д': 'mouth_dd',
-    'к': 'mouth_kk', 'г': 'mouth_gg', 'х': 'mouth_hh',
-    'ч': 'mouth_ch', 'щ': 'mouth_sh', 'ц': 'mouth_ss',
-    'й': 'mouth_ee'
-}
+room_current_question_index = defaultdict(int)
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
@@ -65,7 +50,7 @@ def reset_speaking_state(room_id, is_teacher=False):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст с анимацией и добавляет его в историю"""
+    """Озвучивает текст и добавляет его в историю"""
     if not text.strip():
         return
         
@@ -146,51 +131,6 @@ def text_to_speech(text, lang='ru'):
         print(f"Error in text_to_speech: {e}")
         return None
 
-def get_neutral_frames(avatar_name):
-    """Возвращает список нейтральных кадров для аватара"""
-    return sorted([f for f in os.listdir(FRAMES_DIR / avatar_name) 
-                  if f.startswith('mouth_neutral_')])
-
-def get_blink_frames(avatar_name):
-    """Возвращает список кадров моргания для аватара"""
-    return sorted([f for f in os.listdir(FRAMES_DIR / avatar_name) 
-                  if f.startswith('blink_')])
-
-def get_speech_frames(avatar_name, phoneme):
-    """Возвращает список речевых кадров для указанной фонемы"""
-    base_name = PHONEME_MAP.get(phoneme, 'mouth_aa')
-    return [f for f in os.listdir(FRAMES_DIR / avatar_name) 
-            if f.startswith(base_name)]
-
-def animation_loop(room_id, avatar_name):
-    """Основной цикл анимации для комната"""
-    blink_counter = 0
-    blink_frames = get_blink_frames(avatar_name)
-    neutral_frames = get_neutral_frames(avatar_name)
-    
-    while animation_running[room_id]:
-        if room_speaking[room_id]:
-            current_char = random.choice(list(PHONEME_MAP.keys()))
-            speech_frames = get_speech_frames(avatar_name, current_char)
-            if speech_frames:
-                frame = random.choice(speech_frames)
-                frame_path = f'/frames/{avatar_name}/{frame}'
-                socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
-        else:
-            blink_counter += 1
-            if blink_counter >= 30 and blink_frames:
-                for frame in blink_frames:
-                    frame_path = f'/frames/{avatar_name}/{frame}'
-                    socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
-                    time.sleep(0.1)
-                blink_counter = 0
-            elif neutral_frames:
-                frame = random.choice(neutral_frames)
-                frame_path = f'/frames/{avatar_name}/{frame}'
-                socketio.emit('animation_frame', {'frame': frame_path}, room=room_id)
-        
-        time.sleep(0.1)
-
 @socketio.on('connect')
 def handle_connect():
     print('Client connected:', request.sid)
@@ -231,18 +171,28 @@ def handle_join_room(data):
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
-@socketio.on('start_animation')
-def handle_start_animation(data):
+# Убраны обработчики start_animation и stop_animation - анимация теперь на клиенте
+
+@socketio.on('client_start_animation')
+def handle_client_start_animation(data):
+    """Обработчик команды запуска анимации от учителя"""
     room_id = data['room_id']
     avatar_name = data['avatar_name']
-    if not animation_running[room_id]:
-        animation_running[room_id] = True
-        threading.Thread(target=animation_loop, args=(room_id, avatar_name)).start()
+    print(f"Получена команда запуска анимации для комнаты {room_id}, аватар: {avatar_name}")
+    
+    # Уведомляем всех клиентов в комнате о смене аватара
+    emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
+    emit('animation_ready', {'status': 'ready'}, room=room_id)
 
-@socketio.on('stop_animation')
-def handle_stop_animation(data):
+@socketio.on('avatar_changed')
+def handle_avatar_changed(data):
+    """Обработчик смены аватара"""
     room_id = data['room_id']
-    animation_running[room_id] = False
+    avatar_name = data['avatar_name']
+    print(f"Смена аватара в комнате {room_id} на {avatar_name}")
+    
+    # Пересылаем команду всем клиентам в комнате
+    emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
 
 @socketio.on('generate_speech')
 def handle_generate_speech(data):
