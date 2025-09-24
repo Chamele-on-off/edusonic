@@ -82,14 +82,6 @@
             margin-top: 20px;
             text-align: center;
         }
-        #video-preview {
-            display: none;
-            width: 200px;
-            height: 200px;
-            margin: 20px auto;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
         #room-controls {
             margin-top: 20px;
             padding: 15px;
@@ -100,17 +92,6 @@
         #room-id {
             font-weight: bold;
             color: #2c3e50;
-        }
-        #embed-code {
-            width: 100%;
-            padding: 10px;
-            margin-top: 10px;
-            font-family: monospace;
-            background: #f8f8f8;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 12px;
-            resize: vertical;
         }
         
         .management-panel {
@@ -565,43 +546,24 @@
                 <input type="text" id="room-input" placeholder="Имя комнаты">
                 <button id="change-room-btn">Сменить комнату</button>
             </div>
-            <div class="form-group">
-                <label for="embed-code">Код для вставки на другой сайт:</label>
-                <textarea id="embed-code" rows="3" readonly></textarea>
-            </div>
         </div>
         
         <div class="controls">
             <select id="avatar-select">
                 <option value="">Выберите аватар</option>
             </select>
-            <button id="load-btn" disabled>Загрузить аватар</button>
+            <button id="load-btn" disabled>Установить аватар</button>
         </div>
         
         <img id="avatar" src="" alt="Аватар">
-        <video id="video-preview" autoplay muted></video>
         
         <div id="status">Выберите аватар для загрузки</div>
-        
-        <div class="controls">
-            <button id="start-btn" disabled>Старт анимации</button>
-            <button id="stop-btn" disabled>Стоп анимации</button>
-        </div>
 
-        <div class="controls">
-            <input type="text" id="speech-text" placeholder="Текст для озвучивания">
-            <button id="speak-btn" disabled>Озвучить</button>
-            <select id="voice-select">
-                <option value="male">Мужской голос</option>
-                <option value="female">Женский голос</option>
-            </select>
-        </div>
-        
         <div id="debug"></div>
 
         <div id="conference-link">
             <a id="conference-link-a" href="/conference?room=default" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
-                📹 Перейти в конференции
+                📹 Перейти в конференцию
             </a>
         </div>
         
@@ -740,19 +702,12 @@
         const avatar = document.getElementById('avatar');
         const statusDiv = document.getElementById('status');
         const debugDiv = document.getElementById('debug');
-        const startBtn = document.getElementById('start-btn');
-        const stopBtn = document.getElementById('stop-btn');
         const loadBtn = document.getElementById('load-btn');
         const avatarSelect = document.getElementById('avatar-select');
-        const speechText = document.getElementById('speech-text');
-        const speakBtn = document.getElementById('speak-btn');
-        const voiceSelect = document.getElementById('voice-select');
-        const videoPreview = document.getElementById('video-preview');
         const roomIdSpan = document.getElementById('room-id');
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
-        const embedCodeTextarea = document.getElementById('embed-code');
         
         // Новые элементы для управления API ключами
         const openrouterKeyInput = document.getElementById('openrouter-key');
@@ -788,12 +743,6 @@
         
         // Состояние
         let currentAvatar = '';
-        let frames = [];
-        let loadedImages = [];
-        let currentFrame = 0;
-        let animationInterval = null;
-        let mediaStream = null;
-        let videoStreamInterval = null;
         let currentRoom = 'default';
         
         // Функции для работы с API ключами
@@ -1043,10 +992,6 @@
             roomIdSpan.textContent = roomId;
             conferenceLink.href = '/conference?room=' + roomId;
             
-            // Генерируем код для вставки
-            const embedCode = '<iframe src="/conference?room=' + roomId + '&embed=true" width="800" height="600" frameborder="0" allow="camera;microphone"></iframe>';
-            embedCodeTextarea.value = embedCode;
-            
             // Сообщаем серверу о смене комнаты
             socket.emit('join_room', { room_id: roomId });
             
@@ -1109,155 +1054,45 @@
                 });
         }
         
-        // Загрузка кадров аватара
+        // Загрузка кадров аватара и установка на конференцию
         function loadAvatarFrames(avatarName) {
             statusDiv.textContent = 'Загрузка ' + avatarName + '...';
-            loadedImages = [];
             
             fetch('/api/frames/' + avatarName)
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
                     if (data.error) throw new Error(data.error);
                     
-                    frames = data.frames;
+                    const frames = data.frames;
                     log('Найдено кадров: ' + frames.length);
                     
-                    // Загружаем все изображения последовательно
-                    let loadedCount = 0;
-                    
-                    function loadNextImage() {
-                        if (loadedCount >= frames.length) {
-                            if (loadedImages.length > 0) {
-                                statusDiv.textContent = avatarName + ': готово (' + loadedImages.length + '/' + frames.length + ')';
-                                startBtn.disabled = false;
-                                speakBtn.disabled = false;
-                                avatar.src = loadedImages[0].src;
-                                currentFrame = 0;
+                    // Загружаем первое изображение для предпросмотра
+                    if (frames.length > 0) {
+                        loadImage('/frames/' + avatarName + '/' + frames[0])
+                            .then(function(img) {
+                                avatar.src = img.src;
+                                statusDiv.textContent = avatarName + ': загружено 1/' + frames.length;
                                 
                                 // Отправляем команду на смену аватара в конференцию
                                 socket.emit('avatar_changed', {
                                     room_id: currentRoom,
                                     avatar_name: avatarName
                                 });
-                            } else {
-                                statusDiv.textContent = avatarName + ': нет загруженных кадров';
-                            }
-                            return;
-                        }
-                        
-                        const frame = frames[loadedCount];
-                        loadImage('/frames/' + avatarName + '/' + frame)
-                            .then(function(img) {
-                                loadedImages.push(img);
-                                loadedCount++;
-                                statusDiv.textContent = avatarName + ': загружено ' + loadedCount + '/' + frames.length;
-                                loadNextImage();
+                                
+                                log('Аватар "' + avatarName + '" установлен для комнаты ' + currentRoom);
                             })
                             .catch(function(error) {
-                                loadedCount++;
+                                statusDiv.textContent = 'Ошибка загрузки изображения';
                                 log(error);
-                                loadNextImage();
                             });
+                    } else {
+                        statusDiv.textContent = avatarName + ': нет кадров';
                     }
-                    
-                    loadNextImage();
                 })
                 .catch(function(error) {
                     statusDiv.textContent = 'Ошибка: ' + error.message;
                     log(error.message);
                 });
-        }
-        
-        // Показать текущий кадр
-        function showFrame() {
-            if (loadedImages.length === 0) return;
-            
-            currentFrame = currentFrame % loadedImages.length;
-            avatar.src = loadedImages[currentFrame].src;
-            statusDiv.textContent = currentAvatar + ': кадр ' + (currentFrame + 1) + '/' + loadedImages.length;
-        }
-        
-        // Создание видео потока из изображений
-        function createVideoStream() {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = loadedImages[0].width;
-                canvas.height = loadedImages[0].height;
-                const ctx = canvas.getContext('2d');
-                
-                const stream = canvas.captureStream(FPS);
-                videoPreview.srcObject = stream;
-                videoPreview.style.display = 'block';
-                
-                videoStreamInterval = setInterval(function() {
-                    ctx.drawImage(loadedImages[currentFrame], 0, 0, canvas.width, canvas.height);
-                }, 1000 / FPS);
-                
-                return stream;
-            } catch (error) {
-                log('Ошибка создания видео потока: ' + error.message);
-                return null;
-            }
-        }
-        
-        // Запуск анимации (теперь отправляет команду на клиент)
-        function startAnimation() {
-            if (animationInterval || loadedImages.length === 0) return;
-            
-            // Отправляем команду запуска анимации в конференцию
-            socket.emit('client_start_animation', { 
-                room_id: currentRoom,
-                avatar_name: currentAvatar
-            });
-            
-            animationInterval = setInterval(function() {
-                currentFrame++;
-                showFrame();
-            }, 1000 / FPS);
-            
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            log('Команда запуска анимации отправлена в комнату ' + currentRoom);
-        }
-        
-        // Остановка анимации (теперь отправляет команду на клиент)
-        function stopAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-                animationInterval = null;
-                currentFrame = 0;
-                showFrame();
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                socket.emit('stop_animation', { room_id: currentRoom });
-                log('Команда остановки анимации отправлена в комнату ' + currentRoom);
-            }
-            
-            if (videoStreamInterval) {
-                clearInterval(videoStreamInterval);
-                videoStreamInterval = null;
-            }
-            
-            if (mediaStream) {
-                mediaStream.getTracks().forEach(function(track) { track.stop(); });
-                mediaStream = null;
-                videoPreview.style.display = 'none';
-            }
-        }
-        
-        // Генерация речи
-        function generateSpeech() {
-            const text = speechText.value.trim();
-            if (text) {
-                const voiceType = voiceSelect.value;
-                socket.emit('generate_speech', { 
-                    text: text,
-                    room_id: currentRoom,
-                    voice: voiceType
-                });
-                log('Отправлен текст для озвучивания: "' + text + '" (' + (voiceType === 'male' ? 'мужской' : 'женский') + ' голос) в комнату ' + currentRoom);
-                speechText.value = '';
-            }
         }
         
         // Инициализация
@@ -1337,20 +1172,11 @@
                 loadBtn.disabled = !currentAvatar;
             });
             
-            // Кнопка загрузки
+            // Кнопка загрузки аватара
             loadBtn.addEventListener('click', function() {
-                stopAnimation();
-                loadAvatarFrames(currentAvatar);
-            });
-            
-            // Управление анимацией
-            startBtn.addEventListener('click', startAnimation);
-            stopBtn.addEventListener('click', stopAnimation);
-            
-            // Генерация речи
-            speakBtn.addEventListener('click', generateSpeech);
-            speechText.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') generateSpeech();
+                if (currentAvatar) {
+                    loadAvatarFrames(currentAvatar);
+                }
             });
             
             // Смена комнаты
