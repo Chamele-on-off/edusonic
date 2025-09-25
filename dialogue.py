@@ -726,22 +726,35 @@ class DialogueManager:
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # Получаем первый вопрос
+        # ВАЖНО: Получаем и возвращаем только ПЕРВЫЙ вопрос
         first_question = self.practice_manager.get_current_question()
         if first_question:
             print(f"Начинаем практику с вопроса: {first_question['question']}")
             self.current_practice_question = first_question
             self.waiting_for_answer = True
             
-            # ВАЖНО: Возвращаем только ПЕРВЫЙ вопрос, а не все сразу
+            # Возвращаем только первый вопрос
             question_text = first_question['question']
-            return f"Отлично! Переходим к практике. Вопрос: {question_text}"
+            return f"Отлично! Переходим к практике. Первый вопрос: {question_text}"
         else:
             print("Практические вопросы не найдены")
             return "Практические задания не найдены."
 
+    def _get_next_practice_question(self) -> Optional[str]:
+        """Возвращает следующий вопрос практики (аналогично _get_next_paragraph для уроков)"""
+        if self.practice_manager.has_more_questions():
+            next_question = self.practice_manager.get_current_question()
+            if next_question:
+                self.current_practice_question = next_question
+                self.waiting_for_answer = True
+                return f"Следующий вопрос: {next_question['question']}"
+        
+        # Вопросы закончились - завершаем практику
+        self._end_practice_session()
+        return "Практика завершена! Вы отлично справились."
+
     def handle_practice_answer(self, answer: str) -> str:
-        """Обрабатывает ответ ученика во время практики"""
+        """Обрабатывает ответ ученика во время практики с передачей контекста"""
         if not self.practice_active or not self.waiting_for_answer:
             return "Практика не активна."
             
@@ -753,8 +766,17 @@ class DialogueManager:
             self._end_practice_session()
             return "Практика завершена! Отличная работа."
         
-        # Проверить ответ ученика
-        evaluation = self.practice_manager.evaluate_answer(answer)
+        # ВАЖНО: Передаем контекст урока для лучшей оценки
+        lesson_context = " ".join(self.lesson_content) if self.lesson_content else ""
+        
+        # Проверить ответ ученика с учетом контекста
+        evaluation = self.practice_manager.evaluate_answer_with_context(
+            answer, 
+            current_question['question'], 
+            current_question['answer'],
+            lesson_context
+        )
+        
         print(f"Оценка ответа: {evaluation}")
         
         # Перейти к следующему вопросу
@@ -762,19 +784,17 @@ class DialogueManager:
         
         if has_next:
             # Есть следующий вопрос - получаем его
-            next_question = self.practice_manager.get_current_question()
-            if next_question:
-                self.current_practice_question = next_question
-                self.waiting_for_answer = True
-                response = f"{evaluation}. Следующий вопрос: {next_question['question']}"
+            next_question_text = self._get_next_practice_question()
+            if next_question_text:
+                response = f"{evaluation}. {next_question_text}"
                 print(f"Переход к следующему вопросу: {response}")
-                return response  # ВАЖНО: возвращаем response, а не None
+                return response
         
         # Нет больше вопросов - завершаем практику
         self._end_practice_session()
         response = f"{evaluation}. Практика завершена! Вы отлично справились."
         print(f"Завершение практики: {response}")
-        return response  # ВАЖНО: возвращаем response
+        return response
 
     def _handle_practice_answer(self, text: str) -> str:
         """Обработчик ответов во время практики (алиас для handle_practice_answer)"""
