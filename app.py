@@ -171,8 +171,6 @@ def handle_join_room(data):
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
-# Убраны обработчики start_animation и stop_animation - анимация теперь на клиенте
-
 @socketio.on('client_start_animation')
 def handle_client_start_animation(data):
     """Обработчик команды запуска анимации от учителя"""
@@ -220,19 +218,12 @@ def handle_student_answer(data):
         'type': 'practice_answer',
         'sid': user_sid
     })
-    if len(room_speech_data[room_id]) > 50:
-        room_speech_data[room_id].pop(0)
-    
-    emit('speech_text', {'text': answer, 'sid': user_sid}, room=room_id)
     
     # Обрабатываем ответ через диалог менеджер с улучшенной логикой
     if room_id in room_dialogue:
-        # Получаем текущий вопрос для контекста
-        current_question = room_dialogue[room_id].practice_manager.get_current_question()
-        if current_question:
-            print(f"Обрабатываю ответ на вопрос: {current_question['question']}")
-        
         response = room_dialogue[room_id].handle_practice_answer(answer)
+        
+        # ВАЖНО: response всегда должен быть строкой, даже если практика завершена
         if response:
             # Отправляем ответ учителя
             emit('speech_text', {
@@ -242,6 +233,12 @@ def handle_student_answer(data):
             }, room=room_id)
             # Озвучиваем ответ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
+            
+            # Проверяем, завершена ли практика
+            if not room_dialogue[room_id].practice_active:
+                room_practice_active[room_id] = False
+                room_current_question_index[room_id] = 0
+                emit('practice_ended', {}, room=room_id)
         else:
             # Если response is None, практика завершена
             room_practice_active[room_id] = False
