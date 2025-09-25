@@ -258,7 +258,7 @@ class DialogueManager:
                     if pattern in text_lower and responses:
                         return random.choice(responses)
         
-        # 2. Контекстный поиск (если есть история разговора)
+        # 2. Контекстный поиск (есть история разговора)
         if self.conversation_context:
             last_user_messages = ' '.join(self.conversation_context).lower()
             
@@ -382,6 +382,28 @@ class DialogueManager:
         prompt = self._get_subject_selection_prompt()
         return prompt if prompt else "Давайте выберем предмет для изучения. Что вас интересует?"
 
+    def _should_save_to_knowledge_base(self, text: str) -> bool:
+        """Определяет, нужно ли сохранять фразу в базу знаний"""
+        text_lower = text.lower()
+        
+        # Исключаем фразы для генерации уроков
+        generation_patterns = [
+            'давай изучим', 'хочу изучить', 'урок по', 'изучим', 
+            'расскажи про', 'хочу узнать про', 'объясни тему',
+            'создай урок', 'сгенерируй урок', 'научи меня'
+        ]
+        
+        if any(pattern in text_lower for pattern in generation_patterns):
+            return False
+        
+        # Исключаем команды выбора предметов
+        available_subjects = self.get_available_subjects()
+        for subject in available_subjects:
+            if subject.lower() in text_lower and len(subject) > 3:
+                return False
+        
+        return True
+
     def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
         """Генерирует урок по запрошенной теме с помощью LLM"""
         try:
@@ -503,13 +525,15 @@ class DialogueManager:
         generated_lesson = self._check_for_lesson_generation_intent(text_lower)
         if generated_lesson:
             # Если урок сгенерирован, начинаем его
+            # ВАЖНО: НЕ сохраняем фразы генерации в базу знаний!
             return self._handle_subject_selection_direct("общее")
         
         # 2. Если пользователь называет предмет - автоматически начинаем урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
-            if subject.lower() in text_lower:
+            if subject.lower() in text_lower and len(subject) > 3:
                 print(f"Обнаружен выбор предмета: {subject}")
+                # ВАЖНО: НЕ сохраняем выбор предмета в базу знаний диалога!
                 return self._handle_subject_selection_direct(subject)
         
         # 3. Если урок уже начат - используем стандартную логику
@@ -705,7 +729,7 @@ class DialogueManager:
             print("Практические вопросы не найдены")
             return "Практические задания не найдены."
 
-    def _handle_practice_answer(self, answer: str) -> str:
+    def handle_practice_answer(self, answer: str) -> str:
         """Обрабатывает ответ ученика во время практики"""
         if not self.practice_active or not self.waiting_for_answer:
             return "Практика не активна."
@@ -738,6 +762,10 @@ class DialogueManager:
             print(f"Завершение практики: {response}")
         
         return response
+
+    def _handle_practice_answer(self, text: str) -> str:
+        """Обработчик ответов во время практики (алиас для handle_practice_answer)"""
+        return self.handle_practice_answer(text)
 
     def _end_practice_session(self):
         """Корректно завершает сессию практики"""
@@ -775,7 +803,7 @@ class DialogueManager:
             if llm_response and not llm_response.startswith("Интересный вопрос!"):
                 # Сохраняем ответ и возвращаем его
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
-                if self.knowledge_base:
+                if self.knowledge_base and self._should_save_to_knowledge_base(question):
                     # Сохраняем ответ в базу знаний для будущего использования
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
@@ -846,7 +874,7 @@ class DialogueManager:
                 if llm_response:
                     # Сохраняем в кэш LLM и базу знаний ответов
                     self.llm.add_to_cache(question, llm_response, self.current_subject)
-                    if self.knowledge_base:
+                    if self.knowledge_base and self._should_save_to_knowledge_base(question):
                         # Сохраняем ответ в базу знаний для будущего использования
                         self.knowledge_base.add_llm_answer(question, llm_response)
                         self.knowledge_base.add_knowledge(question=question, answer=llm_response)
