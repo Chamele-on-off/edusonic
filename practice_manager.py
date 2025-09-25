@@ -93,6 +93,7 @@ class PracticeManager:
         ТРЕБОВАНИЯ К ФОРМАТУ:
         - Каждый вопрос должен начинаться с номера и точки: "1.", "2.", etc.
         - Каждый вопрос должен быть на отдельной строке
+        - Разделяй вопросы ДВУМЯ переводами строки (пустой строкой)
         - Вопросы должны проверять ключевые понятия из материала
         - Вопросы должны быть краткими и понятными
         - Не добавляй ответы или дополнительные комментарии
@@ -164,26 +165,25 @@ class PracticeManager:
         return answers
 
     def _parse_questions(self, content: str) -> List[Dict]:
-        """Парсит вопросы из текста"""
+        """Парсит вопросы из текста с улучшенным разделением по абзацам"""
         questions = []
-        lines = content.strip().split('\n')
         
-        for line in lines:
-            line = line.strip()
-            if not line:
+        # Улучшенное разделение на вопросы (по двойным переводам строк)
+        raw_questions = [q.strip() for q in content.strip().split('\n\n') if q.strip()]
+        
+        for i, question_block in enumerate(raw_questions, 1):
+            if not question_block:
                 continue
                 
-            # Ищем вопросы в формате "1. Текст вопроса"
-            match = re.match(r'^(\d+)\.\s*(.+)$', line)
-            if match:
-                question_id = int(match.group(1))
-                question_text = match.group(2).strip()
-                
-                if question_text:
-                    questions.append({
-                        "id": question_id,
-                        "question": question_text
-                    })
+            # Очищаем от номеров и форматирования
+            question_text = re.sub(r'^\d+\.\s*', '', question_block)
+            question_text = question_text.strip()
+            
+            if question_text:
+                questions.append({
+                    "id": i,
+                    "question": question_text
+                })
         
         print(f"Распаршено вопросов: {len(questions)}")
         return questions
@@ -294,37 +294,66 @@ class PracticeManager:
             return False
 
     def _evaluate_with_llm(self, question: str, student_answer: str, correct_answer: str) -> str:
-        """Оценивает ответ через LLM"""
+        """Оценивает ответ через LLM с улучшенными промптами"""
         try:
             prompt = f"""
-            Вопрос: {question}
-            Правильный ответ: {correct_answer}
-            Ответ ученика: {student_answer}
+            ВОПРОС ДЛЯ УЧЕНИКА: {question}
+            ПРАВИЛЬНЫЙ ОТВЕТ: {correct_answer}
+            ОТВЕТ УЧЕНИКА: {student_answer}
             
-            Проанализируй ответ ученика. Будь поддерживающим учителем:
-            - Если ответ правильный или близкий к правильному - похвали
-            - Если ответ неполный - дополни и объясни
-            - Если ответ неправильный - вежливо исправь
-            - Будь кратким (1-2 предложения)
-            - Отвечай на русском языке
+            Твоя задача - дать обратную связь ученику. Будь добрым и поддерживающим учителем:
+            
+            ЕСЛИ ОТВЕТ ПРАВИЛЬНЫЙ:
+            - Похвали ученика конкретно
+            - Подтверди правильность ответа
+            - Скажи что-то ободряющее
+            
+            ЕСЛИ ОТВЕТ ЧАСТИЧНО ПРАВИЛЬНЫЙ:
+            - Отметь что было правильно
+            - Вежливо укажи на ошибки
+            - Дай правильный ответ
+            - Объясни в чем была ошибка
+            
+            ЕСЛИ ОТВЕТ НЕПРАВИЛЬНЫЙ:
+            - Не ругай, а поддержи ученика
+            - Объясни почему ответ неверный
+            - Дай правильный ответ понятным языком
+            - Предложи попробовать еще раз в будущем
+            
+            ОБРАЩАЙСЯ К УЧЕНИКУ НА "ТЫ" И БУДЬ ДРУЖЕЛЮБНЫМ!
+            Максимум 2-3 предложения. Отвечай на русском языке.
             """
             
-            system_prompt = f"""Ты — опытный учитель по предмету {self.current_subject}. 
-            Давай конструктивную обратную связь. Будь доброжелательным и поддерживающим."""
+            system_prompt = f"""Ты - опытный и добрый учитель по предмету {self.current_subject}. 
+            Твоя задача - помогать ученикам учиться на ошибках, а не ругать их. 
+            Всегда будь поддерживающим и терпеливым."""
             
             evaluation = self.llm._query_llm_api(
                 prompt=prompt,
                 context="",
                 subject=self.current_subject,
                 system_prompt=system_prompt,
-                max_tokens=200
+                max_tokens=300
             )
             
-            return evaluation if evaluation else self._evaluate_with_similarity(student_answer, correct_answer)
+            return evaluation if evaluation else self._get_fallback_feedback(student_answer, correct_answer)
             
         except Exception as e:
             print(f"Ошибка оценки через LLM: {e}")
-            return self._evaluate_with_similarity(student_answer, correct_answer)
+            return self._get_fallback_feedback(student_answer, correct_answer)
+
+    def _get_fallback_feedback(self, student_answer: str, correct_answer: str) -> str:
+        """Fallback обратная связь когда LLM недоступен"""
+        similarity = self._calculate_similarity(student_answer, correct_answer)
+        
+        if similarity > 0.8:
+            return "Отлично! Ты абсолютно прав! Это правильный ответ."
+        elif similarity > 0.6:
+            return f"Хорошо! Ты близок к правильному ответу. Полностью верно будет: {correct_answer}"
+        elif similarity > 0.4:
+            return f"Есть правильные мысли! Но точный ответ такой: {correct_answer}"
+        else:
+            return f"Попробуй еще раз! Правильный ответ: {correct_answer}. Не расстраивайся, ошибки - это часть обучения!"
 
     def _evaluate_with_similarity(self, student_answer: str, correct_answer: str) -> str:
         """Оценивает ответ через сравнение схожести"""
