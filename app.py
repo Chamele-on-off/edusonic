@@ -225,8 +225,13 @@ def handle_student_answer(data):
     
     emit('speech_text', {'text': answer, 'sid': user_sid}, room=room_id)
     
-    # Обрабатываем ответ через диалог менеджер
+    # Обрабатываем ответ через диалог менеджер с улучшенной логикой
     if room_id in room_dialogue:
+        # Получаем текущий вопрос для контекста
+        current_question = room_dialogue[room_id].practice_manager.get_current_question()
+        if current_question:
+            print(f"Обрабатываю ответ на вопрос: {current_question['question']}")
+        
         response = room_dialogue[room_id].handle_practice_answer(answer)
         if response:
             # Отправляем ответ учителя
