@@ -219,11 +219,10 @@ def handle_student_answer(data):
         'sid': user_sid
     })
     
-    # Обрабатываем ответ через диалог менеджер с улучшенной логикой
+    # Обрабатываем ответ через диалог менеджер
     if room_id in room_dialogue:
         response = room_dialogue[room_id].handle_practice_answer(answer)
         
-        # ВАЖНО: response всегда должен быть строкой, даже если практика завершена
         if response:
             # Отправляем ответ учителя
             emit('speech_text', {
