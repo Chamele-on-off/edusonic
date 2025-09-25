@@ -286,6 +286,15 @@ class PracticeManager:
             # Fallback: сравнение ответов
             return self._evaluate_with_similarity(student_answer, correct_answer)
 
+    def evaluate_answer_with_context(self, student_answer: str, question: str, correct_answer: str, context: str = "") -> str:
+        """Оценивает ответ ученика с учетом контекста урока"""
+        # Приоритет: оценка через LLM с контекстом
+        if self._is_llm_available():
+            return self._evaluate_with_llm_context(question, student_answer, correct_answer, context)
+        else:
+            # Fallback: сравнение ответов
+            return self._evaluate_with_similarity(student_answer, correct_answer)
+
     def _is_llm_available(self) -> bool:
         """Проверяет доступность LLM"""
         try:
@@ -342,6 +351,58 @@ class PracticeManager:
             print(f"Ошибка оценки через LLM: {e}")
             return self._get_fallback_feedback(student_answer, correct_answer)
 
+    def _evaluate_with_llm_context(self, question: str, student_answer: str, correct_answer: str, context: str) -> str:
+        """Оценивает ответ через LLM с учетом контекста урока"""
+        try:
+            prompt = f"""
+            КОНТЕКСТ УРОКА: {context[:1000]}
+            ВОПРОС: {question}
+            ПРАВИЛЬНЫЙ ОТВЕТ: {correct_answer}
+            ОТВЕТ УЧЕНИКА: {student_answer}
+            
+            Проанализируй ответ ученика с учетом контекста урока. Будь добрым и поддерживающим учителем:
+            
+            ЕСЛИ ОТВЕТ ПРАВИЛЬНЫЙ ИЛИ БЛИЗКИЙ К ПРАВИЛЬНОМУ:
+            - Похвали ученика конкретно
+            - Подтверди правильность ответа
+            - Если ответ неполный, дополни его
+            - Скажи что-то ободряющее
+            
+            ЕСЛИ ОТВЕТ ЧАСТИЧНО ПРАВИЛЬНЫЙ:
+            - Отметь что было правильно
+            - Вежливо укажи на ошибки или неточности
+            - Дай правильный ответ с объяснением
+            - Ссылайся на контекст урока если это уместно
+            
+            ЕСЛИ ОТВЕТ НЕПРАВИЛЬНЫЙ:
+            - Не ругай, а поддержи ученика
+            - Объясни почему ответ неверный с ссылкой на материал урока
+            - Дай правильный ответ понятным языком
+            - Предложи обратить внимание на конкретные аспекты темы
+            
+            ОБРАЩАЙСЯ К УЧЕНИКУ НА "ТЫ" И БУДЬ ДРУЖЕЛЮБНЫМ!
+            Учитывай контекст урока при оценке.
+            Максимум 2-3 предложения. Отвечай на русском языке.
+            """
+            
+            system_prompt = f"""Ты - опытный и добрый учитель по предмету {self.current_subject}. 
+            Твоя задача - помогать ученикам учиться на ошибках, используя контекст пройденного материала. 
+            Всегда будь поддерживающим и терпеливым."""
+            
+            evaluation = self.llm._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject=self.current_subject,
+                system_prompt=system_prompt,
+                max_tokens=300
+            )
+            
+            return evaluation if evaluation else self._get_fallback_feedback(student_answer, correct_answer)
+            
+        except Exception as e:
+            print(f"Ошибка оценки через LLM с контекстом: {e}")
+            return self._get_fallback_feedback(student_answer, correct_answer)
+
     def _get_fallback_feedback(self, student_answer: str, correct_answer: str) -> str:
         """Fallback обратная связь когда LLM недоступен"""
         similarity = self._calculate_similarity(student_answer, correct_answer)
@@ -381,7 +442,7 @@ class PracticeManager:
 
     def has_more_questions(self) -> bool:
         """Проверяет, есть ли еще вопросы"""
-        return self.current_question_index < len(self.questions)
+        return self.current_question_index < len(self.questions) - 1
 
     def get_questions_count(self) -> int:
         """Возвращает количество вопросов"""
