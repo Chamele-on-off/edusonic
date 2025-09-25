@@ -258,7 +258,7 @@ class DialogueManager:
                     if pattern in text_lower and responses:
                         return random.choice(responses)
         
-        # 2. Контекстный поиск (есть история разговора)
+        # 2. Контекстный поиск (если есть история разговора)
         if self.conversation_context:
             last_user_messages = ' '.join(self.conversation_context).lower()
             
@@ -479,7 +479,7 @@ class DialogueManager:
         # Сначала проверяем, не запрашивает ли пользователь существующий предмет
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
-            if subject.lower() in text_lower and len(subject) > 3:  # Исключаем короткие совпадения
+            if subject.lower() in text_lower and len(subject) > 3:
                 print(f"Обнаружен существующий предмет: {subject}, пропускаем генерацию")
                 return False
         
@@ -503,16 +503,32 @@ class DialogueManager:
                 topic = match.group(1).strip()
                 # Удаляем возможные вопросительные слова в конце
                 topic = re.sub(r'[.?]$', '', topic)
-                if topic and len(topic) > 2:  # Минимальная длина темы
+                if topic and len(topic) > 2:
                     print(f"Обнаружен запрос на генерацию урока по теме: '{topic}'")
                     # Пытаемся сгенерировать урок
                     generated_lesson = self.generate_lesson_on_demand(topic)
                     if generated_lesson:
                         print(f"Урок успешно сгенерирован: {generated_lesson['id']}")
+                        # ВАЖНО: Сразу начинаем сгенерированный урок!
+                        self._start_generated_lesson(generated_lesson)
                         return True
-                    else:
-                        print("Ошибка генерации урока")
         return False
+
+    def _start_generated_lesson(self, lesson_data: dict):
+        """Начинает сгенерированный урок"""
+        self.current_subject = "общее"
+        self.selected_lesson = lesson_data
+        self.lesson_started = True
+        self.current_state = "lesson_reading"
+        self.current_paragraph = 0
+        self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
+        self.knowledge_base = KnowledgeBase(self.current_subject)
+        
+        # Очищаем историю диалога при начале урока
+        self.conversation_history = []
+        self.conversation_context = []
+        
+        print(f"Начинаем сгенерированный урок: {lesson_data['title']}")
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -521,22 +537,7 @@ class DialogueManager:
         # Добавляем в историю диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
-        # 1. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (ДО всего остального)
-        generated_lesson = self._check_for_lesson_generation_intent(text_lower)
-        if generated_lesson:
-            # Если урок сгенерирован, начинаем его
-            # ВАЖНО: НЕ сохраняем фразы генерации в базу знаний!
-            return self._handle_subject_selection_direct("общее")
-        
-        # 2. Если пользователь называет предмет - автоматически начинаем урок
-        available_subjects = self.get_available_subjects()
-        for subject in available_subjects:
-            if subject.lower() in text_lower and len(subject) > 3:
-                print(f"Обнаружен выбор предмета: {subject}")
-                # ВАЖНО: НЕ сохраняем выбор предмета в базу знаний диалога!
-                return self._handle_subject_selection_direct(subject)
-        
-        # 3. Если урок уже начат - используем стандартную логику
+        # 1. Если урок уже начат - используем стандартную логику (ПЕРВОЕ условие!)
         if self.lesson_started:
             handler = self.dialogue_states.get(self.current_state)
             if handler:
@@ -545,6 +546,19 @@ class DialogueManager:
                     self._add_to_conversation_history(response, is_user=False)
                     return response
             return None
+        
+        # 2. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (только если урок не начат)
+        generated_lesson = self._check_for_lesson_generation_intent(text_lower)
+        if generated_lesson:
+            # Урок уже начат в _start_generated_lesson, возвращаем None для чтения первого абзаца
+            return None
+        
+        # 3. Если пользователь называет предмет - автоматически начинаем урок
+        available_subjects = self.get_available_subjects()
+        for subject in available_subjects:
+            if subject.lower() in text_lower and len(subject) > 3:
+                print(f"Обнаружен выбор предмета: {subject}")
+                return self._handle_subject_selection_direct(subject)
         
         # 4. Если ждем ответ на вопрос практики - обрабатываем как ответ
         if self.practice_active and self.waiting_for_answer:
@@ -704,12 +718,8 @@ class DialogueManager:
             practice_generated = self.practice_manager.generate_practice(lesson_text, self.current_subject)
             
             if not practice_generated:
-                # Если и генерация не удалась, завершаем сессию
                 print("Не удалось сгенерировать практику")
                 self.current_state = "greeting"
-                self.conversation_counter = 0
-                self.conversation_history = []
-                self.conversation_context = []
                 return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
         
         # Отправляем событие начала практики
@@ -721,8 +731,9 @@ class DialogueManager:
         if first_question:
             print(f"Начинаем практику с вопроса: {first_question['question']}")
             self.current_practice_question = first_question
-            self.waiting_for_answer = True  # Устанавливаем флаг ожидания ответа
+            self.waiting_for_answer = True
             
+            # ВАЖНО: Возвращаем только ПЕРВЫЙ вопрос, а не все сразу
             question_text = first_question['question']
             return f"Отлично! Переходим к практике. Вопрос: {question_text}"
         else:
@@ -748,20 +759,22 @@ class DialogueManager:
         
         # Перейти к следующему вопросу
         has_next = self.practice_manager.move_to_next_question()
-        next_question = self.practice_manager.get_current_question() if has_next else None
         
-        # Сформировать ответ
-        if next_question:
-            self.current_practice_question = next_question
-            self.waiting_for_answer = True  # Продолжаем ждать ответы
-            response = f"{evaluation}. Следующий вопрос: {next_question['question']}"
-            print(f"Переход к следующему вопросу: {response}")
-        else:
-            self._end_practice_session()
-            response = f"{evaluation}. Практика завершена! Вы отлично справились."
-            print(f"Завершение практики: {response}")
+        if has_next:
+            # Есть следующий вопрос - получаем его
+            next_question = self.practice_manager.get_current_question()
+            if next_question:
+                self.current_practice_question = next_question
+                self.waiting_for_answer = True
+                response = f"{evaluation}. Следующий вопрос: {next_question['question']}"
+                print(f"Переход к следующему вопросу: {response}")
+                return response  # ВАЖНО: возвращаем response, а не None
         
-        return response
+        # Нет больше вопросов - завершаем практику
+        self._end_practice_session()
+        response = f"{evaluation}. Практика завершена! Вы отлично справились."
+        print(f"Завершение практики: {response}")
+        return response  # ВАЖНО: возвращаем response
 
     def _handle_practice_answer(self, text: str) -> str:
         """Обработчик ответов во время практики (алиас для handle_practice_answer)"""
@@ -773,6 +786,14 @@ class DialogueManager:
         self.waiting_for_answer = False
         self.current_state = "greeting"
         self.practice_manager.reset()
+        
+        # ВАЖНО: Сбрасываем состояние урока, чтобы можно было начать новый
+        self.lesson_started = False
+        self.selected_lesson = None
+        self.current_subject = None
+        self.lesson_content = []
+        self.current_paragraph = 0
+        
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
         print("=== ПРАКТИКА ЗАВЕРШЕНА ===")
