@@ -41,6 +41,7 @@ room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
+room_current_avatar = defaultdict(lambda: 'teacher')  # Храним текущий аватар для каждой комнаты
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
@@ -82,6 +83,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
     
+    # Длительность речи рассчитываем на основе длины текста
     speech_duration = max(2, len(text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
@@ -110,7 +112,13 @@ def get_frames(avatar_name):
         if not avatar_dir.exists():
             return jsonify({"error": "Avatar not found"}), 404
         
-        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        # Поддерживаемые форматы изображений
+        supported_formats = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')
+        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(supported_formats)]
+        
+        # Сортируем кадры для правильной последовательности
+        frames.sort()
+        
         return jsonify({"frames": frames})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -163,6 +171,9 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
+    # Отправляем текущий аватар комнаты новому участнику
+    emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
+    
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
         welcome_text = "Учитель с искусственным интеллектом активирован"
         speak_text(room_id, welcome_text, voice_type='female', is_teacher=True)
@@ -171,12 +182,21 @@ def handle_join_room(data):
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
 
+@socketio.on('get_current_avatar')
+def handle_get_current_avatar(data):
+    """Отправляет текущий аватар комнаты"""
+    room_id = data['room_id']
+    emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
+
 @socketio.on('client_start_animation')
 def handle_client_start_animation(data):
     """Обработчик команды запуска анимации от учителя"""
     room_id = data['room_id']
     avatar_name = data['avatar_name']
     print(f"Получена команда запуска анимации для комнаты {room_id}, аватар: {avatar_name}")
+    
+    # Сохраняем текущий аватар комнаты
+    room_current_avatar[room_id] = avatar_name
     
     # Уведомляем всех клиентов в комнате о смене аватара
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
@@ -188,6 +208,9 @@ def handle_avatar_changed(data):
     room_id = data['room_id']
     avatar_name = data['avatar_name']
     print(f"Смена аватара в комнате {room_id} на {avatar_name}")
+    
+    # Сохраняем новый аватар для комнаты
+    room_current_avatar[room_id] = avatar_name
     
     # Пересылаем команду всем клиентам в комнате
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
