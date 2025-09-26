@@ -70,6 +70,7 @@ class PracticeManager:
             
             # 3. Объединяем вопросы и ответы
             self.questions = self._combine_questions_answers(questions, answers)
+            self.current_question_index = 0
             
             # 4. Сохраняем в раздельные файлы
             success = self._save_practice_files(lesson_id="generated_practice", questions=questions, answers=answers)
@@ -270,6 +271,14 @@ class PracticeManager:
         """Возвращает текущий вопрос"""
         return self.get_question(self.current_question_index)
 
+    def get_next_question(self) -> Optional[Dict]:
+        """Возвращает следующий вопрос и увеличивает индекс"""
+        if self.current_question_index < len(self.questions):
+            question = self.questions[self.current_question_index]
+            self.current_question_index += 1
+            return question
+        return None
+
     def evaluate_answer(self, student_answer: str, use_llm: bool = True) -> str:
         """Оценивает ответ ученика с приоритетом LLM и fallback на сравнение"""
         current_question = self.get_current_question()
@@ -436,13 +445,12 @@ class PracticeManager:
         return SequenceMatcher(None, text1, text2).ratio()
 
     def move_to_next_question(self) -> bool:
-        """Переходит к следующему вопросу"""
-        self.current_question_index += 1
+        """Переходит к следующему вопросу (без увеличения индекса)"""
         return self.current_question_index < len(self.questions)
 
     def has_more_questions(self) -> bool:
         """Проверяет, есть ли еще вопросы"""
-        return self.current_question_index < len(self.questions) - 1
+        return self.current_question_index < len(self.questions)
 
     def get_questions_count(self) -> int:
         """Возвращает количество вопросов"""
