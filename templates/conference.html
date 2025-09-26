@@ -833,8 +833,8 @@
         
         body.embedded .control-btn {
             width: 50px;
-            height: 50px;
-            font-size: 16px;
+                height: 50px;
+                font-size: 16px;
         }
         
         /* iOS specific fixes */
@@ -1171,12 +1171,18 @@
 
         // Функция загрузки кадров аватара с улучшенной обработкой ошибок
         function loadAvatarFrames(avatarName) {
+            console.log('Начало загрузки аватара:', avatarName);
             statusDiv.textContent = 'Загрузка ' + avatarName + '...';
             loadedImages = [];
             avatarLoading.style.display = 'block';
             
+            // Останавливаем текущую анимацию
+            if (animationInterval) {
+                stopAnimation();
+            }
+            
             // Сначала пытаемся загрузить через API
-            fetch('/api/frames/' + avatarName)
+            fetch('/api/frames/' + encodeURIComponent(avatarName))
                 .then(function(response) { 
                     if (!response.ok) {
                         throw new Error('HTTP error ' + response.status);
@@ -1184,22 +1190,23 @@
                     return response.json(); 
                 })
                 .then(function(data) {
-                    if (data.error) throw new Error(data.error);
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    if (!data.frames || data.frames.length === 0) {
+                        throw new Error('Нет доступных кадров');
+                    }
                     
                     frames = data.frames;
                     console.log('Найдено кадров через API: ' + frames.length);
-                    
-                    if (frames.length === 0) {
-                        throw new Error('Нет доступных кадров');
-                    }
                     
                     // Загружаем все изображения
                     return loadAllFrames(avatarName, frames);
                 })
                 .catch(function(error) {
                     console.error('Ошибка загрузки через API:', error);
-                    // Fallback: пытаемся загрузить напрямую из стандартной папки
-                    statusDiv.textContent = 'Попытка загрузки стандартного аватара...';
+                    // Fallback: пытаемся загрузить стандартные кадры
                     return loadDefaultFrames(avatarName);
                 })
                 .then(function(images) {
@@ -1209,15 +1216,18 @@
                         statusDiv.textContent = avatarName + ': готово (' + loadedImages.length + ' кадров)';
                         currentFrame = 0;
                         startAnimation();
+                        console.log('Анимация запущена с', loadedImages.length, 'кадрами');
                     } else {
                         statusDiv.textContent = 'Не удалось загрузить аватар';
                         showAvatarPlaceholder();
+                        console.warn('Не удалось загрузить кадры для аватара:', avatarName);
                     }
                 })
                 .catch(function(finalError) {
                     avatarLoading.style.display = 'none';
                     statusDiv.textContent = 'Ошибка: ' + finalError.message;
                     showAvatarPlaceholder();
+                    console.error('Финальная ошибка загрузки аватара:', finalError);
                 });
         }
 
@@ -1313,16 +1323,41 @@
 
         // Функция показа placeholder при ошибках
         function showAvatarPlaceholder() {
-            const svg = `
-                <svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="100%" height="100%" fill="#3498db"/>
-                    <circle cx="200" cy="150" r="50" fill="#fff"/>
-                    <path d="M150 250 Q200 300 250 250" stroke="#fff" stroke-width="10" fill="none"/>
-                    <text x="200" y="350" text-anchor="middle" fill="#fff" font-size="20">Аватар не найден</text>
-                </svg>
-            `;
+            // Создаем canvas и рисуем простой placeholder
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 400;
+            const ctx = canvas.getContext('2d');
             
-            teacherVideo.src = 'data:image/svg+xml;base64,' + btoa(svg);
+            // Фон
+            ctx.fillStyle = '#3498db';
+            ctx.fillRect(0, 0, 400, 400);
+            
+            // Круг (голова)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(200, 150, 50, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Улыбка
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.arc(200, 150, 30, 0, Math.PI);
+            ctx.stroke();
+            
+            // Текст
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Аватар не найден', 200, 350);
+            
+            teacherVideo.src = canvas.toDataURL();
+            
+            // Останавливаем анимацию
+            if (animationInterval) {
+                stopAnimation();
+            }
         }
 
         // Функция показа текущего кадра
@@ -2135,7 +2170,7 @@
                                 recognition.start();
                             }, 500);
                         } else {
-                                recognition.start();
+                            recognition.start();
                         }
                     }
                 } else {
