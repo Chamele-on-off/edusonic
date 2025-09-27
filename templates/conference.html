@@ -1010,6 +1010,7 @@
                     <i class="fas fa-users"></i>
                     <span id="participants-count">1</span> участников
                 </div>
+                <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">😴 Режим покоя</div>
             </div>
             
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
@@ -1094,6 +1095,7 @@
         const closeDrawingBtn = document.getElementById('close-drawing');
         const closeTextWidgetBtn = document.getElementById('close-text-widget');
         const avatarLoading = document.getElementById('avatar-loading');
+        const animationStatus = document.getElementById('animation-status');
 
         // Глобальные переменные
         let userStream = null;
@@ -1122,7 +1124,10 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let isSpeaking = false;
+        
+        // Переменные для управления анимацией речи на основе текста
+        let speechAnimationTimeout = null;
+        let isSpeechAnimating = false;
         
         // Переменные для рисования
         let isDrawing = false;
@@ -1169,7 +1174,7 @@
             });
         }
 
-        // Функция загрузки кадров аватара с улучшенной обработкой ошибок
+        // Функция загрузки кадров аватара
         function loadAvatarFrames(avatarName) {
             console.log('Начало загрузки аватара:', avatarName);
             statusDiv.textContent = 'Загрузка ' + avatarName + '...';
@@ -1177,319 +1182,282 @@
             avatarLoading.style.display = 'block';
             
             // Останавливаем текущую анимацию
-            if (animationInterval) {
-                stopAnimation();
-            }
+            stopAnimation();
             
-            // Сначала пытаемся загрузить через API
             fetch('/api/frames/' + encodeURIComponent(avatarName))
                 .then(function(response) { 
-                    if (!response.ok) {
-                        throw new Error('HTTP error ' + response.status);
-                    }
+                    if (!response.ok) throw new Error('HTTP error ' + response.status);
                     return response.json(); 
                 })
                 .then(function(data) {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
+                    if (data.error) throw new Error(data.error);
+                    if (!data.frames || data.frames.length === 0) throw new Error('Нет доступных кадров');
                     
-                    if (!data.frames || data.frames.length === 0) {
-                        throw new Error('Нет доступных кадров');
-                    }
-                    
-                    frames = data.frames;
-                    console.log('Найдено кадров через API: ' + frames.length);
-                    
-                    // Загружаем все изображения
-                    return loadAllFrames(avatarName, frames);
-                })
-                .catch(function(error) {
-                    console.error('Ошибка загрузки через API:', error);
-                    // Fallback: пытаемся загрузить стандартные кадры
-                    return loadDefaultFrames(avatarName);
+                    console.log('Найдено кадров:', data.frames.length);
+                    return loadAllFrames(avatarName, data.frames);
                 })
                 .then(function(images) {
                     avatarLoading.style.display = 'none';
+                    
                     if (images && images.length > 0) {
                         loadedImages = images;
-                        statusDiv.textContent = avatarName + ': готово (' + loadedImages.length + ' кадров)';
-                        currentFrame = 0;
+                        statusDiv.textContent = avatarName + ': загружено ' + loadedImages.length + ' кадров';
+                        
+                        // ЗАПУСКАЕМ АНИМАЦИЮ СРАЗУ ПОСЛЕ ЗАГРУЗКИ
                         startAnimation();
+                        
                         console.log('Анимация запущена с', loadedImages.length, 'кадрами');
                     } else {
-                        statusDiv.textContent = 'Не удалось загрузить аватар';
-                        showAvatarPlaceholder();
-                        console.warn('Не удалось загрузить кадры для аватара:', avatarName);
+                        throw new Error('Не удалось загрузить кадры');
                     }
                 })
-                .catch(function(finalError) {
+                .catch(function(error) {
                     avatarLoading.style.display = 'none';
-                    statusDiv.textContent = 'Ошибка: ' + finalError.message;
+                    statusDiv.textContent = 'Ошибка: ' + error.message;
+                    console.error('Ошибка загрузки аватара:', error);
                     showAvatarPlaceholder();
-                    console.error('Финальная ошибка загрузки аватара:', finalError);
                 });
         }
 
         // Функция загрузки всех кадров
         function loadAllFrames(avatarName, frameList) {
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 const images = [];
                 let loadedCount = 0;
                 let errorCount = 0;
                 
                 if (!frameList || frameList.length === 0) {
-                    reject(new Error('Список кадров пуст'));
+                    resolve([]);
                     return;
                 }
                 
-                function loadNextImage(index) {
+                function loadNext(index) {
                     if (index >= frameList.length) {
-                        if (images.length > 0) {
-                            resolve(images);
-                        } else {
-                            reject(new Error('Не удалось загрузить ни одного кадра'));
-                        }
-                        return;
-                    }
-                    
-                    const frame = frameList[index];
-                    const imageUrl = '/frames/' + avatarName + '/' + frame;
-                    
-                    loadImage(imageUrl, 2)
-                        .then(function(img) {
-                            images.push(img);
-                            loadedCount++;
-                            console.log('Загружен кадр:', frame);
-                            
-                            if (loadedCount % 5 === 0) {
-                                statusDiv.textContent = avatarName + ': загружено ' + loadedCount + '/' + frameList.length;
-                            }
-                            
-                            loadNextImage(index + 1);
-                        })
-                        .catch(function(error) {
-                            errorCount++;
-                            console.error('Ошибка загрузки кадра ' + frame + ':', error);
-                            
-                            if (errorCount >= frameList.length) {
-                                reject(new Error('Все кадры не удалось загрузить'));
-                            } else {
-                                loadNextImage(index + 1);
-                            }
-                        });
-                }
-                
-                loadNextImage(0);
-            });
-        }
-
-        // Fallback: загрузка стандартных кадров
-        function loadDefaultFrames(avatarName) {
-            return new Promise((resolve) => {
-                const defaultFrames = [
-                    'frame1.jpg', 'frame2.jpg', 'frame3.jpg', 'frame4.jpg',
-                    'frame1.png', 'frame2.png', 'frame3.png', 'frame4.png',
-                    'neutral.jpg', 'speaking.jpg', 'idle.jpg'
-                ];
-                
-                const images = [];
-                let loadedCount = 0;
-                
-                function tryLoadFrame(index) {
-                    if (index >= defaultFrames.length) {
+                        console.log('Загружено кадров:', images.length, 'из', frameList.length);
                         resolve(images);
                         return;
                     }
                     
-                    const frame = defaultFrames[index];
-                    const imageUrl = '/frames/' + avatarName + '/' + frame;
+                    const frame = frameList[index];
+                    const imageUrl = '/frames/' + encodeURIComponent(avatarName) + '/' + encodeURIComponent(frame);
                     
-                    loadImage(imageUrl, 1)
-                        .then(function(img) {
+                    loadImage(imageUrl, 2)
+                        .then(img => {
                             images.push(img);
                             loadedCount++;
-                            console.log('Загружен стандартный кадр:', frame);
-                            tryLoadFrame(index + 1);
+                            
+                            if (loadedCount % 5 === 0 || loadedCount === frameList.length) {
+                                statusDiv.textContent = `${avatarName}: ${loadedCount}/${frameList.length}`;
+                            }
+                            
+                            loadNext(index + 1);
                         })
-                        .catch(function() {
-                            tryLoadFrame(index + 1);
+                        .catch(error => {
+                            errorCount++;
+                            console.warn('Ошибка загрузки кадра', frame, error);
+                            loadNext(index + 1);
                         });
                 }
                 
-                tryLoadFrame(0);
+                loadNext(0);
             });
         }
 
         // Функция показа placeholder при ошибках
         function showAvatarPlaceholder() {
-            // Создаем canvas и рисуем простой placeholder
             const canvas = document.createElement('canvas');
             canvas.width = 400;
             canvas.height = 400;
             const ctx = canvas.getContext('2d');
             
-            // Фон
             ctx.fillStyle = '#3498db';
             ctx.fillRect(0, 0, 400, 400);
             
-            // Круг (голова)
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(200, 150, 50, 0, Math.PI * 2);
             ctx.fill();
             
-            // Улыбка
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 10;
             ctx.beginPath();
             ctx.arc(200, 150, 30, 0, Math.PI);
             ctx.stroke();
             
-            // Текст
             ctx.fillStyle = '#fff';
             ctx.font = '20px Arial';
             ctx.textAlign = 'center';
             ctx.fillText('Аватар не найден', 200, 350);
             
             teacherVideo.src = canvas.toDataURL();
-            
-            // Останавливаем анимацию
-            if (animationInterval) {
-                stopAnimation();
-            }
+            stopAnimation();
         }
 
         // Функция показа текущего кадра
         function showFrame() {
-            if (loadedImages.length === 0) return;
-            
-            currentFrame = currentFrame % loadedImages.length;
-            teacherVideo.src = loadedImages[currentFrame].src;
-        }
-
-        // Запуск анимации на основе аудио
-        function startAnimation() {
-            if (animationInterval) return;
-            
-            animationInterval = setInterval(function() {
-                if (isSpeaking) {
-                    // Режим речи: быстрая смена кадров (2 кадра в секунду)
-                    currentFrame = (currentFrame + 1) % loadedImages.length;
-                } else {
-                    // Режим покоя: медленная смена кадров (1 кадр в 2 секунды)
-                    if (Math.floor(Date.now() / 2000) % 2 === 0) {
-                        currentFrame = (currentFrame + 1) % loadedImages.length;
-                    }
-                }
-                showFrame();
-            }, 1000 / FPS);
-            
-            console.log('Анимация запущена');
-        }
-
-        // Остановка анимации
-        function stopAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-                animationInterval = null;
-                currentFrame = 0;
-                showFrame();
-                console.log('Анимация остановлена');
-            }
-        }
-
-        // Установка режима речи на основе аудио
-        function setSpeaking(speaking) {
-            isSpeaking = speaking;
-            if (speaking) {
-                console.log('Режим речи включен (на основе аудио)');
-            } else {
-                console.log('Режим покоя включен');
-            }
-        }
-
-        // Анализ аудио для определения речи
-        function initAudioAnalysis(audioElement) {
-            if (!window.AudioContext) {
-                console.warn('AudioContext не поддерживается');
-                return null;
+            if (loadedImages.length === 0) {
+                console.warn('Нет кадров для отображения');
+                return;
             }
             
             try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const analyser = audioContext.createAnalyser();
-                const source = audioContext.createMediaElementSource(audioElement);
+                currentFrame = currentFrame % loadedImages.length;
+                const img = loadedImages[currentFrame];
                 
-                source.connect(analyser);
-                analyser.connect(audioContext.destination);
-                
-                analyser.fftSize = 256;
-                const bufferLength = analyser.frequencyBinCount;
-                const dataArray = new Uint8Array(bufferLength);
-                
-                return { audioContext, analyser, dataArray, bufferLength };
-            } catch (error) {
-                console.error('Ошибка инициализации анализа аудио:', error);
-                return null;
-            }
-        }
-
-        // Мониторинг аудио для определения речи
-        function monitorAudio(audioAnalysis) {
-            if (!audioAnalysis) return;
-            
-            const { analyser, dataArray, bufferLength } = audioAnalysis;
-            
-            function analyze() {
-                analyser.getByteFrequencyData(dataArray);
-                
-                let sum = 0;
-                for (let i = 0; i < bufferLength; i++) {
-                    sum += dataArray[i];
+                if (img && img.src) {
+                    teacherVideo.src = img.src;
+                    teacherVideo.style.display = 'block';
                 }
-                const average = sum / bufferLength;
-                
-                // Порог для определения речи (можно настроить)
-                const SPEECH_THRESHOLD = 10;
-                const isSpeechDetected = average > SPEECH_THRESHOLD;
-                
-                setSpeaking(isSpeechDetected);
-                
-                requestAnimationFrame(analyze);
+            } catch (error) {
+                console.error('Ошибка показа кадра:', error);
             }
-            
-            analyze();
         }
 
-        // Воспроизведение аудио с анализом
-        function playAudioWithAnalysis(base64Audio) {
+        // Функция запуска анимации речи на основе текста
+        function startSpeechAnimation(text) {
+            // Останавливаем предыдущую анимацию речи
+            stopSpeechAnimation();
+            
+            // Рассчитываем продолжительность речи на основе длины текста
+            const duration = calculateSpeechDuration(text);
+            
+            console.log(`Запуск анимации речи на ${duration}ms для текста: "${text.substring(0, 50)}..."`);
+            
+            // Запускаем быструю анимацию для речи
+            startFastAnimation();
+            isSpeechAnimating = true;
+            updateAnimationStatus();
+            
+            // Устанавливаем таймер для остановки анимации речи
+            speechAnimationTimeout = setTimeout(() => {
+                stopSpeechAnimation();
+                console.log('Анимация речи завершена');
+            }, duration);
+        }
+
+        // Функция остановки анимации речи
+        function stopSpeechAnimation() {
+            if (speechAnimationTimeout) {
+                clearTimeout(speechAnimationTimeout);
+                speechAnimationTimeout = null;
+            }
+            
+            if (isSpeechAnimating) {
+                isSpeechAnimating = false;
+                // Возвращаем медленную анимацию покоя
+                startSlowAnimation();
+                updateAnimationStatus();
+                console.log('Анимация речи остановлена, переход в режим покоя');
+            }
+        }
+
+        // Расчет продолжительности речи на основе длины текста
+        function calculateSpeechDuration(text) {
+            if (!text || text.length === 0) return 2000;
+            
+            // Учитываем паузы на знаках препинания
+            const punctuationPauses = (text.match(/[.!?;:]/g) || []).length;
+            const pauseBonus = punctuationPauses * 300;
+            
+            // Базовый расчет по длине текста
+            const charsPerSecond = 15;
+            const baseDuration = (text.length / charsPerSecond) * 1000;
+            
+            const totalDuration = baseDuration + pauseBonus;
+            
+            // Ограничения
+            const minDuration = 2000;
+            const maxDuration = 45000;
+            
+            return Math.max(minDuration, Math.min(maxDuration, totalDuration));
+        }
+
+        // Быстрая анимация для речи (15 FPS)
+        function startFastAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) return;
+            
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % loadedImages.length;
+                showFrame();
+            }, 1000 / 15);
+        }
+
+        // Медленная анимация для покоя (3 FPS)
+        function startSlowAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) return;
+            
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % loadedImages.length;
+                showFrame();
+            }, 1000 / 3);
+        }
+
+        // Функция запуска анимации (по умолчанию - медленная)
+        function startAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) {
+                console.warn('Нет загруженных кадров для анимации');
+                return;
+            }
+            
+            console.log('Запуск анимации покоя с', loadedImages.length, 'кадрами');
+            startSlowAnimation();
+            showFrame();
+            updateAnimationStatus();
+        }
+
+        // Остановка всей анимации
+        function stopAnimation() {
+            stopSpeechAnimation();
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            
+            // Показываем первый кадр
+            if (loadedImages.length > 0) {
+                currentFrame = 0;
+                showFrame();
+            }
+            
+            updateAnimationStatus();
+        }
+
+        // Обновление статуса анимации
+        function updateAnimationStatus() {
+            if (!animationStatus) return;
+            
+            if (isSpeechAnimating) {
+                animationStatus.textContent = '🗣️ Анимация речи';
+                animationStatus.style.color = '#4cc9f0';
+            } else {
+                animationStatus.textContent = '😴 Режим покоя';
+                animationStatus.style.color = '#95a5a6';
+            }
+        }
+
+        // Упрощенная функция воспроизведения аудио
+        function playAudio(base64Audio) {
             return new Promise((resolve, reject) => {
                 const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
                 
-                // Инициализируем анализ аудио
-                const audioAnalysis = initAudioAnalysis(audio);
-                
-                audio.addEventListener('loadeddata', () => {
-                    if (audioAnalysis) {
-                        monitorAudio(audioAnalysis);
-                    }
-                });
-                
-                audio.addEventListener('play', () => {
-                    setSpeaking(true);
-                });
-                
                 audio.addEventListener('ended', () => {
-                    setSpeaking(false);
-                    if (audioAnalysis && audioAnalysis.audioContext) {
-                        audioAnalysis.audioContext.close();
-                    }
                     resolve();
                 });
                 
                 audio.addEventListener('error', (e) => {
-                    setSpeaking(false);
                     reject(e);
                 });
                 
@@ -1886,10 +1854,12 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 socket.emit('join_room', { room_id: roomId });
                 
-                // Автоматически загружаем аватар "teacher" при подключении
+                // Запрашиваем текущий аватар при подключении
                 setTimeout(() => {
-                    loadAvatarFrames('teacher');
-                }, 1000);
+                    if (socket) {
+                        socket.emit('get_current_avatar', { room_id: roomId });
+                    }
+                }, 500);
                 
                 // Автоматически включаем камеру и микрофон
                 setTimeout(() => {
@@ -1903,33 +1873,32 @@
             
             // Обработчик смены аватара
             socket.on('avatar_changed', (data) => {
-                console.log('Смена аватара на: ' + data.avatar_name);
+                console.log('Смена аватара на:', data.avatar_name);
+                currentAvatar = data.avatar_name;
                 loadAvatarFrames(data.avatar_name);
             });
             
-            // Обработчик состояния речи (резервный, основной - анализ аудио)
-            socket.on('speaking_state', (data) => {
-                console.log('Серверное состояние речи:', data.speaking);
-                // Используем как резерв, если анализ аудио не работает
-                if (!window.AudioContext) {
-                    setSpeaking(data.speaking);
-                }
+            socket.on('current_avatar', (data) => {
+                console.log('Текущий аватар:', data.avatar_name);
+                currentAvatar = data.avatar_name;
+                loadAvatarFrames(data.avatar_name);
             });
             
-            // Обработчик речи - ВКЛЮЧАЕМ анимацию на основе аудио
+            // Обработчик речи - ЗАПУСКАЕМ АНИМАЦИЮ НА ОСНОВЕ ТЕКСТА
             socket.on('speech_audio', (data) => {
                 try {
-                    console.log('Получено аудио сообщение, длина:', data.audio.length);
+                    console.log('Получено аудио сообщение, текст:', data.text.substring(0, 100) + '...');
                     
-                    // Воспроизводим аудио с анализом для определения речи
-                    playAudioWithAnalysis(data.audio)
+                    // ЗАПУСКАЕМ АНИМАЦИЮ РЕЧИ НА ОСНОВЕ ТЕКСТА
+                    startSpeechAnimation(data.text);
+                    
+                    // Воспроизводим аудио
+                    playAudio(data.audio)
                         .then(() => {
                             console.log('Аудио воспроизведено');
                         })
                         .catch(error => {
                             console.error('Ошибка воспроизведения аудио:', error);
-                            // Fallback: используем серверное состояние
-                            setSpeaking(false);
                         });
                     
                     if (!isLessonActive) {
@@ -1945,6 +1914,10 @@
             
             socket.on('speech_text', (data) => {
                 if (data.is_teacher) {
+                    // ЗАПУСКАЕМ АНИМАЦИЮ РЕЧИ ДЛЯ ТЕКСТА УЧИТЕЛЯ
+                    const teacherText = data.text.replace('Учитель: ', '');
+                    startSpeechAnimation(teacherText);
+                    
                     if (!isLessonActive) {
                         showTeacherSpeech(data.text);
                     }
@@ -1988,10 +1961,11 @@
                 loadLessonContent(data.lesson_id);
             });
 
-            // Новый обработчик для получения текущего аватара
-            socket.on('current_avatar', (data) => {
-                console.log('Текущий аватар:', data.avatar_name);
-                loadAvatarFrames(data.avatar_name);
+            socket.on('animation_ready', (data) => {
+                console.log('Анимация готова:', data.status);
+                if (data.status === 'ready' && loadedImages.length > 0) {
+                    startAnimation();
+                }
             });
         }
 
@@ -2271,9 +2245,7 @@
             if (recognition) {
                 recognition.stop();
             }
-            if (animationInterval) {
-                stopAnimation();
-            }
+            stopAnimation();
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
                 socket.disconnect();
@@ -2431,13 +2403,6 @@
             
             // Устанавливаем инструмент по умолчанию
             setDrawingTool('pen');
-
-            // Запрашиваем текущий аватар при загрузке
-            setTimeout(() => {
-                if (socket) {
-                    socket.emit('get_current_avatar', { room_id: roomId });
-                }
-            }, 2000);
         });
 
         // Обработчик изменения полноэкранного режима
