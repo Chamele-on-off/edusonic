@@ -698,13 +698,25 @@ class DialogueManager:
             practice_message = self._start_practice_session()
             return practice_message
 
+    def _get_next_practice_question(self) -> Optional[str]:
+        """Возвращает следующий вопрос практики (аналогично _get_next_paragraph для уроков)"""
+        if self.practice_manager.has_more_questions():
+            next_question = self.practice_manager.get_next_question()
+            if next_question:
+                self.current_practice_question = next_question
+                self.waiting_for_answer = True
+                return f"Следующий вопрос: {next_question['question']}"
+        
+        # Вопросы закончились - завершаем практику
+        self._end_practice_session()
+        return "Практика завершена! Вы отлично справились."
+
     def _start_practice_session(self) -> str:
         """Запускает фазу практики после окончания урока"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
         self.waiting_for_answer = False
-        self.current_question_index = 0
         
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
         
@@ -717,41 +729,78 @@ class DialogueManager:
             lesson_text = " ".join(self.lesson_content)
             practice_generated = self.practice_manager.generate_practice(lesson_text, self.current_subject)
             
-            if not practice_generated:
-                print("Не удалось сгенерировать практику")
-                self.current_state = "greeting"
-                return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
+            if not practice_generated or len(self.practice_manager.questions) == 0:
+                print("Не удалось сгенерировать практику, создаем fallback")
+                # Создаем простые вопросы на основе урока
+                self._create_emergency_questions()
+        
+        # Проверяем, что вопросы есть
+        if len(self.practice_manager.questions) == 0:
+            print("Нет вопросов для практики, завершаем урок")
+            self.current_state = "greeting"
+            return "Урок завершен! К сожалению, практические задания временно недоступны."
         
         # Отправляем событие начала практики
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # ВАЖНО: Получаем и возвращаем только ПЕРВЫЙ вопрос
-        first_question = self.practice_manager.get_current_question()
-        if first_question:
+        # Получаем первый вопрос
+        first_question = self.practice_manager.get_next_question()
+        if first_question and first_question['question']:
             print(f"Начинаем практику с вопроса: {first_question['question']}")
             self.current_practice_question = first_question
             self.waiting_for_answer = True
             
             # Возвращаем только первый вопрос
             question_text = first_question['question']
-            return f"Отлично! Переходим к практике. Первый вопрос: {question_text}"
+            return f"Отлично! Переходим к практике. Вопрос: {question_text}"
         else:
-            print("Практические вопросы не найдены")
-            return "Практические задания не найдены."
+            print("Не удалось получить первый вопрос практики")
+            self.current_state = "greeting"
+            return "Урок завершен! Возникла проблема с практическими заданиями."
 
-    def _get_next_practice_question(self) -> Optional[str]:
-        """Возвращает следующий вопрос практики (аналогично _get_next_paragraph для уроков)"""
-        if self.practice_manager.has_more_questions():
-            next_question = self.practice_manager.get_current_question()
-            if next_question:
-                self.current_practice_question = next_question
-                self.waiting_for_answer = True
-                return f"Следующий вопрос: {next_question['question']}"
+    def _create_emergency_questions(self):
+        """Создает экстренные вопросы на основе содержания урока"""
+        emergency_questions = []
         
-        # Вопросы закончились - завершаем практику
-        self._end_practice_session()
-        return "Практика завершена! Вы отлично справились."
+        # Берем ключевые фразы из урока
+        key_phrases = []
+        for paragraph in self.lesson_content[:3]:  # Первые 3 абзаца
+            sentences = re.split(r'[.!?]', paragraph)
+            for sentence in sentences:
+                if len(sentence.strip()) > 30:  # Достаточно длинные предложения
+                    key_phrases.append(sentence.strip())
+        
+        # Создаем простые вопросы
+        for i, phrase in enumerate(key_phrases[:3], 1):
+            words = phrase.split()
+            if len(words) > 4:
+                key_term = words[2] if len(words) > 2 else words[0]
+                question = f"Что означает термин '{key_term}'?"
+                
+                emergency_questions.append({
+                    "id": i,
+                    "question": question,
+                    "answer": f"Это понятие объясняется в уроке: {phrase[:100]}..."
+                })
+        
+        # Fallback вопросы
+        if not emergency_questions:
+            emergency_questions = [
+                {
+                    "id": 1,
+                    "question": "Какова основная тема урока?",
+                    "answer": "Основная тема урока рассмотрена в материале."
+                },
+                {
+                    "id": 2,
+                    "question": "Что нового ты узнал из урока?",
+                    "answer": "Урок содержал важную информацию по теме."
+                }
+            ]
+        
+        self.practice_manager.questions = emergency_questions
+        self.practice_manager.current_question_index = 0
 
     def handle_practice_answer(self, answer: str) -> str:
         """Обрабатывает ответ ученика во время практики с передачей контекста"""
@@ -761,7 +810,7 @@ class DialogueManager:
         print(f"Обработка ответа практики: {answer}")
         
         # Получить текущий вопрос
-        current_question = self.practice_manager.get_current_question()
+        current_question = self.current_practice_question
         if not current_question:
             self._end_practice_session()
             return "Практика завершена! Отличная работа."
@@ -779,10 +828,8 @@ class DialogueManager:
         
         print(f"Оценка ответа: {evaluation}")
         
-        # Перейти к следующему вопросу
-        has_next = self.practice_manager.move_to_next_question()
-        
-        if has_next:
+        # Проверяем, есть ли следующий вопрос
+        if self.practice_manager.has_more_questions():
             # Есть следующий вопрос - получаем его
             next_question_text = self._get_next_practice_question()
             if next_question_text:
