@@ -234,6 +234,13 @@ def handle_student_answer(data):
         print(f"Игнорирую ответ ученика: {answer}")
         return
 
+    # Проверяем, ожидает ли система ответа в диалог менеджере
+    if room_id in room_dialogue:
+        dialogue = room_dialogue[room_id]
+        if not dialogue.waiting_for_answer:
+            print(f"Система не ожидает ответа, игнорирую: {answer}")
+            return
+
     # Добавляем ответ в историю
     room_speech_data[room_id].append({
         'text': f"Ответ ученика: {answer}",
