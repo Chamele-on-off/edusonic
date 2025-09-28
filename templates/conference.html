@@ -1448,22 +1448,91 @@
             }
         }
 
-        // Упрощенная функция воспроизведения аудио
+        // Улучшенная функция воспроизведения аудио для iOS
         function playAudio(base64Audio) {
             return new Promise((resolve, reject) => {
-                const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
-                
-                audio.addEventListener('ended', () => {
-                    resolve();
-                });
-                
-                audio.addEventListener('error', (e) => {
-                    reject(e);
-                });
-                
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                    playPromise.catch(reject);
+                try {
+                    // Создаем новый audio элемент для каждого воспроизведения
+                    const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+                    
+                    // iOS требует пользовательского взаимодействия
+                    audio.preload = 'auto';
+                    audio.volume = 1.0;
+                    
+                    // Для iOS: добавляем обработчик жестов
+                    const handleUserInteraction = () => {
+                        document.removeEventListener('click', handleUserInteraction);
+                        document.removeEventListener('touchstart', handleUserInteraction);
+                    };
+                    
+                    document.addEventListener('click', handleUserInteraction, { once: true });
+                    document.addEventListener('touchstart', handleUserInteraction, { once: true });
+                    
+                    let played = false;
+                    
+                    const playAudioInternal = () => {
+                        if (played) return;
+                        played = true;
+                        
+                        const playPromise = audio.play();
+                        
+                        if (playPromise !== undefined) {
+                            playPromise
+                                .then(() => {
+                                    console.log('Аудио воспроизводится');
+                                })
+                                .catch(error => {
+                                    console.warn('Автовоспроизведение заблокировано, пробуем с жестом:', error);
+                                    // Пробуем еще раз при пользовательском взаимодействии
+                                    const retryPlay = () => {
+                                        document.removeEventListener('click', retryPlay);
+                                        document.removeEventListener('touchstart', retryPlay);
+                                        audio.play().catch(e => {
+                                            console.error('Не удалось воспроизвести аудио:', e);
+                                            reject(e);
+                                        });
+                                    };
+                                    document.addEventListener('click', retryPlay, { once: true });
+                                    document.addEventListener('touchstart', retryPlay, { once: true });
+                                });
+                        }
+                    };
+                    
+                    audio.addEventListener('loadeddata', () => {
+                        console.log('Аудио загружено, пытаемся воспроизвести');
+                        playAudioInternal();
+                    });
+                    
+                    audio.addEventListener('canplaythrough', () => {
+                        console.log('Аудио готово к воспроизведению');
+                        playAudioInternal();
+                    });
+                    
+                    audio.addEventListener('ended', () => {
+                        console.log('Аудио завершено');
+                        // Удаляем audio элемент после использования
+                        setTimeout(() => {
+                            audio.remove();
+                        }, 1000);
+                        resolve();
+                    });
+                    
+                    audio.addEventListener('error', (e) => {
+                        console.error('Ошибка аудио:', e);
+                        reject(e);
+                    });
+                    
+                    // Таймаут на случай если аудио не загрузится
+                    setTimeout(() => {
+                        if (!played) {
+                            console.log('Принудительная попытка воспроизведения по таймауту');
+                            playAudioInternal();
+                        }
+                    }, 1000);
+                    
+                } catch (error) {
+                    console.error('Критическая ошибка при создании аудио:', error);
+                    reject(error);
                 }
             });
         }
@@ -1892,10 +1961,10 @@
                     // ЗАПУСКАЕМ АНИМАЦИЮ РЕЧИ НА ОСНОВЕ ТЕКСТА
                     startSpeechAnimation(data.text);
                     
-                    // Воспроизводим аудио
+                    // Воспроизводим аудио с улучшенной обработкой для iOS
                     playAudio(data.audio)
                         .then(() => {
-                            console.log('Аудио воспроизведено');
+                            console.log('Аудио успешно воспроизведено');
                         })
                         .catch(error => {
                             console.error('Ошибка воспроизведения аудио:', error);
@@ -2399,6 +2468,12 @@
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     }
                 }, { once: true });
+                
+                // Добавляем обработчик для пользовательского взаимодействия
+                document.addEventListener('click', function() {
+                    // iOS требует пользовательского взаимодействия для аудио
+                    console.log('Пользовательское взаимодействие для iOS аудио');
+                });
             }
             
             // Устанавливаем инструмент по умолчанию
