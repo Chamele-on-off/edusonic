@@ -699,59 +699,85 @@ class DialogueManager:
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """Запускает фазу практики после окончания урока"""
+        """Запускает фазу практики с последовательной генерацией вопросов"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
         self.waiting_for_answer = False
         self.current_question_index = 0
         
-        print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
+        print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ С ПОСЛЕДОВАТЕЛЬНОЙ ГЕНЕРАЦИЕЙ ===")
         
-        # Загружаем практические задания
-        practice_loaded = self.practice_manager.load_practice(self.selected_lesson['id'])
-        
-        if not practice_loaded:
-            # Если не удалось загрузить, генерируем на лету
-            print("Генерация практики на лету...")
-            lesson_text = " ".join(self.lesson_content)
-            practice_generated = self.practice_manager.generate_practice(lesson_text, self.current_subject)
-            
-            if not practice_generated:
-                print("Не удалось сгенерировать практику")
-                self.current_state = "greeting"
-                return "Урок завершен! Было очень интересно. Скажите 'привет' чтобы начать новый увлекательный урок."
+        # Инициализируем контекст для генерации вопросов
+        lesson_context = " ".join(self.lesson_content)
+        self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
         # Отправляем событие начала практики
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # ВАЖНО: Получаем и возвращаем только ПЕРВЫЙ вопрос
-        first_question = self.practice_manager.get_current_question()
+        # Генерируем и возвращаем ПЕРВЫЙ вопрос
+        first_question = self._generate_next_practice_question()
         if first_question:
-            print(f"Начинаем практику с вопроса: {first_question['question']}")
-            self.current_practice_question = first_question
+            print(f"Начинаем практику с вопроса: {first_question}")
             self.waiting_for_answer = True
-            
-            # Возвращаем только первый вопрос
-            question_text = first_question['question']
-            return f"Отлично! Переходим к практике. Первый вопрос: {question_text}"
+            return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
-            print("Практические вопросы не найдены")
-            return "Практические задания не найдены."
+            print("Не удалось сгенерировать первый вопрос практики")
+            return "Практические задания временно недоступны."
 
-    def _get_next_practice_question(self) -> Optional[str]:
-        """Возвращает следующий вопрос практики (аналогично _get_next_paragraph для уроков)"""
-        if self.practice_manager.has_more_questions():
-            next_question = self.practice_manager.get_current_question()
-            if next_question:
-                self.current_practice_question = next_question
-                self.waiting_for_answer = True
-                return f"Следующий вопрос: {next_question['question']}"
+    def _generate_next_practice_question(self) -> Optional[str]:
+        """Генерирует следующий вопрос практики через LLM"""
+        try:
+            # Генерируем вопрос на основе контекста урока
+            question = self.practice_manager.generate_single_question()
+            if question:
+                self.current_practice_question = {
+                    "id": self.current_question_index + 1,
+                    "question": question,
+                    "answer": ""  # Ответ будет сгенерирован при проверке
+                }
+                self.current_question_index += 1
+                return question
+            return None
+        except Exception as e:
+            print(f"Ошибка генерации вопроса практики: {e}")
+            return None
+
+    def _evaluate_and_generate_next(self, student_answer: str) -> str:
+        """Оценивает ответ и генерирует следующий вопрос (новый метод)"""
+        if not self.practice_active or not self.waiting_for_answer:
+            return "Практика не активна."
         
-        # Вопросы закончились - завершаем практику
-        self._end_practice_session()
-        return "Практика завершена! Вы отлично справились."
+        print(f"Оценка ответа и генерация следующего вопроса...")
+        
+        # Получаем текущий вопрос
+        current_question = self.current_practice_question
+        if not current_question:
+            self._end_practice_session()
+            return "Практика завершена."
+        
+        # Оцениваем ответ ученика и получаем обратную связь
+        evaluation = self.practice_manager.evaluate_single_answer(
+            student_answer, 
+            current_question["question"]
+        )
+        
+        # Проверяем, нужно ли генерировать следующий вопрос
+        if self.current_question_index < 5:  # Всего 5 вопросов
+            next_question = self._generate_next_practice_question()
+            if next_question:
+                response = f"{evaluation}. Следующий вопрос: {next_question}"
+                self.waiting_for_answer = True
+                return response
+            else:
+                # Не удалось сгенерировать следующий вопрос
+                self._end_practice_session()
+                return f"{evaluation}. Практика завершена - возникли трудности с генерацией вопросов."
+        else:
+            # Достигли лимита вопросов
+            self._end_practice_session()
+            return f"{evaluation}. Практика завершена! Вы ответили на все 5 вопросов. Отличная работа!"
 
     def handle_practice_answer(self, answer: str) -> str:
         """Обрабатывает ответ ученика во время практики с передачей контекста"""
