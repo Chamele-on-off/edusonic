@@ -229,16 +229,24 @@ def handle_student_answer(data):
     answer = data['answer']
     user_sid = request.sid
 
-    # ИГНОРИРУЕМ ответ, если учитель говорит или практика не активна
-    if room_teacher_speaking[room_id] or not room_practice_active[room_id]:
-        print(f"Игнорирую ответ ученика: {answer}")
+    print(f"📝 Получен ответ ученика: {answer}")
+    print(f"📊 Состояние комнаты: practice_active={room_practice_active[room_id]}, teacher_speaking={room_teacher_speaking[room_id]}")
+
+    # ИГНОРИРУЕМ ответ, если учитель говорит
+    if room_teacher_speaking[room_id]:
+        print(f"🔇 Игнорирую ответ ученика, так как учитель говорит: {answer}")
+        return
+
+    # Проверяем, активна ли практика
+    if not room_practice_active[room_id]:
+        print(f"🔇 Практика не активна, игнорирую ответ: {answer}")
         return
 
     # Проверяем, ожидает ли система ответа в диалог менеджере
     if room_id in room_dialogue:
         dialogue = room_dialogue[room_id]
         if not dialogue.waiting_for_answer:
-            print(f"Система не ожидает ответа, игнорирую: {answer}")
+            print(f"🔇 Система не ожидает ответа, игнорирую: {answer}")
             return
 
     # Добавляем ответ в историю
@@ -251,16 +259,24 @@ def handle_student_answer(data):
     
     # Обрабатываем ответ через диалог менеджер
     if room_id in room_dialogue:
-        # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД для последовательной обработки
+        print(f"🔄 Обработка ответа через диалог менеджер...")
+        
+        # Сбрасываем флаг ожидания ПЕРЕД обработкой
+        room_dialogue[room_id].waiting_for_answer = False
+        
+        # Используем новый метод для последовательной обработки
         response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
         
         if response:
+            print(f"🎯 Ответ учителя: {response}")
+            
             # Отправляем ответ учителя
             emit('speech_text', {
                 'text': f"Учитель: {response}",
                 'sid': 'teacher',
                 'is_teacher': True
             }, room=room_id)
+            
             # Озвучиваем ответ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
             
@@ -269,11 +285,14 @@ def handle_student_answer(data):
                 room_practice_active[room_id] = False
                 room_current_question_index[room_id] = 0
                 emit('practice_ended', {}, room=room_id)
+                print("🏁 Практика завершена")
         else:
             # Если response is None, практика завершена
             room_practice_active[room_id] = False
             room_current_question_index[room_id] = 0
+            room_dialogue[room_id].waiting_for_answer = False
             emit('practice_ended', {}, room=room_id)
+            print("🏁 Практика завершена (response=None)")
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
@@ -636,7 +655,7 @@ def get_lesson_content(lesson_id):
         
         # Объединяем короткие абзацы в группы по 6 предложений
         for paragraph in raw_paragraphs:
-            # Разбиваем на предложения
+            # Разбиваем на предложences
             sentences = re.split(r'(?<=[.!?])\s+', paragraph)
             sentences = [s.strip() for s in sentences if s.strip()]
             
