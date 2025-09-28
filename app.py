@@ -224,7 +224,7 @@ def handle_generate_speech(data):
 
 @socketio.on('student_answer')
 def handle_student_answer(data):
-    """Обработчик ответов ученика во время практики"""
+    """Обработчик ответов ученика во время практики с последовательной генерацией"""
     room_id = data['room_id']
     answer = data['answer']
     user_sid = request.sid
@@ -244,7 +244,8 @@ def handle_student_answer(data):
     
     # Обрабатываем ответ через диалог менеджер
     if room_id in room_dialogue:
-        response = room_dialogue[room_id].handle_practice_answer(answer)
+        # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД для последовательной обработки
+        response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
         
         if response:
             # Отправляем ответ учителя
