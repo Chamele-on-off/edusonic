@@ -1115,8 +1115,6 @@
         let currentAvatarAspectRatio = 1;
         let isLessonActive = false;
         let audioContext = null;
-        let audioQueue = [];
-        let isPlayingAudio = false;
         
         // Анимация аватара - переменные
         let currentAvatar = 'teacher';
@@ -1144,6 +1142,11 @@
         let currentDraggedWindow = null;
         let dragOffsetX = 0;
         let dragOffsetY = 0;
+
+        // iOS Audio Fix - ключевые переменные из работающей версии
+        let audioQueue = [];
+        let isPlayingAudio = false;
+        let audioElements = []; // Массив для хранения всех аудио элементов
 
         // Функция загрузки изображения с повторами
         function loadImage(src, retries = 3) {
@@ -1448,93 +1451,82 @@
             }
         }
 
-        // Улучшенная функция воспроизведения аудио для iOS
+        // iOS Audio Fix - функции из работающей версии
+        function playAudioForIOS(base64Audio) {
+            // iOS требует пользовательского взаимодействия для воспроизведения аудио
+            // Создаем новый элемент audio для каждого воспроизведения
+            const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+            audio.preload = 'auto';
+            
+            // Добавляем в массив для предотвращения garbage collection
+            audioElements.push(audio);
+            
+            // Ограничиваем количество хранимых элементов
+            if (audioElements.length > 10) {
+                audioElements.shift();
+            }
+            
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        // Аудио успешно запущено
+                        audio.onended = () => {
+                            // Удаляем из массива после завершения
+                            const index = audioElements.indexOf(audio);
+                            if (index > -1) {
+                                audioElements.splice(index, 1);
+                            }
+                        };
+                    })
+                    .catch(error => {
+                        console.error('iOS audio play failed:', error);
+                        // Показываем текст речи как запасной вариант
+                        showTeacherSpeech("Аудио недоступно");
+                    });
+            }
+        }
+
+        function playNextAudio() {
+            if (isPlayingAudio || audioQueue.length === 0) return;
+            
+            isPlayingAudio = true;
+            const audio = audioQueue.shift();
+            
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        audio.onended = () => {
+                            isPlayingAudio = false;
+                            setTimeout(playNextAudio, 100);
+                        };
+                    })
+                    .catch(error => {
+                        console.error('Ошибка автовоспроизведения:', error);
+                        isPlayingAudio = false;
+                        setTimeout(playNextAudio, 100);
+                    });
+            }
+        }
+
+        // Универсальная функция воспроизведения аудио
         function playAudio(base64Audio) {
-            return new Promise((resolve, reject) => {
-                try {
-                    // Создаем новый audio элемент для каждого воспроизведения
+            try {
+                // iOS audio fix - use a different approach
+                if (isIOS) {
+                    playAudioForIOS(base64Audio);
+                } else {
                     const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
-                    
-                    // iOS требует пользовательского взаимодействия
                     audio.preload = 'auto';
-                    audio.volume = 1.0;
                     
-                    // Для iOS: добавляем обработчик жестов
-                    const handleUserInteraction = () => {
-                        document.removeEventListener('click', handleUserInteraction);
-                        document.removeEventListener('touchstart', handleUserInteraction);
-                    };
-                    
-                    document.addEventListener('click', handleUserInteraction, { once: true });
-                    document.addEventListener('touchstart', handleUserInteraction, { once: true });
-                    
-                    let played = false;
-                    
-                    const playAudioInternal = () => {
-                        if (played) return;
-                        played = true;
-                        
-                        const playPromise = audio.play();
-                        
-                        if (playPromise !== undefined) {
-                            playPromise
-                                .then(() => {
-                                    console.log('Аудио воспроизводится');
-                                })
-                                .catch(error => {
-                                    console.warn('Автовоспроизведение заблокировано, пробуем с жестом:', error);
-                                    // Пробуем еще раз при пользовательском взаимодействии
-                                    const retryPlay = () => {
-                                        document.removeEventListener('click', retryPlay);
-                                        document.removeEventListener('touchstart', retryPlay);
-                                        audio.play().catch(e => {
-                                            console.error('Не удалось воспроизвести аудио:', e);
-                                            reject(e);
-                                        });
-                                    };
-                                    document.addEventListener('click', retryPlay, { once: true });
-                                    document.addEventListener('touchstart', retryPlay, { once: true });
-                                });
-                        }
-                    };
-                    
-                    audio.addEventListener('loadeddata', () => {
-                        console.log('Аудио загружено, пытаемся воспроизвести');
-                        playAudioInternal();
-                    });
-                    
-                    audio.addEventListener('canplaythrough', () => {
-                        console.log('Аудио готово к воспроизведению');
-                        playAudioInternal();
-                    });
-                    
-                    audio.addEventListener('ended', () => {
-                        console.log('Аудио завершено');
-                        // Удаляем audio элемент после использования
-                        setTimeout(() => {
-                            audio.remove();
-                        }, 1000);
-                        resolve();
-                    });
-                    
-                    audio.addEventListener('error', (e) => {
-                        console.error('Ошибка аудио:', e);
-                        reject(e);
-                    });
-                    
-                    // Таймаут на случай если аудио не загрузится
-                    setTimeout(() => {
-                        if (!played) {
-                            console.log('Принудительная попытка воспроизведения по таймауту');
-                            playAudioInternal();
-                        }
-                    }, 1000);
-                    
-                } catch (error) {
-                    console.error('Критическая ошибка при создании аудио:', error);
-                    reject(error);
+                    // Add to queue and play sequentially
+                    audioQueue.push(audio);
+                    playNextAudio();
                 }
-            });
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+            }
         }
 
         // Функция создания фоновой анимации
@@ -1961,14 +1953,8 @@
                     // ЗАПУСКАЕМ АНИМАЦИЮ РЕЧИ НА ОСНОВЕ ТЕКСТА
                     startSpeechAnimation(data.text);
                     
-                    // Воспроизводим аудио с улучшенной обработкой для iOS
-                    playAudio(data.audio)
-                        .then(() => {
-                            console.log('Аудио успешно воспроизведено');
-                        })
-                        .catch(error => {
-                            console.error('Ошибка воспроизведения аудио:', error);
-                        });
+                    // Воспроизводим аудио с iOS-совместимым подходом
+                    playAudio(data.audio);
                     
                     if (!isLessonActive) {
                         showTeacherSpeech(data.text);
@@ -2461,19 +2447,13 @@
                 createBackgroundAnimation();
             });
             
-            // iOS audio workaround
+            // iOS audio workaround - preload audio context
             if (isIOS) {
                 document.addEventListener('touchstart', function() {
                     if (!audioContext) {
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     }
                 }, { once: true });
-                
-                // Добавляем обработчик для пользовательского взаимодействия
-                document.addEventListener('click', function() {
-                    // iOS требует пользовательского взаимодействия для аудио
-                    console.log('Пользовательское взаимодействие для iOS аудио');
-                });
             }
             
             // Устанавливаем инструмент по умолчанию
