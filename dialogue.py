@@ -707,6 +707,7 @@ class DialogueManager:
         self.current_question_index = 0
         
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ С ПОСЛЕДОВАТЕЛЬНОЙ ГЕНЕРАЦИЕЙ ===")
+        print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
         # Инициализируем контекст для генерации вопросов
         lesson_context = " ".join(self.lesson_content)
@@ -720,10 +721,11 @@ class DialogueManager:
         first_question = self._generate_next_practice_question()
         if first_question:
             print(f"Начинаем практику с вопроса: {first_question}")
-            self.waiting_for_answer = True
+            print(f"Установлен waiting_for_answer: {self.waiting_for_answer}")
             return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
             print("Не удалось сгенерировать первый вопрос практики")
+            self.practice_active = False
             return "Практические задания временно недоступны."
 
     def _generate_next_practice_question(self) -> Optional[str]:
@@ -738,6 +740,10 @@ class DialogueManager:
                     "answer": ""  # Ответ будет сгенерирован при проверке
                 }
                 self.current_question_index += 1
+                # ВАЖНО: Устанавливаем флаг ожидания ответа!
+                self.waiting_for_answer = True
+                print(f"Сгенерирован вопрос {self.current_question_index}: {question}")
+                print(f"Установлен waiting_for_answer: {self.waiting_for_answer}")
                 return question
             return None
         except Exception as e:
@@ -746,7 +752,11 @@ class DialogueManager:
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
         """Оценивает ответ и генерирует следующий вопрос (новый метод)"""
+        print(f"Обработка ответа: '{student_answer}'")
+        print(f"Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
+        
         if not self.practice_active or not self.waiting_for_answer:
+            print("Практика не активна или не ожидается ответ")
             return "Практика не активна."
         
         print(f"Оценка ответа и генерация следующего вопроса...")
@@ -763,12 +773,16 @@ class DialogueManager:
             current_question["question"]
         )
         
+        # Сбрасываем флаг ожидания перед генерацией следующего вопроса
+        self.waiting_for_answer = False
+        print(f"Сброшен waiting_for_answer: {self.waiting_for_answer}")
+        
         # Проверяем, нужно ли генерировать следующий вопрос
         if self.current_question_index < 5:  # Всего 5 вопросов
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
-                self.waiting_for_answer = True
+                # Флаг waiting_for_answer уже установлен в _generate_next_practice_question
                 return response
             else:
                 # Не удалось сгенерировать следующий вопрос
