@@ -175,33 +175,50 @@ class DialogueManager:
     def _load_lesson_content(self, lesson_file: Path) -> List[str]:
         """Загружает содержание урока из текстового файла"""
         try:
+            print(f"📖 Загрузка урока из файла: {lesson_file}")
+            
+            if not lesson_file.exists():
+                print(f"❌ Файл урока не существует: {lesson_file}")
+                return ["Файл урока не найден. Попробуйте другой урок."]
+                
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # Разбиваем на абзацы (по пустым строкам)
-                paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+            
+            print(f"✅ Файл прочитан, длина: {len(content)} символов")
+            
+            # Разбиваем на абзацы (по пустым строкам)
+            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+            
+            # Если абзацев нет, разбиваем на предложения
+            if not paragraphs:
+                print("⚠️ Нет абзацев, разбиваем на предложения")
+                sentences = re.split(r'(?<=[.!?])\s+', content)
+                # Объединяем предложения в группы по 2-3 для плавного чтения
+                current_paragraph = []
+                paragraphs = []
                 
-                # Если абзацев нет, разбиваем на предложения
-                if not paragraphs:
-                    sentences = re.split(r'(?<=[.!?])\s+', content)
-                    # Объединяем предложения в группы по 2-3 для плавного чтения
-                    current_paragraph = []
-                    paragraphs = []
-                    
-                    for sentence in sentences:
-                        if sentence.strip():
-                            current_paragraph.append(sentence.strip())
-                            if len(current_paragraph) >= 2:  # Группируем по 2-3 предложения
-                                paragraphs.append(' '.join(current_paragraph))
-                                current_paragraph = []
-                    
-                    # Добавляем оставшиеся предложения
-                    if current_paragraph:
-                        paragraphs.append(' '.join(current_paragraph))
+                for sentence in sentences:
+                    if sentence.strip():
+                        current_paragraph.append(sentence.strip())
+                        if len(current_paragraph) >= 2:  # Группируем по 2-3 предложения
+                            paragraphs.append(' '.join(current_paragraph))
+                            current_paragraph = []
                 
-                return paragraphs if paragraphs else ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
+                # Добавляем оставшиеся предложения
+                if current_paragraph:
+                    paragraphs.append(' '.join(current_paragraph))
+            
+            print(f"✅ Урок разбит на {len(paragraphs)} абзацев")
+            
+            if not paragraphs:
+                print("❌ Не удалось разбить урок на абзацы")
+                return ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
+                
+            return paragraphs
+            
         except Exception as e:
-            print(f"Ошибка загрузки содержания урока: {e}")
-            return ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
+            print(f"❌ Ошибка загрузки содержания урока: {e}")
+            return ["Ошибка загрузки урока. Попробуйте позже."]
 
     def _similarity(self, a: str, b: str) -> float:
         """Вычисление схожести строк"""
@@ -407,7 +424,7 @@ class DialogueManager:
     def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
         """Генерирует урок по запрошенной теме с помощью LLM"""
         try:
-            print(f"Генерация урока по теме: {topic}")
+            print(f"🎯 Генерация урока по теме: {topic}")
             
             # Формируем промпт для генерации урока
             system_prompt = """Ты - эксперт по созданию образовательных материалов. 
@@ -421,22 +438,25 @@ class DialogueManager:
 ВАЖНО: Разделяй абзацы ДВУМЯ переводами строки (\\n\\n) для правильного отображения.
 Возвращай только текст урока без дополнительных комментариев."""
 
-            # Запрос к LLM
+            # Запрос к LLM с увеличенным количеством токенов
             lesson_content = self.llm._query_llm_api(
-                prompt=f"Создай подробный урок на тему: {topic}",
+                prompt=f"Создай подробный образовательный урок на тему: '{topic}'. Урок должен быть понятным и структурированным.",
                 context="",
                 subject="общее",
                 system_prompt=system_prompt,
-                max_tokens=2000
+                max_tokens=2500  # Увеличиваем лимит токенов
             )
             
             if not lesson_content:
-                print("Ошибка: LLM не вернул содержание урока")
+                print("❌ Ошибка: LLM не вернул содержание урока")
                 return None
+            
+            print(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
             
             # Убедимся, что есть правильное разделение на абзацы
             # Если в ответе нет двойных переводов строк, добавим их после предложений
             if '\n\n' not in lesson_content:
+                print("⚠️ В ответе нет двойных переводов строк, добавляем...")
                 # Разбиваем на предложения и добавляем двойные переводы строк
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
                 lesson_content = '\n\n'.join(sentences)
@@ -446,15 +466,18 @@ class DialogueManager:
             filename = f"{lesson_id}.txt"
             lesson_path = self.lessons_dir / filename
             
+            # Записываем контент в файл
             with open(lesson_path, 'w', encoding='utf-8') as f:
                 f.write(f"Урок по теме: {topic}\n\n")
                 f.write(lesson_content)
+            
+            print(f"✅ Файл урока создан: {lesson_path}")
             
             # Добавляем в список уроков
             subject = "общее"
             lesson_data = {
                 'id': lesson_id,
-                'title': topic,
+                'title': f"Урок по теме: {topic}",
                 'file_path': lesson_path,
                 'type': 'text',
                 'is_generated': True
@@ -464,11 +487,11 @@ class DialogueManager:
                 self.lessons[subject] = []
             self.lessons[subject].append(lesson_data)
             
-            print(f"Урок успешно сгенерирован: {lesson_id}")
+            print(f"✅ Урок успешно сгенерирован и добавлен в список: {lesson_id}")
             return lesson_data
             
         except Exception as e:
-            print(f"Ошибка генерации урока: {e}")
+            print(f"❌ Ошибка генерации урока: {e}")
             return None
 
     def _check_for_lesson_generation_intent(self, text_lower: str) -> bool:
@@ -512,23 +535,43 @@ class DialogueManager:
                         # ВАЖНО: Сразу начинаем сгенерированный урок!
                         self._start_generated_lesson(generated_lesson)
                         return True
+                    else:
+                        print("❌ Не удалось сгенерировать урок")
         return False
 
     def _start_generated_lesson(self, lesson_data: dict):
         """Начинает сгенерированный урок"""
-        self.current_subject = "общее"
-        self.selected_lesson = lesson_data
-        self.lesson_started = True
-        self.current_state = "lesson_reading"
-        self.current_paragraph = 0
-        self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
-        self.knowledge_base = KnowledgeBase(self.current_subject)
-        
-        # Очищаем историю диалога при начале урока
-        self.conversation_history = []
-        self.conversation_context = []
-        
-        print(f"Начинаем сгенерированный урок: {lesson_data['title']}")
+        try:
+            print(f"🚀 Начинаем сгенерированный урок: {lesson_data['title']}")
+            
+            self.current_subject = "общее"
+            self.selected_lesson = lesson_data
+            self.lesson_started = True
+            self.current_state = "lesson_reading"
+            self.current_paragraph = 0
+            
+            # Загружаем содержание урока
+            print(f"📖 Загрузка содержания урока из: {lesson_data['file_path']}")
+            self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
+            
+            if not self.lesson_content:
+                print("❌ Не удалось загрузить содержание урока")
+                return
+            
+            print(f"✅ Урок загружен, количество абзацев: {len(self.lesson_content)}")
+            
+            # Инициализируем базу знаний
+            self.knowledge_base = KnowledgeBase(self.current_subject)
+            
+            # Очищаем историю диалога при начале урока
+            self.conversation_history = []
+            self.conversation_context = []
+            
+            print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат!")
+            
+        except Exception as e:
+            print(f"❌ Ошибка начала сгенерированного урока: {e}")
+            self.lesson_started = False
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -689,12 +732,16 @@ class DialogueManager:
 
     def _get_next_paragraph(self) -> Optional[str]:
         """Возвращает следующий абзац урока"""
+        print(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
+        
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
+            print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
         else:
             # Урок завершен - запускаем практику
+            print("🏁 Урок завершен, запускаем практику")
             practice_message = self._start_practice_session()
             return practice_message
 
