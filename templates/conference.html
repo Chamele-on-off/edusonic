@@ -1,1106 +1,2496 @@
-from flask import Flask, render_template, send_from_directory, jsonify, request, send_file
-import os
-from pathlib import Path
-from flask_socketio import SocketIO, emit, join_room, leave_room
-from gtts import gTTS
-import io
-import base64
-import time
-import threading
-from collections import defaultdict
-import random
-from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
-import requests
-import json
-from datetime import datetime
-from werkzeug.utils import secure_filename
-import re
-
-app = Flask(__name__, static_folder='static')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
-
-BASE_DIR = Path(__file__).parent
-FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
-LESSONS_DIR = BASE_DIR / 'lessons'
-MATERIALS_DIR = BASE_DIR / 'materials'
-PRACTICE_DIR = BASE_DIR / 'materials' / 'practice'
-
-# Создаем необходимые папки
-for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR]:
-    os.makedirs(folder, exist_ok=True)
-
-# Глобальные состояния
-room_participants = defaultdict(set)
-room_speech_data = defaultdict(list)
-room_speaking = defaultdict(bool)
-room_ai_activated = defaultdict(bool)
-room_dialogue = defaultdict(lambda: DialogueManager(socketio))
-room_lessons = defaultdict(dict)
-room_llm_mode = defaultdict(lambda: get_llm_mode())
-room_teacher_speaking = defaultdict(bool)
-room_practice_active = defaultdict(bool)
-room_current_question_index = defaultdict(int)
-room_current_avatar = defaultdict(lambda: 'teacher')  # Храним текущий аватар для каждой комнаты
-
-def reset_speaking_state(room_id, is_teacher=False):
-    """Сбрасывает состояние речи для указанной комнаты"""
-    room_speaking[room_id] = False
-    if is_teacher:
-        room_teacher_speaking[room_id] = False
-    socketio.emit('speaking_state', {'speaking': False}, room=room_id)
-
-def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст и добавляет его в историю"""
-    if not text.strip():
-        return
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Виртуальный класс</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    <style>
+        :root {
+            --primary: #4263EB;
+            --secondary: #3a0ca3;
+            --success: #4cc9f0;
+            --danger: #f72585;
+            --dark: #212529;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --teacher-color: #4cc9f0;
+            --student-color: #f72585;
+            --board-bg: #F5F6F8;
+            --board-text: #333333;
+            --board-border: #E6E9EF;
+            --board-shadow: rgba(0, 0, 0, 0.1);
+        }
         
-    # Устанавливаем флаг, что учитель начинает говорить
-    if is_teacher:
-        room_teacher_speaking[room_id] = True
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
         
-    room_speaking[room_id] = True
-    socketio.emit('speaking_state', {'speaking': True}, room=room_id)
-    
-    audio_data = text_to_speech(text, lang='ru')
-    if audio_data:
-        emit('speech_audio', {
-            'audio': audio_data,
-            'text': text,
-            'timestamp': time.time(),
-            'voice_type': voice_type,
-            'is_teacher': is_teacher
-        }, room=room_id)
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
         
-        if not skip_history:
-            room_speech_data[room_id].append({
-                'text': text,
-                'timestamp': time.time(),
-                'type': 'generated',
-                'voice_type': voice_type,
-                'is_teacher': is_teacher
-            })
-            if len(room_speech_data[room_id]) > 50:
-                room_speech_data[room_id].pop(0)
-    
-    # Длительность речи рассчитываем на основе длины текста
-    speech_duration = max(2, len(text) * 0.1)
-    threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
-
-@app.route('/')
-def home():
-    return render_template('teacher.html')
-
-@app.route('/conference')
-def conference():
-    room_id = request.args.get('room', 'default')
-    embed = request.args.get('embed', 'false') == 'true'
-    return render_template('conference.html', room_id=room_id, embed=embed)
-
-@app.route('/api/avatars')
-def get_avatars():
-    try:
-        avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
-        return jsonify({"avatars": avatars})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/frames/<avatar_name>')
-def get_frames(avatar_name):
-    try:
-        avatar_dir = FRAMES_DIR / avatar_name
-        if not avatar_dir.exists():
-            return jsonify({"error": "Avatar not found"}), 404
+        #header {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 100;
+        }
         
-        # Поддерживаемые форматы изображений
-        supported_formats = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')
-        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(supported_formats)]
+        #logo {
+            font-weight: bold;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
         
-        # Сортируем кадры для правильной последовательности
-        frames.sort()
+        #main {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
         
-        return jsonify({"frames": frames})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/frames/<avatar_name>/<path:filename>')
-def serve_frame(avatar_name, filename):
-    return send_from_directory(FRAMES_DIR / avatar_name, filename)
-
-def text_to_speech(text, lang='ru'):
-    """Преобразует текст в аудио (base64)"""
-    try:
-        tts = gTTS(text=text, lang=lang, slow=False)
-        mp3_fp = io.BytesIO()
-        tts.write_to_fp(mp3_fp)
-        mp3_fp.seek(0)
-        return base64.b64encode(mp3_fp.read()).decode('utf-8')
-    except Exception as e:
-        print(f"Error in text_to_speech: {e}")
-        return None
-
-@socketio.on('connect')
-def handle_connect():
-    print('Client connected:', request.sid)
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    for room_id in list(room_participants.keys()):
-        if request.sid in room_participants[room_id]:
-            room_participants[room_id].remove(request.sid)
-            emit('participant_left', {'sid': request.sid}, room=room_id)
-            emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-
-@socketio.on('join_room')
-def handle_join_room(data):
-    room_id = data['room_id']
-    join_room(room_id)
-    room_participants[room_id].add(request.sid)
-    
-    if room_id not in room_dialogue:
-        room_dialogue[room_id] = DialogueManager(socketio)
-        room_dialogue[room_id].room_id = room_id
-    
-    # Устанавливаем режим LLM для диалог менеджера комнаты
-    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-    
-    if len(room_participants[room_id]) == 1:
-        greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
-        speak_text(room_id, greeting, voice_type='female', is_teacher=True)
-    
-    emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-    emit('new_participant', {'sid': request.sid}, room=room_id)
-    
-    # Отправляем текущий аватар комнаты новому участнику
-    emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
-    
-    if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
-        welcome_text = "Учитель с искусственным интеллектом активирован"
-        speak_text(room_id, welcome_text, voice_type='female', is_teacher=True)
-        emit('ai_teacher_available', {}, room=room_id)
-    
-    if room_speech_data[room_id]:
-        emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
-
-@socketio.on('get_current_avatar')
-def handle_get_current_avatar(data):
-    """Отправляет текущий аватар комнаты"""
-    room_id = data['room_id']
-    emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
-
-@socketio.on('client_start_animation')
-def handle_client_start_animation(data):
-    """Обработчик команды запуска анимации от учителя"""
-    room_id = data['room_id']
-    avatar_name = data['avatar_name']
-    print(f"Получена команда запуска анимации для комнаты {room_id}, аватар: {avatar_name}")
-    
-    # Сохраняем текущий аватар комнаты
-    room_current_avatar[room_id] = avatar_name
-    
-    # Уведомляем всех клиентов в комнате о смене аватара
-    emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
-    emit('animation_ready', {'status': 'ready'}, room=room_id)
-
-@socketio.on('avatar_changed')
-def handle_avatar_changed(data):
-    """Обработчик смены аватара"""
-    room_id = data['room_id']
-    avatar_name = data['avatar_name']
-    print(f"Смена аватара в комнате {room_id} на {avatar_name}")
-    
-    # Сохраняем новый аватар для комнаты
-    room_current_avatar[room_id] = avatar_name
-    
-    # Пересылаем команду всем клиентам в комнате
-    emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
-
-@socketio.on('generate_speech')
-def handle_generate_speech(data):
-    room_id = data['room_id']
-    text = data['text']
-    voice_type = data.get('voice', 'male')
-    speak_text(room_id, text, voice_type)
-
-@socketio.on('student_answer')
-def handle_student_answer(data):
-    """Обработчик ответов ученика во время практики с последовательной генерацией"""
-    room_id = data['room_id']
-    answer = data['answer']
-    user_sid = request.sid
-
-    print(f"📝 Получен ответ ученика: {answer}")
-    print(f"📊 Состояние комнаты: practice_active={room_practice_active[room_id]}, teacher_speaking={room_teacher_speaking[room_id]}")
-
-    # ИГНОРИРУЕМ ответ, если учитель говорит
-    if room_teacher_speaking[room_id]:
-        print(f"🔇 Игнорирую ответ ученика, так как учитель говорит: {answer}")
-        return
-
-    # Проверяем, активна ли практика
-    if not room_practice_active[room_id]:
-        print(f"🔇 Практика не активна, игнорирую ответ: {answer}")
-        return
-
-    # Проверяем, ожидает ли система ответа в диалог менеджере
-    if room_id in room_dialogue:
-        dialogue = room_dialogue[room_id]
-        if not dialogue.waiting_for_answer:
-            print(f"🔇 Система не ожидает ответа, игнорирую: {answer}")
-            return
-
-    # Добавляем ответ в историю
-    room_speech_data[room_id].append({
-        'text': f"Ответ ученика: {answer}",
-        'timestamp': time.time(),
-        'type': 'practice_answer',
-        'sid': user_sid
-    })
-    
-    # Обрабатываем ответ через диалог менеджер
-    if room_id in room_dialogue:
-        print(f"🔄 Обработка ответа через диалог менеджер...")
+        #video-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
         
-        # Сбрасываем флаг ожидания ПЕРЕД обработкой
-        room_dialogue[room_id].waiting_for_answer = False
+        #background-animation {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
         
-        # Используем новый метод для последовательной обработки
-        response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
+        .animated-circle {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.3;
+        }
         
-        if response:
-            print(f"🎯 Ответ учителя: {response}")
+        /* Основное окно урока */
+        #lesson-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--board-bg);
+            padding: 0;
+            border-radius: 16px;
+            width: 80%;
+            height: 70%;
+            overflow: hidden;
+            z-index: 5;
+            display: none;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--board-border);
+            -webkit-overflow-scrolling: touch;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        /* Окно рисования */
+        #drawing-window {
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            background: var(--board-bg);
+            padding: 0;
+            border-radius: 16px;
+            width: 80%;
+            height: 70%;
+            overflow: hidden;
+            z-index: 6;
+            display: none;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--board-border);
+            -webkit-overflow-scrolling: touch;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        .window-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid var(--board-border);
+            cursor: move;
+            user-select: none;
+        }
+        
+        .window-title {
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        .window-close {
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+            border: none;
+            background: var(--light);
+            color: var(--gray);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .window-close:hover {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .board-toolbar {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid var(--board-border);
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .toolbar-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 1px solid var(--board-border);
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--gray);
+            font-size: 16px;
+        }
+        
+        .toolbar-btn:hover, .toolbar-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .toolbar-separator {
+            width: 1px;
+            height: 20px;
+            background: var(--board-border);
+            margin: 0 8px;
+        }
+        
+        #lesson-canvas {
+            flex: 1;
+            height: calc(100% - 56px);
+            overflow: auto;
+            padding: 30px;
+            background: var(--board-bg);
+            position: relative;
+            touch-action: none;
+        }
+        
+        #drawing-canvas-container {
+            flex: 1;
+            height: calc(100% - 56px);
+            overflow: hidden;
+            background: var(--board-bg);
+            position: relative;
+            touch-action: none;
+        }
+        
+        #drawing-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        
+        .text-widget {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--board-border);
+            min-width: 200px;
+            max-width: 600px;
+            position: relative;
+            cursor: grab;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .text-widget:active {
+            cursor: grabbing;
+            box-shadow: 0 4px 20px rgba(66, 99, 235, 0.15);
+        }
+        
+        .widget-handle {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .text-widget:hover .widget-handle {
+            opacity: 1;
+        }
+        
+        .handle-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            border: none;
+            background: var(--light);
+            color: var(--gray);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .handle-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+        
+        #lesson-text {
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 120px;
+            outline: none;
+            border: none;
+            resize: none;
+            width: 100%;
+            background: transparent;
+        }
+        
+        .board-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(var(--board-border) 1px, transparent 1px),
+                linear-gradient(90deg, var(--board-border) 1px, transparent 1px);
+            background-size: 20px 20px;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+        
+        .typing-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: var(--primary);
+            margin-left: 2px;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        #answer-input-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 20;
+            display: none;
+            width: 80%;
+            max-width: 500px;
+        }
+        
+        #answer-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--board-border);
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+        
+        #submit-answer {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .color-picker {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            margin-left: 10px;
+        }
+        
+        .color-option {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        
+        .color-option.active {
+            border-color: var(--dark);
+        }
+        
+        #teacher-video-container {
+            position: absolute;
+            bottom: 100px;
+            right: 20px;
+            border: 3px solid var(--teacher-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(76, 201, 240, 0.3);
+            z-index: 10;
+            background: black;
+            transition: all 0.3s ease;
+            width: 200px;
+            height: 150px;
+        }
+        
+        #teacher-video {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        #teacher-speech {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            right: 0;
+            background: linear-gradient(135deg, var(--teacher-color), #3a86ff);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 20px;
+            max-width: 250px;
+            font-size: 14px;
+            z-index: 11;
+            display: none;
+            box-shadow: 0 8px 20px rgba(76, 201, 240, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            animation: speechAppear 0.3s ease-out;
+        }
+        
+        @keyframes speechAppear {
+            from {
+                opacity: 0;
+                transform: translateY(10px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        #self-video-container {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            width: 200px;
+            height: 150px;
+            border: 3px solid var(--student-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(247, 37, 133, 0.3);
+            z-index: 10;
+            background: black;
+        }
+        
+        #self-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        #student-speech {
+            position: absolute;
+            bottom: calc(100% + 10px);
+            left: 0;
+            background: linear-gradient(135deg, var(--student-color), #ff6b6b);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 20px;
+            max-width: 250px;
+            font-size: 14px;
+            z-index: 11;
+            display: none;
+            box-shadow: 0 8px 20px rgba(247, 37, 133, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            animation: speechAppear 0.3s ease-out;
+        }
+        
+        #status-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-width: 80%;
+        }
+        
+        #participants {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        #controls {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            font-size: 20px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .control-btn.active {
+            background: var(--primary);
+        }
+        
+        .control-btn span {
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        
+        #end-call-btn {
+            background: var(--danger);
+        }
+        
+        #end-call-btn:active {
+            background: #e01b74;
+            transform: scale(0.95);
+        }
+        
+        #activate-ai-btn {
+            position: absolute;
+            bottom: 270px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 30px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            display: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        #activate-ai-btn:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+        
+        .camera-permission {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 20;
+            display: none;
+        }
+        
+        .camera-permission button {
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 12px;
+            padding: 8px;
+            display: flex;
+            gap: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10;
+        }
+        
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--board-border);
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            color: var(--gray);
+            transition: all 0.2s ease;
+        }
+        
+        .zoom-btn:hover {
+            background: var(--light);
+            color: var(--primary);
+        }
+        
+        @media (max-width: 768px) {
+            #header {
+                padding: 10px 15px;
+            }
             
-            # Отправляем ответ учителя
-            emit('speech_text', {
-                'text': f"Учитель: {response}",
-                'sid': 'teacher',
-                'is_teacher': True
-            }, room=room_id)
+            #logo {
+                font-size: 1.1rem;
+            }
             
-            # Озвучиваем ответ
-            speak_text(room_id, response, voice_type='female', is_teacher=True)
+            #lesson-content, #drawing-window {
+                width: 90%;
+                height: 60%;
+            }
             
-            # Проверяем, завершена ли практика
-            if not room_dialogue[room_id].practice_active:
-                room_practice_active[room_id] = False
-                room_current_question_index[room_id] = 0
-                emit('practice_ended', {}, room=room_id)
-                print("🏁 Практика завершена")
-        else:
-            # Если response is None, практика завершена
-            room_practice_active[room_id] = False
-            room_current_question_index[room_id] = 0
-            room_dialogue[room_id].waiting_for_answer = False
-            emit('practice_ended', {}, room=room_id)
-            print("🏁 Практика завершена (response=None)")
-
-@socketio.on('recognized_speech')
-def handle_recognized_speech(data):
-    room_id = data['room_id']
-    text = data['text']
-    user_sid = request.sid
-
-    # ИГНОРИРУЕМ распознанную речь, если учитель говорит
-    if room_teacher_speaking[room_id]:
-        print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
-        return
-
-    # Игнорируем распознавание системных сообщений и короткие фразы
-    if (text.startswith("Учитель:") or "учитель" in text.lower() or 
-        len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
-        return
-    
-    room_speech_data[room_id].append({
-        'text': text,
-        'timestamp': time.time(),
-        'type': 'recognized',
-        'sid': user_sid
-    })
-    if len(room_speech_data[room_id]) > 50:
-        room_speech_data[room_id].pop(0)
-    
-    emit('speech_text', {'text': text, 'sid': user_sid}, room=room_id)
-    
-    if room_ai_activated[room_id]:
-        dialogue = room_dialogue[room_id]
+            #lesson-canvas {
+                padding: 20px;
+            }
+            
+            .text-widget {
+                padding: 16px;
+                max-width: 400px;
+            }
+            
+            .board-toolbar {
+                padding: 10px 12px;
+            }
+            
+            .toolbar-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
+            }
+            
+            #teacher-video-container {
+                width: 150px;
+                height: 112px;
+                bottom: 90px;
+                right: 15px;
+            }
+            
+            #self-video-container {
+                width: 150px;
+                height: 112px;
+                bottom: 90px;
+                left: 15px;
+            }
+            
+            #teacher-speech,
+            #student-speech {
+                max-width: 200px;
+                font-size: 13px;
+                padding: 10px 16px;
+            }
+            
+            #controls {
+                padding: 10px;
+                gap: 10px;
+            }
+            
+            .control-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 18px;
+            }
+            
+            .control-btn span {
+                font-size: 10px;
+            }
+            
+            #activate-ai-btn {
+                bottom: 220px;
+                padding: 12px 24px;
+                font-size: 16px;
+            }
+            
+            #answer-input-container {
+                width: 90%;
+                padding: 12px;
+            }
+            
+            #answer-input {
+                padding: 10px;
+                font-size: 14px;
+            }
+        }
         
-        # Если урок уже начат, обрабатываем как вопрос/команду
-        if dialogue.is_lesson_started():
-            # Сначала проверяем команды управления
-            if any(word in text.lower() for word in ["записал", "дальше", 'продолжай', "следующий", "продолжить"]):
-                # Получаем следующий абзац урока
-                next_paragraph = dialogue._get_next_paragraph()
-                if next_paragraph:
-                    # Отправляем текст
-                    emit('speech_text', {
-                        'text': f"Учитель: {next_paragraph}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    # Озвучиваем следующий абзац
-                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-                return
+        @media (max-width: 480px) {
+            #lesson-content, #drawing-window {
+                width: 95%;
+                height: 55%;
+            }
             
-            # Команды остановки
-            if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
-                stop_response = dialogue.process_input(text)
-                if stop_response:
-                    # Отправляем текст
-                    emit('speech_text', {
-                        'text': f"Учитель: {stop_response}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    # Озвучиваем ответ на остановку
-                    speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
-                return
+            #lesson-canvas {
+                padding: 15px;
+            }
             
-            # Обработка вопросов во время чтения урока
-            response = dialogue.handle_question_during_lesson(text)
-            if response:
-                # Отправляем текст
-                emit('speech_text', {
-                    'text': f"Учитель: {response}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
-        else:
-            # Обработка диалога выбора урока
-            response = dialogue.process_input(text)
+            .text-widget {
+                padding: 12px;
+                max-width: 300px;
+            }
             
-            # Если response None - это значит был выбран предмет и нужно начать урок
-            if response is None:
-                # Урок выбран, начинаем чтение
-                lesson_data = dialogue.get_selected_lesson()
-                if lesson_data:
-                    emit('lesson_started', {
-                        'lesson_id': lesson_data['id'],
-                        'title': lesson_data['title'],
-                        'subject': dialogue.get_current_subject()
-                    }, room=room_id)
+            #teacher-video-container {
+                width: 120px;
+                height: 90px;
+                bottom: 80px;
+                right: 10px;
+            }
+            
+            #self-video-container {
+                width: 120px;
+                height: 90px;
+                bottom: 80px;
+                left: 10px;
+            }
+            
+            #teacher-speech,
+            #student-speech {
+                max-width: 180px;
+                font-size: 12px;
+                padding: 8px 14px;
+                bottom: calc(100% + 8px);
+            }
+            
+            .control-btn {
+                width: 45px;
+                height: 45px;
+                font-size: 16px;
+            }
+            
+            #status-container {
+                font-size: 12px;
+                padding: 8px 12px;
+                max-width: 70%;
+            }
+            
+            #activate-ai-btn {
+                bottom: 200px;
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            
+            .zoom-controls {
+                bottom: 15px;
+                right: 15px;
+            }
+            
+            .zoom-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            
+            .board-toolbar {
+                gap: 5px;
+            }
+            
+            .toolbar-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 12px;
+            }
+            
+            .color-picker {
+                margin-left: 5px;
+            }
+            
+            .color-option {
+                width: 16px;
+                height: 16px;
+            }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .slide-out {
+            animation: slideOut 0.5s ease forwards;
+        }
+        
+        @keyframes slideOut {
+            from { 
+                opacity: 1; 
+                transform: translateY(0) scale(1);
+            }
+            to { 
+                opacity: 0; 
+                transform: translateY(-20px) scale(0.95);
+            }
+        }
+        
+        body.embedded {
+            height: auto;
+        }
+        
+        body.embedded #header {
+            display: none;
+        }
+        
+        body.embedded #controls {
+            padding: 10px;
+        }
+        
+        body.embedded .control-btn {
+            width: 50px;
+                height: 50px;
+                font-size: 16px;
+        }
+        
+        /* iOS specific fixes */
+        @supports (-webkit-touch-callout: none) {
+            body {
+                height: -webkit-fill-available;
+            }
+            
+            #main {
+                height: -webkit-fill-available;
+            }
+            
+            .control-btn {
+                cursor: default;
+            }
+            
+            /* iOS audio fix */
+            audio {
+                display: none;
+            }
+        }
+        
+        /* Mobile audio fix */
+        .audio-fix {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* Loading animation */
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--teacher-color);
+            animation: spin 1s ease-in-out infinite;
+            z-index: 100;
+        }
+        
+        @keyframes spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        /* Speech recognition status */
+        #speech-status {
+            font-size: 12px;
+            margin-top: 3px;
+            color: #95a5a6;
+        }
+    </style>
+</head>
+<body>
+    <div id="header" class="fade-in">
+        <div id="logo">
+            <i class="fas fa-chalkboard-teacher"></i>
+            <span>Виртуальный класс</span>
+        </div>
+        <div id="meeting-id">Комната: <span id="room-name">default</span></div>
+    </div>
+
+    <div id="main">
+        <div id="video-container">
+            <div id="background-animation"></div>
+            
+            <!-- Индикатор загрузки аватара -->
+            <div id="avatar-loading" class="loading-spinner" style="display: none;"></div>
+            
+            <!-- Основное окно урока -->
+            <div id="lesson-content">
+                <div class="window-header">
+                    <div class="window-title">Учебная доска</div>
+                    <button class="window-close" id="close-lesson">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="board-toolbar">
+                    <button class="toolbar-btn" id="text-tool" title="Текст">
+                        <i class="fas fa-font"></i>
+                    </button>
+                    <button class="toolbar-btn" id="draw-tool" title="Рисование">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="toolbar-btn" id="answer-tool" title="Ответить">
+                        <i class="fas fa-comment-dots"></i>
+                    </button>
+                    <div class="toolbar-separator"></div>
+                    <button class="toolbar-btn" id="clear-text" title="Очистить текст">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div id="lesson-canvas">
+                    <div class="board-grid"></div>
+                    <div class="text-widget" id="main-text-widget">
+                        <div class="widget-handle">
+                            <button class="handle-btn" id="close-text-widget">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div id="lesson-text"></div>
+                    </div>
+                </div>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="zoom-out" title="Уменьшить">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <button class="zoom-btn" id="zoom-reset" title="Сбросить масштаб">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="zoom-btn" id="zoom-in" title="Увеличить">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                
+                <div id="answer-input-container">
+                    <input type="text" id="answer-input" placeholder="Введите ваш ответ...">
+                    <button id="submit-answer">Отправить</button>
+                </div>
+            </div>
+            
+            <!-- Окно рисования -->
+            <div id="drawing-window">
+                <div class="window-header">
+                    <div class="window-title">Доска для рисования</div>
+                    <button class="window-close" id="close-drawing">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="board-toolbar">
+                    <button class="toolbar-btn active" id="drawing-pen" title="Карандаш">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="toolbar-btn" id="drawing-eraser" title="Ластик">
+                        <i class="fas fa-eraser"></i>
+                    </button>
+                    <div class="toolbar-separator"></div>
+                    <button class="toolbar-btn" id="clear-drawing" title="Очистить рисунок">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <div class="color-picker">
+                        <div class="color-option active" style="background-color: #000000;" data-color="#000000"></div>
+                        <div class="color-option" style="background-color: #ff0000;" data-color="#ff0000"></div>
+                        <div class="color-option" style="background-color: #0000ff;" data-color="#0000ff"></div>
+                        <div class="color-option" style="background-color: #00aa00;" data-color="#00aa00"></div>
+                    </div>
+                </div>
+                <div id="drawing-canvas-container">
+                    <canvas id="drawing-canvas"></canvas>
+                </div>
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="drawing-zoom-out" title="Уменьшить">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                    <button class="zoom-btn" id="drawing-zoom-reset" title="Сбросить масштаб">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="zoom-btn" id="drawing-zoom-in" title="Увеличить">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="teacher-video-container" class="fade-in">
+                <img id="teacher-video" src="" alt="Аватар учителя">
+                <div id="teacher-speech"></div>
+            </div>
+            
+            <div id="self-video-container" class="fade-in">
+                <video id="self-video" autoplay muted playsinline></video>
+                <div id="student-speech"></div>
+            </div>
+            
+            <div id="status-container" class="fade-in">
+                <div id="status">Подключение к конференции...</div>
+                <div id="participants">
+                    <i class="fas fa-users"></i>
+                    <span id="participants-count">1</span> участников
+                </div>
+                <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">😴 Режим покоя</div>
+                <div id="speech-status">🎤 Распознавание: выкл</div>
+            </div>
+            
+            <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
+            
+            <div class="camera-permission fade-in" id="camera-permission">
+                <p>Разрешите доступ к камере и микрофону для участия в конференции</p>
+                <button id="enable-camera-btn">Разрешить доступ</button>
+            </div>
+            
+            <!-- Audio fix for iOS -->
+            <audio id="audio-fix" class="audio-fix" controls></audio>
+        </div>
+    </div>
+
+    <div id="controls" class="fade-in">
+        <button class="control-btn" id="mic-btn" title="Микрофон">
+            <i class="fas fa-microphone"></i>
+            <span>Вкл</span>
+        </button>
+        <button class="control-btn" id="cam-btn" title="Камера">
+            <i class="fas fa-video"></i>
+            <span>Вкл</span>
+        </button>
+        <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
+            <i class="fas fa-desktop"></i>
+            <span>Экран</span>
+        </button>
+        <button class="control-btn" id="fullscreen-btn" title="Полный экран">
+            <i class="fas fa-expand"></i>
+            <span>Полный</span>
+        </button>
+        <button class="control-btn" id="end-call-btn" title="Выйти">
+            <i class="fas fa-phone-slash"></i>
+            <span>Выйти</span>
+        </button>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // Конфигурация
+        const FPS = 10;
+        
+        // Основной код конференции
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room') || 'default';
+        const isEmbedded = window.location.search.includes('embed=true');
+        document.getElementById('room-name').textContent = roomId;
+        
+        // Элементы DOM
+        const teacherVideo = document.getElementById('teacher-video');
+        const selfVideo = document.getElementById('self-video');
+        const micBtn = document.getElementById('mic-btn');
+        const camBtn = document.getElementById('cam-btn');
+        const screenBtn = document.getElementById('screen-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const endCallBtn = document.getElementById('end-call-btn');
+        const statusDiv = document.getElementById('status');
+        const participantsCount = document.getElementById('participants-count');
+        const teacherSpeech = document.getElementById('teacher-speech');
+        const studentSpeech = document.getElementById('student-speech');
+        const activateAiBtn = document.getElementById('activate-ai-btn');
+        const lessonContent = document.getElementById('lesson-content');
+        const drawingWindow = document.getElementById('drawing-window');
+        const lessonText = document.getElementById('lesson-text');
+        const lessonCanvas = document.getElementById('lesson-canvas');
+        const backgroundAnimation = document.getElementById('background-animation');
+        const cameraPermission = document.getElementById('camera-permission');
+        const enableCameraBtn = document.getElementById('enable-camera-btn');
+        const textWidget = document.getElementById('main-text-widget');
+        const audioFix = document.getElementById('audio-fix');
+        const drawingCanvas = document.getElementById('drawing-canvas');
+        const textToolBtn = document.getElementById('text-tool');
+        const drawToolBtn = document.getElementById('draw-tool');
+        const answerToolBtn = document.getElementById('answer-tool');
+        const clearDrawingBtn = document.getElementById('clear-drawing');
+        const clearTextBtn = document.getElementById('clear-text');
+        const answerInputContainer = document.getElementById('answer-input-container');
+        const answerInput = document.getElementById('answer-input');
+        const submitAnswerBtn = document.getElementById('submit-answer');
+        const colorOptions = document.querySelectorAll('.color-option');
+        const closeLessonBtn = document.getElementById('close-lesson');
+        const closeDrawingBtn = document.getElementById('close-drawing');
+        const closeTextWidgetBtn = document.getElementById('close-text-widget');
+        const avatarLoading = document.getElementById('avatar-loading');
+        const animationStatus = document.getElementById('animation-status');
+        const speechStatus = document.getElementById('speech-status');
+
+        // Глобальные переменные
+        let userStream = null;
+        let socket = null;
+        let isMicOn = false;
+        let isCamOn = false;
+        let isFullscreen = false;
+        let recognition = null;
+        let aiTeacherActivated = false;
+        let animationCircles = [];
+        let currentLesson = null;
+        let currentParagraph = 0;
+        let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        let currentTypingAnimation = null;
+        let currentLessonContent = [];
+        let devicesEnabled = false;
+        let currentAvatarAspectRatio = 1;
+        let isLessonActive = false;
+        let audioContext = null;
+        
+        // Анимация аватара - переменные
+        let currentAvatar = 'teacher';
+        let frames = [];
+        let loadedImages = [];
+        let currentFrame = 0;
+        let animationInterval = null;
+        
+        // Переменные для управления анимацией речи на основе текста
+        let speechAnimationTimeout = null;
+        let isSpeechAnimating = false;
+        
+        // Переменные для рисования
+        let isDrawing = false;
+        let currentTool = 'pen';
+        let drawingCtx = null;
+        let currentColor = '#000000';
+        let lastX = 0;
+        let lastY = 0;
+        let isEraser = false;
+        let isDrawingWindowOpen = false;
+        
+        // Переменные для перетаскивания окон
+        let isDraggingWindow = false;
+        let currentDraggedWindow = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // iOS Audio Fix - ключевые переменные из работающей версии
+        let audioQueue = [];
+        let isPlayingAudio = false;
+        let audioElements = [];
+
+        // ========== УЛУЧШЕННОЕ РАСПОЗНАВАНИЕ РЕЧИ ==========
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'ru-RU';
+                
+                // НАСТРОЙКИ ЧУВСТВИТЕЛЬНОСТИ
+                recognition.continuous = true;
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+                
+                let silenceTimer = null;
+                let lastFinalResult = '';
+
+                recognition.onresult = (event) => {
+                    if (silenceTimer) clearTimeout(silenceTimer);
                     
-                    # Немедленно начинаем чтение первого абзаца урока
-                    first_paragraph = dialogue._get_next_paragraph()
-                    if first_paragraph:
-                        # Отправляем текст
-                        emit('speech_text', {
-                            'text': f"Учитель: {first_paragraph}",
-                            'sid': 'teacher',
-                            'is_teacher': True
-                        }, room=room_id)
-                        # Озвучиваем первый абзац
-                        speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
-            elif response:
-                # Отправляем текст
-                emit('speech_text', {
-                    'text': f"Учитель: {response}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
+                    let finalTranscript = '';
+                    let interimTranscript = '';
+                    
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript;
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+
+                    if (finalTranscript) {
+                        const cleanText = finalTranscript.trim();
+                        
+                        // ФИЛЬТРЫ ДЛЯ УМЕНЬШЕНИЯ ЛОЖНЫХ СРАБАТЫВАНИЙ
+                        if (cleanText.length < 3) {
+                            console.log('Отфильтрована короткая фраза:', cleanText);
+                            return;
+                        }
+                        
+                        if (cleanText === lastFinalResult) {
+                            console.log('Повторяющаяся фраза:', cleanText);
+                            return;
+                        }
+                        
+                        const noisePatterns = [
+                            /^[а-я]*ммм[а-я]*$/i,
+                            /^[а-я]*эээ[а-я]*$/i,
+                            /^[а-я]*ах[а-я]*$/i,
+                            /^[а-я]*ох[а-я]*$/i,
+                        ];
+                        
+                        const isNoise = noisePatterns.some(pattern => pattern.test(cleanText));
+                        if (isNoise) {
+                            console.log('Отфильтрован шум:', cleanText);
+                            return;
+                        }
+                        
+                        console.log('Распознана речь:', cleanText);
+                        lastFinalResult = cleanText;
+                        
+                        if (socket) {
+                            socket.emit('recognized_speech', {
+                                room_id: roomId,
+                                text: cleanText
+                            });
+                            showStudentSpeech(cleanText, 'me');
+                        }
+                    }
+                    
+                    updateSpeechStatus(!!interimTranscript);
+                    
+                    silenceTimer = setTimeout(() => {
+                        console.log('Автоостановка из-за молчания');
+                        updateSpeechStatus(false);
+                        if (recognition && isMicOn) {
+                            recognition.stop();
+                        }
+                    }, 3000);
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Ошибка распознавания речи:', event.error);
+                    updateSpeechStatus(false);
+                    
+                    if (event.error === 'no-speech' || event.error === 'audio-capture') {
+                        setTimeout(() => {
+                            if (isMicOn && recognition) {
+                                try {
+                                    recognition.start();
+                                    updateSpeechStatus(true);
+                                } catch (e) {
+                                    console.log('Ошибка перезапуска распознавания:', e);
+                                }
+                            }
+                        }, 1000);
+                    }
+                };
+
+                recognition.onend = () => {
+                    updateSpeechStatus(false);
+                    if (silenceTimer) clearTimeout(silenceTimer);
+                    
+                    if (isMicOn) {
+                        console.log('Перезапуск распознавания речи');
+                        setTimeout(() => {
+                            if (isMicOn && recognition) {
+                                try {
+                                    recognition.start();
+                                } catch (e) {
+                                    console.log('Ошибка перезапуска:', e);
+                                }
+                            }
+                        }, 500);
+                    }
+                };
                 
-                # Озвучиваем ответ (всегда!)
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
-
-@socketio.on('activate_ai_teacher')
-def handle_activate_ai_teacher(data):
-    room_id = data['room_id']
-    room_ai_activated[room_id] = True
-    room_dialogue[room_id] = DialogueManager(socketio)
-    room_dialogue[room_id].room_id = room_id
-    
-    # Устанавливаем режим LLM для нового диалог менеджера
-    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-    
-    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-    speak_text(room_id, greeting, voice_type='female', is_teacher=True)
-    
-    emit('ai_teacher_activated', {}, room=room_id)
-
-@socketio.on('set_llm_mode')
-def handle_set_llm_mode(data):
-    room_id = data['room_id']
-    mode = data['mode']
-    
-    if mode in ["traditional", "llm_first"]:
-        room_llm_mode[room_id] = mode
-        if room_id in room_dialogue:
-            room_dialogue[room_id].set_llm_mode(mode)
-        
-        emit('llm_mode_changed', {
-            'mode': mode,
-            'room': room_id
-        }, room=room_id)
-        
-        print(f"Режим LLM изменен в комнате {room_id}: {mode}")
-
-@socketio.on('llm_response_ready')
-def handle_llm_response_ready(data):
-    """Обработчик готовых ответов от LLM (для асинхронной обработки)"""
-    room_id = data['room_id']
-    question = data['question']
-    answer = data['answer']
-    
-    print(f"Получен ответ LLM для комнаты {room_id}: {answer[:100]}...")
-    
-    # Сбрасываем состояние речи учителя, чтобы гарантированно озвучить ответ
-    reset_speaking_state(room_id, is_teacher=True)
-    room_teacher_speaking[room_id] = False
-    room_speaking[room_id] = False
-    
-    # Небольшая задержка для гарантии сброса состояния
-    time.sleep(0.5)
-    
-    # Отправляем ответ в комнату
-    emit('speech_text', {
-        'text': f"Учитель: {answer}",
-        'sid': 'teacher',
-        'is_teacher': True
-    }, room=room_id)
-    
-    # Озвучиваем ответ
-    speak_text(room_id, answer, voice_type='female', is_teacher=True)
-
-@socketio.on('practice_started')
-def handle_practice_started(data):
-    """Обработчик начала фазы практики"""
-    room_id = data['room_id']
-    room_practice_active[room_id] = True
-    room_current_question_index[room_id] = 0
-    emit('practice_started', {}, room=room_id)
-    print(f"Практика начата в комнате {room_id}")
-
-@socketio.on('practice_ended')
-def handle_practice_ended(data):
-    """Обработчик завершения фазы практики"""
-    room_id = data['room_id']
-    room_practice_active[room_id] = False
-    room_current_question_index[room_id] = 0
-    emit('practice_ended', {}, room=room_id)
-    print(f"Практика завершена в комнате {room_id}")
-
-@app.route('/api/llm/model', methods=['POST'])
-def set_llm_model():
-    """Установка модели LLM для комнаты"""
-    try:
-        data = request.json
-        model = data.get('model')
-        room_id = data.get('room_id', 'default')
-        
-        if not model:
-            return jsonify({"success": False, "error": "Model not specified"})
-        
-        if room_id in room_dialogue:
-            room_dialogue[room_id].set_llm_model(model)
-            return jsonify({"success": True, "model": model, "room": room_id})
-        
-        return jsonify({"success": False, "error": "Room not found"})
-    
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/llm/models', methods=['GET'])
-def get_llm_models():
-    """Получение списка доступных моделей LLM"""
-    models = [
-        {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta", "provider": "openrouter"},
-        {"id": "llama3", "name": "Llama 3.3 8B Instruct", "description": "Инструктивная версия Llama 3.3", "provider": "openrouter"},
-        {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba", "provider": "openrouter"},
-        {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования", "provider": "openrouter"}
-    ]
-    return jsonify({"models": models})
-
-@app.route('/api/llm/status', methods=['GET'])
-def get_llm_status():
-    """Получение статуса LLM для комнаты"""
-    room_id = request.args.get('room_id', 'default')
-    
-    if room_id in room_dialogue:
-        stats = room_dialogue[room_id].llm.get_cache_stats()
-        return jsonify({
-            "success": True,
-            "room": room_id,
-            "cache_stats": stats,
-            "model": room_dialogue[room_id].llm.model
-        })
-    
-    return jsonify({"success": False, "error": "Room not found"})
-
-@app.route('/api/config/llm_mode', methods=['GET'])
-def get_llm_mode_api():
-    """Получение текущего режима работы LLM"""
-    try:
-        config = load_config()
-        return jsonify({
-            "success": True,
-            "mode": config.get("llm_query_mode", {}).get("default_mode", "traditional"),
-            "available_modes": config.get("llm_query_mode", {}).get("available_modes", ["traditional", "llm_first"])
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/llm_mode', methods=['POST'])
-def set_llm_mode_api():
-    """Установка режима работы LLM"""
-    try:
-        data = request.json
-        mode = data.get('mode')
-        
-        if not mode:
-            return jsonify({"success": False, "error": "Mode not specified"})
-        
-        if mode not in ["traditional", "llm_first"]:
-            return jsonify({"success": False, "error": "Invalid mode. Use 'traditional' or 'llm_first'"})
-        
-        success = set_llm_mode(mode)
-        
-        if success:
-            # Обновляем режим для всех активных комнат
-            for room_id in room_llm_mode:
-                room_llm_mode[room_id] = mode
-                if room_id in room_dialogue:
-                    room_dialogue[room_id].set_llm_mode(mode)
-            
-            return jsonify({
-                "success": True,
-                "message": f"Режим LLM успешно изменен на '{mode}'",
-                "mode": mode
-            })
-        else:
-            return jsonify({"success": False, "error": "Failed to save config"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/knowledge/stats', methods=['GET'])
-def get_knowledge_stats():
-    """Получение статистики базы знаний для комнаты"""
-    room_id = request.args.get('room_id', 'default')
-    subject = request.args.get('subject', '')
-    
-    if room_id in room_dialogue:
-        stats = room_dialogue[room_id].get_knowledge_stats()
-        if stats:
-            return jsonify({
-                "success": True,
-                "room": room_id,
-                "subject": subject or stats.get("subject", "unknown"),
-                "stats": stats
-            })
-    
-    return jsonify({"success": False, "error": "Room not found"})
-
-@app.route('/api/knowledge/search', methods=['GET'])
-def search_knowledge():
-    """Поиск в базе знаний"""
-    room_id = request.args.get('room_id', 'default')
-    query = request.args.get('query', '')
-    max_results = int(request.args.get('max_results', 5))
-    
-    if not query:
-        return jsonify({"success": False, "error": "Query parameter is required"})
-    
-    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
-        results = room_dialogue[room_id].knowledge_base.search_similar(query, max_results)
-        return jsonify({
-            "success": True,
-            "room": room_id,
-            "query": query,
-            "results": results,
-            "total_found": len(results)
-        })
-    
-    return jsonify({"success": False, "error": "Room not found or no knowledge base"})
-
-@app.route('/api/knowledge/llm_answers', methods=['GET'])
-def get_llm_answers():
-    """Получение списка ответов LLM для предмета"""
-    room_id = request.args.get('room_id', 'default')
-    subject = request.args.get('subject', '')
-    
-    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
-        answers = room_dialogue[room_id].knowledge_base.list_llm_answers()
-        return jsonify({
-            "success": True,
-            "room": room_id,
-            "subject": subject,
-            "answers": answers,
-            "total_answers": len(answers)
-        })
-    
-    return jsonify({"success": False, "error": "Room not found or no knowledge base"})
-
-@app.route('/api/lesson_content/<lesson_id>')
-def get_lesson_content(lesson_id):
-    """Получение содержания урока"""
-    try:
-        lesson_file = LESSONS_DIR / f"{lesson_id}.txt"
-        if not lesson_file.exists():
-            return jsonify({"error": "Lesson not found"}), 404
-        
-        with open(lesson_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Разбиваем на абзацы (улучшенная логика)
-        paragraphs = []
-        current_paragraph = []
-        
-        # Сначала разбиваем по двойным переводам строк
-        if '\n\n' in content:
-            raw_paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
-        else:
-            # Если нет двойных переводов строк, разбиваем по одиночным
-            raw_paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
-        
-        # Объединяем короткие абзацы в группы по 6 предложений
-        for paragraph in raw_paragraphs:
-            # Разбиваем на предложences
-            sentences = re.split(r'(?<=[.!?])\s+', paragraph)
-            sentences = [s.strip() for s in sentences if s.strip()]
-            
-            # Если абзац уже содержит достаточно предложений, добавляем как есть
-            if len(sentences) >= 6:
-                paragraphs.append(' '.join(sentences))
-                continue
+                if (isMicOn) {
+                    setTimeout(() => {
+                        recognition.start();
+                        updateSpeechStatus(true);
+                    }, 1000);
+                }
                 
-            # Добавляем предложения в текущий абзац
-            current_paragraph.extend(sentences)
-            
-            # Если накопилось достаточно предложений, создаем новый абзац
-            if len(current_paragraph) >= 6:
-                paragraphs.append(' '.join(current_paragraph[:6]))
-                current_paragraph = current_paragraph[6:]
-        
-        # Добавляем оставшиеся предложения
-        if current_paragraph:
-            paragraphs.append(' '.join(current_paragraph))
-        
-        # Убираем \n\n из текста
-        paragraphs = [p.replace('\n\n', ' ').replace('\n', ' ') for p in paragraphs]
-        
-        return jsonify({
-            "success": True,
-            "lesson_id": lesson_id,
-            "content": paragraphs,
-            "paragraph_count": len(paragraphs)
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            } else {
+                console.warn('Распознавание речи не поддерживается в этом браузере');
+                statusDiv.textContent = 'Распознавание речи не поддерживается';
+                speechStatus.textContent = '🎤 Распознавание: не поддерживается';
+            }
+        }
 
-@app.route('/api/lessons')
-def get_available_lessons():
-    """Получение списка доступных уроков"""
-    try:
-        lessons = {}
-        for lesson_file in LESSONS_DIR.glob("*.txt"):
-            subject = _detect_subject(lesson_file.stem)
-            
-            if subject not in lessons:
-                lessons[subject] = []
-            
-            lessons[subject].append({
-                'id': lesson_file.stem,
-                'title': lesson_file.stem.replace('_', ' ').title(),
-                'file_path': lesson_file.name,
-                'type': 'text'
-            })
-        
-        return jsonify({
-            "success": True,
-            "lessons": lessons
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/practice_content/<lesson_id>')
-def get_practice_content(lesson_id):
-    """Получение практических заданий для урока"""
-    try:
-        practice_file = PRACTICE_DIR / f"{lesson_id}.json"
-        if not practice_file.exists():
-            return jsonify({"error": "Практические задания не найдены", "success": False}), 404
-        
-        with open(practice_file, 'r', encoding='utf-8') as f:
-            content = json.load(f)
-        
-        return jsonify({
-            "success": True,
-            'lesson_id': lesson_id,
-            'content': content,
-            'question_count': len(content.get('questions', []))
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e), "success": False}), 500
-
-@app.route('/api/practice_files')
-def get_practice_files():
-    """Получение списка файлов практики"""
-    try:
-        practice_files = []
-        for practice_file in PRACTICE_DIR.glob("*.json"):
-            practice_files.append({
-                'filename': practice_file.name,
-                'size': practice_file.stat().st_size,
-                'modified': datetime.fromtimestamp(practice_file.stat().st_mtime).isoformat()
-            })
-        
-        return jsonify({
-            "success": True,
-            "files": practice_files
-        })
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/upload_practice', methods=['POST'])
-def upload_practice():
-    """Загрузка файла практики"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({"success": False, "error": "No file provided"})
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"success": False, "error": "No file selected"})
-        
-        if file and file.filename.endswith('.json'):
-            filename = secure_filename(file.filename)
-            file.save(PRACTICE_DIR / filename)
-            
-            return jsonify({
-                "success": True,
-                "message": f"File {filename} uploaded successfully",
-                "filename": filename
-            })
-        else:
-            return jsonify({"success": False, "error": "Invalid file type. Only JSON allowed"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/delete_practice/<filename>')
-def delete_practice(filename):
-    """Удаление файла практики"""
-    try:
-        practice_file = PRACTICE_DIR / filename
-        if not practice_file.exists():
-            return jsonify({"success": False, "error": "File not found"})
-        
-        practice_file.unlink()
-        return jsonify({
-            "success": True,
-            "message": f"File {filename} deleted successfully"
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-def _detect_subject(filename: str) -> str:
-    """Определяет предмет по названию файла"""
-    filename_lower = filename.lower()
-    if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
-        return "математика"
-    elif any(word in filename_lower for word in ['history', 'история', 'истор']):
-        return "история"
-    elif any(word in filename_lower for word in ['physics', 'физика', 'физ']):
-        return "физика"
-    elif any(word in filename_lower for word in ['chemistry', 'химия', 'хим']):
-        return "химия"
-    elif any(word in filename_lower for word in ['social', 'обществознание', 'общество']):
-        return "обществознание"
-    elif any(word in filename_lower for word in ['biology', 'биология', 'био']):
-        return "биология"
-    elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
-        return "литература"
-    elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
-        return "русский язык"
-    else:
-        return "общее"
-
-@app.route('/api/add_knowledge', methods=['POST'])
-def add_knowledge():
-    """Добавление знаний в базу"""
-    try:
-        data = request.json
-        subject = data.get('subject', 'общее')
-        text = data.get('text', '')
-        
-        if not text.strip():
-            return jsonify({"success": False, "error": "Text is required"})
-        
-        # Создаем базу знаний для предмета если ее нет
-        knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
-        if knowledge_file.exists():
-            with open(knowledge_file, 'r', encoding='utf-8') as f:
-                knowledge_data = json.load(f)
-        else:
-            knowledge_data = {
-                "terms": {},
-                "questions": {},
-                "examples": {},
-                "metadata": {
-                    "subject": subject,
-                    "version": "1.0",
-                    "last_updated": datetime.now().isoformat(),
-                    "author": "AI Teacher System"
+        function updateSpeechStatus(listening) {
+            if (speechStatus) {
+                if (listening) {
+                    speechStatus.textContent = '🎤 Распознавание: слушаю...';
+                    speechStatus.style.color = '#4cc9f0';
+                } else {
+                    speechStatus.textContent = '🎤 Распознавание: выкл';
+                    speechStatus.style.color = '#95a5a6';
                 }
             }
-        
-        # Парсим текст и добавляем в базу знаний
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
-        for line in lines:
-            if ' - ' in line:
-                term, definition = line.split(' - ', 1)
-                knowledge_data["terms"][term.strip().lower()] = definition.strip()
-            elif line.endswith('?'):
-                knowledge_data["questions"][line.strip().lower()] = "Ответ будет добавлен автоматически"
-            else:
-                # Просто добавляем как общую информацию
-                if "general_info" not in knowledge_data:
-                    knowledge_data["general_info"] = []
-                knowledge_data["general_info"].append(line.strip())
-        
-        # Сохраняем обновленную базу знаний
-        with open(knowledge_file, 'w', encoding='utf-8') as f:
-            json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
-        
-        return jsonify({"success": True, "subject": subject, "added_items": len(lines)})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        }
 
-@app.route('/api/add_lesson', methods=['POST'])
-def add_lesson():
-    """Добавление нового урока"""
-    try:
-        data = request.json
-        subject = data.get('subject', 'общее')
-        title = data.get('title', '')
-        content = data.get('content', '')
-        
-        if not title or not content:
-            return jsonify({"success": False, "error": "Title and content are required"})
-        
-        # Создаем имя файла
-        filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
-        lesson_path = LESSONS_DIR / filename
-        
-        with open(lesson_path, 'w', encoding='utf-8') as f:
-            f.write(content)
-        
-        return jsonify({"success": True, "filename": filename, "subject": subject, "title": title})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/add_practice', methods=['POST'])
-def add_practice():
-    """Добавление практических заданий"""
-    try:
-        data = request.json
-        lesson_id = data.get('lesson_id', '')
-        practice_data = data.get('practice_data', {})
-        
-        if not lesson_id or not practice_data:
-            return jsonify({"success": False, "error": "Lesson ID and practice data are required"})
-        
-        # Создаем файл практики
-        practice_file = PRACTICE_DIR / f"{lesson_id}.json"
-        
-        with open(practice_file, 'w', encoding='utf-8') as f:
-            json.dump(practice_data, f, ensure_ascii=False, indent=2)
-        
-        return jsonify({"success": True, "lesson_id": lesson_id, "question_count": len(practice_data.get('questions', []))})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/download_knowledge')
-def download_knowledge():
-    """Скачивание базы знаний"""
-    subject = request.args.get('subject', 'обществознание')
-    knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
-    llm_answers_file = MATERIALS_DIR / f"{subject}_llm_answers.json"
-    
-    if not knowledge_file.exists() and not llm_answers_file.exists():
-        return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
-    
-    # Создаем временный файл для скачивания
-    import tempfile
-    import zipfile
-    
-    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    
-    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-        if knowledge_file.exists():
-            zipf.write(knowledge_file, f"{subject}_knowledge.json")
-        if llm_answers_file.exists():
-            zipf.write(llm_answers_file, f"{subject}_llm_answers.json")
-    
-    temp_zip.close()
-    
-    return send_file(
-        temp_zip.name,
-        as_attachment=True,
-        download_name=f"{subject}_knowledge_base.zip",
-        mimetype='application/zip'
-    )
-
-@app.route('/api/download_lessons')
-def download_lessons():
-    """Скачивание всех уроков"""
-    if not any(LESSONS_DIR.iterdir()):
-        return jsonify({"success": False, "error": "Уроки не найдены"})
-    
-    # Создаем временный zip-файл
-    import tempfile
-    import zipfile
-    
-    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    
-    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-        for lesson_file in LESSONS_DIR.glob("*.txt"):
-            zipf.write(lesson_file, lesson_file.name)
-    
-    temp_zip.close()
-    
-    return send_file(
-        temp_zip.name,
-        as_attachment=True,
-        download_name="ai_teacher_lessons.zip",
-        mimetype='application/zip'
-    )
-
-@app.route('/api/download_practice')
-def download_practice():
-    """Скачивание всех практических заданий"""
-    if not any(PRACTICE_DIR.iterdir()):
-        return jsonify({"success": False, "error": "Практические задания не найдены"})
-    
-    # Создаем временный zip-файл
-    import tempfile
-    import zipfile
-    
-    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-    
-    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-        for practice_file in PRACTICE_DIR.glob("*.json"):
-            zipf.write(practice_file, practice_file.name)
-    
-    temp_zip.close()
-    
-    return send_file(
-        temp_zip.name,
-        as_attachment=True,
-        download_name="ai_teacher_practice.zip",
-        mimetype='application/zip'
-    )
-
-# Новые API эндпоинты для управления API ключами
-@app.route('/api/config/keys', methods=['GET'])
-def get_api_keys():
-    """Получение текущих API ключей"""
-    try:
-        config = load_config()
-        return jsonify({
-            "success": True,
-            "keys": {
-                "openrouter": config.get("openrouter", {}).get("api_key", ""),
-                "llm": config.get("llm", {}).get("api_key", "")
+        // ========== iOS AUDIO FIX ИЗ СТАРОГО ОБРАЗЦА ==========
+        function playNextAudio() {
+            if (isPlayingAudio || audioQueue.length === 0) return;
+            
+            isPlayingAudio = true;
+            const audio = audioQueue.shift();
+            
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        audio.onended = () => {
+                            isPlayingAudio = false;
+                            setTimeout(playNextAudio, 100);
+                        };
+                    })
+                    .catch(error => {
+                        console.error('Ошибка автовоспроизведения:', error);
+                        isPlayingAudio = false;
+                        setTimeout(playNextAudio, 100);
+                    });
             }
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/keys', methods=['POST'])
-def set_api_key():
-    """Установка API ключа"""
-    try:
-        data = request.json
-        provider = data.get('provider')
-        api_key = data.get('api_key')
-        
-        if not provider or not api_key:
-            return jsonify({"success": False, "error": "Provider and API key are required"})
-        
-        if provider not in ['openrouter', 'llm']:
-            return jsonify({"success": False, "error": "Invalid provider. Use 'openrouter' or 'llm'"})
-        
-        success = update_api_key(provider, api_key)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "message": f"API ключ для {provider} успешно обновлен",
-                "provider": provider
-            })
-        else:
-            return jsonify({"success": False, "error": "Failed to update API key"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/config/test', methods=['POST'])
-def test_api_key():
-    """Тестирование API ключа"""
-    try:
-        data = request.json
-        provider = data.get('provider')
-        api_key = data.get('api_key')
-        
-        if not provider or not api_key:
-            return jsonify({"success": False, "error": "Provider and API key are required"})
-        
-        # Тестируем ключ через простой запрос к OpenRouter
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://your-site.com",
-            "X-Title": "AI Teacher"
         }
         
-        test_data = {
-            "model": "meta-llama/llama-3.3-8b-instruct:free",
-            "messages": [{"role": "user", "content": "test"}],
-            "max_tokens": 10
-        }
-        
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=test_data,
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            return jsonify({
-                "success": True,
-                "message": f"Ключ {provider} работает корректно",
-                "valid": True
-            })
-        elif response.status_code == 401:
-            return jsonify({
-                "success": True,
-                "message": f"Ключ {provider} неверный или неактивный",
-                "valid": False
-            })
-        else:
-            return jsonify({
-                "success": True,
-                "message": f"Ключ {provider} может быть неверным (код: {response.status_code})",
-                "valid": False
-            })
+        function playAudioForIOS(base64Audio) {
+            audioFix.src = `data:audio/mp3;base64,${base64Audio}`;
             
-    except Exception as e:
-        return jsonify({
-            "success": True,
-            "message": f"Ошибка проверки ключа: {str(e)}",
-            "valid": False
-        })
+            const playPromise = audioFix.play();
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        // Audio started successfully
+                    })
+                    .catch(error => {
+                        console.error('iOS audio play failed:', error);
+                        showTeacherSpeech("(Аудио сообщение)");
+                    });
+            }
+        }
 
-if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+        // ========== ФУНКЦИИ АНИМАЦИИ АВАТАРА ==========
+        function loadImage(src, retries = 3) {
+            return new Promise(function(resolve, reject) {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                
+                img.onload = function() { 
+                    console.log('Изображение загружено:', src);
+                    resolve(img); 
+                };
+                
+                img.onerror = function() {
+                    if (retries > 0) {
+                        console.log(`Повторная попытка загрузки: ${src} (осталось попыток: ${retries})`);
+                        setTimeout(function() { 
+                            loadImage(src, retries - 1).then(resolve).catch(reject); 
+                        }, 300);
+                    } else {
+                        reject(new Error(`Не удалось загрузить: ${src}`));
+                    }
+                };
+                
+                const timestamp = new Date().getTime();
+                const separator = src.includes('?') ? '&' : '?';
+                img.src = src + separator + 't=' + timestamp;
+            });
+        }
+
+        function loadAvatarFrames(avatarName) {
+            console.log('Начало загрузки аватара:', avatarName);
+            statusDiv.textContent = 'Загрузка ' + avatarName + '...';
+            loadedImages = [];
+            avatarLoading.style.display = 'block';
+            
+            stopAnimation();
+            
+            fetch('/api/frames/' + encodeURIComponent(avatarName))
+                .then(function(response) { 
+                    if (!response.ok) throw new Error('HTTP error ' + response.status);
+                    return response.json(); 
+                })
+                .then(function(data) {
+                    if (data.error) throw new Error(data.error);
+                    if (!data.frames || data.frames.length === 0) throw new Error('Нет доступных кадров');
+                    
+                    console.log('Найдено кадров:', data.frames.length);
+                    return loadAllFrames(avatarName, data.frames);
+                })
+                .then(function(images) {
+                    avatarLoading.style.display = 'none';
+                    
+                    if (images && images.length > 0) {
+                        loadedImages = images;
+                        statusDiv.textContent = avatarName + ': загружено ' + loadedImages.length + ' кадров';
+                        startAnimation();
+                        console.log('Анимация запущена с', loadedImages.length, 'кадрами');
+                    } else {
+                        throw new Error('Не удалось загрузить кадры');
+                    }
+                })
+                .catch(function(error) {
+                    avatarLoading.style.display = 'none';
+                    statusDiv.textContent = 'Ошибка: ' + error.message;
+                    console.error('Ошибка загрузки аватара:', error);
+                    showAvatarPlaceholder();
+                });
+        }
+
+        function loadAllFrames(avatarName, frameList) {
+            return new Promise((resolve) => {
+                const images = [];
+                let loadedCount = 0;
+                let errorCount = 0;
+                
+                if (!frameList || frameList.length === 0) {
+                    resolve([]);
+                    return;
+                }
+                
+                function loadNext(index) {
+                    if (index >= frameList.length) {
+                        console.log('Загружено кадров:', images.length, 'из', frameList.length);
+                        resolve(images);
+                        return;
+                    }
+                    
+                    const frame = frameList[index];
+                    const imageUrl = '/frames/' + encodeURIComponent(avatarName) + '/' + encodeURIComponent(frame);
+                    
+                    loadImage(imageUrl, 2)
+                        .then(img => {
+                            images.push(img);
+                            loadedCount++;
+                            
+                            if (loadedCount % 5 === 0 || loadedCount === frameList.length) {
+                                statusDiv.textContent = `${avatarName}: ${loadedCount}/${frameList.length}`;
+                            }
+                            
+                            loadNext(index + 1);
+                        })
+                        .catch(error => {
+                            errorCount++;
+                            console.warn('Ошибка загрузки кадра', frame, error);
+                            loadNext(index + 1);
+                        });
+                }
+                
+                loadNext(0);
+            });
+        }
+
+        function showAvatarPlaceholder() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 400;
+            canvas.height = 400;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#3498db';
+            ctx.fillRect(0, 0, 400, 400);
+            
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(200, 150, 50, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.arc(200, 150, 30, 0, Math.PI);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Аватар не найден', 200, 350);
+            
+            teacherVideo.src = canvas.toDataURL();
+            stopAnimation();
+        }
+
+        function showFrame() {
+            if (loadedImages.length === 0) {
+                console.warn('Нет кадров для отображения');
+                return;
+            }
+            
+            try {
+                currentFrame = currentFrame % loadedImages.length;
+                const img = loadedImages[currentFrame];
+                
+                if (img && img.src) {
+                    teacherVideo.src = img.src;
+                    teacherVideo.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Ошибка показа кадра:', error);
+            }
+        }
+
+        function startSpeechAnimation(text) {
+            stopSpeechAnimation();
+            
+            const duration = calculateSpeechDuration(text);
+            
+            console.log(`Запуск анимации речи на ${duration}ms для текста: "${text.substring(0, 50)}..."`);
+            
+            startFastAnimation();
+            isSpeechAnimating = true;
+            updateAnimationStatus();
+            
+            speechAnimationTimeout = setTimeout(() => {
+                stopSpeechAnimation();
+                console.log('Анимация речи завершена');
+            }, duration);
+        }
+
+        function stopSpeechAnimation() {
+            if (speechAnimationTimeout) {
+                clearTimeout(speechAnimationTimeout);
+                speechAnimationTimeout = null;
+            }
+            
+            if (isSpeechAnimating) {
+                isSpeechAnimating = false;
+                startSlowAnimation();
+                updateAnimationStatus();
+                console.log('Анимация речи остановлена, переход в режим покоя');
+            }
+        }
+
+        function calculateSpeechDuration(text) {
+            if (!text || text.length === 0) return 2000;
+            
+            const punctuationPauses = (text.match(/[.!?;:]/g) || []).length;
+            const pauseBonus = punctuationPauses * 300;
+            
+            const charsPerSecond = 15;
+            const baseDuration = (text.length / charsPerSecond) * 1000;
+            
+            const totalDuration = baseDuration + pauseBonus;
+            
+            const minDuration = 2000;
+            const maxDuration = 45000;
+            
+            return Math.max(minDuration, Math.min(maxDuration, totalDuration));
+        }
+
+        function startFastAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) return;
+            
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % loadedImages.length;
+                showFrame();
+            }, 1000 / 15);
+        }
+
+        function startSlowAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) return;
+            
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % loadedImages.length;
+                showFrame();
+            }, 1000 / 3);
+        }
+
+        function startAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) {
+                console.warn('Нет загруженных кадров для анимации');
+                return;
+            }
+            
+            console.log('Запуск анимации покоя с', loadedImages.length, 'кадрами');
+            startSlowAnimation();
+            showFrame();
+            updateAnimationStatus();
+        }
+
+        function stopAnimation() {
+            stopSpeechAnimation();
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            
+            if (loadedImages.length > 0) {
+                currentFrame = 0;
+                showFrame();
+            }
+            
+            updateAnimationStatus();
+        }
+
+        function updateAnimationStatus() {
+            if (!animationStatus) return;
+            
+            if (isSpeechAnimating) {
+                animationStatus.textContent = '🗣️ Анимация речи';
+                animationStatus.style.color = '#4cc9f0';
+            } else {
+                animationStatus.textContent = '😴 Режим покоя';
+                animationStatus.style.color = '#95a5a6';
+            }
+        }
+
+        function playAudio(base64Audio) {
+            try {
+                if (isIOS) {
+                    playAudioForIOS(base64Audio);
+                } else {
+                    const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+                    audio.preload = 'auto';
+                    
+                    audioQueue.push(audio);
+                    playNextAudio();
+                }
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+            }
+        }
+
+        // ========== ФУНКЦИИ ИНИЦИАЛИЗАЦИИ ==========
+        function createBackgroundAnimation() {
+            for (let i = 0; i < 8; i++) {
+                const circle = document.createElement('div');
+                circle.className = 'animated-circle';
+                
+                const size = Math.random() * 80 + 40;
+                circle.style.width = `${size}px`;
+                circle.style.height = `${size}px`;
+                circle.style.left = `${Math.random() * 100}%`;
+                circle.style.top = `${Math.random() * 100}%`;
+                
+                const colors = ['#4361ee', '#3a0ca3', '#4cc9f0', '#f72585'];
+                circle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                backgroundAnimation.appendChild(circle);
+                animationCircles.push(circle);
+                
+                anime({
+                    targets: circle,
+                    translateX: () => anime.random(-200, 200),
+                    translateY: () => anime.random(-200, 200),
+                    scale: () => anime.random(0.5, 1.2),
+                    duration: () => anime.random(4000, 12000),
+                    easing: 'easeInOutQuad',
+                    complete: function(anim) {
+                        anim.restart();
+                    }
+                });
+            }
+        }
+
+        function initDrawingCanvas() {
+            const resizeCanvas = () => {
+                drawingCanvas.width = drawingCanvas.offsetWidth;
+                drawingCanvas.height = drawingCanvas.offsetHeight;
+                
+                if (drawingCtx) {
+                    drawingCtx.lineWidth = isEraser ? 20 : 3;
+                    drawingCtx.lineCap = 'round';
+                    drawingCtx.lineJoin = 'round';
+                    drawingCtx.strokeStyle = isEraser ? '#F5F6F8' : currentColor;
+                }
+            };
+            
+            resizeCanvas();
+            
+            drawingCtx = drawingCanvas.getContext('2d');
+            drawingCtx.lineWidth = 3;
+            drawingCtx.lineCap = 'round';
+            drawingCtx.lineJoin = 'round';
+            drawingCtx.strokeStyle = currentColor;
+            
+            if (isIOS) {
+                drawingCanvas.style.touchAction = 'none';
+                drawingCanvas.style.webkitUserSelect = 'none';
+                drawingCanvas.style.webkitTouchCallout = 'none';
+            }
+            
+            drawingCanvas.addEventListener('mousedown', startDrawing);
+            drawingCanvas.addEventListener('mousemove', draw);
+            drawingCanvas.addEventListener('mouseup', stopDrawing);
+            drawingCanvas.addEventListener('mouseout', stopDrawing);
+            
+            drawingCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            drawingCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            drawingCanvas.addEventListener('touchend', handleTouchEnd);
+            
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        function isDrawingWindowVisible() {
+            return isDrawingWindowOpen && 
+                   drawingWindow.style.display === 'block' &&
+                   drawingWindow.offsetWidth > 0 &&
+                   drawingWindow.offsetHeight > 0;
+        }
+
+        function getCanvasCoordinates(e) {
+            const rect = drawingCanvas.getBoundingClientRect();
+            const scaleX = drawingCanvas.width / rect.width;
+            const scaleY = drawingCanvas.height / rect.height;
+            
+            let clientX, clientY;
+            
+            if (e.type.includes('touch')) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        function startDrawing(e) {
+            if (!isDrawingWindowVisible()) return;
+            
+            isDrawing = true;
+            const coords = getCanvasCoordinates(e);
+            lastX = coords.x;
+            lastY = coords.y;
+            
+            drawingCtx.beginPath();
+            drawingCtx.moveTo(lastX, lastY);
+            
+            e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const coords = getCanvasCoordinates(e);
+            const currentX = coords.x;
+            const currentY = coords.y;
+            
+            drawingCtx.lineTo(currentX, currentY);
+            drawingCtx.stroke();
+            
+            lastX = currentX;
+            lastY = currentY;
+            
+            e.preventDefault();
+        }
+
+        function stopDrawing() {
+            if (!isDrawing) return;
+            
+            isDrawing = false;
+            drawingCtx.closePath();
+        }
+
+        function handleTouchStart(e) {
+            if (!isDrawingWindowVisible()) return;
+            
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const customEvent = {
+                type: 'mousedown',
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                target: drawingCanvas
+            };
+            
+            startDrawing(customEvent);
+        }
+
+        function handleTouchMove(e) {
+            if (!isDrawing || !isDrawingWindowVisible()) return;
+            
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const customEvent = {
+                type: 'mousemove',
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                target: drawingCanvas
+            };
+            
+            draw(customEvent);
+        }
+
+        function handleTouchEnd() {
+            if (!isDrawing) return;
+            
+            stopDrawing();
+        }
+
+        function clearDrawing() {
+            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+        }
+
+        function setDrawingTool(tool) {
+            currentTool = tool;
+            isEraser = (tool === 'eraser');
+            
+            document.getElementById('drawing-pen').classList.remove('active');
+            document.getElementById('drawing-eraser').classList.remove('active');
+            
+            if (tool === 'pen') {
+                document.getElementById('drawing-pen').classList.add('active');
+                drawingCtx.lineWidth = 3;
+                drawingCtx.strokeStyle = currentColor;
+                drawingCtx.globalCompositeOperation = 'source-over';
+            } else if (tool === 'eraser') {
+                document.getElementById('drawing-eraser').classList.add('active');
+                drawingCtx.lineWidth = 20;
+                drawingCtx.strokeStyle = '#F5F6F8';
+                drawingCtx.globalCompositeOperation = 'destination-out';
+            }
+        }
+
+        function initWindowDragging() {
+            function initDragForWindow(windowElement) {
+                const header = windowElement.querySelector('.window-header');
+                
+                header.addEventListener('mousedown', startDragWindow);
+                header.addEventListener('touchstart', startDragWindow, { passive: false });
+                
+                header.addEventListener('touchstart', (e) => {
+                    e.stopPropagation();
+                });
+                header.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                });
+                
+                function startDragWindow(e) {
+                    isDraggingWindow = true;
+                    currentDraggedWindow = windowElement;
+                    
+                    const rect = windowElement.getBoundingClientRect();
+                    if (e.type === 'mousedown') {
+                        dragOffsetX = e.clientX - rect.left;
+                        dragOffsetY = e.clientY - rect.top;
+                    } else {
+                        dragOffsetX = e.touches[0].clientX - rect.left;
+                        dragOffsetY = e.touches[0].clientY - rect.top;
+                        e.preventDefault();
+                    }
+                    
+                    document.addEventListener('mousemove', dragWindow);
+                    document.addEventListener('touchmove', dragWindow, { passive: false });
+                    document.addEventListener('mouseup', stopDragWindow);
+                    document.addEventListener('touchend', stopDragWindow);
+                }
+            }
+            
+            function dragWindow(e) {
+                if (!isDraggingWindow || !currentDraggedWindow) return;
+                
+                let clientX, clientY;
+                if (e.type === 'mousemove') {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                } else {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                    e.preventDefault();
+                }
+                
+                const newX = clientX - dragOffsetX;
+                const newY = clientY - dragOffsetY;
+                
+                const maxX = window.innerWidth - currentDraggedWindow.offsetWidth;
+                const maxY = window.innerHeight - currentDraggedWindow.offsetHeight;
+                
+                currentDraggedWindow.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+                currentDraggedWindow.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+                currentDraggedWindow.style.transform = 'none';
+            }
+            
+            function stopDragWindow() {
+                isDraggingWindow = false;
+                currentDraggedWindow = null;
+                document.removeEventListener('mousemove', dragWindow);
+                document.removeEventListener('touchmove', dragWindow);
+                document.removeEventListener('mouseup', stopDragWindow);
+                document.removeEventListener('touchend', stopDragWindow);
+            }
+            
+            initDragForWindow(lessonContent);
+            initDragForWindow(drawingWindow);
+        }
+
+        function setTool(tool) {
+            isDrawingWindowOpen = false;
+            
+            lessonContent.style.display = 'none';
+            drawingWindow.style.display = 'none';
+            answerInputContainer.style.display = 'none';
+            
+            textToolBtn.classList.remove('active');
+            drawToolBtn.classList.remove('active');
+            answerToolBtn.classList.remove('active');
+            
+            if (tool === 'text') {
+                textToolBtn.classList.add('active');
+                lessonContent.style.display = 'block';
+            } else if (tool === 'draw') {
+                drawToolBtn.classList.add('active');
+                drawingWindow.style.display = 'block';
+                isDrawingWindowOpen = true;
+                
+                setTimeout(() => {
+                    const rect = drawingCanvas.getBoundingClientRect();
+                    drawingCanvas.width = rect.width;
+                    drawingCanvas.height = rect.height;
+                }, 50);
+            } else if (tool === 'answer') {
+                answerToolBtn.classList.add('active');
+                lessonContent.style.display = 'block';
+                answerInputContainer.style.display = 'block';
+                answerInput.focus();
+            }
+        }
+
+        function submitAnswer() {
+            const answer = answerInput.value.trim();
+            if (answer) {
+                if (socket) {
+                    socket.emit('recognized_speech', {
+                        room_id: roomId,
+                        text: answer
+                    });
+                }
+                answerInput.value = '';
+                setTool('text');
+                showStudentSpeech(answer, 'me');
+            }
+        }
+
+        function initZoom() {
+            let lessonScale = 1;
+            const zoomInBtn = document.getElementById('zoom-in');
+            const zoomOutBtn = document.getElementById('zoom-out');
+            const zoomResetBtn = document.getElementById('zoom-reset');
+            
+            zoomInBtn.addEventListener('click', () => {
+                lessonScale = Math.min(lessonScale + 0.1, 2);
+                updateLessonZoom();
+            });
+            
+            zoomOutBtn.addEventListener('click', () => {
+                lessonScale = Math.max(lessonScale - 0.1, 0.5);
+                updateLessonZoom();
+            });
+            
+            zoomResetBtn.addEventListener('click', () => {
+                lessonScale = 1;
+                updateLessonZoom();
+            });
+            
+            function updateLessonZoom() {
+                lessonCanvas.style.transform = `scale(${lessonScale})`;
+                lessonCanvas.style.transformOrigin = 'center center';
+            }
+            
+            let drawingScale = 1;
+            const drawingZoomInBtn = document.getElementById('drawing-zoom-in');
+            const drawingZoomOutBtn = document.getElementById('drawing-zoom-out');
+            const drawingZoomResetBtn = document.getElementById('drawing-zoom-reset');
+            
+            drawingZoomInBtn.addEventListener('click', () => {
+                drawingScale = Math.min(drawingScale + 0.1, 2);
+                updateDrawingZoom();
+            });
+            
+            drawingZoomOutBtn.addEventListener('click', () => {
+                drawingScale = Math.max(drawingScale - 0.1, 0.5);
+                updateDrawingZoom();
+            });
+            
+            drawingZoomResetBtn.addEventListener('click', () => {
+                drawingScale = 1;
+                updateDrawingZoom();
+            });
+            
+            function updateDrawingZoom() {
+                drawingCanvas.style.transform = `scale(${drawingScale})`;
+                drawingCanvas.style.transformOrigin = 'center center';
+            }
+        }
+
+        function initSocket() {
+            socket = io();
+            
+            socket.on('connect', () => {
+                statusDiv.textContent = 'Подключено к серверу';
+                socket.emit('join_room', { room_id: roomId });
+                
+                setTimeout(() => {
+                    if (socket) {
+                        socket.emit('get_current_avatar', { room_id: roomId });
+                    }
+                }, 500);
+                
+                setTimeout(() => {
+                    enableCameraAndMicrophone();
+                }, 1500);
+            });
+            
+            socket.on('disconnect', () => {
+                statusDiv.textContent = 'Отключено от сервера';
+            });
+            
+            socket.on('avatar_changed', (data) => {
+                console.log('Смена аватара на:', data.avatar_name);
+                currentAvatar = data.avatar_name;
+                loadAvatarFrames(data.avatar_name);
+            });
+            
+            socket.on('current_avatar', (data) => {
+                console.log('Текущий аватар:', data.avatar_name);
+                currentAvatar = data.avatar_name;
+                loadAvatarFrames(data.avatar_name);
+            });
+            
+            socket.on('speech_audio', (data) => {
+                try {
+                    console.log('Получено аудио сообщение, текст:', data.text.substring(0, 100) + '...');
+                    
+                    startSpeechAnimation(data.text);
+                    
+                    playAudio(data.audio);
+                    
+                    if (!isLessonActive) {
+                        showTeacherSpeech(data.text);
+                    }
+                } catch (error) {
+                    console.error('Ошибка обработки аудио:', error);
+                    if (!isLessonActive) {
+                        showTeacherSpeech(data.text);
+                    }
+                }
+            });
+            
+            socket.on('speech_text', (data) => {
+                if (data.is_teacher) {
+                    const teacherText = data.text.replace('Учитель: ', '');
+                    startSpeechAnimation(teacherText);
+                    
+                    if (!isLessonActive) {
+                        showTeacherSpeech(data.text);
+                    }
+                    if (currentLesson && data.text.startsWith('Учитель: ')) {
+                        const lessonText = data.text.replace('Учитель: ', '');
+                        updateLessonText(lessonText);
+                    }
+                } else {
+                    showStudentSpeech(data.text, data.sid);
+                }
+            });
+            
+            socket.on('participants_update', (data) => {
+                participantsCount.textContent = data.count;
+            });
+            
+            socket.on('ai_teacher_available', () => {
+                if (devicesEnabled) {
+                    activateAiBtn.style.display = 'block';
+                }
+            });
+            
+            socket.on('ai_teacher_activated', () => {
+                aiTeacherActivated = true;
+                activateAiBtn.style.display = 'none';
+                statusDiv.textContent = 'AI-Teacher активирован';
+                
+                if (isIOS) {
+                    setTimeout(() => {
+                        if (recognition && isMicOn) {
+                            recognition.start();
+                        }
+                    }, 2000);
+                }
+            });
+            
+            socket.on('lesson_started', (data) => {
+                isLessonActive = true;
+                currentLesson = data;
+                currentParagraph = 0;
+                loadLessonContent(data.lesson_id);
+            });
+
+            socket.on('animation_ready', (data) => {
+                console.log('Анимация готова:', data.status);
+                if (data.status === 'ready' && loadedImages.length > 0) {
+                    startAnimation();
+                }
+            });
+        }
+
+        async function enableCameraAndMicrophone() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    }
+                });
+                
+                userStream = stream;
+                selfVideo.srcObject = userStream;
+                isCamOn = true;
+                camBtn.classList.add('active');
+                camBtn.querySelector('span').textContent = 'Выкл';
+                document.getElementById('self-video-container').style.display = 'block';
+                
+                isMicOn = true;
+                micBtn.classList.add('active');
+                micBtn.querySelector('span').textContent = 'Выкл';
+                
+                if (recognition) {
+                    if (isIOS) {
+                        setTimeout(() => {
+                            if (isMicOn) {
+                                recognition.start();
+                            }
+                        }, 1000);
+                    } else {
+                        recognition.start();
+                    }
+                }
+                
+                statusDiv.textContent = 'Камера и микрофон включены';
+                cameraPermission.style.display = 'none';
+                devicesEnabled = true;
+                activateAiBtn.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Ошибка доступа к камере/микрофону:', error);
+                cameraPermission.style.display = 'block';
+                
+                if (error.name === 'NotAllowedError') {
+                    statusDiv.textContent = 'Доступ к камере/микрофону запрещен';
+                } else {
+                    statusDiv.textContent = 'Ошибка доступа к устройствам';
+                }
+            }
+        }
+
+        function loadLessonContent(lessonId) {
+            currentLessonContent = [
+                "Добро пожаловать на урок!",
+                "Сегодня мы изучим основы работы с виртуальным классом.",
+                "Вы можете использовать текстовую доску для заметок и отдельное окно для рисования."
+            ];
+            displayLessonParagraph(0);
+        }
+
+        function displayLessonParagraph(paragraphIndex) {
+            if (paragraphIndex < currentLessonContent.length) {
+                const paragraph = currentLessonContent[paragraphIndex];
+                
+                if (lessonText.textContent !== '') {
+                    lessonText.classList.add('slide-out');
+                    setTimeout(() => {
+                        lessonText.classList.remove('slide-out');
+                        lessonText.textContent = '';
+                        animateTextTyping(paragraph);
+                    }, 500);
+                } else {
+                    animateTextTyping(paragraph);
+                }
+                
+                currentParagraph = paragraphIndex + 1;
+            } else {
+                lessonContent.style.display = 'none';
+                currentLesson = null;
+                isLessonActive = false;
+            }
+        }
+
+        function updateLessonText(text) {
+            if (currentLesson) {
+                const paragraphIndex = currentLessonContent.indexOf(text);
+                if (paragraphIndex !== -1 && paragraphIndex >= currentParagraph) {
+                    displayLessonParagraph(paragraphIndex);
+                } else if (paragraphIndex === -1) {
+                    animateTextTyping(text);
+                }
+            }
+        }
+
+        function animateTextTyping(text) {
+            lessonContent.style.display = 'block';
+            
+            if (currentTypingAnimation) {
+                clearInterval(currentTypingAnimation);
+            }
+            
+            lessonText.textContent = '';
+            let currentIndex = 0;
+            const typingSpeed = 30;
+            
+            currentTypingAnimation = setInterval(() => {
+                if (currentIndex < text.length) {
+                    lessonText.textContent += text.charAt(currentIndex);
+                    currentIndex++;
+                    lessonCanvas.scrollTop = lessonCanvas.scrollHeight;
+                } else {
+                    clearInterval(currentTypingAnimation);
+                    const cursor = document.querySelector('.typing-cursor');
+                    if (cursor) cursor.remove();
+                }
+            }, typingSpeed);
+            
+            const cursor = document.createElement('span');
+            cursor.className = 'typing-cursor';
+            lessonText.appendChild(cursor);
+        }
+
+        function showTeacherSpeech(text) {
+            const cleanText = text.replace('Учитель: ', '');
+            teacherSpeech.textContent = cleanText;
+            teacherSpeech.style.display = 'block';
+            
+            setTimeout(() => {
+                teacherSpeech.style.display = 'none';
+            }, 5000);
+        }
+
+        function showStudentSpeech(text, sid) {
+            studentSpeech.textContent = text;
+            studentSpeech.style.display = 'block';
+            
+            setTimeout(() => {
+                studentSpeech.style.display = 'none';
+            }, 5000);
+        }
+
+        async function toggleMicrophone() {
+            try {
+                if (!isMicOn) {
+                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            sampleRate: 44100
+                        }
+                    });
+                    if (userStream) {
+                        userStream.getAudioTracks().forEach(track => userStream.addTrack(track));
+                    } else {
+                        userStream = audioStream;
+                    }
+                    isMicOn = true;
+                    micBtn.classList.add('active');
+                    micBtn.querySelector('span').textContent = 'Выкл';
+                    statusDiv.textContent = 'Микрофон включен';
+                    
+                    if (recognition) {
+                        if (isIOS) {
+                            setTimeout(() => {
+                                recognition.start();
+                            }, 500);
+                        } else {
+                            recognition.start();
+                        }
+                    }
+                } else {
+                    if (userStream) {
+                        userStream.getAudioTracks().forEach(track => track.stop());
+                    }
+                    isMicOn = false;
+                    micBtn.classList.remove('active');
+                    micBtn.querySelector('span').textContent = 'Вкл';
+                    statusDiv.textContent = 'Микрофон выключен';
+                    
+                    if (recognition) {
+                        recognition.stop();
+                    }
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Ошибка доступа к микрофону';
+                console.error('Ошибка доступа к микрофону:', error);
+            }
+        }
+
+        async function toggleCamera() {
+            try {
+                if (!isCamOn) {
+                    const videoStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: {
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            facingMode: 'user'
+                        }
+                    });
+                    
+                    if (userStream) {
+                        userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
+                    } else {
+                        userStream = videoStream;
+                    }
+                    
+                    selfVideo.srcObject = userStream;
+                    isCamOn = true;
+                    camBtn.classList.add('active');
+                    camBtn.querySelector('span').textContent = 'Выкл';
+                    statusDiv.textContent = 'Камера включена';
+                    document.getElementById('self-video-container').style.display = 'block';
+                    cameraPermission.style.display = 'none';
+                } else {
+                    if (userStream) {
+                        userStream.getVideoTracks().forEach(track => track.stop());
+                        selfVideo.srcObject = null;
+                    }
+                    isCamOn = false;
+                    camBtn.classList.remove('active');
+                    camBtn.querySelector('span').textContent = 'Вкл';
+                    statusDiv.textContent = 'Камера выключена';
+                    document.getElementById('self-video-container').style.display = 'none';
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Ошибка доступа к камере';
+                console.error('Ошибка доступа к камере:', error);
+                
+                if (error.name === 'NotAllowedError') {
+                    cameraPermission.style.display = 'block';
+                }
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!isFullscreen) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) {
+                    document.documentElement.msRequestFullscreen();
+                }
+                isFullscreen = true;
+                fullscreenBtn.querySelector('span').textContent = 'Обычный';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                isFullscreen = false;
+                fullscreenBtn.querySelector('span').textContent = 'Полный';
+            }
+        }
+
+        function endCall() {
+            if (userStream) {
+                userStream.getTracks().forEach(track => track.stop());
+            }
+            if (recognition) {
+                recognition.stop();
+            }
+            stopAnimation();
+            if (socket) {
+                socket.emit('leave_room', { room_id: roomId });
+                socket.disconnect();
+            }
+            
+            if (isEmbedded) {
+                window.parent.postMessage('conference_ended', '*');
+            } else {
+                window.location.href = '/';
+            }
+        }
+
+        // ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            initSocket();
+            createBackgroundAnimation();
+            initSpeechRecognition();
+            initWindowDragging();
+            initZoom();
+            initDrawingCanvas();
+            
+            textToolBtn.addEventListener('click', () => setTool('text'));
+            drawToolBtn.addEventListener('click', () => setTool('draw'));
+            answerToolBtn.addEventListener('click', () => setTool('answer'));
+            
+            document.getElementById('drawing-pen').addEventListener('click', () => setDrawingTool('pen'));
+            document.getElementById('drawing-eraser').addEventListener('click', () => setDrawingTool('eraser'));
+            clearDrawingBtn.addEventListener('click', clearDrawing);
+            clearTextBtn.addEventListener('click', () => {
+                lessonText.textContent = '';
+            });
+            
+            colorOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    colorOptions.forEach(opt => opt.classList.remove('active'));
+                    option.classList.add('active');
+                    currentColor = option.dataset.color;
+                    if (!isEraser) {
+                        drawingCtx.strokeStyle = currentColor;
+                    }
+                });
+            });
+            
+            submitAnswerBtn.addEventListener('click', submitAnswer);
+            answerInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') submitAnswer();
+            });
+            
+            closeLessonBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                lessonContent.style.display = 'none';
+                textToolBtn.classList.remove('active');
+                answerToolBtn.classList.remove('active');
+            });
+            
+            closeDrawingBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                drawingWindow.style.display = 'none';
+                isDrawingWindowOpen = false;
+                drawToolBtn.classList.remove('active');
+            });
+            
+            closeTextWidgetBtn.addEventListener('click', () => {
+                textWidget.style.display = 'none';
+            });
+            
+            micBtn.addEventListener('click', toggleMicrophone);
+            camBtn.addEventListener('click', toggleCamera);
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
+            endCallBtn.addEventListener('click', endCall);
+
+            activateAiBtn.addEventListener('click', () => {
+                socket.emit('activate_ai_teacher', { room_id: roomId });
+            });
+
+            enableCameraBtn.addEventListener('click', async () => {
+                await enableCameraAndMicrophone();
+            });
+
+            if (isEmbedded) {
+                document.body.classList.add('embedded');
+            }
+
+            window.addEventListener('message', (event) => {
+                if (event.data === 'end_conference') {
+                    endCall();
+                }
+            });
+            
+            window.addEventListener('resize', () => {
+                animationCircles.forEach(circle => circle.remove());
+                animationCircles = [];
+                createBackgroundAnimation();
+            });
+            
+            if (isIOS) {
+                document.addEventListener('touchstart', function() {
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                }, { once: true });
+            }
+            
+            setDrawingTool('pen');
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            isFullscreen = !!document.fullscreenElement;
+            fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
+        });
+    </script>
+</body>
+</html>
