@@ -742,24 +742,26 @@ class DialogueManager:
                 self.current_question_index += 1
                 # ВАЖНО: Устанавливаем флаг ожидания ответа!
                 self.waiting_for_answer = True
-                print(f"Сгенерирован вопрос {self.current_question_index}: {question}")
-                print(f"Установлен waiting_for_answer: {self.waiting_for_answer}")
+                print(f"✅ Сгенерирован вопрос {self.current_question_index}: {question}")
+                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
                 return question
-            return None
+            else:
+                print("❌ Не удалось сгенерировать вопрос")
+                return None
         except Exception as e:
-            print(f"Ошибка генерации вопроса практики: {e}")
+            print(f"❌ Ошибка генерации вопроса практики: {e}")
             return None
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
         """Оценивает ответ и генерирует следующий вопрос (новый метод)"""
-        print(f"Обработка ответа: '{student_answer}'")
-        print(f"Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
+        print(f"🔍 Обработка ответа: '{student_answer}'")
+        print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
-        if not self.practice_active or not self.waiting_for_answer:
-            print("Практика не активна или не ожидается ответ")
+        if not self.practice_active:
+            print("❌ Практика не активна")
             return "Практика не активна."
         
-        print(f"Оценка ответа и генерация следующего вопроса...")
+        print(f"🎯 Оценка ответа и генерация следующего вопроса...")
         
         # Получаем текущий вопрос
         current_question = self.current_practice_question
@@ -773,72 +775,30 @@ class DialogueManager:
             current_question["question"]
         )
         
-        # Сбрасываем флаг ожидания перед генерацией следующего вопроса
-        self.waiting_for_answer = False
-        print(f"Сброшен waiting_for_answer: {self.waiting_for_answer}")
+        print(f"📝 Оценка: {evaluation}")
         
         # Проверяем, нужно ли генерировать следующий вопрос
         if self.current_question_index < 5:  # Всего 5 вопросов
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
-                # Флаг waiting_for_answer уже установлен в _generate_next_practice_question
+                print(f"➡️ Следующий вопрос сгенерирован: {next_question}")
+                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
                 return response
             else:
                 # Не удалось сгенерировать следующий вопрос
+                print("❌ Не удалось сгенерировать следующий вопрос")
                 self._end_practice_session()
                 return f"{evaluation}. Практика завершена - возникли трудности с генерацией вопросов."
         else:
             # Достигли лимита вопросов
+            print("🏁 Достигнут лимит вопросов (5)")
             self._end_practice_session()
             return f"{evaluation}. Практика завершена! Вы ответили на все 5 вопросов. Отличная работа!"
 
-    def handle_practice_answer(self, answer: str) -> str:
-        """Обрабатывает ответ ученика во время практики с передачей контекста"""
-        if not self.practice_active or not self.waiting_for_answer:
-            return "Практика не активна."
-            
-        print(f"Обработка ответа практики: {answer}")
-        
-        # Получить текущий вопрос
-        current_question = self.practice_manager.get_current_question()
-        if not current_question:
-            self._end_practice_session()
-            return "Практика завершена! Отличная работа."
-        
-        # ВАЖНО: Передаем контекст урока для лучшей оценки
-        lesson_context = " ".join(self.lesson_content) if self.lesson_content else ""
-        
-        # Проверить ответ ученика с учетом контекста
-        evaluation = self.practice_manager.evaluate_answer_with_context(
-            answer, 
-            current_question['question'], 
-            current_question['answer'],
-            lesson_context
-        )
-        
-        print(f"Оценка ответа: {evaluation}")
-        
-        # Перейти к следующему вопросу
-        has_next = self.practice_manager.move_to_next_question()
-        
-        if has_next:
-            # Есть следующий вопрос - получаем его
-            next_question_text = self._get_next_practice_question()
-            if next_question_text:
-                response = f"{evaluation}. {next_question_text}"
-                print(f"Переход к следующему вопросу: {response}")
-                return response
-        
-        # Нет больше вопросов - завершаем практику
-        self._end_practice_session()
-        response = f"{evaluation}. Практика завершена! Вы отлично справились."
-        print(f"Завершение практики: {response}")
-        return response
-
     def _handle_practice_answer(self, text: str) -> str:
-        """Обработчик ответов во время практики (алиас для handle_practice_answer)"""
-        return self.handle_practice_answer(text)
+        """Обработчик ответов во время практики"""
+        return self._evaluate_and_generate_next(text)
 
     def _end_practice_session(self):
         """Корректно завершает сессию практики"""
@@ -856,7 +816,7 @@ class DialogueManager:
         
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
-        print("=== ПРАКТИКА ЗАВЕРШЕНА ===")
+        print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов во время урока с учетом выбранного режима"""
