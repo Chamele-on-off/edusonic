@@ -155,10 +155,13 @@ class PracticeManager:
             КОНТЕКСТ УРОКА (для справки):
             {self.current_lesson_context[:500]}
             
+            ВАЖНОЕ ПРАВИЛО: Всегда обращайся к ученику на "ты", а не "ученик" или "он".
+            Например: "Ты близко подошел к правильному ответу" вместо "Ученик близко подошел"
+            
             Твоя задача - дать добрую и поддерживающую обратную связь:
             
             ЕСЛИ ОТВЕТ ПРАВИЛЬНЫЙ:
-            - Похвали ученика конкретно
+            - Похвали ученика конкретно, обращаясь на "ты"
             - Подтверди правильность ответа
             - Скажи что-то ободряющее
             
@@ -174,10 +177,12 @@ class PracticeManager:
             
             Будь добрым и поддерживающим учителем! 
             Максимум 2-3 предложения. Отвечай на русском языке.
+            Всегда обращайся к ученику на "ты".
             """
             
             system_prompt = f"""Ты - опытный и добрый учитель по предмету {self.current_subject}. 
-            Твоя задача - помогать ученикам учиться на ошибках, а не ругать их."""
+            Твоя задача - помогать ученикам учиться на ошибках, а не ругать их.
+            Всегда обращайся к ученику на "ты"."""
             
             evaluation = self.llm._query_llm_api(
                 prompt=prompt,
@@ -187,11 +192,42 @@ class PracticeManager:
                 max_tokens=300
             )
             
+            # ДОПОЛНИТЕЛЬНАЯ ОБРАБОТКА: заменяем "ученик" на "ты"
+            if evaluation:
+                evaluation = self._fix_student_addressing(evaluation)
+            
             return evaluation if evaluation else self._get_fallback_feedback(student_answer, correct_answer)
             
         except Exception as e:
             print(f"Ошибка оценки через LLM: {e}")
             return self._get_fallback_feedback(student_answer, correct_answer)
+
+    def _fix_student_addressing(self, text: str) -> str:
+        """Исправляет обращение к ученику с 'ученик' на 'ты'"""
+        if not text:
+            return text
+        
+        # Заменяем различные формы обращения
+        replacements = {
+            'ученик': 'ты',
+            'ученица': 'ты', 
+            'ученики': 'вы',
+            'ученикам': 'вам',
+            'учеников': 'вас',
+            'он': 'ты',
+            'она': 'ты',
+            'его': 'твой',
+            'её': 'твой',
+            'ему': 'тебе',
+            'ей': 'тебе'
+        }
+        
+        result = text
+        for old, new in replacements.items():
+            # Заменяем с учетом регистра
+            result = re.sub(r'\b' + re.escape(old) + r'\b', new, result, flags=re.IGNORECASE)
+        
+        return result
 
     def _get_fallback_feedback(self, student_answer: str, correct_answer: str) -> str:
         """Fallback обратная связь когда LLM недоступен"""
@@ -211,6 +247,35 @@ class PracticeManager:
         self.current_subject = ""
         self.generated_questions = []
         self.current_question_index = 0
+
+    def save_practice_to_txt(self, lesson_id: str, practice_data: dict):
+        """Сохраняет практические задания в TXT файл"""
+        try:
+            txt_filename = f"{lesson_id}_practice.txt"
+            txt_path = self.practice_dir / txt_filename
+            
+            with open(txt_path, 'w', encoding='utf-8') as f:
+                f.write(f"ПРАКТИЧЕСКИЕ ЗАДАНИЯ: {lesson_id}\n")
+                f.write("=" * 50 + "\n\n")
+                
+                questions = practice_data.get('questions', [])
+                for i, question_data in enumerate(questions, 1):
+                    f.write(f"ВОПРОС {i}: {question_data.get('question', '')}\n\n")
+                    
+                    if 'correct_answer' in question_data:
+                        f.write(f"Правильный ответ: {question_data['correct_answer']}\n")
+                    
+                    if 'explanation' in question_data and question_data['explanation']:
+                        f.write(f"Объяснение: {question_data['explanation']}\n")
+                    
+                    f.write("\n" + "-" * 30 + "\n\n")
+            
+            print(f"✅ Практика сохранена в TXT: {txt_path}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка сохранения практики в TXT: {e}")
+            return False
 
     # Старые методы для обратной совместимости
     def load_practice(self, lesson_id: str) -> bool:
