@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель управления AI-учителем</title>
     <style>
+        /* ОСНОВНЫЕ СТИЛИ */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -19,6 +20,89 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        
+        /* СТИЛИ ДЛЯ УПРАВЛЕНИЯ API КЛЮЧАМИ */
+        .management-panel {
+            margin-top: 30px;
+            border-top: 2px solid #eee;
+            padding-top: 20px;
+        }
+        .api-key-form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        .api-key-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .api-status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .api-status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .api-status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* СТИЛИ ДЛЯ РЕЖИМА LLM */
+        .llm-mode-panel {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        .mode-description {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #3498db;
+        }
+        .mode-description.llm-first {
+            border-left-color: #e74c3c;
+        }
+        .mode-steps {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .mode-steps li {
+            margin-bottom: 5px;
+            line-height: 1.4;
+        }
+        
+        /* СТИЛИ ДЛЯ УПРАВЛЕНИЯ КОМНАТОЙ */
+        #room-controls {
+            margin-top: 20px;
+            padding: 15px;
+            background: #eef;
+            border-radius: 4px;
+            border: 1px solid #dde;
+        }
+        
+        /* СТИЛИ ДЛЯ АВАТАРА */
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
         #avatar {
             width: 400px;
             height: 400px;
@@ -27,13 +111,79 @@
             border: 1px solid #ddd;
             background-color: #f0f0f0;
         }
-        .controls {
+        #status {
+            text-align: center;
+            margin: 10px 0;
+            font-family: monospace;
+            color: #555;
+        }
+        
+        /* СТИЛИ ДЛЯ УПРАВЛЕНИЯ ЗНАНИЯМИ */
+        .tab-container {
             display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin: 20px 0;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
             flex-wrap: wrap;
         }
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: #f8f9fa;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            transition: background-color 0.3s;
+        }
+        .tab:hover {
+            background: #e9ecef;
+        }
+        .tab.active {
+            border: 1px solid #ddd;
+            border-bottom: 1px solid white;
+            background: white;
+            margin-bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* ФОРМЫ И КНОПКИ */
+        .knowledge-form, .lesson-form, .practice-form {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #eee;
+        }
+        .subject-select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        /* ОБЩИЕ СТИЛИ ЭЛЕМЕНТОВ */
         button, select, input {
             padding: 10px 15px;
             border-radius: 4px;
@@ -61,12 +211,8 @@
             border: 1px solid #ddd;
             min-width: 200px;
         }
-        #status {
-            text-align: center;
-            margin: 10px 0;
-            font-family: monospace;
-            color: #555;
-        }
+        
+        /* СТАТУС И ОТЛАДКА */
         #debug {
             margin-top: 20px;
             padding: 10px;
@@ -78,241 +224,8 @@
             font-size: 12px;
             border: 1px solid #ddd;
         }
-        #conference-link {
-            margin-top: 20px;
-            text-align: center;
-        }
-        #room-controls {
-            margin-top: 20px;
-            padding: 15px;
-            background: #eef;
-            border-radius: 4px;
-            border: 1px solid #dde;
-        }
-        #room-id {
-            font-weight: bold;
-            color: #2c3e50;
-        }
         
-        .management-panel {
-            margin-top: 30px;
-            border-top: 2px solid #eee;
-            padding-top: 20px;
-        }
-        
-        .tab-container {
-            display: flex;
-            border-bottom: 1px solid #ddd;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .tab {
-            padding: 12px 20px;
-            cursor: pointer;
-            border: 1px solid transparent;
-            background: #f8f9fa;
-            margin-right: 5px;
-            border-radius: 4px 4px 0 0;
-            transition: background-color 0.3s;
-        }
-        
-        .tab:hover {
-            background: #e9ecef;
-        }
-        
-        .tab.active {
-            border: 1px solid #ddd;
-            border-bottom: 1px solid white;
-            background: white;
-            margin-bottom: -1px;
-        }
-        
-        .tab-content {
-            display: none;
-            padding: 20px;
-            background: white;
-            border: 1px solid #ddd;
-            border-top: none;
-            border-radius: 0 0 4px 4px;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        textarea {
-            width: 100%;
-            height: 200px;
-            padding: 12px;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            font-family: inherit;
-            font-size: 14px;
-            resize: vertical;
-        }
-        
-        .knowledge-form, .lesson-form, .practice-form {
-            margin-bottom: 25px;
-            padding: 15px;
-            background: #f9f9f9;
-            border-radius: 6px;
-            border: 1px solid #eee;
-        }
-        
-        .subject-select {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            font-size: 14px;
-        }
-        
-        .api-key-form {
-            background: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #eee;
-        }
-        
-        .api-key-input {
-            width: 100%;
-            padding: 12px;
-            margin: 12px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-        }
-        
-        .api-status {
-            margin-top: 12px;
-            padding: 12px;
-            border-radius: 4px;
-            display: none;
-            font-size: 14px;
-        }
-        
-        .api-status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .api-status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .api-key-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .download-buttons {
-            display: flex;
-            gap: 12px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .download-btn {
-            background: #27ae60;
-            color: white;
-            border: none;
-            padding: 12px 18px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s;
-        }
-        
-        .download-btn:hover {
-            background: #219a52;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        h2, h3, h4 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-        }
-        
-        h2 {
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
-        }
-        
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            border: 1px solid #c3e6cb;
-            display: none;
-        }
-        
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-            border: 1px solid #f5c6cb;
-            display: none;
-        }
-        
-        .llm-mode-panel {
-            background: #f9f9f9;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #eee;
-        }
-        
-        .mode-description {
-            background: white;
-            padding: 15px;
-            border-radius: 6px;
-            margin: 15px 0;
-            border-left: 4px solid #3498db;
-        }
-        
-        .mode-description.llm-first {
-            border-left-color: #e74c3c;
-        }
-        
-        .mode-description h4 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
-        
-        .mode-steps {
-            margin: 10px 0;
-            padding-left: 20px;
-        }
-        
-        .mode-steps li {
-            margin-bottom: 5px;
-            line-height: 1.4;
-        }
-        
+        /* ФАЙЛЫ И ЗАГРУЗКА */
         .file-list {
             margin: 15px 0;
             border: 1px solid #ddd;
@@ -320,7 +233,6 @@
             max-height: 300px;
             overflow-y: auto;
         }
-        
         .file-item {
             display: flex;
             justify-content: space-between;
@@ -328,31 +240,24 @@
             padding: 10px 15px;
             border-bottom: 1px solid #eee;
         }
-        
         .file-item:last-child {
             border-bottom: none;
         }
-        
         .file-info {
             flex: 1;
         }
-        
         .file-name {
             font-weight: bold;
             color: #2c3e50;
-            word-break: break-all;
         }
-        
         .file-size {
             font-size: 12px;
             color: #6c757d;
         }
-        
         .file-actions {
             display: flex;
             gap: 5px;
         }
-        
         .file-btn {
             padding: 5px 10px;
             border: none;
@@ -360,12 +265,10 @@
             cursor: pointer;
             font-size: 12px;
         }
-        
         .file-btn.delete {
             background: #dc3545;
             color: white;
         }
-        
         .file-btn.delete:hover {
             background: #c82333;
         }
@@ -378,73 +281,74 @@
             margin: 15px 0;
             text-align: center;
         }
-        
         .upload-form.dragover {
             border-color: #3498db;
             background: #f8f9fa;
         }
         
-        .upload-btn {
-            background: #17a2b8;
+        .download-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .download-btn {
+            background: #27ae60;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 12px 18px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
-            margin-top: 10px;
+        }
+        .download-btn:hover {
+            background: #219a52;
         }
         
-        .upload-btn:hover {
-            background: #138496;
+        /* СООБЩЕНИЯ */
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #c3e6cb;
+            display: none;
+        }
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+            display: none;
         }
         
+        /* АДАПТИВНОСТЬ */
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
                 height: 300px;
             }
-            
             .controls {
                 flex-direction: column;
                 align-items: center;
             }
-            
             .controls > * {
                 width: 100%;
                 max-width: 300px;
             }
-            
-            .api-key-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .download-buttons {
-                flex-direction: column;
-            }
-            
             .tab-container {
                 flex-direction: column;
             }
-            
             .tab {
                 margin-bottom: 5px;
                 border-radius: 4px;
             }
-            
             .tab.active {
                 margin-bottom: 0;
                 border-radius: 4px 4px 0 0;
-            }
-            
-            .file-item {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 10px;
-            }
-            
-            .file-actions {
-                align-self: flex-end;
             }
         }
         
@@ -452,29 +356,13 @@
             #container {
                 padding: 15px;
             }
-            
             #avatar {
                 width: 250px;
                 height: 250px;
             }
-            
             button, select, input {
                 padding: 8px 12px;
                 font-size: 13px;
-            }
-            
-            .tab {
-                padding: 10px 15px;
-                font-size: 13px;
-            }
-            
-            .tab-content {
-                padding: 15px;
-            }
-            
-            .file-actions {
-                align-self: stretch;
-                justify-content: flex-end;
             }
         }
     </style>
@@ -484,38 +372,32 @@
     <div id="container">
         <h1 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Панель управления AI-учителем</h1>
         
-        <!-- Новая секция для управления API ключами -->
+        <!-- СЕКЦИЯ: Управление API ключами -->
         <div class="management-panel">
             <h2>Управление API ключами</h2>
-            
-            <div class="api-key-grid">
-                <div class="api-key-form">
-                    <h3>OpenRouter API Key</h3>
-                    <input type="password" id="openrouter-key" class="api-key-input" placeholder="Введите API ключ для OpenRouter">
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button id="save-openrouter-btn">Сохранить</button>
-                        <button id="test-openrouter-btn">Проверить</button>
-                    </div>
-                    <div id="openrouter-status" class="api-status"></div>
+            <div class="api-key-form">
+                <h3>OpenRouter API Key</h3>
+                <input type="password" id="openrouter-key" class="api-key-input" placeholder="Введите API ключ для OpenRouter">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="save-openrouter-btn">Сохранить</button>
+                    <button id="test-openrouter-btn">Проверить</button>
                 </div>
+                <div id="openrouter-status" class="api-status"></div>
             </div>
         </div>
         
-        <!-- Секция управления режимом LLM -->
+        <!-- СЕКЦИЯ: Режим работы LLM -->
         <div class="management-panel">
             <h2>Режим работы AI-учителя</h2>
-            
             <div class="llm-mode-panel">
-                <div class="form-group">
-                    <label for="llm-mode-select">Стратегия ответов на вопросы:</label>
+                <div style="margin-bottom: 15px;">
+                    <label for="llm-mode-select" style="display: block; margin-bottom: 5px; font-weight: bold;">Стратегия ответов на вопросы:</label>
                     <select id="llm-mode-select" class="subject-select">
                         <option value="traditional">Сначала база знаний, потом LLM</option>
                         <option value="llm_first">Сначала LLM, потом база знаний</option>
                     </select>
                 </div>
-                
-                <button id="set-llm-mode-btn" style="margin-top: 10px;">Применить режим</button>
-                
+                <button id="set-llm-mode-btn">Применить режим</button>
                 <div id="llm-mode-status" class="success-message"></div>
                 
                 <div class="mode-description">
@@ -540,14 +422,21 @@
             </div>
         </div>
         
+        <!-- СЕКЦИЯ: Управление комнатой -->
         <div id="room-controls">
             <h3>Комната: <span id="room-id">default</span></h3>
             <div class="controls">
                 <input type="text" id="room-input" placeholder="Имя комнаты">
                 <button id="change-room-btn">Сменить комнату</button>
             </div>
+            <div style="text-align: center; margin-top: 15px;">
+                <a id="conference-link" href="/conference?room=default" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
+                    📹 Перейти в конференцию
+                </a>
+            </div>
         </div>
         
+        <!-- СЕКЦИЯ: Управление аватаром -->
         <div class="controls">
             <select id="avatar-select">
                 <option value="">Выберите аватар</option>
@@ -556,18 +445,9 @@
         </div>
         
         <img id="avatar" src="" alt="Аватар">
-        
         <div id="status">Выберите аватар для загрузки</div>
 
-        <div id="debug"></div>
-
-        <div id="conference-link">
-            <a id="conference-link-a" href="/conference?room=default" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
-                📹 Перейти в конференцию
-            </a>
-        </div>
-        
-        <!-- Панель управления базой знаний и уроками -->
+        <!-- СЕКЦИЯ: Управление знаниями и уроками -->
         <div class="management-panel">
             <h2>Управление базой знаний и уроками</h2>
             
@@ -578,6 +458,7 @@
                 <div class="tab" data-tab="download">Скачать</div>
             </div>
             
+            <!-- Вкладка базы знаний -->
             <div class="tab-content active" id="knowledge-tab">
                 <div class="knowledge-form">
                     <h3>Добавить в базу знаний</h3>
@@ -601,6 +482,7 @@
                 </div>
             </div>
             
+            <!-- Вкладка уроков -->
             <div class="tab-content" id="lessons-tab">
                 <div class="lesson-form">
                     <h3>Добавить новый урок</h3>
@@ -622,6 +504,7 @@
                 </div>
             </div>
             
+            <!-- Вкладка практики -->
             <div class="tab-content" id="practice-tab">
                 <h3>Управление файлами практики</h3>
                 
@@ -630,7 +513,7 @@
                     <div class="upload-form" id="upload-area">
                         <p>Перетащите TXT файл сюда или</p>
                         <input type="file" id="practice-file" accept=".txt" style="display: none;">
-                        <button class="upload-btn" id="select-file-btn">Выбрать файл</button>
+                        <button id="select-file-btn" style="padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px;">Выбрать файл</button>
                         <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
                             Поддерживаются только TXT файлы с вопросами для практики
                         </p>
@@ -651,6 +534,7 @@
                 </div>
             </div>
             
+            <!-- Вкладка скачивания -->
             <div class="tab-content" id="download-tab">
                 <h3>Скачать материалы</h3>
                 
@@ -692,671 +576,11 @@
                 <div id="download-status" class="success-message"></div>
             </div>
         </div>
+
+        <!-- ОТЛАДКА -->
+        <div id="debug"></div>
     </div>
 
-    <script>
-        // Конфигурация
-        const FPS = 10;
-        
-        // Элементы
-        const avatar = document.getElementById('avatar');
-        const statusDiv = document.getElementById('status');
-        const debugDiv = document.getElementById('debug');
-        const loadBtn = document.getElementById('load-btn');
-        const avatarSelect = document.getElementById('avatar-select');
-        const roomIdSpan = document.getElementById('room-id');
-        const roomInput = document.getElementById('room-input');
-        const changeRoomBtn = document.getElementById('change-room-btn');
-        const conferenceLink = document.getElementById('conference-link-a');
-        
-        // Новые элементы для управления API ключами
-        const openrouterKeyInput = document.getElementById('openrouter-key');
-        const saveOpenrouterBtn = document.getElementById('save-openrouter-btn');
-        const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
-        const openrouterStatus = document.getElementById('openrouter-status');
-        
-        // Элементы для управления режимом LLM
-        const llmModeSelect = document.getElementById('llm-mode-select');
-        const setLlmModeBtn = document.getElementById('set-llm-mode-btn');
-        const llmModeStatus = document.getElementById('llm-mode-status');
-        
-        // Элементы для скачивания
-        const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
-        const downloadLessonsBtn = document.getElementById('download-lessons-btn');
-        const downloadPracticeBtn = document.getElementById('download-practice-btn');
-        
-        // Элементы статуса
-        const knowledgeStatus = document.getElementById('knowledge-status');
-        const lessonStatus = document.getElementById('lesson-status');
-        const downloadStatus = document.getElementById('download-status');
-        
-        // Элементы для управления практикой
-        const practiceFileInput = document.getElementById('practice-file');
-        const selectFileBtn = document.getElementById('select-file-btn');
-        const uploadArea = document.getElementById('upload-area');
-        const uploadStatus = document.getElementById('upload-status');
-        const practiceFilesList = document.getElementById('practice-files-list');
-        const refreshFilesBtn = document.getElementById('refresh-files-btn');
-        
-        // Socket.io
-        const socket = io();
-        
-        // Состояние
-        let currentAvatar = '';
-        let currentRoom = 'default';
-        
-        // Функции для работы с API ключами
-        function loadApiKeys() {
-            fetch('/api/config/keys')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        openrouterKeyInput.value = data.keys.openrouter || '';
-                        log('API ключи загружены');
-                    } else {
-                        log('Ошибка загрузки API ключей: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    log('Ошибка загрузки API ключей: ' + error);
-                });
-        }
-        
-        function saveApiKey(provider, apiKey) {
-            fetch('/api/config/keys', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    provider: provider,
-                    api_key: apiKey
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const statusElement = openrouterStatus;
-                if (data.success) {
-                    statusElement.textContent = data.message;
-                    statusElement.className = 'api-status success';
-                    statusElement.style.display = 'block';
-                    log(data.message);
-                } else {
-                    statusElement.textContent = 'Ошибка: ' + data.error;
-                    statusElement.className = 'api-status error';
-                    statusElement.style.display = 'block';
-                    log('Ошибка сохранения ключа: ' + data.error);
-                }
-                
-                // Скрываем статус через 5 секунд
-                setTimeout(() => {
-                    statusElement.style.display = 'none';
-                }, 5000);
-            })
-            .catch(error => {
-                const statusElement = openrouterStatus;
-                statusElement.textContent = 'Ошибка сети: ' + error;
-                statusElement.className = 'api-status error';
-                statusElement.style.display = 'block';
-                log('Ошибка сети при сохранении ключа: ' + error);
-            });
-        }
-        
-        function testApiKey(provider, apiKey) {
-            fetch('/api/config/test', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    provider: provider,
-                    api_key: apiKey
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                const statusElement = openrouterStatus;
-                if (data.success) {
-                    statusElement.textContent = data.message;
-                    statusElement.className = 'api-status ' + (data.valid ? 'success' : 'error');
-                    statusElement.style.display = 'block';
-                    log('Проверка ключа ' + provider + ': ' + data.message);
-                } else {
-                    statusElement.textContent = 'Ошибка: ' + data.error;
-                    statusElement.className = 'api-status error';
-                    statusElement.style.display = 'block';
-                    log('Ошибка проверки ключа: ' + data.error);
-                }
-                
-                // Скрываем статус через 5 секунд
-                setTimeout(() => {
-                    statusElement.style.display = 'none';
-                }, 5000);
-            })
-            .catch(error => {
-                const statusElement = openrouterStatus;
-                statusElement.textContent = 'Ошибка сети: ' + error;
-                statusElement.className = 'api-status error';
-                statusElement.style.display = 'block';
-                log('Ошибка сети при проверке ключа: ' + error);
-            });
-        }
-        
-        // Функции для работы с режимом LLM
-        function loadLLMMode() {
-            fetch('/api/config/llm_mode')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        llmModeSelect.value = data.mode;
-                        log('Текущий режим LLM: ' + data.mode);
-                    }
-                })
-                .catch(error => {
-                    log('Ошибка загрузки режима LLM: ' + error);
-                });
-        }
-        
-        function setLLMMode(mode) {
-            fetch('/api/config/llm_mode', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ mode: mode })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus(llmModeStatus, data.message);
-                    log(data.message);
-                    
-                    // Также отправляем сокет-запрос для применения режима ко всем активным комнатам
-                    if (socket) {
-                        socket.emit('set_llm_mode', { 
-                            room_id: currentRoom,
-                            mode: mode
-                        });
-                    }
-                } else {
-                    showStatus(llmModeStatus, 'Ошибка: ' + data.error, false);
-                }
-            })
-            .catch(error => {
-                showStatus(llmModeStatus, 'Ошибка сети: ' + error, false);
-            });
-        }
-        
-        // Функции для работы с файлами практики
-        function loadPracticeFiles() {
-            fetch('/api/practice_files')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayPracticeFiles(data.files);
-                    } else {
-                        practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Ошибка загрузки файлов</div></div></div>';
-                    }
-                })
-                .catch(error => {
-                    practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Ошибка сети</div></div></div>';
-                    log('Ошибка загрузки файлов практики: ' + error);
-                });
-        }
-        
-        function displayPracticeFiles(files) {
-            if (files.length === 0) {
-                practiceFilesList.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Файлы не найдены</div></div></div>';
-                return;
-            }
-            
-            practiceFilesList.innerHTML = '';
-            files.forEach(file => {
-                const fileSize = formatFileSize(file.size);
-                const fileDate = new Date(file.modified).toLocaleDateString();
-                
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
-                fileItem.innerHTML = `
-                    <div class="file-info">
-                        <div class="file-name">${file.filename}</div>
-                        <div class="file-size">${fileSize} · ${fileDate}</div>
-                    </div>
-                    <div class="file-actions">
-                        <button class="file-btn" onclick="downloadPracticeFile('${file.filename}')">Скачать</button>
-                        <button class="file-btn delete" data-filename="${file.filename}">Удалить</button>
-                    </div>
-                `;
-                practiceFilesList.appendChild(fileItem);
-            });
-            
-            // Добавляем обработчики для кнопок удаления
-            document.querySelectorAll('.file-btn.delete').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const filename = this.dataset.filename;
-                    deletePracticeFile(filename);
-                });
-            });
-        }
-        
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-        
-        function downloadPracticeFile(filename) {
-            window.open('/api/download_practice/' + filename, '_blank');
-        }
-        
-        function deletePracticeFile(filename) {
-            if (!confirm('Удалить файл "' + filename + '"?')) return;
-            
-            fetch('/api/delete_practice/' + filename)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showStatus(uploadStatus, data.message);
-                        loadPracticeFiles();
-                    } else {
-                        showStatus(uploadStatus, 'Ошибка: ' + data.error, false);
-                    }
-                })
-                .catch(error => {
-                    showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
-                });
-        }
-        
-        function uploadPracticeFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            fetch('/api/upload_practice', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus(uploadStatus, data.message);
-                    loadPracticeFiles();
-                } else {
-                    showStatus(uploadStatus, 'Ошибка: ' + data.error, false);
-                }
-            })
-            .catch(error => {
-                showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
-            });
-        }
-        
-        // Инициализация комнаты
-        function initRoom(roomId) {
-            currentRoom = roomId;
-            roomIdSpan.textContent = roomId;
-            conferenceLink.href = '/conference?room=' + roomId;
-            
-            // Сообщаем серверу о смене комнаты
-            socket.emit('join_room', { room_id: roomId });
-            
-            log('Переключено в комнату: ' + roomId);
-        }
-        
-        // Логирование
-        function log(message) {
-            const now = new Date().toLocaleTimeString();
-            debugDiv.innerHTML += '[' + now + '] ' + message + '<br>';
-            debugDiv.scrollTop = debugDiv.scrollHeight;
-        }
-        
-        // Показать статус сообщение
-        function showStatus(element, message, isSuccess = true) {
-            element.textContent = message;
-            element.className = isSuccess ? 'success-message' : 'error-message';
-            element.style.display = 'block';
-            
-            setTimeout(function() {
-                element.style.display = 'none';
-            }, 5000);
-        }
-        
-        // Загрузка изображения с повторами
-        function loadImage(src, retries = 3) {
-            return new Promise(function(resolve, reject) {
-                const img = new Image();
-                img.onload = function() { resolve(img); };
-                img.onerror = function() {
-                    if (retries > 0) {
-                        setTimeout(function() { loadImage(src, retries - 1).then(resolve).catch(reject); }, 300);
-                    } else {
-                        reject('Не удалось загрузить: ' + src);
-                    }
-                };
-                img.src = src;
-            });
-        }
-        
-        // Загрузка списка аватаров
-        function loadAvatars() {
-            fetch('/api/avatars')
-                .then(function(response) { return response.json(); })
-                .then(function(data) {
-                    if (data.error) throw new Error(data.error);
-                    
-                    avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
-                    data.avatars.forEach(function(avatar) {
-                        const option = document.createElement('option');
-                        option.value = avatar;
-                        option.textContent = avatar;
-                        avatarSelect.appendChild(option);
-                    });
-                    
-                    log('Загружено аватаров: ' + data.avatars.length);
-                })
-                .catch(function(error) {
-                    log(error.message);
-                });
-        }
-        
-        // Загрузка кадров аватара и установка на конференцию
-        function loadAvatarFrames(avatarName) {
-            statusDiv.textContent = 'Загрузка ' + avatarName + '...';
-            
-            fetch('/api/frames/' + avatarName)
-                .then(function(response) { return response.json(); })
-                .then(function(data) {
-                    if (data.error) throw new Error(data.error);
-                    
-                    const frames = data.frames;
-                    log('Найдено кадров: ' + frames.length);
-                    
-                    // Загружаем первое изображение для предпросмотра
-                    if (frames.length > 0) {
-                        loadImage('/frames/' + avatarName + '/' + frames[0])
-                            .then(function(img) {
-                                avatar.src = img.src;
-                                statusDiv.textContent = avatarName + ': загружено 1/' + frames.length;
-                                
-                                // Отправляем команду на смену аватара в конференцию
-                                socket.emit('avatar_changed', {
-                                    room_id: currentRoom,
-                                    avatar_name: avatarName
-                                });
-                                
-                                log('Аватар "' + avatarName + '" установлен для комнаты ' + currentRoom);
-                            })
-                            .catch(function(error) {
-                                statusDiv.textContent = 'Ошибка загрузки изображения';
-                                log(error);
-                            });
-                    } else {
-                        statusDiv.textContent = avatarName + ': нет кадров';
-                    }
-                })
-                .catch(function(error) {
-                    statusDiv.textContent = 'Ошибка: ' + error.message;
-                    log(error.message);
-                });
-        }
-        
-        // Инициализация
-        document.addEventListener('DOMContentLoaded', function() {
-            // Загружаем API ключи при загрузке страницы
-            loadApiKeys();
-            
-            // Загружаем режим LLM при загрузке страницы
-            loadLLMMode();
-            
-            // Загружаем файлы практики при загрузке страницы
-            loadPracticeFiles();
-            
-            // Инициализация комнаты по умолчанию
-            initRoom('default');
-            
-            // Загрузка списка аватаров
-            loadAvatars();
-            
-            // Обработчики для API ключей
-            saveOpenrouterBtn.addEventListener('click', function() {
-                saveApiKey('openrouter', openrouterKeyInput.value);
-            });
-            
-            testOpenrouterBtn.addEventListener('click', function() {
-                testApiKey('openrouter', openrouterKeyInput.value);
-            });
-            
-            // Обработчики для режима LLM
-            setLlmModeBtn.addEventListener('click', function() {
-                const mode = llmModeSelect.value;
-                setLLMMode(mode);
-            });
-            
-            // Обработчики для управления файлами практики
-            selectFileBtn.addEventListener('click', function() {
-                practiceFileInput.click();
-            });
-            
-            practiceFileInput.addEventListener('change', function(e) {
-                if (e.target.files.length > 0) {
-                    uploadPracticeFile(e.target.files[0]);
-                }
-            });
-            
-            refreshFilesBtn.addEventListener('click', function() {
-                loadPracticeFiles();
-            });
-            
-            // Drag and drop для загрузки файлов
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                uploadArea.classList.add('dragover');
-            });
-            
-            uploadArea.addEventListener('dragleave', function() {
-                uploadArea.classList.remove('dragover');
-            });
-            
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-                
-                if (e.dataTransfer.files.length > 0) {
-                    const file = e.dataTransfer.files[0];
-                    if (file.name.endsWith('.txt')) {
-                        uploadPracticeFile(file);
-                    } else {
-                        showStatus(uploadStatus, 'Только TXT файлы поддерживаются', false);
-                    }
-                }
-            });
-            
-            // Выбор аватара
-            avatarSelect.addEventListener('change', function() {
-                currentAvatar = avatarSelect.value;
-                loadBtn.disabled = !currentAvatar;
-            });
-            
-            // Кнопка загрузки аватара
-            loadBtn.addEventListener('click', function() {
-                if (currentAvatar) {
-                    loadAvatarFrames(currentAvatar);
-                }
-            });
-            
-            // Смена комнаты
-            changeRoomBtn.addEventListener('click', function() {
-                const newRoom = roomInput.value.trim() || 'default';
-                initRoom(newRoom);
-                roomInput.value = '';
-            });
-            
-            // Управление вкладками
-            document.querySelectorAll('.tab').forEach(function(tab) {
-                tab.addEventListener('click', function() {
-                    document.querySelectorAll('.tab').forEach(function(t) {
-                        t.classList.remove('active');
-                    });
-                    document.querySelectorAll('.tab-content').forEach(function(c) {
-                        c.classList.remove('active');
-                    });
-                    
-                    this.classList.add('active');
-                    document.getElementById(this.dataset.tab + '-tab').classList.add('active');
-                });
-            });
-            
-            // Добавление в базу знаний
-            document.getElementById('add-knowledge-btn').addEventListener('click', function() {
-                const subject = document.getElementById('knowledge-subject').value;
-                const text = document.getElementById('knowledge-text').value;
-                
-                if (!text.trim()) {
-                    showStatus(knowledgeStatus, 'Введите текст для добавления в базу знаний', false);
-                    return;
-                }
-                
-                fetch('/api/add_knowledge', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        subject: subject,
-                        text: text
-                    })
-                })
-                .then(function(response) { return response.json(); })
-                .then(function(data) {
-                    if (data.success) {
-                        showStatus(knowledgeStatus, 'Данные успешно добавлены в базу знаний! Добавлено элементов: ' + data.added_items);
-                        document.getElementById('knowledge-text').value = '';
-                    } else {
-                        showStatus(knowledgeStatus, 'Ошибка: ' + data.error, false);
-                    }
-                })
-                .catch(function(error) {
-                    showStatus(knowledgeStatus, 'Ошибка при добавлении данных: ' + error, false);
-                });
-            });
-            
-            // Добавление урока
-            document.getElementById('add-lesson-btn').addEventListener('click', function() {
-                const subject = document.getElementById('lesson-subject').value;
-                const title = document.getElementById('lesson-title').value;
-                const content = document.getElementById('lesson-content').value;
-                
-                if (!title.trim() || !content.trim()) {
-                    showStatus(lessonStatus, 'Заполните название и содержание урока', false);
-                    return;
-                }
-                
-                fetch('/api/add_lesson', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        subject: subject,
-                        title: title,
-                        content: content
-                    })
-                })
-                .then(function(response) { return response.json(); })
-                .then(function(data) {
-                    if (data.success) {
-                        showStatus(lessonStatus, 'Урок "' + title + '" успешно добавлен по предмету "' + subject + '"!');
-                        document.getElementById('lesson-title').value = '';
-                        document.getElementById('lesson-content').value = '';
-                    } else {
-                        showStatus(lessonStatus, 'Ошибка: ' + data.error, false);
-                    }
-                })
-                .catch(function(error) {
-                    showStatus(lessonStatus, 'Ошибка при добавлении урока: ' + error, false);
-                });
-            });
-            
-            // Скачивание базы знаний
-            downloadKnowledgeBtn.addEventListener('click', function() {
-                const subject = document.getElementById('download-subject').value;
-                
-                fetch('/api/download_knowledge?subject=' + encodeURIComponent(subject))
-                .then(function(response) {
-                    if (response.ok) {
-                        return response.blob();
-                    }
-                    throw new Error('Ошибка скачивания');
-                })
-                .then(function(blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = subject + '_knowledge.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus(downloadStatus, 'База знаний по предмету "' + subject + '" успешно скачана!');
-                })
-                .catch(function(error) {
-                    showStatus(downloadStatus, 'Ошибка при скачивании: ' + error.message, false);
-                });
-            });
-            
-            // Скачивание уроков
-            downloadLessonsBtn.addEventListener('click', function() {
-                fetch('/api/download_lessons')
-                .then(function(response) {
-                    if (response.ok) {
-                        return response.blob();
-                    }
-                    throw new Error('Ошибка скачивания');
-                })
-                .then(function(blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'ai_teacher_lessons.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus(downloadStatus, 'Все уроки успешно скачаны!');
-                })
-                .catch(function(error) {
-                    showStatus(downloadStatus, 'Ошибка при скачивании уроков: ' + error.message, false);
-                });
-            });
-            
-            // Скачивание практики
-            downloadPracticeBtn.addEventListener('click', function() {
-                fetch('/api/download_practice')
-                .then(function(response) {
-                    if (response.ok) {
-                        return response.blob();
-                    }
-                    throw new Error('Ошибка скачивания');
-                })
-                .then(function(blob) {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'ai_teacher_practice.zip';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    showStatus(downloadStatus, 'Практические задания успешно скачаны!');
-                })
-                .catch(function(error) {
-                    showStatus(downloadStatus, 'Ошибка при скачивании практики: ' + error.message, false);
-                });
-            });
-        });
-    </script>
+    <script src="{{ url_for('static', filename='js/teacher.js') }}"></script>
 </body>
 </html>
