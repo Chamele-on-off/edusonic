@@ -577,6 +577,18 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ (всегда приоритет)
+        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
+        recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
+        
+        # Если урок начат и это команда продолжения
+        if self.lesson_started and any(cmd in text_lower for cmd in continue_commands + recorded_commands):
+            next_paragraph = self._get_next_paragraph()
+            if next_paragraph:
+                return next_paragraph
+            else:
+                return "Урок завершен. Переходим к практике."
+        
         # Добавляем в историю диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
@@ -759,6 +771,17 @@ class DialogueManager:
         # Инициализируем контекст для генерации вопросов
         lesson_context = " ".join(self.lesson_content)
         self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
+        
+        # Сохраняем практику в TXT файл
+        if self.selected_lesson:
+            lesson_id = self.selected_lesson.get('id', 'unknown')
+            # Создаем базовую структуру практики для сохранения
+            practice_data = {
+                'questions': [],
+                'lesson_id': lesson_id,
+                'subject': self.current_subject
+            }
+            self.practice_manager.save_practice_to_txt(lesson_id, practice_data)
         
         # Отправляем событие начала практики
         if self.room_id:
