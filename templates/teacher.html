@@ -628,11 +628,11 @@
                 <div class="practice-form">
                     <h4>📝 Загрузить файл практики</h4>
                     <div class="upload-form" id="upload-area">
-                        <p>Перетащите JSON файл сюда или</p>
-                        <input type="file" id="practice-file" accept=".json" style="display: none;">
+                        <p>Перетащите TXT файл сюда или</p>
+                        <input type="file" id="practice-file" accept=".txt" style="display: none;">
                         <button class="upload-btn" id="select-file-btn">Выбрать файл</button>
                         <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
-                            Поддерживаются только JSON файлы с вопросами для практики
+                            Поддерживаются только TXT файлы с вопросами для практики
                         </p>
                     </div>
                     <div id="upload-status" class="success-message"></div>
@@ -923,6 +923,7 @@
                         <div class="file-size">${fileSize} · ${fileDate}</div>
                     </div>
                     <div class="file-actions">
+                        <button class="file-btn" onclick="downloadPracticeFile('${file.filename}')">Скачать</button>
                         <button class="file-btn delete" data-filename="${file.filename}">Удалить</button>
                     </div>
                 `;
@@ -944,6 +945,10 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function downloadPracticeFile(filename) {
+            window.open('/api/download_practice/' + filename, '_blank');
         }
         
         function deletePracticeFile(filename) {
@@ -1158,10 +1163,10 @@
                 
                 if (e.dataTransfer.files.length > 0) {
                     const file = e.dataTransfer.files[0];
-                    if (file.name.endsWith('.json')) {
+                    if (file.name.endsWith('.txt')) {
                         uploadPracticeFile(file);
                     } else {
-                        showStatus(uploadStatus, 'Только JSON файлы поддерживаются', false);
+                        showStatus(uploadStatus, 'Только TXT файлы поддерживаются', false);
                     }
                 }
             });
