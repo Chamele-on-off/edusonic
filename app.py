@@ -305,9 +305,17 @@ def handle_recognized_speech(data):
         print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
         return
 
-    # Игнорируем распознавание системных сообщений и короткие фразы
+    # Расширенный список команд продолжения
+    continue_commands = [
+        "продолжай", "продолжить", "дальше", "следующий", "следующая",
+        "записал", "записала", "понял", "поняла", "ясно", "ясна", 
+        "ага", "угу", "хорошо", "ок", "ладно", "готов", "готова",
+        "слушаю", "вперед", "поехали", "начали", "давай"
+    ]
+    
+    # Игнорируем короткие фразы и системные сообщения
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
-        len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
+        len(text.strip()) < 2 or text in ["привет", "здравствуйте"]):
         return
     
     room_speech_data[room_id].append({
@@ -326,8 +334,9 @@ def handle_recognized_speech(data):
         
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
-            # Сначала проверяем команды управления
-            if any(word in text.lower() for word in ["записал", "дальше", 'продолжай', "следующий", "продолжить"]):
+            # Улучшенная проверка команд продолжения
+            text_lower = text.lower().strip()
+            if any(cmd in text_lower for cmd in continue_commands):
                 # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
@@ -339,10 +348,20 @@ def handle_recognized_speech(data):
                     }, room=room_id)
                     # Озвучиваем следующий абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                else:
+                    # Если урок закончился, начинаем практику
+                    practice_message = "Урок завершен. Переходим к практике."
+                    emit('speech_text', {
+                        'text': f"Учитель: {practice_message}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
                 return
             
             # Команды остановки
-            if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
+            stop_commands = ["стоп", "останови", "хватит", "закончи", "прерви", "пауза"]
+            if any(cmd in text_lower for cmd in stop_commands):
                 stop_response = dialogue.process_input(text)
                 if stop_response:
                     # Отправляем текст
@@ -719,18 +738,35 @@ def get_available_lessons():
 def get_practice_content(lesson_id):
     """Получение практических заданий для урока"""
     try:
-        practice_file = PRACTICE_DIR / f"{lesson_id}.json"
+        practice_file = PRACTICE_DIR / f"{lesson_id}.txt"
         if not practice_file.exists():
             return jsonify({"error": "Практические задания не найдены", "success": False}), 404
         
         with open(practice_file, 'r', encoding='utf-8') as f:
-            content = json.load(f)
+            content = f.read()
+        
+        # Разбиваем на вопросы
+        questions = []
+        current_question = ""
+        
+        for line in content.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#'):  # Игнорируем комментарии
+                if line.endswith('?'):
+                    if current_question:
+                        questions.append(current_question.strip())
+                    current_question = line
+                else:
+                    current_question += " " + line
+        
+        if current_question:
+            questions.append(current_question.strip())
         
         return jsonify({
             "success": True,
             'lesson_id': lesson_id,
-            'content': content,
-            'question_count': len(content.get('questions', []))
+            'questions': questions,
+            'question_count': len(questions)
         })
         
     except Exception as e:
@@ -741,11 +777,12 @@ def get_practice_files():
     """Получение списка файлов практики"""
     try:
         practice_files = []
-        for practice_file in PRACTICE_DIR.glob("*.json"):
+        for practice_file in PRACTICE_DIR.glob("*.txt"):
             practice_files.append({
                 'filename': practice_file.name,
                 'size': practice_file.stat().st_size,
-                'modified': datetime.fromtimestamp(practice_file.stat().st_mtime).isoformat()
+                'modified': datetime.fromtimestamp(practice_file.stat().st_mtime).isoformat(),
+                'lesson_id': practice_file.stem
             })
         
         return jsonify({
@@ -755,6 +792,27 @@ def get_practice_files():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/download_practice/<filename>')
+def download_practice_file(filename):
+    """Скачивание файла практики"""
+    try:
+        if not filename.endswith('.txt'):
+            return jsonify({"success": False, "error": "Invalid file type"}), 400
+            
+        practice_file = PRACTICE_DIR / filename
+        if not practice_file.exists():
+            return jsonify({"success": False, "error": "File not found"}), 404
+        
+        return send_file(
+            practice_file,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='text/plain'
+        )
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/upload_practice', methods=['POST'])
 def upload_practice():
@@ -767,7 +825,7 @@ def upload_practice():
         if file.filename == '':
             return jsonify({"success": False, "error": "No file selected"})
         
-        if file and file.filename.endswith('.json'):
+        if file and file.filename.endswith('.txt'):
             filename = secure_filename(file.filename)
             file.save(PRACTICE_DIR / filename)
             
@@ -777,7 +835,7 @@ def upload_practice():
                 "filename": filename
             })
         else:
-            return jsonify({"success": False, "error": "Invalid file type. Only JSON allowed"})
+            return jsonify({"success": False, "error": "Invalid file type. Only TXT allowed"})
             
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -903,18 +961,19 @@ def add_practice():
     try:
         data = request.json
         lesson_id = data.get('lesson_id', '')
-        practice_data = data.get('practice_data', {})
+        questions = data.get('questions', [])
         
-        if not lesson_id or not practice_data:
-            return jsonify({"success": False, "error": "Lesson ID and practice data are required"})
+        if not lesson_id or not questions:
+            return jsonify({"success": False, "error": "Lesson ID and questions are required"})
         
         # Создаем файл практики
-        practice_file = PRACTICE_DIR / f"{lesson_id}.json"
+        practice_file = PRACTICE_DIR / f"{lesson_id}.txt"
         
         with open(practice_file, 'w', encoding='utf-8') as f:
-            json.dump(practice_data, f, ensure_ascii=False, indent=2)
+            for i, question in enumerate(questions, 1):
+                f.write(f"{i}. {question}\n\n")
         
-        return jsonify({"success": True, "lesson_id": lesson_id, "question_count": len(practice_data.get('questions', []))})
+        return jsonify({"success": True, "lesson_id": lesson_id, "question_count": len(questions)})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -988,7 +1047,7 @@ def download_practice():
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
     
     with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-        for practice_file in PRACTICE_DIR.glob("*.json"):
+        for practice_file in PRACTICE_DIR.glob("*.txt"):
             zipf.write(practice_file, practice_file.name)
     
     temp_zip.close()
