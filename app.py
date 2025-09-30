@@ -294,6 +294,28 @@ def handle_student_answer(data):
             emit('practice_ended', {}, room=room_id)
             print("🏁 Практика завершена (response=None)")
 
+@socketio.on('student_message')
+def handle_student_message(data):
+    """Обработчик сообщений от ученика через текстовое поле"""
+    room_id = data['room_id']
+    message = data['message']
+    user_sid = request.sid
+
+    print(f"📝 Получено сообщение от ученика: {message}")
+    
+    # Если активна практика, обрабатываем как ответ
+    if room_practice_active[room_id]:
+        handle_student_answer({
+            'room_id': room_id,
+            'answer': message
+        })
+    else:
+        # Иначе обрабатываем как обычную речь
+        handle_recognized_speech({
+            'room_id': room_id, 
+            'text': message
+        })
+
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
     room_id = data['room_id']
@@ -324,37 +346,41 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ
+        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
+        recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
+        
+        # Если урок начат и это команда продолжения
+        if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands + recorded_commands):
+            # Получаем следующий абзац урока
+            next_paragraph = dialogue._get_next_paragraph()
+            if next_paragraph:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {next_paragraph}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                # Озвучиваем следующий абзац
+                speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+            return
+        
+        # Команды остановки
+        if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
+            stop_response = dialogue.process_input(text)
+            if stop_response:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {stop_response}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                # Озвучиваем ответ на остановку
+                speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
+            return
+        
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
-            # Сначала проверяем команды управления
-            if any(word in text.lower() for word in ["записал", "дальше", 'продолжай', "следующий", "продолжить"]):
-                # Получаем следующий абзац урока
-                next_paragraph = dialogue._get_next_paragraph()
-                if next_paragraph:
-                    # Отправляем текст
-                    emit('speech_text', {
-                        'text': f"Учитель: {next_paragraph}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    # Озвучиваем следующий абзац
-                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-                return
-            
-            # Команды остановки
-            if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
-                stop_response = dialogue.process_input(text)
-                if stop_response:
-                    # Отправляем текст
-                    emit('speech_text', {
-                        'text': f"Учитель: {stop_response}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    # Озвучиваем ответ на остановку
-                    speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
-                return
-            
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
@@ -756,6 +782,27 @@ def get_practice_files():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/practice_txt_files')
+def get_practice_txt_files():
+    """Получение списка TXT файлов практики"""
+    try:
+        txt_files = []
+        for txt_file in PRACTICE_DIR.glob("*.txt"):
+            txt_files.append({
+                'filename': txt_file.name,
+                'size': txt_file.stat().st_size,
+                'modified': datetime.fromtimestamp(txt_file.stat().st_mtime).isoformat()
+            })
+        
+        return jsonify({
+            "success": True,
+            "files": txt_files,
+            "total_files": len(txt_files)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/upload_practice', methods=['POST'])
 def upload_practice():
     """Загрузка файла практики"""
@@ -999,6 +1046,38 @@ def download_practice():
         download_name="ai_teacher_practice.zip",
         mimetype='application/zip'
     )
+
+@app.route('/api/download_practice_txt')
+def download_practice_txt():
+    """Скачивание практических заданий в текстовом формате"""
+    try:
+        # Ищем TXT файлы практики
+        practice_txt_files = list(PRACTICE_DIR.glob("*.txt"))
+        
+        if not practice_txt_files:
+            return jsonify({"success": False, "error": "TXT файлы практики не найдены"})
+        
+        # Создаем временный zip-файл
+        import tempfile
+        import zipfile
+        
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+            for txt_file in practice_txt_files:
+                zipf.write(txt_file, txt_file.name)
+        
+        temp_zip.close()
+        
+        return send_file(
+            temp_zip.name,
+            as_attachment=True,
+            download_name="ai_teacher_practice_txt.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 # Новые API эндпоинты для управления API ключами
 @app.route('/api/config/keys', methods=['GET'])
