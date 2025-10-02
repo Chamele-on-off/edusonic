@@ -154,6 +154,12 @@ class LLMIntegration:
                     if 'choices' in result and len(result['choices']) > 0:
                         answer = result['choices'][0]['message']['content']
                         processed_answer = self._clean_llm_response(answer)
+                        
+                        # Проверяем, содержит ли ответ концепции для визуализации
+                        visualization_concepts = ['диаграмм', 'схем', 'график', 'структур', 'процесс']
+                        if any(concept in processed_answer.lower() for concept in visualization_concepts):
+                            print("🎯 Ответ содержит концепции для визуализации")
+                        
                         print(f"✅ Получен ответ от LLM: {processed_answer[:100]}...")
                         return processed_answer
                     else:
@@ -275,3 +281,264 @@ class LLMIntegration:
         # Всегда используем OpenRouter API ключ
         config = load_config()
         self.api_key = config.get("openrouter", {}).get("api_key", "")
+
+    def generate_mermaid_diagram(self, topic: str, context: str = "") -> str:
+        """Генерация Mermaid диаграммы через LLM"""
+        prompt = f"""
+        Создай Mermaid.js диаграмму для визуализации темы: "{topic}".
+        
+        Контекст: {context}
+        
+        Требования:
+        1. Используй простой и понятный синтаксис Mermaid
+        2. Диаграмма должна быть информативной и наглядной
+        3. Максимум 10-15 элементов
+        4. Подходящий тип диаграммы (graph, flowchart, pie, sequenceDiagram, classDiagram, timeline)
+        5. Русские подписи
+        6. Четкая структура и логические связи
+
+        Верни ТОЛЬКО код Mermaid без обратных кавычек и пояснений.
+        Начни сразу с типа диаграммы (например: flowchart TD).
+        """
+        
+        try:
+            response = self._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject="general",
+                system_prompt="""Ты - эксперт по созданию образовательных диаграмм. 
+                Создавай четкие и понятные Mermaid диаграммы для объяснения учебного материала.
+                Используй простой синтаксис и логическую структуру.""",
+                max_tokens=800
+            )
+            
+            if response:
+                # Очищаем ответ от лишних символов
+                cleaned_code = self._clean_mermaid_code(response)
+                print(f"✅ Сгенерирован Mermaid код для: {topic}")
+                return cleaned_code
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации Mermaid кода: {e}")
+        
+        return ""
+
+    def generate_svg_diagram(self, topic: str, context: str = "") -> str:
+        """Генерация простого SVG через LLM"""
+        prompt = f"""
+        Создай простой SVG код для визуализации: "{topic}".
+        
+        Контекст: {context}
+        
+        Используй только базовые элементы:
+        - <rect> для прямоугольников и блоков
+        - <circle> для кругов и узлов
+        - <line> для линий и связей
+        - <text> для текста и подписей
+        - <path> для сложных форм
+        
+        Требования:
+        - Размер: 400x300
+        - Простая и понятная схема
+        - Русские подписи
+        - Минималистичный дизайн
+        - Логическая структура
+        - Цвета для различия элементов
+
+        Верни ТОЛЬКО SVG код без пояснений.
+        """
+        
+        try:
+            svg_code = self._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject="general",
+                system_prompt="Ты создаешь простые SVG схемы для образования. Используй минималистичный дизайн и четкую структуру.",
+                max_tokens=1000
+            )
+            
+            if svg_code:
+                # Очищаем SVG код
+                svg_code = re.sub(r'```(xml|svg)?\s*', '', svg_code)
+                svg_code = re.sub(r'```\s*', '', svg_code)
+                svg_code = svg_code.strip()
+                
+                # Проверяем валидность SVG
+                if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
+                    print(f"✅ Сгенерирован SVG код для: {topic}")
+                    return svg_code
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации SVG кода: {e}")
+        
+        return ""
+
+    def _clean_mermaid_code(self, code: str) -> str:
+        """Очистка Mermaid кода от лишних символов"""
+        if not code:
+            return ""
+        
+        # Удаляем markdown обратные кавычки
+        code = re.sub(r'```mermaid\s*', '', code)
+        code = re.sub(r'```\s*', '', code)
+        
+        # Удаляем лишние пробелы и комментарии
+        code = re.sub(r'%%.*', '', code)  # Удаляем комментарии Mermaid
+        code = '\n'.join([line for line in code.split('\n') if line.strip()])
+        
+        return code.strip()
+
+    def check_visualization_need(self, text: str) -> bool:
+        """Проверяет, нужна ли визуализация для данного текста"""
+        if not text or len(text.strip()) < 10:
+            return False
+            
+        text_lower = text.lower()
+        
+        # Ключевые слова, указывающие на необходимость визуализации
+        visualization_keywords = [
+            'структура', 'схема', 'диаграмма', 'график', 'процесс', 
+            'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
+            'таблица', 'классификация', 'этапы', 'стадии', 'система',
+            'модель', 'цепочка', 'последовательность', 'отношение',
+            'разделение', 'группировка', 'организация', 'архитектура',
+            'понятие', 'определение', 'теория', 'концепция', 'принцип',
+            'механизм', 'функция', 'свойство', 'характеристика'
+        ]
+        
+        # Структурные индикаторы
+        structure_indicators = [
+            'состоит из', 'включает в себя', 'делится на', 'подразделяется',
+            'можно разделить', 'выделяют', 'различают', 'существуют'
+        ]
+        
+        # Проверяем наличие ключевых слов
+        has_keywords = any(keyword in text_lower for keyword in visualization_keywords)
+        
+        # Проверяем наличие структурных индикаторов
+        has_structure = any(indicator in text_lower for indicator in structure_indicators)
+        
+        # Проверяем длину текста (достаточно информативный)
+        is_long_enough = len(text.split()) > 5
+        
+        return (has_keywords or has_structure) and is_long_enough
+
+    def generate_visualization(self, topic: str, context: str = "") -> dict:
+        """Генерация обеих типов визуализаций (Mermaid и SVG)"""
+        try:
+            print(f"🎨 Генерация визуализаций для: {topic}")
+            
+            # Генерируем Mermaid диаграмму
+            mermaid_code = self.generate_mermaid_diagram(topic, context)
+            
+            # Генерируем SVG схему
+            svg_code = self.generate_svg_diagram(topic, context)
+            
+            result = {
+                "mermaid_code": mermaid_code,
+                "svg_code": svg_code,
+                "topic": topic,
+                "success": bool(mermaid_code or svg_code)
+            }
+            
+            if result["success"]:
+                print(f"✅ Визуализации сгенерированы для: {topic}")
+            else:
+                print(f"❌ Не удалось сгенерировать визуализации для: {topic}")
+                
+            return result
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации визуализаций: {e}")
+            return {
+                "mermaid_code": "",
+                "svg_code": "",
+                "topic": topic,
+                "success": False,
+                "error": str(e)
+            }
+
+    def test_connection(self) -> bool:
+        """Тестирование подключения к API"""
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            test_data = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10
+            }
+            
+            response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=test_data,
+                timeout=10
+            )
+            
+            return response.status_code == 200
+            
+        except Exception as e:
+            print(f"❌ Ошибка тестирования подключения: {e}")
+            return False
+
+    def get_available_models(self) -> list:
+        """Получение списка доступных моделей"""
+        return [
+            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
+            {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
+            {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
+        ]
+
+# Создаем глобальный экземпляр для использования в других модулях
+llm_integration = LLMIntegration()
+
+def get_llm_instance() -> LLMIntegration:
+    """Возвращает глобальный экземпляр LLMIntegration"""
+    return llm_integration
+
+if __name__ == "__main__":
+    # Тестирование модуля
+    llm = LLMIntegration()
+    
+    print("🔧 Тестирование LLM модуля...")
+    
+    # Тестирование подключения
+    connection_ok = llm.test_connection()
+    print(f"📡 Подключение к API: {'✅ Успешно' if connection_ok else '❌ Ошибка'}")
+    
+    # Тестовый запрос
+    test_question = "Объясни, что такое фотосинтез"
+    response = llm.query(test_question, subject="биология")
+    
+    print("\n🧪 Тестовый ответ:")
+    print(response)
+    
+    # Тестирование проверки необходимости визуализации
+    needs_viz = llm.check_visualization_need(test_question)
+    print(f"\n🎨 Нужна ли визуализация для вопроса: {'✅ Да' if needs_viz else '❌ Нет'}")
+    
+    # Тестирование генерации визуализации
+    if needs_viz:
+        print("\n🔄 Генерация визуализации...")
+        viz_result = llm.generate_visualization("Процесс фотосинтеза", "Фотосинтез - это процесс преобразования света в химическую энергию")
+        
+        if viz_result["success"]:
+            print("✅ Визуализации успешно сгенерированы!")
+            if viz_result["mermaid_code"]:
+                print(f"📊 Mermaid код (первые 100 символов): {viz_result['mermaid_code'][:100]}...")
+            if viz_result["svg_code"]:
+                print(f"🖼️ SVG код (первые 100 символов): {viz_result['svg_code'][:100]}...")
+        else:
+            print("❌ Не удалось сгенерировать визуализации")
+    
+    # Тестирование статистики кэша
+    cache_stats = llm.get_cache_stats()
+    print(f"\n💾 Статистика кэша:")
+    print(f"   Всего записей: {cache_stats['total_entries']}")
+    print(f"   Предметы: {cache_stats['subjects']}")
+    
+    print("\n🎉 Тестирование завершено!")
