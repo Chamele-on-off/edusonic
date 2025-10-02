@@ -58,6 +58,11 @@ class DialogueManager:
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
         
+        # Новые поля для визуализации
+        self.visualization_enabled = True  # Флаг визуализации
+        self.last_visualization_time = 0
+        self.visualization_cooldown = 10  # Минимальная пауза между визуализациями (сек)
+        
         self._load_lessons()
         
         # Расширенные локальные шаблоны
@@ -573,6 +578,67 @@ class DialogueManager:
             print(f"❌ Ошибка начала сгенерированного урока: {e}")
             self.lesson_started = False
 
+    # НОВЫЕ МЕТОДЫ ДЛЯ ВИЗУАЛИЗАЦИИ
+    def _should_generate_visualization(self, text: str) -> bool:
+        """Определяет, нужно ли генерировать визуализацию для текста"""
+        # Проверяем кд
+        current_time = time.time()
+        if current_time - self.last_visualization_time < self.visualization_cooldown:
+            return False
+            
+        visualization_triggers = [
+            'структура', 'схема', 'диаграмма', 'график', 'процесс', 
+            'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
+            'таблица', 'классификация', 'этапы', 'стадии', 'система',
+            'модель', 'цепочка', 'последовательность', 'отношение',
+            'разделение', 'группировка', 'организация', 'архитектура'
+        ]
+        
+        text_lower = text.lower()
+        
+        # Проверяем наличие триггерных слов
+        has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
+        
+        # Проверяем длину текста (слишком короткие тексты не требуют визуализации)
+        is_long_enough = len(text.split()) > 5
+        
+        # Проверяем наличие структурных индикаторов
+        has_structure_indicators = any(indicator in text_lower for indicator in 
+                                     ['состоит из', 'включает в себя', 'делится на', 'подразделяется'])
+        
+        return (has_trigger or has_structure_indicators) and is_long_enough and self.visualization_enabled
+
+    def _generate_visualization(self, text: str, context: str = ""):
+        """Генерация визуализации для текста"""
+        if not self.visualization_enabled:
+            return
+        
+        if self._should_generate_visualization(text):
+            try:
+                # Обновляем время последней визуализации
+                self.last_visualization_time = time.time()
+                
+                # Отправляем запрос на генерацию диаграммы
+                if self.room_id and self.socketio:
+                    self.socketio.emit('generate_visualization', {
+                        'room_id': self.room_id,
+                        'topic': text,
+                        'context': context
+                    })
+                    print(f"🔄 Запрошена визуализация для: {text[:100]}...")
+            except Exception as e:
+                print(f"❌ Ошибка запроса визуализации: {e}")
+
+    def enable_visualization(self):
+        """Включение автоматической визуализации"""
+        self.visualization_enabled = True
+        print("✅ Автоматическая визуализация включена")
+
+    def disable_visualization(self):
+        """Выключение автоматической визуализации"""
+        self.visualization_enabled = False
+        print("❌ Автоматическая визуализация выключена")
+
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
@@ -743,12 +809,18 @@ class DialogueManager:
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
-        """Возвращает следующий абзац урока"""
+        """Возвращает следующий абзац урока с возможной визуализацией"""
         print(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
+            
+            # Проверяем нужна ли визуализация для этого абзаца
+            if self.visualization_enabled:
+                context = " ".join(self.lesson_content[:self.current_paragraph])
+                self._generate_visualization(paragraph, context)
+            
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
         else:
