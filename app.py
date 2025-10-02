@@ -16,6 +16,7 @@ import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import re
+import tempfile
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -42,6 +43,9 @@ room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
 room_current_avatar = defaultdict(lambda: 'teacher')  # Храним текущий аватар для каждой комнаты
+
+# Кэш для визуализаций
+diagram_cache = {}
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
@@ -463,7 +467,7 @@ def handle_set_llm_mode(data):
 
 @socketio.on('llm_response_ready')
 def handle_llm_response_ready(data):
-    """Обработчик готовых ответов от LLM (для асинхронной обработки)"""
+    """Обработчик готовых ответов от LLM (для асинхронной обработка)"""
     room_id = data['room_id']
     question = data['question']
     answer = data['answer']
@@ -505,6 +509,202 @@ def handle_practice_ended(data):
     room_current_question_index[room_id] = 0
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
+
+# Новые эндпоинты для визуализации
+@app.route('/api/generate_diagram', methods=['POST'])
+def generate_diagram():
+    """Генерация диаграммы через LLM + Mermaid"""
+    try:
+        data = request.json
+        topic = data.get('topic', '')
+        context = data.get('context', '')
+        room_id = data.get('room_id', 'default')
+        
+        if not topic:
+            return jsonify({"success": False, "error": "Topic is required"})
+        
+        # Проверяем кэш
+        cache_key = f"diagram_{hash(topic + context)}"
+        if cache_key in diagram_cache:
+            print(f"💾 Используем кэшированную диаграмму для: {topic}")
+            mermaid_code = diagram_cache[cache_key]
+        else:
+            # Генерируем Mermaid код через LLM
+            mermaid_code = generate_mermaid_code(topic, context)
+            if mermaid_code:
+                diagram_cache[cache_key] = mermaid_code
+                # Ограничиваем размер кэша
+                if len(diagram_cache) > 50:
+                    oldest_key = next(iter(diagram_cache))
+                    del diagram_cache[oldest_key]
+        
+        if not mermaid_code:
+            return jsonify({"success": False, "error": "Failed to generate diagram"})
+        
+        # Генерируем SVG как альтернативу
+        svg_code = generate_svg_code(topic, context)
+        
+        # Отправляем обе визуализации клиенту
+        socketio.emit('visualization_generated', {
+            'room_id': room_id,
+            'mermaid_code': mermaid_code,
+            'svg_code': svg_code,
+            'topic': topic,
+            'context': context[:200] + '...' if len(context) > 200 else context
+        }, room=room_id)
+        
+        return jsonify({
+            "success": True,
+            "mermaid_code": mermaid_code,
+            "svg_code": svg_code,
+            "topic": topic
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+def generate_mermaid_code(topic: str, context: str = "") -> str:
+    """Генерация Mermaid кода через LLM"""
+    prompt = f"""
+    Создай Mermaid.js диаграмму для визуализации темы: "{topic}".
+    
+    Контекст: {context}
+    
+    Требования:
+    1. Используй простой и понятный синтаксис Mermaid
+    2. Диаграмма должна быть информативной и наглядной
+    3. Максимум 10-15 элементов
+    4. Подходящий тип диаграммы (graph, flowchart, pie, sequenceDiagram, classDiagram, timeline)
+    5. Русские подписи
+    6. Четкая структура и логические связи
+
+    Верни ТОЛЬКО код Mermaid без обратных кавычек и пояснений.
+    Начни сразу с типа диаграммы (например: flowchart TD).
+    """
+    
+    try:
+        # Используем существующий LLM
+        from llm import LLMIntegration
+        llm = LLMIntegration()
+        
+        response = llm._query_llm_api(
+            prompt=prompt,
+            context="",
+            subject="general",
+            system_prompt="""Ты - эксперт по созданию образовательных диаграмм. 
+            Создавай четкие и понятные Mermaid диаграммы для объяснения учебного материала.
+            Используй простой синтаксис и логическую структуру.""",
+            max_tokens=800
+        )
+        
+        if response:
+            # Очищаем ответ от лишних символов
+            cleaned_code = clean_mermaid_code(response)
+            print(f"✅ Сгенерирован Mermaid код для: {topic}")
+            return cleaned_code
+        
+    except Exception as e:
+        print(f"❌ Ошибка генерации Mermaid кода: {e}")
+    
+    return ""
+
+def generate_svg_code(topic: str, context: str = "") -> str:
+    """Генерация простого SVG через LLM"""
+    prompt = f"""
+    Создай простой SVG код для визуализации: "{topic}".
+    
+    Контекст: {context}
+    
+    Используй только базовые элементы:
+    - <rect> для прямоугольников и блоков
+    - <circle> для кругов и узлов
+    - <line> для линий и связей
+    - <text> для текста и подписей
+    - <path> для сложных форм
+    
+    Требования:
+    - Размер: 400x300
+    - Простая и понятная схема
+    - Русские подписи
+    - Минималистичный дизайн
+    - Логическая структура
+    - Цвета для различия элементов
+
+    Верни ТОЛЬКО SVG код без пояснений.
+    """
+    
+    try:
+        from llm import LLMIntegration
+        llm = LLMIntegration()
+        
+        svg_code = llm._query_llm_api(
+            prompt=prompt,
+            context="",
+            subject="general",
+            system_prompt="Ты создаешь простые SVG схемы для образования. Используй минималистичный дизайн и четкую структуру.",
+            max_tokens=1000
+        )
+        
+        if svg_code:
+            # Очищаем SVG код
+            svg_code = re.sub(r'```(xml|svg)?\s*', '', svg_code)
+            svg_code = re.sub(r'```\s*', '', svg_code)
+            svg_code = svg_code.strip()
+            
+            # Проверяем валидность SVG
+            if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
+                print(f"✅ Сгенерирован SVG код для: {topic}")
+                return svg_code
+        
+    except Exception as e:
+        print(f"❌ Ошибка генерации SVG кода: {e}")
+    
+    return ""
+
+def clean_mermaid_code(code: str) -> str:
+    """Очистка Mermaid кода от лишних символов"""
+    if not code:
+        return ""
+    
+    # Удаляем markdown обратные кавычки
+    code = re.sub(r'```mermaid\s*', '', code)
+    code = re.sub(r'```\s*', '', code)
+    
+    # Удаляем лишние пробелы и комментарии
+    code = re.sub(r'%%.*', '', code)  # Удаляем комментарии Mermaid
+    code = '\n'.join([line for line in code.split('\n') if line.strip()])
+    
+    return code.strip()
+
+@socketio.on('generate_visualization')
+def handle_generate_visualization(data):
+    """Обработчик запроса генерации визуализации"""
+    room_id = data['room_id']
+    topic = data.get('topic', '')
+    context = data.get('context', '')
+    
+    if not topic:
+        return
+    
+    # Запускаем генерацию в отдельном потоке
+    def generate_and_send():
+        try:
+            mermaid_code = generate_mermaid_code(topic, context)
+            svg_code = generate_svg_code(topic, context)
+            
+            if mermaid_code or svg_code:
+                socketio.emit('visualization_generated', {
+                    'room_id': room_id,
+                    'mermaid_code': mermaid_code,
+                    'svg_code': svg_code,
+                    'topic': topic,
+                    'context': context[:200] + '...' if len(context) > 200 else context
+                }, room=room_id)
+                print(f"✅ Визуализация отправлена в комнату {room_id}")
+        except Exception as e:
+            print(f"❌ Ошибка генерации визуализации: {e}")
+    
+    threading.Thread(target=generate_and_send).start()
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
