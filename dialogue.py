@@ -280,7 +280,7 @@ class DialogueManager:
                     if pattern in text_lower and responses:
                         return random.choice(responses)
         
-        # 2. Контекстный поиск (если есть история разговора)
+        # 2. Контекстный поиск (есть есть история разговора)
         if self.conversation_context:
             last_user_messages = ' '.join(self.conversation_context).lower()
             
@@ -555,6 +555,9 @@ class DialogueManager:
             self.current_state = "lesson_reading"
             self.current_paragraph = 0
             
+            # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
+            self.enable_visualization()
+            
             # Загружаем содержание урока
             print(f"📖 Загрузка содержания урока из: {lesson_data['file_path']}")
             self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
@@ -586,12 +589,16 @@ class DialogueManager:
         if current_time - self.last_visualization_time < self.visualization_cooldown:
             return False
             
+        # Более широкий список триггеров для автоматической генерации
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
             'таблица', 'классификация', 'этапы', 'стадии', 'система',
             'модель', 'цепочка', 'последовательность', 'отношение',
-            'разделение', 'группировка', 'организация', 'архитектура'
+            'разделение', 'группировка', 'организация', 'архитектура',
+            # Добавляем общие образовательные термины
+            'понятие', 'определение', 'теория', 'концепция', 'принцип',
+            'механизм', 'функция', 'свойство', 'характеристика'
         ]
         
         text_lower = text.lower()
@@ -599,14 +606,19 @@ class DialogueManager:
         # Проверяем наличие триггерных слов
         has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
         
-        # Проверяем длину текста (слишком короткие тексты не требуют визуализации)
-        is_long_enough = len(text.split()) > 5
+        # Проверяем длину текста (достаточно информативный текст)
+        is_long_enough = len(text.split()) > 3
         
         # Проверяем наличие структурных индикаторов
         has_structure_indicators = any(indicator in text_lower for indicator in 
-                                     ['состоит из', 'включает в себя', 'делится на', 'подразделяется'])
+                                     ['состоит из', 'включает в себя', 'делится на', 'подразделяется',
+                                      'можно разделить', 'выделяют', 'различают', 'существуют'])
         
-        return (has_trigger or has_structure_indicators) and is_long_enough and self.visualization_enabled
+        # Генерируем для каждого 3-го абзаца или если есть явные триггеры
+        should_generate = (has_trigger or has_structure_indicators or 
+                          self.current_paragraph % 3 == 0) and is_long_enough and self.visualization_enabled
+        
+        return should_generate
 
     def _generate_visualization(self, text: str, context: str = ""):
         """Генерация визуализации для текста"""
@@ -737,6 +749,9 @@ class DialogueManager:
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
         
+        # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
+        self.enable_visualization()
+        
         # Очищаем историю диалога при начале урока
         self.conversation_history = []
         self.conversation_context = []
@@ -816,7 +831,7 @@ class DialogueManager:
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
-            # Проверяем нужна ли визуализация для этого абзаца
+            # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ВИЗУАЛИЗАЦИИ ДЛЯ КАЖДОГО АБЗАЦА
             if self.visualization_enabled:
                 context = " ".join(self.lesson_content[:self.current_paragraph])
                 self._generate_visualization(paragraph, context)
@@ -966,6 +981,11 @@ class DialogueManager:
             return "Повторите вопрос пожалуйста, я не расслышал."
             
         question_lower = question.lower().strip()
+        
+        # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ВИЗУАЛИЗАЦИИ ДЛЯ ВОПРОСОВ
+        if self.visualization_enabled:
+            context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
+            self._generate_visualization(question, context)
         
         # НЕМЕДЛЕННАЯ обработка вопроса (без асинхронности)
         print(f"Немедленная обработка вопроса: '{question}'")
