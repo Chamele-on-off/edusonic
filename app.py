@@ -637,6 +637,8 @@ def generate_diagram():
 
 def generate_mermaid_code(topic: str, context: str = "") -> str:
     """Генерация Mermaid кода через LLM"""
+    print(f"🔧 Генерация Mermaid для: {topic[:100]}...")
+    
     prompt = f"""
     Создай Mermaid.js диаграмму для визуализации темы: "{topic}".
     
@@ -675,8 +677,11 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
         if response:
             # Очищаем ответ от лишних символов
             cleaned_code = clean_mermaid_code(response)
-            print(f"✅ Сгенерирован Mermaid код для: {topic}")
+            print(f"✅ Сгенерирован Mermaid код для: {topic[:50]}...")
+            print(f"   Длина кода: {len(cleaned_code)} символов")
             return cleaned_code
+        else:
+            print(f"❌ LLM не вернул ответ для Mermaid")
         
     except Exception as e:
         print(f"❌ Ошибка генерации Mermaid кода: {e}")
@@ -685,6 +690,8 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
 
 def generate_svg_code(topic: str, context: str = "") -> str:
     """Генерация простого SVG через LLM"""
+    print(f"🔧 Генерация SVG для: {topic[:100]}...")
+    
     prompt = f"""
     Создай простой SVG код для визуализации: "{topic}".
     
@@ -728,8 +735,11 @@ def generate_svg_code(topic: str, context: str = "") -> str:
             
             # Проверяем валидность SVG
             if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
-                print(f"✅ Сгенерирован SVG код для: {topic}")
+                print(f"✅ Сгенерирован SVG код для: {topic[:50]}...")
+                print(f"   Длина кода: {len(svg_code)} символов")
                 return svg_code
+        else:
+            print(f"❌ LLM не вернул ответ для SVG")
         
     except Exception as e:
         print(f"❌ Ошибка генерации SVG кода: {e}")
@@ -760,15 +770,15 @@ def clean_mermaid_code(code: str) -> str:
         # Добавляем простую структуру если нет связей
         lines = code.split('\n')
         if len(lines) > 1:
-            code = lines[0] + '\n' + 'A[Элемент A] --> B[Элемент B]'
+            code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
         else:
-            code = 'flowchart TD\nA[Элемент A] --> B[Элемент B]'
+            code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
     
     return code.strip()
 
 @socketio.on('generate_visualization')
 def handle_generate_visualization(data):
-    """Обработчик запроса генерации визуализации"""
+    """Обработчик запроса генерации визуализации - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ"""
     room_id = data['room_id']
     topic = data.get('topic', '')
     context = data.get('context', '')
@@ -776,10 +786,32 @@ def handle_generate_visualization(data):
     if not topic:
         return
     
-    # Добавляем в очередь вместо немедленной генерации
-    add_visualization_to_queue(room_id, topic, context)
+    print(f"🎨 Немедленная генерация визуализации для комнаты {room_id}: {topic[:100]}...")
     
-    print(f"📊 Запрос визуализации добавлен в очередь для комнаты {room_id}: {topic}")
+    # НЕМЕДЛЕННАЯ генерация вместо добавления в очередь
+    def generate_and_send():
+        try:
+            # Генерируем обе визуализации
+            mermaid_code = generate_mermaid_code(topic, context)
+            svg_code = generate_svg_code(topic, context)
+            
+            if mermaid_code or svg_code:
+                socketio.emit('visualization_generated', {
+                    'room_id': room_id,
+                    'mermaid_code': mermaid_code,
+                    'svg_code': svg_code,
+                    'topic': topic,
+                    'context': context[:200] + '...' if len(context) > 200 else context
+                }, room=room_id)
+                print(f"✅ Визуализация отправлена в комнату {room_id}")
+            else:
+                print(f"❌ Не удалось сгенерировать визуализацию для: {topic}")
+                
+        except Exception as e:
+            print(f"❌ Ошибка генерации визуализации: {e}")
+    
+    # Запускаем в отдельном потоке
+    threading.Thread(target=generate_and_send, daemon=True).start()
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
