@@ -6,7 +6,6 @@
     <title>Виртуальный класс</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
-    <!-- Mermaid.js для диаграмм -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <style>
         :root {
@@ -24,7 +23,6 @@
             --board-border: #E6E9EF;
             --board-shadow: rgba(0, 0, 0, 0.1);
             --visualization-bg: #ffffff;
-            --visualization-border: #d1d5db;
         }
         
         * {
@@ -141,14 +139,15 @@
             background: var(--visualization-bg);
             padding: 0;
             border-radius: 16px;
-            width: 600px;
-            height: 500px;
+            width: 70%;
+            height: 60%;
             overflow: hidden;
             z-index: 7;
             display: none;
-            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
-            border: 1px solid var(--visualization-border);
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px var(--board-border);
             -webkit-overflow-scrolling: touch;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         
         .window-header {
@@ -252,96 +251,83 @@
             touch-action: none;
         }
         
-        /* Контент визуализации */
         #visualization-content {
             flex: 1;
             height: calc(100% - 56px);
             overflow: auto;
             padding: 20px;
             background: var(--visualization-bg);
-            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
         }
         
         .visualization-tabs {
             display: flex;
-            border-bottom: 1px solid var(--board-border);
-            background: white;
+            gap: 10px;
+            margin-bottom: 15px;
         }
         
         .visualization-tab {
-            padding: 12px 20px;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s ease;
-            font-size: 14px;
-            color: var(--gray);
-        }
-        
-        .visualization-tab:hover {
+            padding: 8px 16px;
             background: var(--light);
-            color: var(--dark);
+            border: 1px solid var(--board-border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
         }
         
         .visualization-tab.active {
-            border-bottom-color: var(--primary);
-            color: var(--primary);
-            font-weight: 600;
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
         }
         
-        .visualization-panel {
-            display: none;
-            height: calc(100% - 50px);
+        .visualization-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             overflow: auto;
         }
         
-        .visualization-panel.active {
-            display: block;
-        }
-        
-        #mermaid-panel {
+        #mermaid-diagram {
+            width: 100%;
+            height: 100%;
+            min-height: 300px;
             background: white;
             border-radius: 8px;
-            padding: 15px;
-        }
-        
-        #svg-panel {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
+            padding: 20px;
             overflow: auto;
         }
         
-        #svg-display {
-            max-width: 100%;
-            max-height: 100%;
-            display: block;
-            margin: 0 auto;
+        #svg-diagram {
+            width: 100%;
+            height: 100%;
+            min-height: 300px;
             background: white;
-            border: 1px solid var(--board-border);
-            border-radius: 4px;
+            border-radius: 8px;
+            padding: 20px;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        .visualization-info {
-            background: var(--light);
-            padding: 12px 15px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            border-left: 4px solid var(--primary);
-        }
-        
-        .visualization-info h4 {
-            margin: 0 0 5px 0;
-            color: var(--dark);
-            font-size: 14px;
-        }
-        
-        .visualization-info p {
-            margin: 0;
+        .visualization-placeholder {
+            text-align: center;
             color: var(--gray);
-            font-size: 12px;
-            line-height: 1.4;
+            padding: 40px;
+        }
+        
+        .visualization-placeholder i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
         }
         
         .text-widget {
@@ -746,16 +732,9 @@
                 font-size: 1.1rem;
             }
             
-            #lesson-content, #drawing-window {
+            #lesson-content, #drawing-window, #visualization-window {
                 width: 90%;
                 height: 60%;
-            }
-            
-            #visualization-window {
-                width: 90%;
-                height: 50%;
-                top: 5%;
-                right: 5%;
             }
             
             #lesson-canvas {
@@ -829,25 +808,19 @@
                 font-size: 14px;
             }
             
-            .visualization-tabs {
-                flex-wrap: wrap;
+            #visualization-content {
+                padding: 15px;
             }
             
-            .visualization-tab {
-                padding: 10px 15px;
-                font-size: 13px;
+            .visualization-tabs {
+                flex-wrap: wrap;
             }
         }
         
         @media (max-width: 480px) {
-            #lesson-content, #drawing-window {
+            #lesson-content, #drawing-window, #visualization-window {
                 width: 95%;
                 height: 55%;
-            }
-            
-            #visualization-window {
-                width: 95%;
-                height: 45%;
             }
             
             #lesson-canvas {
@@ -929,8 +902,12 @@
                 height: 16px;
             }
             
+            #visualization-content {
+                padding: 10px;
+            }
+            
             .visualization-tab {
-                padding: 8px 12px;
+                padding: 6px 12px;
                 font-size: 12px;
             }
         }
@@ -1030,41 +1007,24 @@
             color: #95a5a6;
         }
         
-        /* Mermaid diagram styling */
-        .mermaid {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            overflow: auto;
-            max-height: 100%;
+        /* Visualization loading */
+        .visualization-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: var(--gray);
         }
         
-        .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-        
-        /* Visualization status */
-        .visualization-status {
-            background: #e3f2fd;
-            border: 1px solid #bbdefb;
-            border-radius: 6px;
-            padding: 10px 15px;
+        .visualization-loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--light);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
             margin-bottom: 15px;
-            font-size: 14px;
-            color: #1565c0;
-        }
-        
-        .visualization-status.error {
-            background: #ffebee;
-            border-color: #ffcdd2;
-            color: #c62828;
-        }
-        
-        .visualization-status.success {
-            background: #e8f5e8;
-            border-color: #c8e6c9;
-            color: #2e7d32;
         }
     </style>
 </head>
@@ -1099,11 +1059,11 @@
                     <button class="toolbar-btn" id="draw-tool" title="Рисование">
                         <i class="fas fa-pen"></i>
                     </button>
-                    <button class="toolbar-btn" id="visualization-tool" title="Визуализация">
-                        <i class="fas fa-chart-bar"></i>
-                    </button>
                     <button class="toolbar-btn" id="answer-tool" title="Ответить">
                         <i class="fas fa-comment-dots"></i>
+                    </button>
+                    <button class="toolbar-btn" id="visualization-tool" title="Визуализация">
+                        <i class="fas fa-chart-bar"></i>
                     </button>
                     <div class="toolbar-separator"></div>
                     <button class="toolbar-btn" id="clear-text" title="Очистить текст">
@@ -1184,32 +1144,32 @@
             <!-- Окно визуализации -->
             <div id="visualization-window">
                 <div class="window-header">
-                    <div class="window-title">Визуализация</div>
+                    <div class="window-title">Визуализация урока</div>
                     <button class="window-close" id="close-visualization">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="visualization-tabs">
-                    <button class="visualization-tab active" data-tab="mermaid">Mermaid диаграммы</button>
-                    <button class="visualization-tab" data-tab="svg">SVG схемы</button>
+                <div class="board-toolbar">
+                    <div class="visualization-tabs">
+                        <div class="visualization-tab active" data-tab="mermaid">Mermaid</div>
+                        <div class="visualization-tab" data-tab="svg">SVG</div>
+                    </div>
                 </div>
                 <div id="visualization-content">
-                    <div class="visualization-info">
-                        <h4>Автоматическая визуализация</h4>
-                        <p>Система автоматически генерирует диаграммы для сложных концепций во время урока. Вы можете переключаться между Mermaid и SVG форматами.</p>
+                    <div class="visualization-container" id="mermaid-tab">
+                        <div id="mermaid-diagram">
+                            <div class="visualization-placeholder">
+                                <i class="fas fa-project-diagram"></i>
+                                <p>Диаграмма будет сгенерирована автоматически во время урока</p>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <div id="visualization-status" class="visualization-status">
-                        <i class="fas fa-info-circle"></i> Визуализация будет показана здесь во время урока
-                    </div>
-                    
-                    <div class="visualization-panel active" id="mermaid-panel">
-                        <div id="mermaid-diagram"></div>
-                    </div>
-                    
-                    <div class="visualization-panel" id="svg-panel">
-                        <div id="svg-container">
-                            <div id="svg-display"></div>
+                    <div class="visualization-container" id="svg-tab" style="display: none;">
+                        <div id="svg-diagram">
+                            <div class="visualization-placeholder">
+                                <i class="fas fa-shapes"></i>
+                                <p>SVG схема будет сгенерирована автоматически во время урока</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1256,9 +1216,9 @@
             <i class="fas fa-video"></i>
             <span>Вкл</span>
         </button>
-        <button class="control-btn" id="visualization-btn" title="Визуализация">
-            <i class="fas fa-chart-bar"></i>
-            <span>Графики</span>
+        <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
+            <i class="fas fa-desktop"></i>
+            <span>Экран</span>
         </button>
         <button class="control-btn" id="fullscreen-btn" title="Полный экран">
             <i class="fas fa-expand"></i>
@@ -1272,18 +1232,6 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
-        // Инициализация Mermaid
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: 'default',
-            securityLevel: 'loose',
-            fontFamily: 'Arial, sans-serif',
-            flowchart: {
-                htmlLabels: true,
-                curve: 'basis'
-            }
-        });
-
         // Конфигурация
         const FPS = 10;
         
@@ -1298,7 +1246,7 @@
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
-        const visualizationBtn = document.getElementById('visualization-btn');
+        const screenBtn = document.getElementById('screen-btn');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
@@ -1319,8 +1267,8 @@
         const drawingCanvas = document.getElementById('drawing-canvas');
         const textToolBtn = document.getElementById('text-tool');
         const drawToolBtn = document.getElementById('draw-tool');
-        const visualizationToolBtn = document.getElementById('visualization-tool');
         const answerToolBtn = document.getElementById('answer-tool');
+        const visualizationToolBtn = document.getElementById('visualization-tool');
         const clearDrawingBtn = document.getElementById('clear-drawing');
         const clearTextBtn = document.getElementById('clear-text');
         const answerInputContainer = document.getElementById('answer-input-container');
@@ -1334,13 +1282,11 @@
         const avatarLoading = document.getElementById('avatar-loading');
         const animationStatus = document.getElementById('animation-status');
         const speechStatus = document.getElementById('speech-status');
-        
-        // Элементы визуализации
         const mermaidDiagram = document.getElementById('mermaid-diagram');
-        const svgDisplay = document.getElementById('svg-display');
+        const svgDiagram = document.getElementById('svg-diagram');
         const visualizationTabs = document.querySelectorAll('.visualization-tab');
-        const visualizationPanels = document.querySelectorAll('.visualization-panel');
-        const visualizationStatus = document.getElementById('visualization-status');
+        const mermaidTab = document.getElementById('mermaid-tab');
+        const svgTab = document.getElementById('svg-tab');
 
         // Глобальные переменные
         let userStream = null;
@@ -1383,8 +1329,10 @@
         let isDrawingWindowOpen = false;
         
         // Переменные для визуализации
-        let isVisualizationWindowOpen = false;
         let currentVisualizationTab = 'mermaid';
+        let isVisualizationWindowOpen = false;
+        let visualizationQueue = [];
+        let isProcessingVisualization = false;
         
         // Переменные для перетаскивания окон
         let isDraggingWindow = false;
@@ -1396,6 +1344,160 @@
         let audioQueue = [];
         let isPlayingAudio = false;
         let audioElements = [];
+
+        // Инициализация Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        // ========== ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
+        function initVisualization() {
+            // Обработчики вкладок визуализации
+            visualizationTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    switchVisualizationTab(tabName);
+                });
+            });
+            
+            // Инициализация polling для визуализаций
+            startVisualizationPolling();
+        }
+
+        function switchVisualizationTab(tabName) {
+            currentVisualizationTab = tabName;
+            
+            // Обновляем активные вкладки
+            visualizationTabs.forEach(tab => {
+                if (tab.dataset.tab === tabName) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+            
+            // Показываем соответствующую вкладку
+            if (tabName === 'mermaid') {
+                mermaidTab.style.display = 'flex';
+                svgTab.style.display = 'none';
+            } else if (tabName === 'svg') {
+                mermaidTab.style.display = 'none';
+                svgTab.style.display = 'flex';
+            }
+        }
+
+        function showVisualizationWindow() {
+            visualizationWindow.style.display = 'block';
+            isVisualizationWindowOpen = true;
+            visualizationToolBtn.classList.add('active');
+        }
+
+        function hideVisualizationWindow() {
+            visualizationWindow.style.display = 'none';
+            isVisualizationWindowOpen = false;
+            visualizationToolBtn.classList.remove('active');
+        }
+
+        function displayMermaidDiagram(mermaidCode) {
+            if (!mermaidCode) return;
+            
+            try {
+                // Очищаем контейнер
+                mermaidDiagram.innerHTML = '';
+                
+                // Создаем элемент для диаграммы
+                const diagramElement = document.createElement('div');
+                diagramElement.className = 'mermaid';
+                diagramElement.textContent = mermaidCode;
+                
+                mermaidDiagram.appendChild(diagramElement);
+                
+                // Инициализируем Mermaid
+                mermaid.init(undefined, diagramElement);
+                
+                console.log('Mermaid диаграмма отображена');
+            } catch (error) {
+                console.error('Ошибка отображения Mermaid диаграммы:', error);
+                mermaidDiagram.innerHTML = `
+                    <div class="visualization-placeholder">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка отображения диаграммы</p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        function displaySvgDiagram(svgCode) {
+            if (!svgCode) return;
+            
+            try {
+                // Очищаем контейнер
+                svgDiagram.innerHTML = '';
+                
+                // Вставляем SVG код
+                svgDiagram.innerHTML = svgCode;
+                
+                console.log('SVG диаграмма отображена');
+            } catch (error) {
+                console.error('Ошибка отображения SVG диаграммы:', error);
+                svgDiagram.innerHTML = `
+                    <div class="visualization-placeholder">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка отображения SVG</p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        function showVisualizationLoading() {
+            mermaidDiagram.innerHTML = `
+                <div class="visualization-loading">
+                    <div class="spinner"></div>
+                    <p>Генерация визуализации...</p>
+                </div>
+            `;
+            
+            svgDiagram.innerHTML = `
+                <div class="visualization-loading">
+                    <div class="spinner"></div>
+                    <p>Генерация визуализации...</p>
+                </div>
+            `;
+        }
+
+        function startVisualizationPolling() {
+            // Polling каждые 3 секунды для проверки новых визуализаций
+            setInterval(async () => {
+                if (!socket || !isVisualizationWindowOpen) return;
+                
+                try {
+                    const response = await fetch('/api/poll_visualization', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ room_id: roomId })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success && data.processed) {
+                        console.log('Обработана визуализация из очереди');
+                    }
+                } catch (error) {
+                    console.error('Ошибка polling визуализации:', error);
+                }
+            }, 3000);
+        }
 
         // ========== УЛУЧШЕННОЕ РАСПОЗНАВАНИЕ РЕЧИ ==========
         function initSpeechRecognition() {
@@ -1431,7 +1533,7 @@
                     if (finalTranscript) {
                         const cleanText = finalTranscript.trim();
                         
-                        // ФИЛЬТРЫ ДЛЯ УМЕНЬШЕНИЯ ЛОЖНЫС СРАБАТЫВАНИЙ
+                        // ФИЛЬТРЫ ДЛЯ УМЕНЬШЕНИЯ ЛОЖНЫХ СРАБАТЫВАНИЙ
                         if (cleanText.length < 3) {
                             console.log('Отфильтрована короткая фраза:', cleanText);
                             return;
@@ -1873,155 +1975,6 @@
             }
         }
 
-        // ========== ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
-        function displayVisualization(mermaidCode, svgCode, topic, context) {
-            try {
-                // Показываем окно визуализации
-                visualizationWindow.style.display = 'block';
-                isVisualizationWindowOpen = true;
-                
-                // Обновляем статус
-                visualizationStatus.innerHTML = `<i class="fas fa-sync-alt fa-spin"></i> Генерация визуализации для: "${topic}"`;
-                visualizationStatus.className = 'visualization-status';
-                
-                // Отображаем информацию о контексте
-                if (context && context.length > 10) {
-                    const contextInfo = document.querySelector('.visualization-info p');
-                    if (contextInfo) {
-                        contextInfo.textContent = `Контекст: ${context}`;
-                    }
-                }
-                
-                // Обрабатываем Mermaid диаграмму
-                if (mermaidCode && mermaidCode.trim()) {
-                    processMermaidDiagram(mermaidCode);
-                } else {
-                    mermaidDiagram.innerHTML = '<div style="text-align: center; color: #666; padding: 50px;">Mermaid диаграмма не сгенерирована</div>';
-                }
-                
-                // Обрабатываем SVG
-                if (svgCode && svgCode.trim()) {
-                    processSvgDiagram(svgCode);
-                } else {
-                    svgDisplay.innerHTML = '<div style="text-align: center; color: #666; padding: 50px;">SVG схема не сгенерирована</div>';
-                }
-                
-                // Обновляем статус
-                setTimeout(() => {
-                    visualizationStatus.innerHTML = `<i class="fas fa-check-circle"></i> Визуализация сгенерирована для: "${topic}"`;
-                    visualizationStatus.className = 'visualization-status success';
-                }, 1000);
-                
-            } catch (error) {
-                console.error('Ошибка отображения визуализации:', error);
-                visualizationStatus.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Ошибка генерации визуализации: ${error.message}`;
-                visualizationStatus.className = 'visualization-status error';
-            }
-        }
-
-        function processMermaidDiagram(mermaidCode) {
-            try {
-                mermaidDiagram.innerHTML = '<div class="loading-spinner"></div>';
-                
-                // Очищаем предыдущую диаграмму
-                const existingSvg = mermaidDiagram.querySelector('svg');
-                if (existingSvg) {
-                    existingSvg.remove();
-                }
-                
-                // Рендерим новую диаграмму
-                mermaid.render('mermaid-diagram', mermaidCode).then(result => {
-                    mermaidDiagram.innerHTML = result.svg;
-                    
-                    // Добавляем возможность масштабирования
-                    const svg = mermaidDiagram.querySelector('svg');
-                    if (svg) {
-                        svg.style.maxWidth = '100%';
-                        svg.style.height = 'auto';
-                    }
-                    
-                }).catch(error => {
-                    console.error('Ошибка рендеринга Mermaid:', error);
-                    mermaidDiagram.innerHTML = `
-                        <div style="text-align: center; color: #666; padding: 30px;">
-                            <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 15px; color: #ff6b6b;"></i>
-                            <p>Ошибка отображения Mermaid диаграммы</p>
-                            <details style="margin-top: 15px; text-align: left;">
-                                <summary>Техническая информация</summary>
-                                <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px; overflow: auto;">${error.message}</pre>
-                            </details>
-                        </div>
-                    `;
-                });
-                
-            } catch (error) {
-                console.error('Ошибка обработки Mermaid:', error);
-                mermaidDiagram.innerHTML = '<div style="text-align: center; color: #666; padding: 50px;">Ошибка обработки Mermaid диаграммы</div>';
-            }
-        }
-
-        function processSvgDiagram(svgCode) {
-            try {
-                // Очищаем предыдущий SVG
-                svgDisplay.innerHTML = '';
-                
-                // Создаем контейнер для SVG
-                const container = document.createElement('div');
-                container.style.textAlign = 'center';
-                container.style.padding = '10px';
-                
-                // Вставляем SVG код
-                container.innerHTML = svgCode;
-                
-                // Находим SVG элемент и настраиваем его
-                const svgElement = container.querySelector('svg');
-                if (svgElement) {
-                    svgElement.style.maxWidth = '100%';
-                    svgElement.style.height = 'auto';
-                    svgElement.style.border = '1px solid #e0e0e0';
-                    svgElement.style.borderRadius = '4px';
-                    svgElement.style.background = 'white';
-                }
-                
-                svgDisplay.appendChild(container);
-                
-            } catch (error) {
-                console.error('Ошибка обработки SVG:', error);
-                svgDisplay.innerHTML = `
-                    <div style="text-align: center; color: #666; padding: 30px;">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 15px; color: #ff6b6b;"></i>
-                        <p>Ошибка отображения SVG схемы</p>
-                        <details style="margin-top: 15px; text-align: left;">
-                            <summary>Техническая информация</summary>
-                            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px; overflow: auto;">${error.message}</pre>
-                        </details>
-                    </div>
-                `;
-            }
-        }
-
-        function switchVisualizationTab(tabName) {
-            // Обновляем активные табы
-            visualizationTabs.forEach(tab => {
-                if (tab.dataset.tab === tabName) {
-                    tab.classList.add('active');
-                } else {
-                    tab.classList.remove('active');
-                }
-            });
-            
-            // Показываем активную панель
-            visualizationPanels.forEach(panel => {
-                if (panel.id === `${tabName}-panel`) {
-                    panel.classList.add('active');
-                } else {
-                    panel.classList.remove('active');
-                }
-            });
-            
-            currentVisualizationTab = tabName;
-        }
-
         // ========== ФУНКЦИИ ИНИЦИАЛИЗАЦИИ ==========
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
@@ -2304,8 +2257,8 @@
             
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
-            visualizationToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
+            visualizationToolBtn.classList.remove('active');
             
             if (tool === 'text') {
                 textToolBtn.classList.add('active');
@@ -2320,15 +2273,15 @@
                     drawingCanvas.width = rect.width;
                     drawingCanvas.height = rect.height;
                 }, 50);
-            } else if (tool === 'visualization') {
-                visualizationToolBtn.classList.add('active');
-                visualizationWindow.style.display = 'block';
-                isVisualizationWindowOpen = true;
             } else if (tool === 'answer') {
                 answerToolBtn.classList.add('active');
                 lessonContent.style.display = 'block';
                 answerInputContainer.style.display = 'block';
                 answerInput.focus();
+            } else if (tool === 'visualization') {
+                visualizationToolBtn.classList.add('active');
+                visualizationWindow.style.display = 'block';
+                isVisualizationWindowOpen = true;
             }
         }
 
@@ -2506,17 +2459,31 @@
                     startAnimation();
                 }
             });
-            
-            // Новые обработчики для визуализации
+
+            // Обработчик для визуализаций
             socket.on('visualization_generated', (data) => {
                 console.log('Получена визуализация:', data.topic);
-                displayVisualization(data.mermaid_code, data.svg_code, data.topic, data.context);
-            });
-            
-            socket.on('generate_visualization', (data) => {
-                console.log('Запрос на генерацию визуализации:', data.topic);
-                // Автоматически открываем окно визуализации
-                setTool('visualization');
+                
+                // Автоматически показываем окно визуализации
+                if (!isVisualizationWindowOpen) {
+                    setTool('visualization');
+                }
+                
+                // Показываем индикатор загрузки
+                showVisualizationLoading();
+                
+                // Обновляем диаграммы с небольшой задержкой для плавности
+                setTimeout(() => {
+                    if (data.mermaid_code) {
+                        displayMermaidDiagram(data.mermaid_code);
+                    }
+                    
+                    if (data.svg_code) {
+                        displaySvgDiagram(data.svg_code);
+                    }
+                    
+                    console.log('Визуализации обновлены');
+                }, 500);
             });
         }
 
@@ -2810,18 +2777,12 @@
             initWindowDragging();
             initZoom();
             initDrawingCanvas();
+            initVisualization();
             
             textToolBtn.addEventListener('click', () => setTool('text'));
             drawToolBtn.addEventListener('click', () => setTool('draw'));
-            visualizationToolBtn.addEventListener('click', () => setTool('visualization'));
             answerToolBtn.addEventListener('click', () => setTool('answer'));
-            
-            // Обработчики для вкладок визуализации
-            visualizationTabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    switchVisualizationTab(tab.dataset.tab);
-                });
-            });
+            visualizationToolBtn.addEventListener('click', () => setTool('visualization'));
             
             document.getElementById('drawing-pen').addEventListener('click', () => setDrawingTool('pen'));
             document.getElementById('drawing-eraser').addEventListener('click', () => setDrawingTool('eraser'));
@@ -2873,7 +2834,6 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            visualizationBtn.addEventListener('click', () => setTool('visualization'));
             fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
@@ -2910,7 +2870,6 @@
             }
             
             setDrawingTool('pen');
-            switchVisualizationTab('mermaid');
         });
 
         document.addEventListener('fullscreenchange', () => {
