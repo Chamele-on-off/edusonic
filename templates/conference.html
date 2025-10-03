@@ -973,8 +973,8 @@
         
         body.embedded .control-btn {
             width: 50px;
-                height: 50px;
-                font-size: 16px;
+            height: 50px;
+            font-size: 16px;
         }
         
         /* iOS specific fixes */
@@ -1392,7 +1392,7 @@
         let dragOffsetX = 0;
         let dragOffsetY = 0;
 
-        // iOS Audio Fix - ключевые переменные из работающей версии
+        // iOS Audio Fix
         let audioQueue = [];
         let isPlayingAudio = false;
         let audioElements = [];
@@ -1540,7 +1540,7 @@
             }
         }
 
-        // ========== iOS AUDIO FIX ИЗ СТАРОГО ОБРАЗЦА ==========
+        // ========== iOS AUDIO FIX ==========
         function playNextAudio() {
             if (isPlayingAudio || audioQueue.length === 0) return;
             
@@ -2400,9 +2400,17 @@
         }
 
         function initSocket() {
-            socket = io();
+            socket = io({
+                transports: ['websocket', 'polling'],
+                upgrade: true,
+                timeout: 10000,
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
             
             socket.on('connect', () => {
+                console.log('✅ WebSocket подключен');
                 statusDiv.textContent = 'Подключено к серверу';
                 socket.emit('join_room', { room_id: roomId });
                 
@@ -2415,6 +2423,22 @@
                 setTimeout(() => {
                     enableCameraAndMicrophone();
                 }, 1500);
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.error('❌ Ошибка подключения:', error);
+                statusDiv.textContent = 'Ошибка подключения, пробуем переподключиться...';
+            });
+            
+            socket.on('reconnect_attempt', (attempt) => {
+                console.log(`🔄 Попытка переподключения ${attempt}`);
+                statusDiv.textContent = `Переподключение... (${attempt}/5)`;
+            });
+            
+            socket.on('reconnect_failed', () => {
+                console.error('❌ Не удалось переподключиться');
+                statusDiv.textContent = 'Не удалось подключиться к серверу';
+                alert('Не удалось подключиться к серверу. Пожалуйста, обновите страницу.');
             });
             
             socket.on('disconnect', () => {
