@@ -599,7 +599,10 @@ class DialogueManager:
             'разделение', 'группировка', 'организация', 'архитектура',
             # Добавляем общие образовательные термины
             'понятие', 'определение', 'теория', 'концепция', 'принцип',
-            'механизм', 'функция', 'свойство', 'характеристика'
+            'механизм', 'функция', 'свойство', 'характеристика',
+            # Экономические термины
+            'спрос', 'предложение', 'рынок', 'экономика', 'производство',
+            'потребление', 'распределение', 'обмен', 'цена', 'стоимость'
         ]
         
         text_lower = text.lower()
@@ -616,13 +619,16 @@ class DialogueManager:
                                       'можно разделить', 'выделяют', 'различают', 'существуют'])
         
         # Генерируем для каждого 3-го абзаца или если есть явные триггеры
-        should_generate = (has_trigger or has_structure_indicators or 
-                          self.current_paragraph % 3 == 0) and is_long_enough and self.visualization_enabled
+        should_generate = (has_trigger or has_structure_indicators) and is_long_enough and self.visualization_enabled
+        
+        if should_generate:
+            print(f"🎯 Генерация визуализации для: {text[:100]}...")
+            print(f"   Триггеры: {has_trigger}, Структура: {has_structure_indicators}")
         
         return should_generate
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация визуализации для текста"""
+        """Генерация визуализации для текста - УЛУЧШЕННАЯ ВЕРСИЯ"""
         if not self.visualization_enabled:
             return
         
@@ -632,14 +638,17 @@ class DialogueManager:
                 self.last_visualization_time = time.time()
                 self.visualization_counter += 1
                 
-                # Отправляем запрос на генерацию диаграммы через очередь
+                # ОТПРАВЛЯЕМ ЗАПРОС НА ГЕНЕРАЦИЮ ВИЗУАЛИЗАЦИИ
                 if self.room_id and self.socketio:
+                    print(f"📊 Отправка запроса на генерацию визуализации для: {text[:100]}...")
+                    
+                    # Используем прямой запрос вместо очереди для немедленной генерации
                     self.socketio.emit('generate_visualization', {
                         'room_id': self.room_id,
                         'topic': text,
                         'context': context
-                    })
-                    print(f"📊 Запрошена визуализация #{self.visualization_counter} для: {text[:100]}...")
+                    }, room=self.room_id)
+                    
             except Exception as e:
                 print(f"❌ Ошибка запроса визуализации: {e}")
 
