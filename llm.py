@@ -37,7 +37,7 @@ class LLMIntegration:
         return {}
 
     def _save_cache(self):
-        """Сохранение кэша в файл"""
+        """Сохранение кэша в файле"""
         try:
             if not self.cache_dir.exists():
                 self.cache_dir.mkdir(parents=True)
@@ -285,20 +285,34 @@ class LLMIntegration:
     def generate_mermaid_diagram(self, topic: str, context: str = "") -> str:
         """Генерация Mermaid диаграммы через LLM"""
         prompt = f"""
-        Создай Mermaid.js диаграмму для визуализации темы: "{topic}".
+        Создай простую и понятную Mermaid.js диаграмму для объяснения темы: "{topic}".
         
-        Контекст: {context}
+        Контекст урока: {context}
         
-        Требования:
-        1. Используй простой и понятный синтаксис Mermaid
-        2. Диаграмма должна быть информативной и наглядной
-        3. Максимум 10-15 элементов
-        4. Подходящий тип диаграммы (graph, flowchart, pie, sequenceDiagram, classDiagram, timeline)
-        5. Русские подписи
-        6. Четкая структура и логические связи
+        ТРЕБОВАНИЯ К ДИАГРАММЕ:
+        1. Используй ТОЛЬКО корректный синтаксис Mermaid
+        2. Максимум 8-10 элементов для наглядности
+        3. Простые прямоугольники и стрелки
+        4. Русские подписи в кавычках
+        5. Логическая структура от общего к частному
+        6. Избегай сложных конструкций
+        
+        ПРИМЕРЫ КОРРЕКТНОГО СИНТАКСИСА:
+        flowchart TD
+            A["Общее понятие"] --> B["Частный случай 1"]
+            A --> C["Частный случай 2"]
+            B --> D["Пример"]
+            C --> D
 
-        Верни ТОЛЬКО код Mermaid без обратных кавычек и пояснений.
-        Начни сразу с типа диаграммы (например: flowchart TD).
+        graph TD
+            A[Старт] --> B[Процесс 1]
+            B --> C[Процесс 2]
+            C --> D[Результат]
+
+        Тема для диаграммы: {topic}
+        
+        Верни ТОЛЬКО код Mermaid без каких-либо пояснений.
+        Начни сразу с объявления типа диаграммы.
         """
         
         try:
@@ -307,21 +321,33 @@ class LLMIntegration:
                 context="",
                 subject="general",
                 system_prompt="""Ты - эксперт по созданию образовательных диаграмм. 
-                Создавай четкие и понятные Mermaid диаграммы для объяснения учебного материала.
-                Используй простой синтаксис и логическую структуру.""",
-                max_tokens=800
+                Твоя задача - создавать ПРОСТЫЕ и ПОНЯТНЫЕ Mermaid диаграммы.
+                ВАЖНЫЕ ПРАВИЛА:
+                1. Всегда используй корректный синтаксис Mermaid
+                2. Максимальная простота и наглядность
+                3. Русские подписи в двойных кавычках
+                4. Логические связи между элементами
+                5. Избегай сложных конструкций
+                
+                Если не уверен в синтаксисе - используй простейшую структуру.""",
+                max_tokens=500
             )
             
             if response:
-                # Очищаем ответ от лишних символов
-                cleaned_code = self._clean_mermaid_code(response)
+                # Очищаем и проверяем синтаксис
+                cleaned_code = self.clean_and_validate_mermaid_code(response)
                 print(f"✅ Сгенерирован Mermaid код для: {topic}")
                 return cleaned_code
             
         except Exception as e:
             print(f"❌ Ошибка генерации Mermaid кода: {e}")
         
-        return ""
+        # Fallback - простая диаграмма по умолчанию
+        return f'''flowchart TD
+    A["{topic}"] --> B["Основной аспект 1"]
+    A --> C["Основной аспект 2"]
+    B --> D["Пример или свойство"]
+    C --> D'''
 
     def generate_svg_diagram(self, topic: str, context: str = "") -> str:
         """Генерация простого SVG через LLM"""
@@ -372,6 +398,30 @@ class LLMIntegration:
             print(f"❌ Ошибка генерации SVG кода: {e}")
         
         return ""
+
+    def clean_and_validate_mermaid_code(self, code: str) -> str:
+        """Очистка и валидация Mermaid кода"""
+        if not code:
+            return ""
+        
+        # Удаляем markdown обратные кавычки
+        code = re.sub(r'```mermaid\s*', '', code)
+        code = re.sub(r'```\s*', '', code)
+        code = code.strip()
+        
+        # Проверяем базовый синтаксис
+        valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
+        
+        # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
+        if not any(code.startswith(start) for start in valid_starts):
+            code = 'flowchart TD\n' + code
+        
+        # Убедимся, что есть базовые элементы
+        lines = code.split('\n')
+        if len(lines) < 2:
+            code += '\nA["Элемент A"] --> B["Элемент B"]'
+        
+        return code
 
     def _clean_mermaid_code(self, code: str) -> str:
         """Очистка Mermaid кода от лишних символов"""
