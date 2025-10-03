@@ -44,8 +44,8 @@ class DialogueManager:
         self.practice_active = False
         self.current_question_index = 0
         self.current_expected_answer = ""
-        self.waiting_for_answer = False
-        self.current_practice_question = None
+        self.waiting_for_answer = False  # Флаг ожидания ответа ученика
+        self.current_practice_question = None  # Текущий вопрос практики
         
         # Новые поля для улучшенного диалога
         self.last_subject_prompt_time = 0
@@ -59,9 +59,10 @@ class DialogueManager:
         ]
         
         # Новые поля для визуализации
-        self.visualization_enabled = True
+        self.visualization_enabled = True  # Флаг визуализации
         self.last_visualization_time = 0
-        self.visualization_cooldown = 10
+        self.visualization_cooldown = 10  # Минимальная пауза между визуализациями (сек)
+        self.visualization_counter = 0  # Счетчик для чередования визуализаций
         
         self._load_lessons()
         
@@ -205,7 +206,7 @@ class DialogueManager:
                 for sentence in sentences:
                     if sentence.strip():
                         current_paragraph.append(sentence.strip())
-                        if len(current_paragraph) >= 2:
+                        if len(current_paragraph) >= 2:  # Группируем по 2-3 предложения
                             paragraphs.append(' '.join(current_paragraph))
                             current_paragraph = []
                 
@@ -253,7 +254,7 @@ class DialogueManager:
             return ""
             
         context = []
-        for msg in self.conversation_history[-6:]:
+        for msg in self.conversation_history[-6:]:  # Последние 6 реплик
             speaker = "Ученик" if msg["is_user"] else "Учитель"
             context.append(f"{speaker}: {msg['text']}")
         
@@ -310,7 +311,7 @@ class DialogueManager:
             else:
                 system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
             
-            # ГАРАНТИРОВАННЫЙ запрос к LLM
+            # ГАРАНТИРОВАННЫЙ запрос к LLM - даже если API ключа нет!
             llm_response = self.llm._query_llm_api(
                 prompt=text,
                 context=context,
@@ -330,6 +331,7 @@ class DialogueManager:
                 
         except Exception as e:
             print(f"Ошибка запроса к LLM для диалога: {e}")
+            # При ошибке возвращаем естественный ответ, а не сообщение об ошибке
         
         # Fallback если LLM не ответил - предлагаем выбор предмета
         return self._get_subject_selection_prompt()
@@ -338,7 +340,7 @@ class DialogueManager:
         """Возвращает предложение выбора предмета с учетом кд"""
         current_time = time.time()
         if current_time - self.last_subject_prompt_time < self.subject_prompt_cooldown:
-            return None
+            return None  # Не предлагать выбор слишком часто
         
         self.last_subject_prompt_time = current_time
         subjects = self.get_available_subjects()
@@ -448,7 +450,7 @@ class DialogueManager:
                 context="",
                 subject="общее",
                 system_prompt=system_prompt,
-                max_tokens=2500
+                max_tokens=2500  # Увеличиваем лимит токенов
             )
             
             if not lesson_content:
@@ -458,6 +460,7 @@ class DialogueManager:
             print(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
             
             # Убедимся, что есть правильное разделение на абзацы
+            # Если в ответе нет двойных переводов строк, добавим их после предложений
             if '\n\n' not in lesson_content:
                 print("⚠️ В ответе нет двойных переводов строк, добавляем...")
                 # Разбиваем на предложения и добавляем двойные переводы строк
@@ -619,52 +622,24 @@ class DialogueManager:
         return should_generate
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация визуализации для текста с проверкой соединения"""
+        """Генерация визуализации для текста"""
         if not self.visualization_enabled:
             return
         
         if self._should_generate_visualization(text):
             try:
-                # Проверяем, активно ли соединение
-                if not self.room_id or not self.socketio:
-                    print("❌ Нет активного соединения для отправки визуализации")
-                    return
-                    
                 # Обновляем время последней визуализации
                 self.last_visualization_time = time.time()
+                self.visualization_counter += 1
                 
-                print(f"🔄 Запрос визуализации для: {text[:100]}...")
-                
-                # Используем polling если WebSocket недоступен
-                def generate_and_send():
-                    try:
-                        from llm import LLMIntegration
-                        llm = LLMIntegration()
-                        
-                        mermaid_code = llm.generate_mermaid_diagram(text, context)
-                        svg_code = llm.generate_svg_diagram(text, context)
-                        
-                        if mermaid_code or svg_code:
-                            # Проверяем соединение перед отправкой
-                            if self.socketio:
-                                self.socketio.emit('visualization_generated', {
-                                    'room_id': self.room_id,
-                                    'mermaid_code': mermaid_code,
-                                    'svg_code': svg_code,
-                                    'topic': text,
-                                    'context': context[:200] + '...' if len(context) > 200 else context
-                                }, room=self.room_id)
-                                print(f"✅ Визуализация отправлена в комнату {self.room_id}")
-                            else:
-                                print("❌ SocketIO не доступен для отправки визуализации")
-                    except Exception as e:
-                        print(f"❌ Ошибка генерации визуализации: {e}")
-                
-                # Запускаем в отдельном потоке с обработкой ошибок
-                thread = threading.Thread(target=generate_and_send)
-                thread.daemon = True
-                thread.start()
-                
+                # Отправляем запрос на генерацию диаграммы через очередь
+                if self.room_id and self.socketio:
+                    self.socketio.emit('generate_visualization', {
+                        'room_id': self.room_id,
+                        'topic': text,
+                        'context': context
+                    })
+                    print(f"📊 Запрошена визуализация #{self.visualization_counter} для: {text[:100]}...")
             except Exception as e:
                 print(f"❌ Ошибка запроса визуализации: {e}")
 
@@ -921,7 +896,7 @@ class DialogueManager:
                 self.current_practice_question = {
                     "id": self.current_question_index + 1,
                     "question": question,
-                    "answer": ""
+                    "answer": ""  # Ответ будет сгенерирован при проверке
                 }
                 self.current_question_index += 1
                 # ВАЖНО: Устанавливаем флаг ожидания ответа!
@@ -937,7 +912,7 @@ class DialogueManager:
             return None
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
-        """Оценивает ответ и генерирует следующий вопрос"""
+        """Оценивает ответ и генерирует следующий вопрос (новый метод)"""
         print(f"🔍 Обработка ответа: '{student_answer}'")
         print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
@@ -962,7 +937,7 @@ class DialogueManager:
         print(f"📝 Оценка: {evaluation}")
         
         # Проверяем, нужно ли генерировать следующий вопрос
-        if self.current_question_index < 5:
+        if self.current_question_index < 5:  # Всего 5 вопросов
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
