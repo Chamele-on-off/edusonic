@@ -19,7 +19,16 @@ import re
 import tempfile
 
 app = Flask(__name__, static_folder='static')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='threading',
+    logger=True,
+    engineio_logger=True,
+    ping_timeout=60,
+    ping_interval=25,
+    max_http_buffer_size=1e8
+)
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
@@ -42,7 +51,7 @@ room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
-room_current_avatar = defaultdict(lambda: 'teacher')  # Храним текущий аватар для каждой комнаты
+room_current_avatar = defaultdict(lambda: 'teacher')
 
 # Кэш для визуализаций
 diagram_cache = {}
@@ -706,6 +715,21 @@ def handle_generate_visualization(data):
     
     threading.Thread(target=generate_and_send).start()
 
+@app.route('/api/connection/status')
+def connection_status():
+    """Проверка статуса соединения"""
+    return jsonify({
+        "success": True,
+        "websocket_available": True,
+        "polling_available": True,
+        "timestamp": time.time()
+    })
+
+@socketio.on('ping')
+def handle_ping():
+    """Обработчик ping для проверки соединения"""
+    emit('pong', {'timestamp': time.time()})
+
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
     """Установка модели LLM для комнаты"""
@@ -1260,7 +1284,7 @@ def download_practice_txt():
         # Создаем временный zip-файл
         import tempfile
         import zipfile
-        
+    
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
