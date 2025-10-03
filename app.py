@@ -19,16 +19,7 @@ import re
 import tempfile
 
 app = Flask(__name__, static_folder='static')
-socketio = SocketIO(
-    app, 
-    cors_allowed_origins="*", 
-    async_mode='threading',
-    logger=True,
-    engineio_logger=True,
-    ping_timeout=60,
-    ping_interval=25,
-    max_http_buffer_size=1e8
-)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
@@ -51,10 +42,14 @@ room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
-room_current_avatar = defaultdict(lambda: 'teacher')
+room_current_avatar = defaultdict(lambda: 'teacher')  # Храним текущий аватар для каждой комнаты
 
 # Кэш для визуализаций
 diagram_cache = {}
+# Очередь визуализаций для каждой комнаты
+room_visualization_queue = defaultdict(list)
+# Флаг активной визуализации для каждой комнаты
+room_visualization_active = defaultdict(bool)
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
@@ -519,6 +514,101 @@ def handle_practice_ended(data):
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
 
+# НОВЫЕ ФУНКЦИИ ДЛЯ POLLING ВИЗУАЛИЗАЦИИ
+def add_visualization_to_queue(room_id, topic, context):
+    """Добавляет визуализацию в очередь для комнаты"""
+    if room_id not in room_visualization_queue:
+        room_visualization_queue[room_id] = []
+    
+    # Ограничиваем размер очереди
+    if len(room_visualization_queue[room_id]) >= 10:
+        room_visualization_queue[room_id].pop(0)
+    
+    room_visualization_queue[room_id].append({
+        'topic': topic,
+        'context': context,
+        'timestamp': time.time()
+    })
+    
+    print(f"📊 Визуализация добавлена в очередь для комнаты {room_id}: {topic}")
+
+def process_visualization_queue(room_id):
+    """Обрабатывает очередь визуализаций для комнаты"""
+    if room_id not in room_visualization_queue or not room_visualization_queue[room_id]:
+        return None
+    
+    if room_visualization_active[room_id]:
+        return None  # Пропускаем если уже обрабатывается визуализация
+    
+    visualization_data = room_visualization_queue[room_id].pop(0)
+    room_visualization_active[room_id] = True
+    
+    # Запускаем генерацию в отдельном потоке
+    def generate_and_send():
+        try:
+            topic = visualization_data['topic']
+            context = visualization_data['context']
+            
+            print(f"🔄 Генерация визуализации для: {topic}")
+            
+            # Генерируем обе визуализации
+            mermaid_code = generate_mermaid_code(topic, context)
+            svg_code = generate_svg_code(topic, context)
+            
+            if mermaid_code or svg_code:
+                socketio.emit('visualization_generated', {
+                    'room_id': room_id,
+                    'mermaid_code': mermaid_code,
+                    'svg_code': svg_code,
+                    'topic': topic,
+                    'context': context[:200] + '...' if len(context) > 200 else context
+                }, room=room_id)
+                print(f"✅ Визуализация отправлена в комнату {room_id}")
+            else:
+                print(f"❌ Не удалось сгенерировать визуализацию для: {topic}")
+                
+        except Exception as e:
+            print(f"❌ Ошибка генерации визуализации: {e}")
+        finally:
+            room_visualization_active[room_id] = False
+    
+    threading.Thread(target=generate_and_send).start()
+    return True
+
+# Polling endpoint для визуализации
+@app.route('/api/poll_visualization', methods=['POST'])
+def poll_visualization():
+    """Endpoint для polling визуализаций"""
+    try:
+        data = request.json
+        room_id = data.get('room_id', 'default')
+        
+        # Обрабатываем очередь визуализаций
+        processed = process_visualization_queue(room_id)
+        
+        return jsonify({
+            "success": True,
+            "processed": bool(processed),
+            "queue_length": len(room_visualization_queue.get(room_id, [])),
+            "active": room_visualization_active.get(room_id, False)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/visualization_queue_status', methods=['GET'])
+def visualization_queue_status():
+    """Статус очереди визуализаций"""
+    room_id = request.args.get('room_id', 'default')
+    
+    return jsonify({
+        "success": True,
+        "room_id": room_id,
+        "queue_length": len(room_visualization_queue.get(room_id, [])),
+        "active": room_visualization_active.get(room_id, False),
+        "queue": room_visualization_queue.get(room_id, [])
+    })
+
 # Новые эндпоинты для визуализации
 @app.route('/api/generate_diagram', methods=['POST'])
 def generate_diagram():
@@ -532,40 +622,13 @@ def generate_diagram():
         if not topic:
             return jsonify({"success": False, "error": "Topic is required"})
         
-        # Проверяем кэш
-        cache_key = f"diagram_{hash(topic + context)}"
-        if cache_key in diagram_cache:
-            print(f"💾 Используем кэшированную диаграмму для: {topic}")
-            mermaid_code = diagram_cache[cache_key]
-        else:
-            # Генерируем Mermaid код через LLM
-            mermaid_code = generate_mermaid_code(topic, context)
-            if mermaid_code:
-                diagram_cache[cache_key] = mermaid_code
-                # Ограничиваем размер кэша
-                if len(diagram_cache) > 50:
-                    oldest_key = next(iter(diagram_cache))
-                    del diagram_cache[oldest_key]
-        
-        if not mermaid_code:
-            return jsonify({"success": False, "error": "Failed to generate diagram"})
-        
-        # Генерируем SVG как альтернативу
-        svg_code = generate_svg_code(topic, context)
-        
-        # Отправляем обе визуализации клиенту
-        socketio.emit('visualization_generated', {
-            'room_id': room_id,
-            'mermaid_code': mermaid_code,
-            'svg_code': svg_code,
-            'topic': topic,
-            'context': context[:200] + '...' if len(context) > 200 else context
-        }, room=room_id)
+        # Добавляем в очередь вместо немедленной генерации
+        add_visualization_to_queue(room_id, topic, context)
         
         return jsonify({
             "success": True,
-            "mermaid_code": mermaid_code,
-            "svg_code": svg_code,
+            "message": "Визуализация добавлена в очередь",
+            "queue_position": len(room_visualization_queue.get(room_id, [])),
             "topic": topic
         })
         
@@ -586,6 +649,8 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     4. Подходящий тип диаграммы (graph, flowchart, pie, sequenceDiagram, classDiagram, timeline)
     5. Русские подписи
     6. Четкая структура и логические связи
+    7. Используй простые формы: прямоугольники, круги, стрелки
+    8. Избегай сложных конструкций
 
     Верни ТОЛЬКО код Mermaid без обратных кавычек и пояснений.
     Начни сразу с типа диаграммы (например: flowchart TD).
@@ -602,7 +667,8 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
             subject="general",
             system_prompt="""Ты - эксперт по созданию образовательных диаграмм. 
             Создавай четкие и понятные Mermaid диаграммы для объяснения учебного материала.
-            Используй простой синтаксис и логическую структуру.""",
+            Используй простой синтаксис и логическую структуру.
+            ВАЖНО: Всегда используй корректный синтаксис Mermaid.""",
             max_tokens=800
         )
         
@@ -671,7 +737,7 @@ def generate_svg_code(topic: str, context: str = "") -> str:
     return ""
 
 def clean_mermaid_code(code: str) -> str:
-    """Очистка Mermaid кода от лишних символов"""
+    """Очистка Mermaid кода от лишних символов и проверка синтаксиса"""
     if not code:
         return ""
     
@@ -682,6 +748,21 @@ def clean_mermaid_code(code: str) -> str:
     # Удаляем лишние пробелы и комментарии
     code = re.sub(r'%%.*', '', code)  # Удаляем комментарии Mermaid
     code = '\n'.join([line for line in code.split('\n') if line.strip()])
+    
+    # Проверяем базовый синтаксис Mermaid
+    valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt', 'gitGraph']
+    if not any(code.strip().startswith(start) for start in valid_starts):
+        # Если не начинается с правильного типа, добавляем flowchart по умолчанию
+        code = 'flowchart TD\n' + code
+    
+    # Убедимся, что есть хотя бы одна стрелка или связь
+    if '-->' not in code and '->' not in code and '--' not in code:
+        # Добавляем простую структуру если нет связей
+        lines = code.split('\n')
+        if len(lines) > 1:
+            code = lines[0] + '\n' + 'A[Элемент A] --> B[Элемент B]'
+        else:
+            code = 'flowchart TD\nA[Элемент A] --> B[Элемент B]'
     
     return code.strip()
 
@@ -695,40 +776,10 @@ def handle_generate_visualization(data):
     if not topic:
         return
     
-    # Запускаем генерацию в отдельном потоке
-    def generate_and_send():
-        try:
-            mermaid_code = generate_mermaid_code(topic, context)
-            svg_code = generate_svg_code(topic, context)
-            
-            if mermaid_code or svg_code:
-                socketio.emit('visualization_generated', {
-                    'room_id': room_id,
-                    'mermaid_code': mermaid_code,
-                    'svg_code': svg_code,
-                    'topic': topic,
-                    'context': context[:200] + '...' if len(context) > 200 else context
-                }, room=room_id)
-                print(f"✅ Визуализация отправлена в комнату {room_id}")
-        except Exception as e:
-            print(f"❌ Ошибка генерации визуализации: {e}")
+    # Добавляем в очередь вместо немедленной генерации
+    add_visualization_to_queue(room_id, topic, context)
     
-    threading.Thread(target=generate_and_send).start()
-
-@app.route('/api/connection/status')
-def connection_status():
-    """Проверка статуса соединения"""
-    return jsonify({
-        "success": True,
-        "websocket_available": True,
-        "polling_available": True,
-        "timestamp": time.time()
-    })
-
-@socketio.on('ping')
-def handle_ping():
-    """Обработчик ping для проверки соединения"""
-    emit('pong', {'timestamp': time.time()})
+    print(f"📊 Запрос визуализации добавлен в очередь для комнаты {room_id}: {topic}")
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
@@ -1284,7 +1335,7 @@ def download_practice_txt():
         # Создаем временный zip-файл
         import tempfile
         import zipfile
-    
+        
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
