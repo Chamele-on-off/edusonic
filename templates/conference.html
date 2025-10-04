@@ -998,7 +998,6 @@
             width: 40px;
             height: 40px;
             border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
             border-top-color: var(--teacher-color);
             animation: spin 1s ease-in-out infinite;
             z-index: 100;
@@ -1023,6 +1022,7 @@
             justify-content: center;
             padding: 40px;
             color: var(--gray);
+            text-align: center;
         }
         
         .visualization-loading .spinner {
@@ -1064,6 +1064,34 @@
             width: 15px;
             height: 15px;
             cursor: nwse-resize;
+        }
+
+        /* Notification animations */
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -1408,151 +1436,7 @@
         let isPlayingAudio = false;
         let audioElements = [];
 
-        // Инициализация Mermaid
-        mermaid.initialize({
-            startOnLoad: true,
-            theme: 'default',
-            securityLevel: 'loose',
-            flowchart: {
-                useMaxWidth: true,
-                htmlLabels: true,
-                curve: 'basis'
-            }
-        });
-
-        // ========== ФУНКЦИИ УПРАВЛЕНИЯ ОКНАМИ ==========
-        function initWindowManagement() {
-            initWindowDragging();
-            initWindowResizing();
-            initWindowFocus();
-        }
-
-        function initWindowFocus() {
-            // Устанавливаем z-index при клике на окно
-            const windows = [lessonContent, drawingWindow, visualizationWindow];
-            let maxZIndex = 10;
-            
-            windows.forEach(window => {
-                window.addEventListener('mousedown', () => {
-                    bringWindowToFront(window);
-                });
-                
-                window.addEventListener('touchstart', () => {
-                    bringWindowToFront(window);
-                });
-            });
-        }
-
-        function bringWindowToFront(windowElement) {
-            const windows = [lessonContent, drawingWindow, visualizationWindow];
-            let maxZIndex = 5;
-            
-            // Находим текущий максимальный z-index
-            windows.forEach(win => {
-                if (win.style.display === 'block') {
-                    const zIndex = parseInt(win.style.zIndex) || 5;
-                    if (zIndex > maxZIndex) maxZIndex = zIndex;
-                }
-            });
-            
-            // Устанавливаем новый z-index для активного окна
-            windowElement.style.zIndex = maxZIndex + 1;
-        }
-
-        function initWindowResizing() {
-            function initResizeForWindow(windowElement) {
-                const resizeHandles = windowElement.querySelectorAll('.resize-handle');
-                
-                resizeHandles.forEach(handle => {
-                    handle.addEventListener('mousedown', startResize);
-                    handle.addEventListener('touchstart', startResize, { passive: false });
-                });
-                
-                function startResize(e) {
-                    isResizingWindow = true;
-                    currentResizedWindow = windowElement;
-                    
-                    // Определяем направление изменения размера
-                    if (e.target.classList.contains('resize-handle-e')) {
-                        resizeDirection = 'e';
-                    } else if (e.target.classList.contains('resize-handle-s')) {
-                        resizeDirection = 's';
-                    } else if (e.target.classList.contains('resize-handle-se')) {
-                        resizeDirection = 'se';
-                    }
-                    
-                    const rect = windowElement.getBoundingClientRect();
-                    startWidth = rect.width;
-                    startHeight = rect.height;
-                    startX = e.clientX || e.touches[0].clientX;
-                    startY = e.clientY || e.touches[0].clientY;
-                    
-                    document.addEventListener('mousemove', resizeWindow);
-                    document.addEventListener('touchmove', resizeWindow, { passive: false });
-                    document.addEventListener('mouseup', stopResize);
-                    document.addEventListener('touchend', stopResize);
-                    
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }
-            
-            function resizeWindow(e) {
-                if (!isResizingWindow || !currentResizedWindow) return;
-                
-                let clientX, clientY;
-                if (e.type === 'mousemove') {
-                    clientX = e.clientX;
-                    clientY = e.clientY;
-                } else {
-                    clientX = e.touches[0].clientX;
-                    clientY = e.touches[0].clientY;
-                    e.preventDefault();
-                }
-                
-                const deltaX = clientX - startX;
-                const deltaY = clientY - startY;
-                
-                let newWidth = startWidth;
-                let newHeight = startHeight;
-                
-                if (resizeDirection === 'e' || resizeDirection === 'se') {
-                    newWidth = Math.max(400, startWidth + deltaX);
-                }
-                
-                if (resizeDirection === 's' || resizeDirection === 'se') {
-                    newHeight = Math.max(300, startHeight + deltaY);
-                }
-                
-                currentResizedWindow.style.width = newWidth + 'px';
-                currentResizedWindow.style.height = newHeight + 'px';
-                
-                // Обновляем canvas при изменении размера окна рисования
-                if (currentResizedWindow === drawingWindow) {
-                    setTimeout(() => {
-                        const rect = drawingCanvas.getBoundingClientRect();
-                        drawingCanvas.width = rect.width;
-                        drawingCanvas.height = rect.height;
-                    }, 50);
-                }
-            }
-            
-            function stopResize() {
-                isResizingWindow = false;
-                currentResizedWindow = null;
-                resizeDirection = '';
-                document.removeEventListener('mousemove', resizeWindow);
-                document.removeEventListener('touchmove', resizeWindow);
-                document.removeEventListener('mouseup', stopResize);
-                document.removeEventListener('touchend', stopResize);
-            }
-            
-            initResizeForWindow(lessonContent);
-            initResizeForWindow(drawingWindow);
-            initResizeForWindow(visualizationWindow);
-        }
-
-        // ========== ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
+        // ========== ФУНКЦИИ ВИЗУАЛИЗАЦИИ - ИСПРАВЛЕННЫЕ ==========
         function initVisualization() {
             // Обработчики вкладок визуализации
             visualizationTabs.forEach(tab => {
@@ -1562,8 +1446,39 @@
                 });
             });
             
-            // Инициализация polling для визуализаций
-            startVisualizationPolling();
+            // Инициализация Mermaid
+            initMermaid();
+            
+            console.log('✅ Визуализация инициализирована');
+        }
+
+        function initMermaid() {
+            try {
+                mermaid.initialize({
+                    startOnLoad: true,
+                    theme: 'default',
+                    securityLevel: 'loose',
+                    flowchart: {
+                        useMaxWidth: true,
+                        htmlLabels: true,
+                        curve: 'basis'
+                    },
+                    themeCSS: `
+                        .node rect, .node circle, .node ellipse, .node polygon {
+                            fill: #4cc9f0;
+                            stroke: #3a0ca3;
+                            stroke-width: 2px;
+                        }
+                        .edgePath path {
+                            stroke: #333;
+                            stroke-width: 2px;
+                        }
+                    `
+                });
+                console.log('✅ Mermaid инициализирован');
+            } catch (error) {
+                console.error('❌ Ошибка инициализации Mermaid:', error);
+            }
         }
 
         function switchVisualizationTab(tabName) {
@@ -1586,6 +1501,8 @@
                 mermaidTab.style.display = 'none';
                 svgTab.style.display = 'flex';
             }
+            
+            console.log(`✅ Переключена вкладка визуализации: ${tabName}`);
         }
 
         function showVisualizationWindow() {
@@ -1593,18 +1510,26 @@
             isVisualizationWindowOpen = true;
             visualizationToolBtn.classList.add('active');
             bringWindowToFront(visualizationWindow);
+            console.log('✅ Окно визуализации открыто');
         }
 
         function hideVisualizationWindow() {
             visualizationWindow.style.display = 'none';
             isVisualizationWindowOpen = false;
             visualizationToolBtn.classList.remove('active');
+            console.log('❌ Окно визуализации закрыто');
         }
 
         function displayMermaidDiagram(mermaidCode) {
-            if (!mermaidCode) return;
+            if (!mermaidCode || mermaidCode.trim() === '') {
+                console.warn('❌ Пустой Mermaid код');
+                showMermaidPlaceholder('Пустой код диаграммы');
+                return;
+            }
             
             try {
+                console.log('🔄 Отображение Mermaid диаграммы...');
+                
                 // Очищаем контейнер
                 mermaidDiagram.innerHTML = '';
                 
@@ -1615,43 +1540,86 @@
                 
                 mermaidDiagram.appendChild(diagramElement);
                 
-                // Инициализируем Mermaid
-                mermaid.init(undefined, diagramElement);
+                // Инициализируем Mermaid с обработкой ошибок
+                mermaid.init(undefined, diagramElement).then(() => {
+                    console.log('✅ Mermaid диаграмма успешно отображена');
+                    
+                    // Добавляем стили для лучшего отображения
+                    const svgElements = mermaidDiagram.querySelectorAll('svg');
+                    svgElements.forEach(svg => {
+                        svg.style.maxWidth = '100%';
+                        svg.style.height = 'auto';
+                    });
+                    
+                }).catch(error => {
+                    console.error('❌ Ошибка рендеринга Mermaid:', error);
+                    showMermaidPlaceholder('Ошибка отображения диаграммы: ' + error.message);
+                });
                 
-                console.log('Mermaid диаграмма отображена');
             } catch (error) {
-                console.error('Ошибка отображения Mermaid диаграммы:', error);
-                mermaidDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка отображения диаграммы</p>
-                        <small>${error.message}</small>
-                    </div>
-                `;
+                console.error('❌ Ошибка отображения Mermaid диаграммы:', error);
+                showMermaidPlaceholder('Ошибка: ' + error.message);
             }
         }
 
         function displaySvgDiagram(svgCode) {
-            if (!svgCode) return;
+            if (!svgCode || svgCode.trim() === '') {
+                console.warn('❌ Пустой SVG код');
+                showSvgPlaceholder('Пустой код SVG');
+                return;
+            }
             
             try {
+                console.log('🔄 Отображение SVG диаграммы...');
+                
                 // Очищаем контейнер
                 svgDiagram.innerHTML = '';
+                
+                // Проверяем валидность SVG
+                if (!svgCode.includes('<svg') || !svgCode.includes('</svg>')) {
+                    console.warn('❌ Невалидный SVG код');
+                    showSvgPlaceholder('Невалидный SVG код');
+                    return;
+                }
                 
                 // Вставляем SVG код
                 svgDiagram.innerHTML = svgCode;
                 
-                console.log('SVG диаграмма отображена');
+                // Добавляем стили для SVG
+                const svgElement = svgDiagram.querySelector('svg');
+                if (svgElement) {
+                    svgElement.style.maxWidth = '100%';
+                    svgElement.style.height = 'auto';
+                    svgElement.style.display = 'block';
+                    svgElement.style.margin = '0 auto';
+                }
+                
+                console.log('✅ SVG диаграмма успешно отображена');
+                
             } catch (error) {
-                console.error('Ошибка отображения SVG диаграммы:', error);
-                svgDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка отображения SVG</p>
-                        <small>${error.message}</small>
-                    </div>
-                `;
+                console.error('❌ Ошибка отображения SVG диаграммы:', error);
+                showSvgPlaceholder('Ошибка: ' + error.message);
             }
+        }
+
+        function showMermaidPlaceholder(message) {
+            mermaidDiagram.innerHTML = `
+                <div class="visualization-placeholder">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>${message || 'Диаграмма не доступна'}</p>
+                    <small>Попробуйте следующий абзац урока</small>
+                </div>
+            `;
+        }
+
+        function showSvgPlaceholder(message) {
+            svgDiagram.innerHTML = `
+                <div class="visualization-placeholder">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>${message || 'SVG не доступен'}</p>
+                    <small>Попробуйте следующий абзац урока</small>
+                </div>
+            `;
         }
 
         function showVisualizationLoading() {
@@ -1659,6 +1627,7 @@
                 <div class="visualization-loading">
                     <div class="spinner"></div>
                     <p>Генерация визуализации...</p>
+                    <small>Это может занять несколько секунд</small>
                 </div>
             `;
             
@@ -1666,33 +1635,80 @@
                 <div class="visualization-loading">
                     <div class="spinner"></div>
                     <p>Генерация визуализации...</p>
+                    <small>Это может занять несколько секунд</small>
                 </div>
             `;
         }
 
-        function startVisualizationPolling() {
-            // Polling каждые 3 секунды для проверки новых визуализаций
-            setInterval(async () => {
-                if (!socket || !isVisualizationWindowOpen) return;
-                
-                try {
-                    const response = await fetch('/api/poll_visualization', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ room_id: roomId })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success && data.processed) {
-                        console.log('Обработана визуализация из очереди');
-                    }
-                } catch (error) {
-                    console.error('Ошибка polling визуализации:', error);
+        // Обработчик для визуализаций из сокета
+        function handleVisualizationGenerated(data) {
+            console.log('🎨 Получена визуализация:', data);
+            
+            // Автоматически показываем окно визуализации
+            if (!isVisualizationWindowOpen) {
+                showVisualizationWindow();
+            }
+            
+            // Показываем индикатор загрузки
+            showVisualizationLoading();
+            
+            // Обновляем диаграммы с небольшой задержкой для плавности
+            setTimeout(() => {
+                if (data.mermaid_code && data.mermaid_code.trim() !== '') {
+                    console.log('📊 Отображение Mermaid диаграммы...');
+                    displayMermaidDiagram(data.mermaid_code);
+                } else {
+                    console.warn('❌ Пустой Mermaid код');
+                    showMermaidPlaceholder('Mermaid диаграмма не сгенерирована');
                 }
-            }, 3000);
+                
+                if (data.svg_code && data.svg_code.trim() !== '') {
+                    console.log('🖼️ Отображение SVG диаграммы...');
+                    displaySvgDiagram(data.svg_code);
+                } else {
+                    console.warn('❌ Пустой SVG код');
+                    showSvgPlaceholder('SVG диаграмма не сгенерирована');
+                }
+                
+                console.log('✅ Визуализации обновлены');
+                
+                // Показываем уведомление
+                showNotification(`Сгенерирована визуализация: ${data.topic || 'текущая тема'}`);
+                
+            }, 500);
+        }
+
+        // Функция для показа уведомлений
+        function showNotification(message) {
+            // Создаем элемент уведомления
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: linear-gradient(135deg, #4cc9f0, #3a0ca3);
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+                max-width: 300px;
+                font-size: 14px;
+                animation: slideInRight 0.3s ease-out;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Автоматически удаляем через 5 секунд
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease-in';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 5000);
         }
 
         // ========== УЛУЧШЕННОЕ РАСПОЗНАВАНИЕ РЕЧИ ==========
@@ -2660,30 +2676,10 @@
                 }
             });
 
-            // Обработчик для визуализаций
+            // ОБРАБОТЧИК ДЛЯ ВИЗУАЛИЗАЦИЙ
             socket.on('visualization_generated', (data) => {
-                console.log('Получена визуализация:', data.topic);
-                
-                // Автоматически показываем окно визуализации
-                if (!isVisualizationWindowOpen) {
-                    setTool('visualization');
-                }
-                
-                // Показываем индикатор загрузки
-                showVisualizationLoading();
-                
-                // Обновляем диаграммы с небольшой задержкой для плавности
-                setTimeout(() => {
-                    if (data.mermaid_code) {
-                        displayMermaidDiagram(data.mermaid_code);
-                    }
-                    
-                    if (data.svg_code) {
-                        displaySvgDiagram(data.svg_code);
-                    }
-                    
-                    console.log('Визуализации обновлены');
-                }, 500);
+                console.log('🎨 Получена визуализация через сокет:', data);
+                handleVisualizationGenerated(data);
             });
         }
 
@@ -2974,10 +2970,10 @@
             initSocket();
             createBackgroundAnimation();
             initSpeechRecognition();
-            initWindowManagement();
+            initWindowDragging();
             initZoom();
             initDrawingCanvas();
-            initVisualization();
+            initVisualization(); // Инициализация визуализации
             
             textToolBtn.addEventListener('click', () => setTool('text'));
             drawToolBtn.addEventListener('click', () => setTool('draw'));
