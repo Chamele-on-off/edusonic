@@ -291,7 +291,7 @@ class DialogueManager:
                 if pattern in last_user_messages and responses:
                     return random.choice(responses)
         
-        # 3. Поиск в локальных шаблонах (fallback)
+        # 3. Поиск в локальных шаблонов (fallback)
         for pattern, responses in self.local_patterns.items():
             if pattern in text_lower:
                 return random.choice(responses)
