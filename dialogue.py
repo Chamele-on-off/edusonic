@@ -58,11 +58,13 @@ class DialogueManager:
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
         
-        # Новые поля для визуализации
+        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - УЛУЧШЕННАЯ ЛОГИКА
         self.visualization_enabled = True  # Флаг визуализации
         self.last_visualization_time = 0
-        self.visualization_cooldown = 10  # Минимальная пауза между визуализациями (сек)
+        self.visualization_cooldown = 5  # Уменьшена пауза между визуализациями (сек)
         self.visualization_counter = 0  # Счетчик для чередования визуализаций
+        self.paragraphs_since_last_viz = 0  # Счетчик абзацев с последней визуализации
+        self.viz_paragraph_interval = 2  # Генерировать визуализацию каждые N абзацев
         
         self._load_lessons()
         
@@ -582,14 +584,22 @@ class DialogueManager:
             print(f"❌ Ошибка начала сгенерированного урока: {e}")
             self.lesson_started = False
 
-    # НОВЫЕ МЕТОДЫ ДЛЯ ВИЗУАЛИЗАЦИИ
+    # НОВЫЕ МЕТОДЫ ДЛЯ ВИЗУАЛИЗАЦИИ - УЛУЧШЕННАЯ ЛОГИКА
     def _should_generate_visualization(self, text: str) -> bool:
-        """Определяет, нужно ли генерировать визуализацию для текста"""
+        """Определяет, нужно ли генерировать визуализацию для текста - УЛУЧШЕННАЯ ВЕРСИЯ"""
         # Проверяем кд
         current_time = time.time()
         if current_time - self.last_visualization_time < self.visualization_cooldown:
             return False
             
+        # УВЕЛИЧИВАЕМ ЧАСТОТУ ГЕНЕРАЦИИ - генерируем для КАЖДОГО 2-го абзаца
+        self.paragraphs_since_last_viz += 1
+        if self.paragraphs_since_last_viz < self.viz_paragraph_interval:
+            return False
+            
+        # СБРАСЫВАЕМ счетчик при генерации
+        self.paragraphs_since_last_viz = 0
+        
         # Более широкий список триггеров для автоматической генерации
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
@@ -602,7 +612,13 @@ class DialogueManager:
             'механизм', 'функция', 'свойство', 'характеристика',
             # Экономические термины
             'спрос', 'предложение', 'рынок', 'экономика', 'производство',
-            'потребление', 'распределение', 'обмен', 'цена', 'стоимость'
+            'потребление', 'распределение', 'обмен', 'цена', 'стоимость',
+            # Математические термины
+            'формула', 'уравнение', 'функция', 'график', 'координаты',
+            'прямая', 'кривая', 'площадь', 'объем', 'угол',
+            # Исторические термины
+            'период', 'эпоха', 'династия', 'хронология', 'событие',
+            'война', 'революция', 'реформа', 'закон', 'документ'
         ]
         
         text_lower = text.lower()
@@ -616,14 +632,16 @@ class DialogueManager:
         # Проверяем наличие структурных индикаторов
         has_structure_indicators = any(indicator in text_lower for indicator in 
                                      ['состоит из', 'включает в себя', 'делится на', 'подразделяется',
-                                      'можно разделить', 'выделяют', 'различают', 'существуют'])
+                                      'можно разделить', 'выделяют', 'различают', 'существуют',
+                                      'с одной стороны', 'с другой стороны', 'во-первых', 'во-вторых'])
         
-        # Генерируем для каждого 3-го абзаца или если есть явные триггеры
-        should_generate = (has_trigger or has_structure_indicators) and is_long_enough and self.visualization_enabled
+        # Генерируем для каждого 2-го абзаца ИЛИ если есть явные триггеры
+        should_generate = (has_trigger or has_structure_indicators or 
+                          self.visualization_counter % 2 == 0) and is_long_enough and self.visualization_enabled
         
         if should_generate:
             print(f"🎯 Генерация визуализации для: {text[:100]}...")
-            print(f"   Триггеры: {has_trigger}, Структура: {has_structure_indicators}")
+            print(f"   Триггеры: {has_trigger}, Структура: {has_structure_indicators}, Counter: {self.visualization_counter}")
         
         return should_generate
 
@@ -638,7 +656,7 @@ class DialogueManager:
                 self.last_visualization_time = time.time()
                 self.visualization_counter += 1
                 
-                # ОТПРАВЛЯЕМ ЗАПРОС НА ГЕНЕРАЦИЮ ВИЗУАЛИЗАЦИИ
+                # ОТПРАВЛЯЕМ ЗАПРОС НА ГЕНЕРАЦИЮ ВИЗУАЛИЗАЦИИ - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ
                 if self.room_id and self.socketio:
                     print(f"📊 Отправка запроса на генерацию визуализации для: {text[:100]}...")
                     
