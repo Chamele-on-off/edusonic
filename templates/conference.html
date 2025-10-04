@@ -95,9 +95,8 @@
         /* Основное окно урока */
         #lesson-content {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 10%;
+            left: 5%;
             background: var(--board-bg);
             padding: 0;
             border-radius: 16px;
@@ -110,18 +109,21 @@
             -webkit-overflow-scrolling: touch;
             color: var(--board-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            resize: both;
+            min-width: 400px;
+            min-height: 300px;
         }
         
         /* Окно рисования */
         #drawing-window {
             position: absolute;
-            top: 10%;
+            top: 15%;
             left: 10%;
             background: var(--board-bg);
             padding: 0;
             border-radius: 16px;
-            width: 80%;
-            height: 70%;
+            width: 75%;
+            height: 65%;
             overflow: hidden;
             z-index: 6;
             display: none;
@@ -129,13 +131,16 @@
             -webkit-overflow-scrolling: touch;
             color: var(--board-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            resize: both;
+            min-width: 400px;
+            min-height: 300px;
         }
         
         /* Окно визуализации */
         #visualization-window {
             position: absolute;
             top: 10%;
-            right: 10%;
+            right: 5%;
             background: var(--visualization-bg);
             padding: 0;
             border-radius: 16px;
@@ -148,6 +153,9 @@
             -webkit-overflow-scrolling: touch;
             color: var(--board-text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            resize: both;
+            min-width: 400px;
+            min-height: 300px;
         }
         
         .window-header {
@@ -1026,6 +1034,37 @@
             animation: spin 1s linear infinite;
             margin-bottom: 15px;
         }
+        
+        /* Resize handle */
+        .resize-handle {
+            position: absolute;
+            background: transparent;
+            z-index: 10;
+        }
+        
+        .resize-handle-e {
+            top: 0;
+            right: 0;
+            width: 10px;
+            height: 100%;
+            cursor: ew-resize;
+        }
+        
+        .resize-handle-s {
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            cursor: ns-resize;
+        }
+        
+        .resize-handle-se {
+            bottom: 0;
+            right: 0;
+            width: 15px;
+            height: 15px;
+            cursor: nwse-resize;
+        }
     </style>
 </head>
 <body>
@@ -1097,6 +1136,11 @@
                     <input type="text" id="answer-input" placeholder="Введите ваш ответ...">
                     <button id="submit-answer">Отправить</button>
                 </div>
+                
+                <!-- Ручки для изменения размера -->
+                <div class="resize-handle resize-handle-e"></div>
+                <div class="resize-handle resize-handle-s"></div>
+                <div class="resize-handle resize-handle-se"></div>
             </div>
             
             <!-- Окно рисования -->
@@ -1139,6 +1183,11 @@
                         <i class="fas fa-plus"></i>
                     </button>
                 </div>
+                
+                <!-- Ручки для изменения размера -->
+                <div class="resize-handle resize-handle-e"></div>
+                <div class="resize-handle resize-handle-s"></div>
+                <div class="resize-handle resize-handle-se"></div>
             </div>
             
             <!-- Окно визуализации -->
@@ -1173,6 +1222,11 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Ручки для изменения размера -->
+                <div class="resize-handle resize-handle-e"></div>
+                <div class="resize-handle resize-handle-s"></div>
+                <div class="resize-handle resize-handle-se"></div>
             </div>
             
             <div id="teacher-video-container" class="fade-in">
@@ -1340,6 +1394,15 @@
         let dragOffsetX = 0;
         let dragOffsetY = 0;
 
+        // Переменные для изменения размера окон
+        let isResizingWindow = false;
+        let currentResizedWindow = null;
+        let resizeDirection = '';
+        let startWidth = 0;
+        let startHeight = 0;
+        let startX = 0;
+        let startY = 0;
+
         // iOS Audio Fix - ключевые переменные из работающей версии
         let audioQueue = [];
         let isPlayingAudio = false;
@@ -1356,6 +1419,138 @@
                 curve: 'basis'
             }
         });
+
+        // ========== ФУНКЦИИ УПРАВЛЕНИЯ ОКНАМИ ==========
+        function initWindowManagement() {
+            initWindowDragging();
+            initWindowResizing();
+            initWindowFocus();
+        }
+
+        function initWindowFocus() {
+            // Устанавливаем z-index при клике на окно
+            const windows = [lessonContent, drawingWindow, visualizationWindow];
+            let maxZIndex = 10;
+            
+            windows.forEach(window => {
+                window.addEventListener('mousedown', () => {
+                    bringWindowToFront(window);
+                });
+                
+                window.addEventListener('touchstart', () => {
+                    bringWindowToFront(window);
+                });
+            });
+        }
+
+        function bringWindowToFront(windowElement) {
+            const windows = [lessonContent, drawingWindow, visualizationWindow];
+            let maxZIndex = 5;
+            
+            // Находим текущий максимальный z-index
+            windows.forEach(win => {
+                if (win.style.display === 'block') {
+                    const zIndex = parseInt(win.style.zIndex) || 5;
+                    if (zIndex > maxZIndex) maxZIndex = zIndex;
+                }
+            });
+            
+            // Устанавливаем новый z-index для активного окна
+            windowElement.style.zIndex = maxZIndex + 1;
+        }
+
+        function initWindowResizing() {
+            function initResizeForWindow(windowElement) {
+                const resizeHandles = windowElement.querySelectorAll('.resize-handle');
+                
+                resizeHandles.forEach(handle => {
+                    handle.addEventListener('mousedown', startResize);
+                    handle.addEventListener('touchstart', startResize, { passive: false });
+                });
+                
+                function startResize(e) {
+                    isResizingWindow = true;
+                    currentResizedWindow = windowElement;
+                    
+                    // Определяем направление изменения размера
+                    if (e.target.classList.contains('resize-handle-e')) {
+                        resizeDirection = 'e';
+                    } else if (e.target.classList.contains('resize-handle-s')) {
+                        resizeDirection = 's';
+                    } else if (e.target.classList.contains('resize-handle-se')) {
+                        resizeDirection = 'se';
+                    }
+                    
+                    const rect = windowElement.getBoundingClientRect();
+                    startWidth = rect.width;
+                    startHeight = rect.height;
+                    startX = e.clientX || e.touches[0].clientX;
+                    startY = e.clientY || e.touches[0].clientY;
+                    
+                    document.addEventListener('mousemove', resizeWindow);
+                    document.addEventListener('touchmove', resizeWindow, { passive: false });
+                    document.addEventListener('mouseup', stopResize);
+                    document.addEventListener('touchend', stopResize);
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+            
+            function resizeWindow(e) {
+                if (!isResizingWindow || !currentResizedWindow) return;
+                
+                let clientX, clientY;
+                if (e.type === 'mousemove') {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                } else {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                    e.preventDefault();
+                }
+                
+                const deltaX = clientX - startX;
+                const deltaY = clientY - startY;
+                
+                let newWidth = startWidth;
+                let newHeight = startHeight;
+                
+                if (resizeDirection === 'e' || resizeDirection === 'se') {
+                    newWidth = Math.max(400, startWidth + deltaX);
+                }
+                
+                if (resizeDirection === 's' || resizeDirection === 'se') {
+                    newHeight = Math.max(300, startHeight + deltaY);
+                }
+                
+                currentResizedWindow.style.width = newWidth + 'px';
+                currentResizedWindow.style.height = newHeight + 'px';
+                
+                // Обновляем canvas при изменении размера окна рисования
+                if (currentResizedWindow === drawingWindow) {
+                    setTimeout(() => {
+                        const rect = drawingCanvas.getBoundingClientRect();
+                        drawingCanvas.width = rect.width;
+                        drawingCanvas.height = rect.height;
+                    }, 50);
+                }
+            }
+            
+            function stopResize() {
+                isResizingWindow = false;
+                currentResizedWindow = null;
+                resizeDirection = '';
+                document.removeEventListener('mousemove', resizeWindow);
+                document.removeEventListener('touchmove', resizeWindow);
+                document.removeEventListener('mouseup', stopResize);
+                document.removeEventListener('touchend', stopResize);
+            }
+            
+            initResizeForWindow(lessonContent);
+            initResizeForWindow(drawingWindow);
+            initResizeForWindow(visualizationWindow);
+        }
 
         // ========== ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
         function initVisualization() {
@@ -1397,6 +1592,7 @@
             visualizationWindow.style.display = 'block';
             isVisualizationWindowOpen = true;
             visualizationToolBtn.classList.add('active');
+            bringWindowToFront(visualizationWindow);
         }
 
         function hideVisualizationWindow() {
@@ -2247,26 +2443,28 @@
         }
 
         function setTool(tool) {
-            isDrawingWindowOpen = false;
-            isVisualizationWindowOpen = false;
-            
-            lessonContent.style.display = 'none';
-            drawingWindow.style.display = 'none';
-            visualizationWindow.style.display = 'none';
-            answerInputContainer.style.display = 'none';
-            
+            // Сбрасываем активные состояния
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
             visualizationToolBtn.classList.remove('active');
             
+            // Скрываем все окна
+            lessonContent.style.display = 'none';
+            drawingWindow.style.display = 'none';
+            visualizationWindow.style.display = 'none';
+            answerInputContainer.style.display = 'none';
+            
+            // Показываем нужное окно и устанавливаем активное состояние
             if (tool === 'text') {
                 textToolBtn.classList.add('active');
                 lessonContent.style.display = 'block';
+                bringWindowToFront(lessonContent);
             } else if (tool === 'draw') {
                 drawToolBtn.classList.add('active');
                 drawingWindow.style.display = 'block';
                 isDrawingWindowOpen = true;
+                bringWindowToFront(drawingWindow);
                 
                 setTimeout(() => {
                     const rect = drawingCanvas.getBoundingClientRect();
@@ -2278,10 +2476,12 @@
                 lessonContent.style.display = 'block';
                 answerInputContainer.style.display = 'block';
                 answerInput.focus();
+                bringWindowToFront(lessonContent);
             } else if (tool === 'visualization') {
                 visualizationToolBtn.classList.add('active');
                 visualizationWindow.style.display = 'block';
                 isVisualizationWindowOpen = true;
+                bringWindowToFront(visualizationWindow);
             }
         }
 
@@ -2774,7 +2974,7 @@
             initSocket();
             createBackgroundAnimation();
             initSpeechRecognition();
-            initWindowDragging();
+            initWindowManagement();
             initZoom();
             initDrawingCanvas();
             initVisualization();
