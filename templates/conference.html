@@ -2489,9 +2489,9 @@
             const answer = answerInput.value.trim();
             if (answer) {
                 if (socket) {
-                    socket.emit('recognized_speech', {
+                    socket.emit('student_message', {
                         room_id: roomId,
-                        text: answer
+                        message: answer
                     });
                 }
                 answerInput.value = '';
@@ -2684,6 +2684,17 @@
                     
                     console.log('Визуализации обновлены');
                 }, 500);
+            });
+
+            // Обработчик для практики
+            socket.on('practice_started', () => {
+                console.log('Практика начата');
+                setTool('answer');
+            });
+
+            socket.on('practice_ended', () => {
+                console.log('Практика завершена');
+                setTool('text');
             });
         }
 
