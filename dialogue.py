@@ -584,91 +584,70 @@ class DialogueManager:
             print(f"❌ Ошибка начала сгенерированного урока: {e}")
             self.lesson_started = False
 
-    # НОВЫЕ МЕТОДЫ ДЛЯ ВИЗУАЛИЗАЦИИ - УЛУЧШЕННАЯ ЛОГИКА
-    def _should_generate_visualization(self, text: str) -> bool:
-        """Определяет, нужно ли генерировать визуализацию для текста - УЛУЧШЕННАЯ ВЕРСИЯ"""
-        # Проверяем кд
-        current_time = time.time()
-        if current_time - self.last_visualization_time < self.visualization_cooldown:
-            return False
-            
-        # УВЕЛИЧИВАЕМ ЧАСТОТУ ГЕНЕРАЦИИ - генерируем для КАЖДОГО 2-го абзаца
-        self.paragraphs_since_last_viz += 1
-        if self.paragraphs_since_last_viz < self.viz_paragraph_interval:
-            return False
-            
-        # СБРАСЫВАЕМ счетчик при генерации
-        self.paragraphs_since_last_viz = 0
+    def _has_visualization_triggers(self, text: str) -> bool:
+        """Проверяет наличие триггеров для визуализации"""
+        text_lower = text.lower()
         
-        # Более широкий список триггеров для автоматической генерации
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
-            'таблица', 'классификация', 'этапы', 'стадии', 'система',
-            'модель', 'цепочка', 'последовательность', 'отношение',
-            'разделение', 'группировка', 'организация', 'архитектура',
-            # Добавляем общие образовательные термины
-            'понятие', 'определение', 'теория', 'концепция', 'принцип',
-            'механизм', 'функция', 'свойство', 'характеристика',
-            # Экономические термины
-            'спрос', 'предложение', 'рынок', 'экономика', 'производство',
-            'потребление', 'распределение', 'обмен', 'цена', 'стоимость',
-            # Математические термины
-            'формула', 'уравнение', 'функция', 'график', 'координаты',
-            'прямая', 'кривая', 'площадь', 'объем', 'угол',
-            # Исторические термины
-            'период', 'эпоха', 'династия', 'хронология', 'событие',
-            'война', 'революция', 'реформа', 'закон', 'документ'
+            'таблица', 'классификация', 'этапы', 'стадии', 'система'
         ]
         
-        text_lower = text.lower()
+        structure_indicators = [
+            'состоит из', 'включает в себя', 'делится на', 'подразделяется',
+            'можно разделить', 'выделяют', 'различают', 'существуют'
+        ]
         
-        # Проверяем наличие триггерных слов
         has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
+        has_structure = any(indicator in text_lower for indicator in structure_indicators)
         
-        # Проверяем длину текста (достаточно информативный текст)
-        is_long_enough = len(text.split()) > 3
-        
-        # Проверяем наличие структурных индикаторов
-        has_structure_indicators = any(indicator in text_lower for indicator in 
-                                     ['состоит из', 'включает в себя', 'делится на', 'подразделяется',
-                                      'можно разделить', 'выделяют', 'различают', 'существуют',
-                                      'с одной стороны', 'с другой стороны', 'во-первых', 'во-вторых'])
-        
-        # Генерируем для каждого 2-го абзаца ИЛИ если есть явные триггеры
-        should_generate = (has_trigger or has_structure_indicators or 
-                          self.visualization_counter % 2 == 0) and is_long_enough and self.visualization_enabled
-        
-        if should_generate:
-            print(f"🎯 Генерация визуализации для: {text[:100]}...")
-            print(f"   Триггеры: {has_trigger}, Структура: {has_structure_indicators}, Counter: {self.visualization_counter}")
-        
-        return should_generate
+        return has_trigger or has_structure
 
     def _generate_visualization(self, text: str, context: str = ""):
         """Генерация визуализации для текста - УЛУЧШЕННАЯ ВЕРСИЯ"""
-        if not self.visualization_enabled:
+        if not self.visualization_enabled or not text.strip():
+            return
+    
+        # ПРОВЕРКА: Не генерируем визуализации слишком часто
+        current_time = time.time()
+        if current_time - self.last_visualization_time < self.visualization_cooldown:
             return
         
-        if self._should_generate_visualization(text):
+        # УВЕЛИЧИВАЕМ счетчик абзацев
+        self.paragraphs_since_last_viz += 1
+        
+        # Генерируем визуализацию только для каждого 2-го абзаца ИЛИ если есть явные триггеры
+        should_generate = (self.paragraphs_since_last_viz >= self.viz_paragraph_interval or 
+                          self._has_visualization_triggers(text))
+        
+        if should_generate:
             try:
                 # Обновляем время последней визуализации
-                self.last_visualization_time = time.time()
+                self.last_visualization_time = current_time
+                self.paragraphs_since_last_viz = 0
                 self.visualization_counter += 1
                 
-                # ОТПРАВЛЯЕМ ЗАПРОС НА ГЕНЕРАЦИЮ ВИЗУАЛИЗАЦИИ - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ
+                print(f"🎨 Генерация визуализации для: {text[:100]}...")
+                
+                # НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ через LLM
                 if self.room_id and self.socketio:
-                    print(f"📊 Отправка запроса на генерацию визуализации для: {text[:100]}...")
+                    # Используем существующий LLM для генерации
+                    viz_result = self.llm.generate_visualization(text, context)
                     
-                    # Используем прямой запрос вместо очереди для немедленной генерации
-                    self.socketio.emit('generate_visualization', {
-                        'room_id': self.room_id,
-                        'topic': text,
-                        'context': context
-                    }, room=self.room_id)
+                    if viz_result and viz_result.get("success"):
+                        # Отправляем готовую визуализацию через WebSocket
+                        self.socketio.emit('visualization_generated', {
+                            'room_id': self.room_id,
+                            'topic': text[:100],
+                            'mermaid_code': viz_result.get('mermaid_code', ''),
+                            'svg_code': viz_result.get('svg_code', ''),
+                            'timestamp': time.time()
+                        }, room=self.room_id)
+                        print(f"✅ Визуализация отправлена в комнату {self.room_id}")
                     
             except Exception as e:
-                print(f"❌ Ошибка запроса визуализации: {e}")
+                print(f"❌ Ошибка генерации визуализации: {e}")
 
     def enable_visualization(self):
         """Включение автоматической визуализации"""
@@ -860,10 +839,19 @@ class DialogueManager:
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
-            # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ВИЗУАЛИЗАЦИИ ДЛЯ КАЖДОГО АБЗАЦА
-            if self.visualization_enabled:
-                context = " ".join(self.lesson_content[:self.current_paragraph])
-                self._generate_visualization(paragraph, context)
+            # УСИЛЕННАЯ ЛОГИКА: ВИЗУАЛИЗАЦИЯ ТОЛЬКО ЕСЛИ ЕСТЬ КОНТЕНТ И ВКЛЮЧЕНА
+            if (self.visualization_enabled and paragraph and 
+                len(paragraph.strip()) > 10 and self.room_id):
+                
+                # Добавляем небольшую задержку перед генерацией визуализации
+                # чтобы не блокировать основной поток озвучивания
+                def delayed_visualization():
+                    time.sleep(0.5)  # Задержка для приоритета озвучивания
+                    context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
+                    self._generate_visualization(paragraph, context)
+                
+                # Запускаем в отдельном потоке чтобы не блокировать озвучивание
+                threading.Thread(target=delayed_visualization, daemon=True).start()
             
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
