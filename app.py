@@ -514,6 +514,22 @@ def handle_practice_ended(data):
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
 
+@socketio.on('visualization_generated')
+def handle_visualization_generated(data):
+    """Обработчик готовых визуализаций"""
+    room_id = data['room_id']
+    
+    print(f"🎨 Получена готовая визуализация для комнаты {room_id}: {data['topic'][:100]}...")
+    
+    # Пересылаем всем клиентам в комнате
+    emit('visualization_generated', {
+        'room_id': room_id,
+        'topic': data['topic'],
+        'mermaid_code': data.get('mermaid_code', ''),
+        'svg_code': data.get('svg_code', ''),
+        'timestamp': data.get('timestamp', time.time())
+    }, room=room_id)
+
 # НОВЫЕ ФУНКЦИИ ДЛЯ POLLING ВИЗУАЛИЗАЦИИ
 def add_visualization_to_queue(room_id, topic, context):
     """Добавляет визуализацию в очередь для комнаты"""
@@ -542,23 +558,38 @@ def add_visualization_to_queue(room_id, topic, context):
     return True
 
 # Polling endpoint для визуализации
-@app.route('/api/poll_visualization', methods=['GET'])
+@app.route('/api/poll_visualization', methods=['POST', 'GET'])  # Добавляем POST
 def poll_visualization():
     """Endpoint для polling визуализаций"""
     try:
-        room_id = request.args.get('room_id', 'default')
+        if request.method == 'POST':
+            data = request.json
+            room_id = data.get('room_id', 'default')
+        else:
+            room_id = request.args.get('room_id', 'default')
         
         if room_id in room_visualization_queue and room_visualization_queue[room_id]:
             visualization = room_visualization_queue[room_id].pop(0)
+            
+            # Отправляем через WebSocket для немедленного отображения
+            if socketio and room_id:
+                socketio.emit('visualization_generated', {
+                    'room_id': room_id,
+                    'topic': visualization['topic'],
+                    'mermaid_code': visualization.get('mermaid_code', ''),
+                    'svg_code': visualization.get('svg_code', ''),
+                    'timestamp': visualization['timestamp']
+                }, room=room_id)
+            
             return jsonify({
                 "success": True,
-                "visualization": visualization,
+                "processed": True,
                 "queue_length": len(room_visualization_queue.get(room_id, []))
             })
         
         return jsonify({
-            "success": False,
-            "message": "No visualizations in queue",
+            "success": True,
+            "processed": False,
             "queue_length": len(room_visualization_queue.get(room_id, []))
         })
         
