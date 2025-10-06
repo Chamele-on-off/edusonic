@@ -232,7 +232,7 @@ def handle_generate_speech(data):
 
 @socketio.on('student_answer')
 def handle_student_answer(data):
-    """Обработчик ответов ученика во время практики с последовательной генерацией"""
+    """Обработчик ответов ученика во время практики - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
     room_id = data['room_id']
     answer = data['answer']
     user_sid = request.sid
@@ -240,9 +240,9 @@ def handle_student_answer(data):
     print(f"📝 Получен ответ ученика: {answer}")
     print(f"📊 Состояние комнаты: practice_active={room_practice_active[room_id]}, teacher_speaking={room_teacher_speaking[room_id]}")
 
-    # ИГНОРИРУЕМ ответ, если учитель говорит
-    if room_teacher_speaking[room_id]:
-        print(f"🔇 Игнорирую ответ ученика, так как учитель говорит: {answer}")
+    # ИГНОРИРУЕМ ответ, если учитель говорит ИЛИ если это короткий/пустой ответ
+    if room_teacher_speaking[room_id] or not answer.strip() or len(answer.strip()) < 2:
+        print(f"🔇 Игнорирую ответ ученика (учитель говорит или короткий ответ): {answer}")
         return
 
     # Проверяем, активна ли практика
@@ -275,7 +275,7 @@ def handle_student_answer(data):
         # Используем новый метод для последовательной обработки
         response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
         
-        if response:
+        if response and response.strip():
             print(f"🎯 Ответ учителя: {response}")
             
             # Отправляем ответ учителя
@@ -295,7 +295,7 @@ def handle_student_answer(data):
                 emit('practice_ended', {}, room=room_id)
                 print("🏁 Практика завершена")
         else:
-            # Если response is None, практика завершена
+            # Если response is None или пустой, практика завершена
             room_practice_active[room_id] = False
             room_current_question_index[room_id] = 0
             room_dialogue[room_id].waiting_for_answer = False
@@ -1362,7 +1362,7 @@ def download_practice_txt():
         # Создаем временный zip-файл
         import tempfile
         import zipfile
-        
+    
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
@@ -1503,7 +1503,7 @@ def force_visualization():
             "message": f"Визуализация добавлена в очередь для комнаты {room_id}",
             "topic": topic,
             "queue_length": len(room_visualization_queue.get(room_id, []))
-        }) 
+        })
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
