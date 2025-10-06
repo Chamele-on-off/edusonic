@@ -9,15 +9,10 @@ class LocalLLM:
     def __init__(self, base_url: str = None):
         config = get_local_llm_settings()
         
-        # В Docker используем host.docker.internal для доступа к хосту
-        # Или определяем URL через переменные окружения
-        default_url = "http://host.docker.internal:11434"
-        if os.getenv('DOCKER_ENV'):
-            # Если мы в Docker, используем специальный хост
-            self.base_url = base_url or os.getenv('OLLAMA_HOST', default_url)
-        else:
-            # Если не в Docker, используем localhost
-            self.base_url = base_url or config.get("base_url", "http://localhost:11434")
+        # Приоритет: переменная окружения -> параметр -> конфиг
+        self.base_url = (base_url or 
+                        os.getenv('OLLAMA_HOST') or 
+                        config.get("base_url", "http://localhost:11434"))
             
         self.model = config.get("model", "llama3.2:3b")
         self.timeout = config.get("timeout", 60)
@@ -33,7 +28,7 @@ class LocalLLM:
             return False
             
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = requests.get(f"{self.base_url}/api/tags", timeout=10)
             if response.status_code == 200:
                 print("✅ Локальная модель доступна")
                 return True
@@ -102,7 +97,7 @@ class LocalLLM:
     def get_status(self) -> Dict:
         """Получение статуса локальной модели"""
         try:
-            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response = requests.get(f"{self.base_url}/api/tags", timeout=10)
             if response.status_code == 200:
                 models = response.json().get('models', [])
                 model_loaded = any(self.model in model.get('name', '') for model in models)
