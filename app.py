@@ -18,17 +18,9 @@ from werkzeug.utils import secure_filename
 import re
 import tempfile
 from local_llm import LocalLLM
-import concurrent.futures
-import queue
 
 app = Flask(__name__, static_folder='static')
-# УВЕЛИЧИВАЕМ ТАЙМАУТЫ и настраиваем для долгих операций
-socketio = SocketIO(app, 
-                   cors_allowed_origins="*", 
-                   async_mode='threading',
-                   ping_timeout=60,
-                   ping_interval=25,
-                   max_http_buffer_size=100 * 1024 * 1024)  # 100MB
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
@@ -45,29 +37,20 @@ room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
-# ИСПРАВЛЕНИЕ: Создаем DialogueManager сразу
-room_dialogue = defaultdict(lambda: None)
+room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
-room_current_avatar = defaultdict(lambda: 'teacher')
+room_current_avatar = defaultdict(lambda: 'teacher')  # Храним текущий аватар для каждой комнаты
 
 # Кэш для визуализаций
 diagram_cache = {}
+# Очередь визуализаций для каждой комнаты
 room_visualization_queue = defaultdict(list)
+# Флаг активной визуализации для каждой комнаты
 room_visualization_active = defaultdict(bool)
-
-# НОВЫЙ: Thread pool для обработки LLM запросов
-llm_thread_pool = concurrent.futures.ThreadPoolExecutor(
-    max_workers=3,  # Ограничиваем количество одновременных LLM запросов
-    thread_name_prefix="llm_worker"
-)
-
-# НОВЫЙ: Очередь для асинхронной обработки сообщений
-message_queues = defaultdict(queue.Queue)
-processing_flags = defaultdict(lambda: False)
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
@@ -113,68 +96,6 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     speech_duration = max(2, len(text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
-def initialize_dialogue_manager(room_id):
-    """Инициализирует DialogueManager для комнаты"""
-    try:
-        print(f"🔄 Инициализация DialogueManager для комнаты {room_id}")
-        dialogue_manager = DialogueManager(socketio)
-        dialogue_manager.room_id = room_id
-        dialogue_manager.set_llm_mode(room_llm_mode[room_id])
-        room_dialogue[room_id] = dialogue_manager
-        print(f"✅ DialogueManager инициализирован для комнаты {room_id}")
-        return dialogue_manager
-    except Exception as e:
-        print(f"❌ Ошибка инициализации DialogueManager для комнаты {room_id}: {e}")
-        return None
-
-def ensure_dialogue_manager(room_id):
-    """Гарантирует, что DialogueManager инициализирован для комнаты"""
-    if room_id not in room_dialogue or room_dialogue[room_id] is None:
-        return initialize_dialogue_manager(room_id)
-    return room_dialogue[room_id]
-
-def process_message_async(room_id, message_data):
-    """Асинхронная обработка сообщений через очередь"""
-    def process():
-        try:
-            # ГАРАНТИРУЕМ, что DialogueManager инициализирован
-            dialogue = ensure_dialogue_manager(room_id)
-            if not dialogue:
-                print(f"❌ DialogueManager не доступен для комнаты {room_id}")
-                return
-            
-            # Обрабатываем сообщение
-            response = dialogue.process_input(message_data['text'])
-            
-            if response:
-                # Отправляем ответ через SocketIO
-                socketio.emit('speech_text', {
-                    'text': f"Учитель: {response}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                
-                # Озвучиваем ответ
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
-                
-        except Exception as e:
-            print(f"❌ Ошибка обработки сообщения в комнате {room_id}: {e}")
-        finally:
-            processing_flags[room_id] = False
-            # Обрабатываем следующее сообщение из очереди
-            process_next_message(room_id)
-    
-    # Запускаем в отдельном потоке
-    thread = threading.Thread(target=process, daemon=True)
-    thread.start()
-
-def process_next_message(room_id):
-    """Обрабатывает следующее сообщение из очереди"""
-    if not message_queues[room_id].empty() and not processing_flags[room_id]:
-        processing_flags[room_id] = True
-        message_data = message_queues[room_id].get()
-        process_message_async(room_id, message_data)
-
 @app.route('/')
 def home():
     return render_template('teacher.html')
@@ -200,8 +121,11 @@ def get_frames(avatar_name):
         if not avatar_dir.exists():
             return jsonify({"error": "Avatar not found"}), 404
         
+        # Поддерживаемые форматы изображений
         supported_formats = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')
         frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(supported_formats)]
+        
+        # Сортируем кадры для правильной последовательности
         frames.sort()
         
         return jsonify({"frames": frames})
@@ -242,9 +166,12 @@ def handle_join_room(data):
     join_room(room_id)
     room_participants[room_id].add(request.sid)
     
-    # Инициализируем DialogueManager СРАЗУ при входе в комнату
-    if room_id not in room_dialogue or room_dialogue[room_id] is None:
-        initialize_dialogue_manager(room_id)
+    if room_id not in room_dialogue:
+        room_dialogue[room_id] = DialogueManager(socketio)
+        room_dialogue[room_id].room_id = room_id
+    
+    # Устанавливаем режим LLM для диалог менеджера комнаты
+    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
     if len(room_participants[room_id]) == 1:
         greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
@@ -253,6 +180,7 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
+    # Отправляем текущий аватар комнаты новому участнику
     emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
     
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
@@ -265,26 +193,35 @@ def handle_join_room(data):
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
+    """Отправляет текущий аватар комнаты"""
     room_id = data['room_id']
     emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
 
 @socketio.on('client_start_animation')
 def handle_client_start_animation(data):
+    """Обработчик команды запуска анимации от учителя"""
     room_id = data['room_id']
     avatar_name = data['avatar_name']
     print(f"Получена команда запуска анимации для комнаты {room_id}, аватар: {avatar_name}")
     
+    # Сохраняем текущий аватар комнаты
     room_current_avatar[room_id] = avatar_name
+    
+    # Уведомляем всех клиентов в комнате о смене аватара
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
     emit('animation_ready', {'status': 'ready'}, room=room_id)
 
 @socketio.on('avatar_changed')
 def handle_avatar_changed(data):
+    """Обработчик смены аватара"""
     room_id = data['room_id']
     avatar_name = data['avatar_name']
     print(f"Смена аватара в комнате {room_id} на {avatar_name}")
     
+    # Сохраняем новый аватар для комнаты
     room_current_avatar[room_id] = avatar_name
+    
+    # Пересылаем команду всем клиентам в комнате
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
 
 @socketio.on('generate_speech')
@@ -296,12 +233,13 @@ def handle_generate_speech(data):
 
 @socketio.on('student_answer')
 def handle_student_answer(data):
-    """Обработчик ответов ученика во время практики"""
+    """Обработчик ответов ученика во время практики с последовательной генерацией"""
     room_id = data['room_id']
     answer = data['answer']
     user_sid = request.sid
 
     print(f"📝 Получен ответ ученика: {answer}")
+    print(f"📊 Состояние комнаты: practice_active={room_practice_active[room_id]}, teacher_speaking={room_teacher_speaking[room_id]}")
 
     # ИГНОРИРУЕМ ответ, если учитель говорит
     if room_teacher_speaking[room_id]:
@@ -313,6 +251,13 @@ def handle_student_answer(data):
         print(f"🔇 Практика не активна, игнорирую ответ: {answer}")
         return
 
+    # Проверяем, ожидает ли система ответа в диалог менеджере
+    if room_id in room_dialogue:
+        dialogue = room_dialogue[room_id]
+        if not dialogue.waiting_for_answer:
+            print(f"🔇 Система не ожидает ответа, игнорирую: {answer}")
+            return
+
     # Добавляем ответ в историю
     room_speech_data[room_id].append({
         'text': f"Ответ ученика: {answer}",
@@ -321,55 +266,42 @@ def handle_student_answer(data):
         'sid': user_sid
     })
     
-    # Обрабатываем ответ через диалог менеджер АСИНХРОННО
-    if room_id in room_dialogue and room_dialogue[room_id]:
-        print(f"🔄 Асинхронная обработка ответа через диалог менеджер...")
+    # Обрабатываем ответ через диалог менеджер
+    if room_id in room_dialogue:
+        print(f"🔄 Обработка ответа через диалог менеджер...")
         
-        def process_practice_answer():
-            try:
-                dialogue = room_dialogue[room_id]
-                if not dialogue.waiting_for_answer:
-                    print(f"🔇 Система не ожидает ответа, игнорирую: {answer}")
-                    return
-
-                # Сбрасываем флаг ожидания ПЕРЕД обработкой
-                dialogue.waiting_for_answer = False
-                
-                # Используем новый метод для последовательной обработки
-                response = dialogue._evaluate_and_generate_next(answer)
-                
-                if response:
-                    print(f"🎯 Ответ учителя: {response}")
-                    
-                    # Отправляем ответ учителя
-                    socketio.emit('speech_text', {
-                        'text': f"Учитель: {response}",
-                        'sid': 'teacher',
-                        'is_teacher': True
-                    }, room=room_id)
-                    
-                    # Озвучиваем ответ
-                    speak_text(room_id, response, voice_type='female', is_teacher=True)
-                    
-                    # Проверяем, завершена ли практика
-                    if not dialogue.practice_active:
-                        room_practice_active[room_id] = False
-                        room_current_question_index[room_id] = 0
-                        socketio.emit('practice_ended', {}, room=room_id)
-                        print("🏁 Практика завершена")
-                else:
-                    # Если response is None, практика завершена
-                    room_practice_active[room_id] = False
-                    room_current_question_index[room_id] = 0
-                    dialogue.waiting_for_answer = False
-                    socketio.emit('practice_ended', {}, room=room_id)
-                    print("🏁 Практика завершена (response=None)")
-                    
-            except Exception as e:
-                print(f"❌ Ошибка обработки ответа практики: {e}")
+        # Сбрасываем флаг ожидания ПЕРЕД обработкой
+        room_dialogue[room_id].waiting_for_answer = False
         
-        # Запускаем в отдельном потоке
-        threading.Thread(target=process_practice_answer, daemon=True).start()
+        # Используем новый метод для последовательной обработки
+        response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
+        
+        if response:
+            print(f"🎯 Ответ учителя: {response}")
+            
+            # Отправляем ответ учителя
+            emit('speech_text', {
+                'text': f"Учитель: {response}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            
+            # Озвучиваем ответ
+            speak_text(room_id, response, voice_type='female', is_teacher=True)
+            
+            # Проверяем, завершена ли практика
+            if not room_dialogue[room_id].practice_active:
+                room_practice_active[room_id] = False
+                room_current_question_index[room_id] = 0
+                emit('practice_ended', {}, room=room_id)
+                print("🏁 Практика завершена")
+        else:
+            # Если response is None, практика завершена
+            room_practice_active[room_id] = False
+            room_current_question_index[room_id] = 0
+            room_dialogue[room_id].waiting_for_answer = False
+            emit('practice_ended', {}, room=room_id)
+            print("🏁 Практика завершена (response=None)")
 
 @socketio.on('student_message')
 def handle_student_message(data):
@@ -395,7 +327,6 @@ def handle_student_message(data):
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
-    """УЛУЧШЕННЫЙ обработчик распознанной речи с асинхронной обработкой"""
     room_id = data['room_id']
     text = data['text']
     user_sid = request.sid
@@ -422,33 +353,105 @@ def handle_recognized_speech(data):
     emit('speech_text', {'text': text, 'sid': user_sid}, room=room_id)
     
     if room_ai_activated[room_id]:
-        # ДОБАВЛЯЕМ В ОЧЕРЕДЬ вместо немедленной обработки
-        message_data = {
-            'text': text,
-            'user_sid': user_sid,
-            'timestamp': time.time()
-        }
-        message_queues[room_id].put(message_data)
+        dialogue = room_dialogue[room_id]
         
-        # Запускаем обработку если не обрабатывается другое сообщение
-        if not processing_flags[room_id]:
-            process_next_message(room_id)
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ
+        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
+        recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
+        
+        # Если урок начат и это команда продолжения
+        if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands + recorded_commands):
+            # Получаем следующий абзац урока
+            next_paragraph = dialogue._get_next_paragraph()
+            if next_paragraph:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {next_paragraph}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                # Озвучиваем следующий абзац
+                speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+            return
+        
+        # Команды остановки
+        if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
+            stop_response = dialogue.process_input(text)
+            if stop_response:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {stop_response}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                # Озвучиваем ответ на остановку
+                speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
+            return
+        
+        # Если урок уже начат, обрабатываем как вопрос/команду
+        if dialogue.is_lesson_started():
+            # Обработка вопросов во время чтения урока
+            response = dialogue.handle_question_during_lesson(text)
+            if response:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {response}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
+                speak_text(room_id, response, voice_type='female', is_teacher=True)
+        else:
+            # Обработка диалога выбора урока
+            response = dialogue.process_input(text)
+            
+            # Если response None - это значит был выбран предмет и нужно начать урок
+            if response is None:
+                # Урок выбран, начинаем чтение
+                lesson_data = dialogue.get_selected_lesson()
+                if lesson_data:
+                    emit('lesson_started', {
+                        'lesson_id': lesson_data['id'],
+                        'title': lesson_data['title'],
+                        'subject': dialogue.get_current_subject()
+                    }, room=room_id)
+                    
+                    # Немедленно начинаем чтение первого абзаца урока
+                    first_paragraph = dialogue._get_next_paragraph()
+                    if first_paragraph:
+                        # Отправляем текст
+                        emit('speech_text', {
+                            'text': f"Учитель: {first_paragraph}",
+                            'sid': 'teacher',
+                            'is_teacher': True
+                        }, room=room_id)
+                        # Озвучиваем первый абзац
+                        speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
+            elif response:
+                # Отправляем текст
+                emit('speech_text', {
+                    'text': f"Учитель: {response}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                
+                # Озвучиваем ответ (всегда!)
+                speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
     room_id = data['room_id']
     room_ai_activated[room_id] = True
+    room_dialogue[room_id] = DialogueManager(socketio)
+    room_dialogue[room_id].room_id = room_id
     
-    # Инициализируем DialogueManager СРАЗУ
-    dialogue = ensure_dialogue_manager(room_id)
+    # Устанавливаем режим LLM для нового диалог менеджера
+    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    if dialogue:
-        greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-        speak_text(room_id, greeting, voice_type='female', is_teacher=True)
-        emit('ai_teacher_activated', {}, room=room_id)
-        print(f"✅ AI-учитель активирован в комнате {room_id}")
-    else:
-        print(f"❌ Не удалось активировать AI-учителя в комнате {room_id}")
+    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
+    speak_text(room_id, greeting, voice_type='female', is_teacher=True)
+    
+    emit('ai_teacher_activated', {}, room=room_id)
 
 @socketio.on('set_llm_mode')
 def handle_set_llm_mode(data):
@@ -457,7 +460,7 @@ def handle_set_llm_mode(data):
     
     if mode in ["traditional", "llm_first"]:
         room_llm_mode[room_id] = mode
-        if room_id in room_dialogue and room_dialogue[room_id]:
+        if room_id in room_dialogue:
             room_dialogue[room_id].set_llm_mode(mode)
         
         emit('llm_mode_changed', {
@@ -469,7 +472,7 @@ def handle_set_llm_mode(data):
 
 @socketio.on('llm_response_ready')
 def handle_llm_response_ready(data):
-    """Обработчик готовых ответов от LLM (для асинхронной обработки)"""
+    """Обработчик готовых ответов от LLM (для асинхронной обработка)"""
     room_id = data['room_id']
     question = data['question']
     answer = data['answer']
@@ -815,7 +818,7 @@ def set_llm_priority():
         use_local = data.get('use_local_first', True)
         room_id = data.get('room_id', 'default')
         
-        if room_id in room_dialogue and room_dialogue[room_id]:
+        if room_id in room_dialogue:
             room_dialogue[room_id].llm.set_llm_priority(use_local)
             
             return jsonify({
@@ -835,7 +838,7 @@ def get_llm_status():
     """Получение статуса LLM моделей"""
     room_id = request.args.get('room_id', 'default')
     
-    if room_id in room_dialogue and room_dialogue[room_id]:
+    if room_id in room_dialogue:
         status = room_dialogue[room_id].llm.get_llm_status()
         return jsonify({
             "success": True,
@@ -867,7 +870,7 @@ def handle_get_llm_status(data):
     """WebSocket обработчик получения статуса LLM"""
     room_id = data['room_id']
     
-    if room_id in room_dialogue and room_dialogue[room_id]:
+    if room_id in room_dialogue:
         status = room_dialogue[room_id].llm.get_llm_status()
         emit('llm_status_update', {
             'room_id': room_id,
@@ -885,7 +888,7 @@ def set_llm_model():
         if not model:
             return jsonify({"success": False, "error": "Model not specified"})
         
-        if room_id in room_dialogue and room_dialogue[room_id]:
+        if room_id in room_dialogue:
             room_dialogue[room_id].set_llm_model(model)
             return jsonify({"success": True, "model": model, "room": room_id})
         
@@ -911,7 +914,7 @@ def get_llm_status_old():
     """Получение статуса LLM для комнаты"""
     room_id = request.args.get('room_id', 'default')
     
-    if room_id in room_dialogue and room_dialogue[room_id]:
+    if room_id in room_dialogue:
         stats = room_dialogue[room_id].llm.get_cache_stats()
         return jsonify({
             "success": True,
@@ -954,7 +957,7 @@ def set_llm_mode_api():
             # Обновляем режим для всех активных комнат
             for room_id in room_llm_mode:
                 room_llm_mode[room_id] = mode
-                if room_id in room_dialogue and room_dialogue[room_id]:
+                if room_id in room_dialogue:
                     room_dialogue[room_id].set_llm_mode(mode)
             
             return jsonify({
@@ -974,7 +977,7 @@ def get_knowledge_stats():
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
-    if room_id in room_dialogue and room_dialogue[room_id]:
+    if room_id in room_dialogue:
         stats = room_dialogue[room_id].get_knowledge_stats()
         if stats:
             return jsonify({
@@ -996,7 +999,7 @@ def search_knowledge():
     if not query:
         return jsonify({"success": False, "error": "Query parameter is required"})
     
-    if room_id in room_dialogue and room_dialogue[room_id] and room_dialogue[room_id].knowledge_base:
+    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
         results = room_dialogue[room_id].knowledge_base.search_similar(query, max_results)
         return jsonify({
             "success": True,
@@ -1014,7 +1017,7 @@ def get_llm_answers():
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
-    if room_id in room_dialogue and room_dialogue[room_id] and room_dialogue[room_id].knowledge_base:
+    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
         answers = room_dialogue[room_id].knowledge_base.list_llm_answers()
         return jsonify({
             "success": True,
@@ -1503,7 +1506,7 @@ def test_api_key():
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
         
-        # Тестируем ключ через простый запрос к OpenRouter
+        # Тестируем ключ через простой запрос к OpenRouter
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -1624,10 +1627,4 @@ if __name__ == '__main__':
     lessons_count = len(list(LESSONS_DIR.glob("*.txt")))
     print(f"📚 Доступно уроков: {lessons_count}")
     
-    # ЗАПУСКАЕМ С УВЕЛИЧЕННЫМИ ТАЙМАУТАМИ
-    socketio.run(app, 
-                host='0.0.0.0', 
-                port=5000, 
-                debug=True, 
-                allow_unsafe_werkzeug=True,
-                use_reloader=False)  # Отключаем reloader для стабильности
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
