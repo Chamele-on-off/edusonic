@@ -17,6 +17,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import re
 import tempfile
+from local_llm import LocalLLM
 
 app = Flask(__name__, static_folder='static')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
@@ -808,6 +809,74 @@ def handle_generate_visualization(data):
         'queue_length': len(room_visualization_queue.get(room_id, []))
     }, room=room_id)
 
+# НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЛОКАЛЬНОЙ LLM
+@app.route('/api/llm/priority', methods=['POST'])
+def set_llm_priority():
+    """Установка приоритета моделей LLM"""
+    try:
+        data = request.json
+        use_local = data.get('use_local_first', True)
+        room_id = data.get('room_id', 'default')
+        
+        if room_id in room_dialogue:
+            room_dialogue[room_id].llm.set_llm_priority(use_local)
+            
+            return jsonify({
+                "success": True,
+                "use_local_first": use_local,
+                "room": room_id,
+                "message": f"Приоритет установлен на {'локальную модель' if use_local else 'OpenRouter'}"
+            })
+        
+        return jsonify({"success": False, "error": "Room not found"})
+    
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/llm/status')
+def get_llm_status():
+    """Получение статуса LLM моделей"""
+    room_id = request.args.get('room_id', 'default')
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].llm.get_llm_status()
+        return jsonify({
+            "success": True,
+            "room": room_id,
+            "status": status
+        })
+    
+    return jsonify({"success": False, "error": "Room not found"})
+
+@app.route('/api/llm/local_status')
+def get_local_llm_status():
+    """Получение статуса локальной модели"""
+    try:
+        local_llm = LocalLLM()
+        status = local_llm.get_status()
+        
+        return jsonify({
+            "success": True,
+            "status": status
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
+@socketio.on('get_llm_status')
+def handle_get_llm_status(data):
+    """WebSocket обработчик получения статуса LLM"""
+    room_id = data['room_id']
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].llm.get_llm_status()
+        emit('llm_status_update', {
+            'room_id': room_id,
+            'status': status
+        }, room=room_id)
+
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
     """Установка модели LLM для комнаты"""
@@ -835,12 +904,13 @@ def get_llm_models():
         {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta", "provider": "openrouter"},
         {"id": "llama3", "name": "Llama 3.3 8B Instruct", "description": "Инструктивная версия Llama 3.3", "provider": "openrouter"},
         {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba", "provider": "openrouter"},
-        {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования", "provider": "openrouter"}
+        {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования", "provider": "openrouter"},
+        {"id": "local_llama", "name": "Llama 3.2 3B (локальная)", "description": "Локальная модель Llama 3.2", "provider": "local"}
     ]
     return jsonify({"models": models})
 
 @app.route('/api/llm/status', methods=['GET'])
-def get_llm_status():
+def get_llm_status_old():
     """Получение статуса LLM для комнаты"""
     room_id = request.args.get('room_id', 'default')
     
@@ -1508,5 +1578,53 @@ def force_visualization():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+# Эндпоинт для проверки здоровья системы
+@app.route('/api/health')
+def health_check():
+    """Проверка здоровья системы"""
+    try:
+        # Проверяем доступность локальной модели
+        local_llm = LocalLLM()
+        local_status = local_llm.get_status()
+        
+        # Проверяем доступность OpenRouter
+        openrouter_available = bool(get_api_key('openrouter'))
+        
+        # Проверяем доступность уроков
+        lessons_available = any(LESSONS_DIR.iterdir())
+        
+        return jsonify({
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "components": {
+                "local_llm": local_status,
+                "openrouter": {"available": openrouter_available},
+                "lessons": {"available": lessons_available, "count": len(list(LESSONS_DIR.glob("*.txt")))},
+                "practice": {"available": any(PRACTICE_DIR.iterdir()), "count": len(list(PRACTICE_DIR.glob("*.json")))}
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
+
 if __name__ == '__main__':
+    print("🚀 Запуск AI Teacher системы...")
+    print("🔧 Проверка конфигурации...")
+    
+    # Проверяем доступность локальной модели при запуске
+    local_llm = LocalLLM()
+    local_status = local_llm.get_status()
+    print(f"🔧 Статус локальной модели: {local_status}")
+    
+    # Проверяем доступность OpenRouter
+    openrouter_key = get_api_key('openrouter')
+    print(f"🔧 OpenRouter API ключ: {'Установлен' if openrouter_key else 'Не установлен'}")
+    
+    # Проверяем уроки
+    lessons_count = len(list(LESSONS_DIR.glob("*.txt")))
+    print(f"📚 Доступно уроков: {lessons_count}")
+    
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
