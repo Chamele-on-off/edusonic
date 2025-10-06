@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 from config import get_api_key, load_config, get_model_config
 import re
+from local_llm import LocalLLM
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
@@ -24,6 +25,10 @@ class LLMIntegration:
         self.request_delay = 1.0
         self.max_retries = 3
         self.retry_delay = 2.0
+        
+        # ДОБАВЛЯЕМ ЛОКАЛЬНУЮ МОДЕЛЬ
+        self.local_llm = LocalLLM()
+        self.use_local_first = True  # Флаг приоритета локальной модели
         
     def _load_cache(self) -> Dict:
         """Загрузка кэша из файла"""
@@ -71,9 +76,19 @@ class LLMIntegration:
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000) -> Optional[str]:
-        """Запрос к LLM API через OpenRouter с улучшенной обработкой ошибок"""
+        """УЛУЧШЕННЫЙ ЗАПРОС С ПРИОРИТЕТОМ ЛОКАЛЬНОЙ МОДЕЛИ"""
         
-        # Если нет API ключа, используем fallback ответ
+        # 1. Пытаемся использовать локальную модель если включено
+        if self.use_local_first and self.local_llm.is_available():
+            print("🔧 Использую локальную Llama модель...")
+            local_response = self.local_llm.generate(prompt, system_prompt, max_tokens)
+            if local_response:
+                print("✅ Ответ получен от локальной модели")
+                return local_response
+            else:
+                print("❌ Локальная модель не ответила, переключаюсь на OpenRouter")
+        
+        # 2. Fallback на OpenRouter (оригинальная логика)
         if not self.api_key:
             print("⚠️ API ключ не установлен, использую fallback ответ")
             return self._get_fallback_response(prompt, subject)
@@ -129,7 +144,7 @@ class LLMIntegration:
             "stream": False
         }
 
-        print(f"🔧 Данные для запроса LLM:")
+        print(f"🔧 Запрос к OpenRouter:")
         print(f"   Модель: {self.model}")
         print(f"   Промпт: {prompt[:100]}...")
         if context:
@@ -138,7 +153,7 @@ class LLMIntegration:
         
         for attempt in range(self.max_retries):
             try:
-                print(f"🔄 Попытка {attempt + 1}: Отправка запроса к {self.model}")
+                print(f"🔄 Попытка {attempt + 1}: Отправка запроса к OpenRouter")
                 response = requests.post(
                     self.api_url,
                     headers=headers,
@@ -160,7 +175,7 @@ class LLMIntegration:
                         if any(concept in processed_answer.lower() for concept in visualization_concepts):
                             print("🎯 Ответ содержит концепции для визуализации")
                         
-                        print(f"✅ Получен ответ от LLM: {processed_answer[:100]}...")
+                        print(f"✅ Получен ответ от OpenRouter: {processed_answer[:100]}...")
                         return processed_answer
                     else:
                         print("❌ Неверный формат ответа от API")
@@ -282,15 +297,34 @@ class LLMIntegration:
         config = load_config()
         self.api_key = config.get("openrouter", {}).get("api_key", "")
 
+    def set_llm_priority(self, use_local_first: bool):
+        """Установка приоритета моделей"""
+        self.use_local_first = use_local_first
+        status = "локальная модель" if use_local_first else "OpenRouter"
+        print(f"🔧 Приоритет установлен на: {status}")
+
+    def get_llm_status(self) -> Dict:
+        """Получение статуса моделей"""
+        local_available = self.local_llm.is_available()
+        openrouter_available = bool(self.api_key)
+        
+        return {
+            "local_available": local_available,
+            "openrouter_available": openrouter_available,
+            "current_priority": "local" if self.use_local_first else "openrouter",
+            "local_status": self.local_llm.get_status(),
+            "local_url": self.local_llm.base_url
+        }
+
     def clean_and_validate_mermaid_code(self, code: str) -> str:
-        """Очистка и валидация Mermaid кода - УЛУЧШЕННАЯ ВЕРСИЯ"""
+        """Очистка и валидация Mermaid кода"""
         if not code:
             return ""
         
         # Удаляем markdown обратные кавычки и все что между ними
-        code = re.sub(r'```[\s\S]*?```', '', code)  # Удаляем все блоки кода
-        code = re.sub(r'`[^`]*`', '', code)  # Удаляем inline код
-        code = re.sub(r'[\*\#\-\_]{2,}', '', code)  # Удаляем форматирование
+        code = re.sub(r'```[\s\S]*?```', '', code)
+        code = re.sub(r'`[^`]*`', '', code)
+        code = re.sub(r'[\*\#\-\_]{2,}', '', code)
         
         # Удаляем комментарии Mermaid
         code = re.sub(r'%%.*', '', code)
@@ -554,6 +588,10 @@ if __name__ == "__main__":
     # Тестирование подключения
     connection_ok = llm.test_connection()
     print(f"📡 Подключение к API: {'✅ Успешно' if connection_ok else '❌ Ошибка'}")
+    
+    # Тестирование статуса моделей
+    status = llm.get_llm_status()
+    print(f"🔧 Статус моделей: {status}")
     
     # Тестовый запрос
     test_question = "Объясни, что такое фотосинтез"
