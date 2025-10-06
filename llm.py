@@ -26,7 +26,7 @@ class LLMIntegration:
         self.max_retries = 3
         self.retry_delay = 2.0
         
-        # ДОБАВЛЯЕМ ЛОКАЛЬНУЮ МОДЕЛЬ
+        # УЛЬТРА-БЫСТРАЯ ЛОКАЛЬНАЯ МОДЕЛЬ
         self.local_llm = LocalLLM()
         self.use_local_first = True  # Флаг приоритета локальной модели
         
@@ -76,19 +76,22 @@ class LLMIntegration:
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000) -> Optional[str]:
-        """УЛУЧШЕННЫЙ ЗАПРОС С ПРИОРИТЕТОМ ЛОКАЛЬНОЙ МОДЕЛИ"""
+        """УЛУЧШЕННЫЙ ЗАПРОС С ПРИОРИТЕТОМ УЛЬТРА-БЫСТРОЙ ЛОКАЛЬНОЙ МОДЕЛИ"""
         
-        # 1. Пытаемся использовать локальную модель если включено
+        # 1. УЛЬТРА-БЫСТРАЯ ЛОКАЛЬНАЯ МОДЕЛЬ (всегда сначала)
         if self.use_local_first and self.local_llm.is_available():
-            print("🔧 Использую локальную Llama модель...")
+            print("⚡ Использую ультра-быструю локальную модель...")
+            start_time = time.time()
             local_response = self.local_llm.generate(prompt, system_prompt, max_tokens)
-            if local_response:
-                print("✅ Ответ получен от локальной модели")
+            response_time = time.time() - start_time
+            
+            if local_response and len(local_response.strip()) > 5:
+                print(f"✅ Локальный ответ за {response_time:.2f}с: {local_response[:80]}...")
                 return local_response
             else:
-                print("❌ Локальная модель не ответила, переключаюсь на OpenRouter")
+                print(f"❌ Локальная модель не ответила за {response_time:.2f}с, переключаюсь на OpenRouter")
         
-        # 2. Fallback на OpenRouter (оригинальная логика)
+        # 2. Fallback на OpenRouter (оригинальная логика без изменений)
         if not self.api_key:
             print("⚠️ API ключ не установлен, использую fallback ответ")
             return self._get_fallback_response(prompt, subject)
