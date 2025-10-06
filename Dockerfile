@@ -23,10 +23,6 @@ RUN mkdir -p \
     materials \
     cache
 
-# Добавляем переменную окружения для Docker
-ENV DOCKER_ENV=true
-ENV OLLAMA_HOST=http://host.docker.internal:11434
-
 EXPOSE 5000
 
 CMD ["python", "app.py"]
