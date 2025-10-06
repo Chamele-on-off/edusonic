@@ -1503,7 +1503,7 @@ def force_visualization():
             "message": f"Визуализация добавлена в очередь для комнаты {room_id}",
             "topic": topic,
             "queue_length": len(room_visualization_queue.get(room_id, []))
-        })
+        }) 
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
