@@ -605,7 +605,12 @@ class DialogueManager:
         return has_trigger or has_structure
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация визуализации для текста - УЛУЧШЕННАЯ ВЕРСИЯ"""
+        """Генерация визуализации для текста - С ЗАЩИТОЙ ОТ ПРАКТИКИ"""
+        
+        # ВАЖНО: НЕ генерируем визуализации во время практики!
+        if self.practice_active:
+            return
+            
         if not self.visualization_enabled or not text.strip():
             return
     
@@ -711,7 +716,7 @@ class DialogueManager:
             # ДОБАВЛЯЕМ предложение выбора предмета к любому ответу
             final_response = self._add_subject_suggestion(dialogue_response)
             if final_response:
-                self._add_to_conversation_history(final_response, is_user=False)
+                self._add_to_conversation_history(final_response, is_teacher=False)
                 return final_response
         
         # 6. ГАРАНТИРОВАННЫЙ запрос к LLM если не найден в шаблонах
@@ -720,13 +725,13 @@ class DialogueManager:
             # ДОБАВЛЯЕМ предложение выбора предмета к ответу LLM
             final_response = self._add_subject_suggestion(llm_response)
             if final_response:
-                self._add_to_conversation_history(final_response, is_user=False)
+                self._add_to_conversation_history(final_response, is_teacher=False)
                 return final_response
         
         # 7. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
-            self._add_to_conversation_history(fallback_response, is_user=False)
+            self._add_to_conversation_history(fallback_response, is_teacher=False)
             return fallback_response
         
         return None
@@ -927,43 +932,41 @@ class DialogueManager:
             return None
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
-        """Оценивает ответ и генерирует следующий вопрос (новый метод)"""
-        print(f"🔍 Обработка ответа: '{student_answer}'")
+        """Оценивает ответ и генерирует следующий вопрос - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        print(f"🔍 Обработка ответа практики: '{student_answer}'")
         print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
         if not self.practice_active:
-            print("❌ Практика не активна")
+            print("❌ Практика не активна, игнорирую ответ")
             return "Практика не активна."
-        
-        print(f"🎯 Оценка ответа и генерация следующего вопроса...")
-        
+
         # Получаем текущий вопрос
         current_question = self.current_practice_question
         if not current_question:
+            print("❌ Нет текущего вопроса практики")
             self._end_practice_session()
             return "Практика завершена."
-        
-        # Оцениваем ответ ученика и получаем обратную связь
+
+        # Оцениваем ответ ученика
         evaluation = self.practice_manager.evaluate_single_answer(
             student_answer, 
             current_question["question"]
         )
         
-        print(f"📝 Оценка: {evaluation}")
-        
+        print(f"📝 Результат оценки: {evaluation}")
+
         # Проверяем, нужно ли генерировать следующий вопрос
-        if self.current_question_index < 5:  # Всего 5 вопросов
+        if self.current_question_index < 5:  # Лимит 5 вопросов
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
-                print(f"➡️ Следующий вопрос сгенерирован: {next_question}")
-                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
+                print(f"➡️ Следующий вопрос сгенерирован")
                 return response
             else:
                 # Не удалось сгенерировать следующий вопрос
                 print("❌ Не удалось сгенерировать следующий вопрос")
                 self._end_practice_session()
-                return f"{evaluation}. Практика завершена - возникли трудности с генерацией вопросов."
+                return f"{evaluation}. Практика завершена."
         else:
             # Достигли лимита вопросов
             print("🏁 Достигнут лимит вопросов (5)")
@@ -1000,7 +1003,7 @@ class DialogueManager:
         question_lower = question.lower().strip()
         
         # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ВИЗУАЛИЗАЦИИ ДЛЯ ВОПРОСОВ
-        if self.visualization_enabled:
+        if self.visualization_enabled and not self.practice_active:  # Защита от практики
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
             self._generate_visualization(question, context)
         
