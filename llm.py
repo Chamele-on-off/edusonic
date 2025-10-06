@@ -282,6 +282,40 @@ class LLMIntegration:
         config = load_config()
         self.api_key = config.get("openrouter", {}).get("api_key", "")
 
+    def clean_and_validate_mermaid_code(self, code: str) -> str:
+        """Очистка и валидация Mermaid кода - УЛУЧШЕННАЯ ВЕРСИЯ"""
+        if not code:
+            return ""
+        
+        # Удаляем markdown обратные кавычки и все что между ними
+        code = re.sub(r'```[\s\S]*?```', '', code)  # Удаляем все блоки кода
+        code = re.sub(r'`[^`]*`', '', code)  # Удаляем inline код
+        code = re.sub(r'[\*\#\-\_]{2,}', '', code)  # Удаляем форматирование
+        
+        # Удаляем комментарии Mermaid
+        code = re.sub(r'%%.*', '', code)
+        
+        # Удаляем лишние пробелы и пустые строки
+        code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
+        
+        # Проверяем базовый синтаксис
+        valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
+        
+        # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
+        if not any(code.strip().startswith(start) for start in valid_starts):
+            code = 'flowchart TD\n' + code
+        
+        # Убедимся, что есть базовые элементы
+        lines = code.split('\n')
+        if len(lines) < 2 or ('-->' not in code and '->' not in code):
+            # Добавляем простую структуру если нет связей
+            if len(lines) > 1:
+                code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
+            else:
+                code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
+        
+        return code.strip()
+
     def generate_mermaid_diagram(self, topic: str, context: str = "") -> str:
         """Генерация Mermaid диаграммы через LLM"""
         prompt = f"""
@@ -398,45 +432,6 @@ class LLMIntegration:
             print(f"❌ Ошибка генерации SVG кода: {e}")
         
         return ""
-
-    def clean_and_validate_mermaid_code(self, code: str) -> str:
-        """Очистка и валидация Mermaid кода"""
-        if not code:
-            return ""
-        
-        # Удаляем markdown обратные кавычки
-        code = re.sub(r'```mermaid\s*', '', code)
-        code = re.sub(r'```\s*', '', code)
-        code = code.strip()
-        
-        # Проверяем базовый синтаксис
-        valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
-        
-        # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
-        if not any(code.startswith(start) for start in valid_starts):
-            code = 'flowchart TD\n' + code
-        
-        # Убедимся, что есть базовые элементы
-        lines = code.split('\n')
-        if len(lines) < 2:
-            code += '\nA["Элемент A"] --> B["Элемент B"]'
-        
-        return code
-
-    def _clean_mermaid_code(self, code: str) -> str:
-        """Очистка Mermaid кода от лишних символов"""
-        if not code:
-            return ""
-        
-        # Удаляем markdown обратные кавычки
-        code = re.sub(r'```mermaid\s*', '', code)
-        code = re.sub(r'```\s*', '', code)
-        
-        # Удаляем лишние пробелы и комментарии
-        code = re.sub(r'%%.*', '', code)  # Удаляем комментарии Mermaid
-        code = '\n'.join([line for line in code.split('\n') if line.strip()])
-        
-        return code.strip()
 
     def check_visualization_need(self, text: str) -> bool:
         """Проверяет, нужна ли визуализация для данного текста"""
