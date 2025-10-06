@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 from config import get_api_key, load_config, get_model_config
 import re
+import socket
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
@@ -12,8 +13,14 @@ class LLMIntegration:
                  cache_dir: str = "cache",
                  model: str = "meta-llama/llama-3.3-8b-instruct:free"):
         
-        # НАСТРОЙКИ ДЛЯ DOCKER - ВАЖНО!
-        self.local_llm_url = "http://host.docker.internal:11434/v1"  # Docker специальный адрес
+        # НАСТРОЙКИ ДЛЯ DOCKER LINUX - ВАЖНО!
+        # Пробуем разные адреса для подключения к хосту
+        self.local_llm_urls = [
+            "http://172.17.0.1:11434/v1",  # Стандартный Docker gateway
+            "http://host.docker.internal:11434/v1",  # Для Docker Desktop (не работает в Linux)
+            "http://localhost:11434/v1"  # Если контейнер в сети хоста
+        ]
+        self.local_llm_url = self._find_working_llama_url()
         self.local_model = "llama3.2:3b"
         self.use_local_llm = True
         self.local_llm_enabled = True
@@ -37,10 +44,39 @@ class LLMIntegration:
         # Проверяем доступность локальной Llama при инициализации
         self._check_local_llama_availability()
 
+    def _find_working_llama_url(self) -> str:
+        """Находит рабочий URL для подключения к Llama на хосте"""
+        print("🔍 Поиск рабочего URL для Llama...")
+        
+        for url in self.local_llm_urls:
+            try:
+                # Извлекаем хост и порт из URL
+                host = url.replace("http://", "").split(":")[0]
+                port = int(url.split(":")[2].split("/")[0])
+                
+                # Проверяем доступность хоста
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((host, port))
+                sock.close()
+                
+                if result == 0:
+                    print(f"✅ Найден рабочий URL: {url}")
+                    return url
+                else:
+                    print(f"❌ URL недоступен: {url}")
+                    
+            except Exception as e:
+                print(f"❌ Ошибка проверки {url}: {e}")
+        
+        # Если ничего не найдено, используем первый URL как fallback
+        print(f"⚠️  Рабочий URL не найден, использую: {self.local_llm_urls[0]}")
+        return self.local_llm_urls[0]
+
     def _check_local_llama_availability(self):
         """Проверяет доступность локальной Llama при запуске"""
         try:
-            print("🔍 Проверка доступности локальной Llama...")
+            print(f"🔍 Проверка доступности локальной Llama по URL: {self.local_llm_url}...")
             response = requests.get(f"{self.local_llm_url.replace('/v1', '')}/api/tags", timeout=5)
             if response.status_code == 200:
                 models_data = response.json()
@@ -334,7 +370,8 @@ class LLMIntegration:
             "total_entries": len(self.cache),
             "subjects": list(set(key.split('_')[0] for key in self.cache.keys() if '_' in key)),
             "local_llm_enabled": self.local_llm_enabled,
-            "openrouter_enabled": self.openrouter_enabled
+            "openrouter_enabled": self.openrouter_enabled,
+            "local_llm_url": self.local_llm_url
         }
 
     def set_model(self, model: str):
@@ -561,7 +598,7 @@ class LLMIntegration:
             try:
                 response = requests.get(f"{self.local_llm_url.replace('/v1', '')}/api/tags", timeout=5)
                 if response.status_code == 200:
-                    print("✅ Локальная Llama подключена")
+                    print(f"✅ Локальная Llama подключена по URL: {self.local_llm_url}")
                     return True
             except Exception as e:
                 print(f"❌ Локальная Llama недоступна: {e}")
