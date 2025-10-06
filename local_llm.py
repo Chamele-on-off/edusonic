@@ -12,12 +12,12 @@ class LocalLLM:
         # Приоритет: переменная окружения -> параметр -> конфиг
         self.base_url = (base_url or 
                         os.getenv('OLLAMA_HOST') or 
-                        config.get("base_url", "http://localhost:11434"))
+                        config.get("base_url", "http://ollama:11434"))
             
         self.model = config.get("model", "llama3.2:3b")
         self.timeout = config.get("timeout", 60)
         self.max_retries = config.get("max_retries", 2)
-        self.retry_delay = config.get("retry_delay", 1.0)
+        self.retry_delay = config.get("retry_delay", 2.0)
         self.enabled = config.get("enabled", True)
         
         print(f"🔧 LocalLLM инициализирован с URL: {self.base_url}")
@@ -25,9 +25,11 @@ class LocalLLM:
     def is_available(self) -> bool:
         """Проверяет доступность локальной модели"""
         if not self.enabled:
+            print("🔧 LocalLLM отключен в конфигурации")
             return False
             
         try:
+            print(f"🔧 Проверка доступности Ollama по {self.base_url}...")
             response = requests.get(f"{self.base_url}/api/tags", timeout=10)
             if response.status_code == 200:
                 print("✅ Локальная модель доступна")
@@ -35,6 +37,12 @@ class LocalLLM:
             else:
                 print(f"❌ Локальная модель недоступна (статус: {response.status_code})")
                 return False
+        except requests.exceptions.ConnectTimeout:
+            print(f"❌ Таймаут подключения к Ollama по {self.base_url}")
+            return False
+        except requests.exceptions.ConnectionError:
+            print(f"❌ Ошибка подключения к Ollama по {self.base_url}")
+            return False
         except Exception as e:
             print(f"❌ Локальная модель недоступна: {e}")
             return False
@@ -59,7 +67,7 @@ class LocalLLM:
                     "stream": False
                 }
                 
-                print(f"🔧 Запрос к локальной модели {self.model}...")
+                print(f"🔧 Запрос к локальной модели {self.model} (попытка {attempt + 1})...")
                 response = requests.post(
                     f"{self.base_url}/api/chat",
                     json=data,
@@ -76,9 +84,12 @@ class LocalLLM:
                         content = result['response']
                         print(f"✅ Локальная модель ответила: {content[:100]}...")
                         return content
+                    else:
+                        print(f"❌ Неожиданный формат ответа: {result}")
                 
                 print(f"❌ Локальная модель вернула статус {response.status_code}")
-                time.sleep(self.retry_delay)
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay)
                 
             except requests.exceptions.Timeout:
                 print(f"⏰ Таймаут локальной модели (попытка {attempt + 1}/{self.max_retries})")
