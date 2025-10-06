@@ -500,42 +500,31 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Секция управления режимом LLM -->
+
+        <!-- Секция управления локальной моделью -->
         <div class="management-panel">
-            <h2>Режим работы AI-учителя</h2>
+            <h2>Управление локальной моделью</h2>
             
             <div class="llm-mode-panel">
                 <div class="form-group">
-                    <label for="llm-mode-select">Стратегия ответов на вопросы:</label>
-                    <select id="llm-mode-select" class="subject-select">
-                        <option value="traditional">Сначала база знаний, потом LLM</option>
-                        <option value="llm_first">Сначала LLM, потом база знаний</option>
+                    <label for="llm-priority-select">Приоритет моделей:</label>
+                    <select id="llm-priority-select" class="subject-select">
+                        <option value="local">Сначала локальная модель (Qwen)</option>
+                        <option value="openrouter">Сначала OpenRouter</option>
                     </select>
                 </div>
                 
-                <button id="set-llm-mode-btn" style="margin-top: 10px;">Применить режим</button>
+                <button id="set-llm-priority-btn" style="margin-top: 10px;">Применить приоритет</button>
                 
-                <div id="llm-mode-status" class="success-message"></div>
+                <div id="llm-priority-status" class="success-message"></div>
                 
-                <div class="mode-description">
-                    <h4>📚 Режим "Сначала база знаний, потом LLM"</h4>
-                    <p>Традиционный подход, который экономит запросы к LLM:</p>
-                    <ol class="mode-steps">
-                        <li>Поиск в локальной базе знаний</li>
-                        <li>Проверка сохраненных ответов LLM</li>
-                        <li>Запрос к внешнему LLM (если ответ не найден)</li>
-                    </ol>
-                </div>
-                
-                <div class="mode-description llm-first">
-                    <h4>🚀 Режим "Сначала LLM, потом база знаний"</h4>
-                    <p>Приоритет качественным ответам от AI:</p>
-                    <ol class="mode-steps">
-                        <li>Немедленный запрос к внешнему LLM</li>
-                        <li>Поиск в локальной базе знаний (если LLM не ответил)</li>
-                        <li>Проверка сохраненных ответов LLM</li>
-                    </ol>
+                <!-- Статус локальной модели -->
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+                    <h4>📊 Статус моделей</h4>
+                    <div id="llm-status-info">
+                        <p>Загрузка статуса...</p>
+                    </div>
+                    <button id="refresh-llm-status-btn" style="margin-top: 10px;">🔄 Обновить статус</button>
                 </div>
             </div>
         </div>
@@ -723,10 +712,12 @@
         const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
         const openrouterStatus = document.getElementById('openrouter-status');
         
-        // Элементы для управления режимом LLM
-        const llmModeSelect = document.getElementById('llm-mode-select');
-        const setLlmModeBtn = document.getElementById('set-llm-mode-btn');
-        const llmModeStatus = document.getElementById('llm-mode-status');
+        // Элементы для управления локальной моделью
+        const llmPrioritySelect = document.getElementById('llm-priority-select');
+        const setLlmPriorityBtn = document.getElementById('set-llm-priority-btn');
+        const llmPriorityStatus = document.getElementById('llm-priority-status');
+        const llmStatusInfo = document.getElementById('llm-status-info');
+        const refreshLlmStatusBtn = document.getElementById('refresh-llm-status-btn');
         
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
@@ -851,49 +842,83 @@
             });
         }
         
-        // Функции для работы с режимом LLM
-        function loadLLMMode() {
-            fetch('/api/config/llm_mode')
+        // Функции для работы с локальной моделью
+        function loadLLMPriority() {
+            fetch('/api/llm/status?room_id=' + currentRoom)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        llmModeSelect.value = data.mode;
-                        log('Текущий режим LLM: ' + data.mode);
+                        const priority = data.status.current_priority;
+                        llmPrioritySelect.value = priority;
+                        updateLLMStatus(data.status);
                     }
                 })
                 .catch(error => {
-                    log('Ошибка загрузки режима LLM: ' + error);
+                    log('Ошибка загрузки приоритета LLM: ' + error);
                 });
         }
         
-        function setLLMMode(mode) {
-            fetch('/api/config/llm_mode', {
+        function setLLMPriority(useLocalFirst) {
+            fetch('/api/llm/priority', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ mode: mode })
+                body: JSON.stringify({
+                    room_id: currentRoom,
+                    use_local_first: useLocalFirst
+                })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showStatus(llmModeStatus, data.message);
+                    showStatus(llmPriorityStatus, data.message);
                     log(data.message);
-                    
-                    // Также отправляем сокет-запрос для применения режима ко всем активным комнатам
-                    if (socket) {
-                        socket.emit('set_llm_mode', { 
-                            room_id: currentRoom,
-                            mode: mode
-                        });
-                    }
+                    loadLLMPriority(); // Обновляем статус после изменения
                 } else {
-                    showStatus(llmModeStatus, 'Ошибка: ' + data.error, false);
+                    showStatus(llmPriorityStatus, 'Ошибка: ' + data.error, false);
                 }
             })
             .catch(error => {
-                showStatus(llmModeStatus, 'Ошибка сети: ' + error, false);
+                showStatus(llmPriorityStatus, 'Ошибка сети: ' + error, false);
             });
+        }
+        
+        function updateLLMStatus(status) {
+            let html = `
+                <p><strong>Локальная модель:</strong> ${status.local_available ? '✅ Доступна' : '❌ Недоступна'}</p>
+                <p><strong>OpenRouter:</strong> ${status.openrouter_available ? '✅ Доступен' : '❌ Недоступен'}</p>
+                <p><strong>Текущий приоритет:</strong> ${status.current_priority === 'local' ? 'Локальная модель' : 'OpenRouter'}</p>
+            `;
+            
+            if (status.local_available && status.local_status) {
+                html += `
+                    <p><strong>URL:</strong> ${status.local_status.base_url || 'N/A'}</p>
+                    <p><strong>Модель:</strong> ${status.local_status.current_model || 'N/A'}</p>
+                    <p><strong>Модель загружена:</strong> ${status.local_status.model_loaded ? '✅ Да' : '❌ Нет'}</p>
+                `;
+                
+                if (status.local_status.models && status.local_status.models.length > 0) {
+                    html += `<p><strong>Доступные модели:</strong> ${status.local_status.models.join(', ')}</p>`;
+                }
+            }
+            
+            llmStatusInfo.innerHTML = html;
+        }
+        
+        function refreshLLMStatus() {
+            fetch('/api/llm/status?room_id=' + currentRoom)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        updateLLMStatus(data.status);
+                    } else {
+                        llmStatusInfo.innerHTML = `<p>❌ Ошибка загрузки статуса: ${data.error}</p>`;
+                    }
+                })
+                .catch(error => {
+                    llmStatusInfo.innerHTML = `<p>❌ Ошибка сети: ${error}</p>`;
+                });
         }
         
         // Функции для работы с файлами практики
@@ -1109,8 +1134,8 @@
             // Загружаем API ключи при загрузке страницы
             loadApiKeys();
             
-            // Загружаем режим LLM при загрузке страницы
-            loadLLMMode();
+            // Загружаем статус локальной модели
+            loadLLMPriority();
             
             // Загружаем файлы практики при загрузке страницы
             loadPracticeFiles();
@@ -1130,10 +1155,14 @@
                 testApiKey('openrouter', openrouterKeyInput.value);
             });
             
-            // Обработчики для режима LLM
-            setLlmModeBtn.addEventListener('click', function() {
-                const mode = llmModeSelect.value;
-                setLLMMode(mode);
+            // Обработчики для локальной модели
+            setLlmPriorityBtn.addEventListener('click', function() {
+                const useLocal = llmPrioritySelect.value === 'local';
+                setLLMPriority(useLocal);
+            });
+            
+            refreshLlmStatusBtn.addEventListener('click', function() {
+                refreshLLMStatus();
             });
             
             // Обработчики для управления файлами практики
@@ -1362,7 +1391,7 @@
             });
             
             // Скачивание практики в TXT формате
-            document.getElementById('download-practice-txt-btn').addEventListener('click', function() {
+            downloadPracticeTxtBtn.addEventListener('click', function() {
                 fetch('/api/download_practice_txt')
                 .then(function(response) {
                     if (response.ok) {
