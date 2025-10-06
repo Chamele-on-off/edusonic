@@ -9,17 +9,19 @@ class LocalLLM:
     def __init__(self, base_url: str = None):
         config = get_local_llm_settings()
         
+        # ИСПРАВЛЕНИЕ: Правильный URL для локального подключения
         self.base_url = (base_url or 
                         os.getenv('OLLAMA_HOST') or 
-                        config.get("base_url", "http://ollama:11434"))
+                        config.get("base_url", "http://localhost:11434"))
             
-        self.model = config.get("model", "qwen2.5:3b")  # Qwen вместо Llama
+        # ИСПРАВЛЕНИЕ: Используем модель которая точно есть
+        self.model = config.get("model", "llama3.2:3b")  # Изменено на llama3.2:3b
         self.timeout = config.get("timeout", 60)
         self.max_retries = config.get("max_retries", 2)
         self.retry_delay = config.get("retry_delay", 2.0)
         self.enabled = config.get("enabled", True)
         
-        print(f"🔧 LocalLLM инициализирован с URL: {self.base_url}")
+        print(f"🔧 LocalLLM инициализирован с URL: {self.base_url}, модель: {self.model}")
         
     def is_available(self) -> bool:
         """Проверяет доступность локальной модели"""
@@ -109,13 +111,24 @@ class LocalLLM:
         try:
             response = requests.get(f"{self.base_url}/api/tags", timeout=10)
             if response.status_code == 200:
-                models = response.json().get('models', [])
-                model_loaded = any(self.model in model.get('name', '') for model in models)
+                data = response.json()
+                models = data.get('models', [])
+                
+                # Проверяем загружена ли наша модель
+                model_loaded = False
+                available_models = []
+                
+                for model in models:
+                    model_name = model.get('name', '')
+                    available_models.append(model_name)
+                    if self.model in model_name:
+                        model_loaded = True
                 
                 return {
                     "available": True,
                     "model_loaded": model_loaded,
-                    "models": [model.get('name') for model in models],
+                    "current_model": self.model,
+                    "available_models": available_models,
                     "base_url": self.base_url
                 }
         except Exception as e:
@@ -124,9 +137,34 @@ class LocalLLM:
         return {
             "available": False,
             "model_loaded": False,
-            "models": [],
+            "current_model": self.model,
+            "available_models": [],
             "base_url": self.base_url
         }
+
+    def pull_model(self, model_name: str = None) -> bool:
+        """Загружает модель если она не загружена"""
+        model_to_pull = model_name or self.model
+        
+        try:
+            print(f"🔧 Попытка загрузить модель: {model_to_pull}")
+            response = requests.post(
+                f"{self.base_url}/api/pull",
+                json={"model": model_to_pull},
+                timeout=300  # 5 минут для загрузки
+            )
+            
+            if response.status_code == 200:
+                print(f"✅ Модель {model_to_pull} успешно загружена")
+                self.model = model_to_pull
+                return True
+            else:
+                print(f"❌ Не удалось загрузить модель {model_to_pull}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Ошибка загрузки модели: {e}")
+            return False
 
 # Глобальный экземпляр для использования
 local_llm = LocalLLM()
