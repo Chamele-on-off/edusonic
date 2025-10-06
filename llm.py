@@ -12,8 +12,8 @@ class LLMIntegration:
                  cache_dir: str = "cache",
                  model: str = "meta-llama/llama-3.3-8b-instruct:free"):
         
-        # Настройки для локальной Llama
-        self.local_llm_url = "http://localhost:11434/v1"
+        # НАСТРОЙКИ ДЛЯ DOCKER - ВАЖНО!
+        self.local_llm_url = "http://host.docker.internal:11434/v1"  # Docker специальный адрес
         self.local_model = "llama3.2:3b"
         self.use_local_llm = True
         self.local_llm_enabled = True
@@ -107,7 +107,7 @@ class LLMIntegration:
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception as e:
-            print(f"Ошибка загрузки кэша: {e}")
+            print(f"Ошибка загрузка кэша: {e}")
         return {}
 
     def _save_cache(self):
@@ -398,6 +398,7 @@ class LLMIntegration:
         6. Избегай сложных конструкций
         
         Верни ТОЛЬКО код Mermaid без каких-либо пояснений.
+        Начни сразу с объявления типа диаграммы.
         """
         
         try:
@@ -406,8 +407,15 @@ class LLMIntegration:
                 context="",
                 subject="general",
                 system_prompt="""Ты - эксперт по созданию образовательных диаграмм. 
-                Создавай ПРОСТЫЕ и ПОНЯТНЫЕ Mermaid диаграммы.
-                Всегда используй корректный синтаксис Mermaid.""",
+                Твоя задача - создавать ПРОСТЫЕ и ПОНЯТНЫЕ Mermaid диаграммы.
+                ВАЖНЫЕ ПРАВИЛА:
+                1. Всегда используй корректный синтаксис Mermaid
+                2. Максимальная простота и наглядность
+                3. Русские подписи в двойных кавычках
+                4. Логические связи между элементами
+                5. Избегай сложных конструкций
+                
+                Если не уверен в синтаксисе - используй простейшую структуру.""",
                 max_tokens=500
             )
             
@@ -419,6 +427,7 @@ class LLMIntegration:
         except Exception as e:
             print(f"❌ Ошибка генерации Mermaid кода: {e}")
         
+        # Fallback - простая диаграмма по умолчанию
         return f'''flowchart TD
     A["{topic}"] --> B["Основной аспект 1"]
     A --> C["Основной аспект 2"]
@@ -437,12 +446,15 @@ class LLMIntegration:
         - <circle> для кругов и узлов
         - <line> для линий и связей
         - <text> для текста и подписей
+        - <path> для сложных форм
         
         Требования:
         - Размер: 400x300
         - Простая и понятная схема
         - Русские подписи
         - Минималистичный дизайн
+        - Логическая структура
+        - Цвета для различия элементов
 
         Верни ТОЛЬКО SVG код без пояснений.
         """
@@ -452,15 +464,17 @@ class LLMIntegration:
                 prompt=prompt,
                 context="",
                 subject="general",
-                system_prompt="Ты создаешь простые SVG схемы для образования. Используй минималистичный дизайн.",
+                system_prompt="Ты создаешь простые SVG схемы для образования. Используй минималистичный дизайн и четкую структуру.",
                 max_tokens=1000
             )
             
             if svg_code:
+                # Очищаем SVG код
                 svg_code = re.sub(r'```(xml|svg)?\s*', '', svg_code)
                 svg_code = re.sub(r'```\s*', '', svg_code)
                 svg_code = svg_code.strip()
                 
+                # Проверяем валидность SVG
                 if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
                     print(f"✅ Сгенерирован SVG код для: {topic}")
                     return svg_code
@@ -477,19 +491,30 @@ class LLMIntegration:
             
         text_lower = text.lower()
         
+        # Ключевые слова, указывающие на необходимость визуализации
         visualization_keywords = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
-            'таблица', 'классификация', 'этапы', 'стадии', 'система'
+            'таблица', 'классификация', 'этапы', 'стадии', 'система',
+            'модель', 'цепочка', 'последовательность', 'отношение',
+            'разделение', 'группировка', 'организация', 'архитектура',
+            'понятие', 'определение', 'теория', 'концепция', 'принцип',
+            'механизм', 'функция', 'свойство', 'характеристика'
         ]
         
+        # Структурные индикаторы
         structure_indicators = [
             'состоит из', 'включает в себя', 'делится на', 'подразделяется',
             'можно разделить', 'выделяют', 'различают', 'существуют'
         ]
         
+        # Проверяем наличие ключевых слов
         has_keywords = any(keyword in text_lower for keyword in visualization_keywords)
+        
+        # Проверяем наличие структурных индикаторов
         has_structure = any(indicator in text_lower for indicator in structure_indicators)
+        
+        # Проверяем длину текста (достаточно информативный)
         is_long_enough = len(text.split()) > 5
         
         return (has_keywords or has_structure) and is_long_enough
@@ -499,7 +524,10 @@ class LLMIntegration:
         try:
             print(f"🎨 Генерация визуализаций для: {topic}")
             
+            # Генерируем Mermaid диаграмму
             mermaid_code = self.generate_mermaid_diagram(topic, context)
+            
+            # Генерируем SVG схему
             svg_code = self.generate_svg_diagram(topic, context)
             
             result = {
@@ -528,15 +556,17 @@ class LLMIntegration:
 
     def test_connection(self) -> bool:
         """Тестирование подключения к API"""
+        # Тестируем локальную Llama
         if self.local_llm_enabled:
             try:
                 response = requests.get(f"{self.local_llm_url.replace('/v1', '')}/api/tags", timeout=5)
                 if response.status_code == 200:
                     print("✅ Локальная Llama подключена")
                     return True
-            except:
-                print("❌ Локальная Llama недоступна")
+            except Exception as e:
+                print(f"❌ Локальная Llama недоступна: {e}")
         
+        # Тестируем OpenRouter
         if self.openrouter_enabled:
             try:
                 headers = {
@@ -574,10 +604,12 @@ class LLMIntegration:
         """Получение списка доступных моделей"""
         models = []
         
+        # Локальные модели
         if self.local_llm_enabled:
             models.append({"id": "llama3.2:3b", "name": "Llama 3.2 3B", "description": "Локальная быстрая модель", "provider": "local"})
             models.append({"id": "llama3.2:1b", "name": "Llama 3.2 1B", "description": "Локальная сверхбыстрая модель", "provider": "local"})
         
+        # OpenRouter модели
         if self.openrouter_enabled:
             models.extend([
                 {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная модель от Meta", "provider": "openrouter"},
@@ -587,7 +619,7 @@ class LLMIntegration:
         
         return models
 
-# Глобальный экземпляр
+# Создаем глобальный экземпляр для использования в других модулях
 llm_integration = LLMIntegration()
 
 def get_llm_instance() -> LLMIntegration:
@@ -595,19 +627,23 @@ def get_llm_instance() -> LLMIntegration:
     return llm_integration
 
 if __name__ == "__main__":
+    # Тестирование модуля
     llm = LLMIntegration()
     
     print("🔧 Тестирование LLM модуля...")
     
+    # Тестирование подключения
     connection_ok = llm.test_connection()
     print(f"📡 Подключение: {'✅ Успешно' if connection_ok else '❌ Ошибка'}")
     
+    # Тестовый запрос
     test_question = "Объясни, что такое фотосинтез"
     response = llm.query(test_question, subject="биология")
     
     print("\n🧪 Тестовый ответ:")
     print(response)
     
+    # Статистика
     cache_stats = llm.get_cache_stats()
     print(f"\n💾 Статистика: {cache_stats}")
     
