@@ -1627,4 +1627,4 @@ if __name__ == '__main__':
     lessons_count = len(list(LESSONS_DIR.glob("*.txt")))
     print(f"📚 Доступно уроков: {lessons_count}")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
