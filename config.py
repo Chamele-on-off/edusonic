@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import time
 
 CONFIG_FILE = Path(__file__).parent / 'api_config.json'
 
@@ -21,6 +22,13 @@ DEFAULT_CONFIG = {
         "api_url": "https://openrouter.ai/api/v1/chat/completions",
         "max_tokens": 1000,
         "temperature": 0.7
+    },
+    "local_llm": {
+        "enabled": True,
+        "base_url": "http://localhost:11434",
+        "model": "llama3.2:3b",
+        "timeout": 60,
+        "max_retries": 2
     },
     "fallback": {
         "enabled": True,
@@ -285,6 +293,15 @@ def get_ui_settings():
     default_ui = DEFAULT_CONFIG.get("ui_settings", {})
     return {**default_ui, **ui_settings}
 
+def get_local_llm_settings():
+    """Получение настроек локальной LLM"""
+    config = load_config()
+    local_settings = config.get("local_llm", {})
+    
+    # Объединяем с настройками по умолчанию
+    default_local = DEFAULT_CONFIG.get("local_llm", {})
+    return {**default_local, **local_settings}
+
 def get_setting(section, key, default=None):
     """Получение конкретной настройки"""
     config = load_config()
@@ -389,6 +406,7 @@ def import_config(filename):
 # Загружаем конфигурацию при импорте
 LLM_CONFIG = load_config().get("llm", DEFAULT_CONFIG["llm"])
 OPENROUTER_CONFIG = load_config().get("openrouter", DEFAULT_CONFIG["openrouter"])
+LOCAL_LLM_CONFIG = get_local_llm_settings()
 FALLBACK_CONFIG = load_config().get("fallback", DEFAULT_CONFIG["fallback"])
 DIALOGUE_SETTINGS = get_dialogue_settings()
 KNOWLEDGE_SETTINGS = get_knowledge_settings()
@@ -400,9 +418,6 @@ PERFORMANCE_SETTINGS = get_performance_settings()
 SECURITY_SETTINGS = get_security_settings()
 UI_SETTINGS = get_ui_settings()
 
-# Импортируем time для функций backup
-import time
-
 # Выводим информацию о конфигурации при загрузке
 if __name__ == "__main__":
     print("=" * 50)
@@ -412,6 +427,7 @@ if __name__ == "__main__":
     print(f"Config exists: {CONFIG_FILE.exists()}")
     print(f"LLM Mode: {get_llm_mode()}")
     print(f"OpenRouter API Key: {'Set' if get_api_key('openrouter') else 'Not set'}")
+    print(f"Local LLM Enabled: {LOCAL_LLM_CONFIG.get('enabled', False)}")
     print("=" * 50)
     
     # Проверяем валидность конфигурации
