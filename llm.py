@@ -26,7 +26,7 @@ class LLMIntegration:
         self.max_retries = 3
         self.retry_delay = 2.0
         
-        # УЛЬТРА-БЫСТРАЯ ЛОКАЛЬНАЯ МОДЕЛЬ
+        # ДОБАВЛЯЕМ ЛОКАЛЬНУЮ МОДЕЛЬ
         self.local_llm = LocalLLM()
         self.use_local_first = True  # Флаг приоритета локальной модели
         
@@ -76,29 +76,19 @@ class LLMIntegration:
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000) -> Optional[str]:
-        """УЛУЧШЕННЫЙ ЗАПРОС С ПРИОРИТЕТОМ УЛЬТРА-БЫСТРОЙ ЛОКАЛЬНОЙ МОДЕЛИ"""
+        """УЛУЧШЕННЫЙ ЗАПРОС С ПРИОРИТЕТОМ ЛОКАЛЬНОЙ МОДЕЛИ"""
         
-        # 1. УЛЬТРА-БЫСТРАЯ ЛОКАЛЬНАЯ МОДЕЛЬ (всегда сначала)
+        # 1. Пытаемся использовать локальную модель если включено
         if self.use_local_first and self.local_llm.is_available():
-            print("⚡ Использую ультра-быструю локальную модель...")
-            start_time = time.time()
-            
-            # ДАЕМ БОЛЬШЕ ВРЕМЕНИ ДЛЯ ОТВЕТА - 15 СЕКУНД
-            try:
-                local_response = self.local_llm.generate(prompt, system_prompt, max_tokens)
-                response_time = time.time() - start_time
-                
-                if local_response and len(local_response.strip()) > 10:  # УВЕЛИЧИЛИ МИНИМАЛЬНУЮ ДЛИНУ
-                    print(f"✅ Локальный ответ за {response_time:.2f}с: {local_response[:80]}...")
-                    return local_response
-                else:
-                    print(f"❌ Локальная модель не дала содержательный ответ за {response_time:.2f}с")
-                    # НЕ ПЕРЕКЛЮЧАЕМСЯ СРАЗУ, ПРОБУЕМ OPENROUTER
-                    
-            except Exception as e:
-                print(f"❌ Ошибка локальной модели: {e}")
+            print("🔧 Использую локальную Llama модель...")
+            local_response = self.local_llm.generate(prompt, system_prompt, max_tokens)
+            if local_response:
+                print("✅ Ответ получен от локальной модели")
+                return local_response
+            else:
+                print("❌ Локальная модель не ответила, переключаюсь на OpenRouter")
         
-        # 2. Fallback на OpenRouter (оригинальная логика без изменений)
+        # 2. Fallback на OpenRouter (оригинальная логика)
         if not self.api_key:
             print("⚠️ API ключ не установлен, использую fallback ответ")
             return self._get_fallback_response(prompt, subject)
@@ -164,14 +154,12 @@ class LLMIntegration:
         for attempt in range(self.max_retries):
             try:
                 print(f"🔄 Попытка {attempt + 1}: Отправка запроса к OpenRouter")
-                start_time = time.time()
                 response = requests.post(
                     self.api_url,
                     headers=headers,
                     json=data,
                     timeout=30
                 )
-                response_time = time.time() - start_time
                 
                 self.last_request_time = time.time()
                 
@@ -187,7 +175,7 @@ class LLMIntegration:
                         if any(concept in processed_answer.lower() for concept in visualization_concepts):
                             print("🎯 Ответ содержит концепции для визуализации")
                         
-                        print(f"✅ Получен ответ от OpenRouter за {response_time:.2f}с: {processed_answer[:100]}...")
+                        print(f"✅ Получен ответ от OpenRouter: {processed_answer[:100]}...")
                         return processed_answer
                     else:
                         print("❌ Неверный формат ответа от API")
@@ -226,22 +214,18 @@ class LLMIntegration:
         """Возвращает fallback ответ когда LLM недоступен"""
         prompt_lower = prompt.lower()
         
-        # УЛУЧШЕННЫЕ FALLBACK ОТВЕТЫ
-        if any(word in prompt_lower for word in ['привет', 'здравств', 'начать', 'старт']):
-            return "Привет! Я ваш AI-учитель. Давайте выберем предмет для изучения - математика, история, обществознание или другой?"
+        # Определяем тип вопроса для более релевантного ответа
+        if any(word in prompt_lower for word in ['что', 'как', 'почему', 'зачем']):
+            return f"Интересный вопрос! По теме {subject if subject else 'этого'} есть много интересной информации. Давайте обсудим это подробнее!"
         
-        if any(word in prompt_lower for word in ['спасибо', 'благодар']):
-            return "Пожалуйста! Рад был помочь. Есть еще вопросы?"
-        
-        if any(word in prompt_lower for word in ['как дела', 'настроен']):
-            return "Всё отлично! Готов к интересному уроку. Какой предмет вас интересует?"
-        
-        # Для образовательных вопросов даем более полезный ответ
-        if any(word in prompt_lower for word in ['что такое', 'объясни', 'расскажи', 'как работает']):
-            return "Хороший вопрос! Давайте разберем эту тему подробнее. Мне нужно немного времени подумать..."
+        if any(word in prompt_lower for word in ['объясни', 'расскажи', 'покажи']):
+            return f"С удовольствием объясню! Это важный аспект {subject if subject else 'темы'}. Давайте разберем вместе."
         
         # Общий fallback ответ
-        return "Спасибо за вопрос! Я подумаю над ответом и скоро вернусь с подробным объяснением."
+        subjects = ["математика", "история", "обществознание", "физика", "химия"]
+        subject_list = ", ".join(subjects[:3]) + " и другие"
+        
+        return f"Извините, возникли временные технические трудности. Но я готов помочь вам с учебой! У меня есть уроки по: {subject_list}. Что вас интересует?"
 
     def query(self, question: str, context: str = "", subject: str = "") -> Optional[str]:
         """Запрос к LLM API с гарантированным ответом"""
@@ -258,14 +242,8 @@ class LLMIntegration:
         
         print(f"📨 Запрос к LLM: '{question}' (предмет: {subject})")
         
-        # ДАЕМ БОЛЬШЕ ВРЕМЕНИ ДЛЯ ОБРАБОТКИ
-        start_time = time.time()
-        
         # Запрос к реальному LLM
         llm_response = self._query_llm_api(question, context, subject)
-        
-        total_time = time.time() - start_time
-        print(f"⏱️ Общее время обработки: {total_time:.2f}с")
         
         if llm_response and llm_response.strip():
             print(f"✅ Ответ получен: {llm_response[:100]}...")
@@ -330,18 +308,8 @@ class LLMIntegration:
         local_available = self.local_llm.is_available()
         openrouter_available = bool(self.api_key)
         
-        # ПРОВЕРЯЕМ РАБОТОСПОСОБНОСТЬ ЛОКАЛЬНОЙ МОДЕЛИ
-        local_working = False
-        if local_available:
-            try:
-                test_response = self.local_llm.generate("Тест", "Ты - учитель", 10)
-                local_working = test_response is not None and len(test_response.strip()) > 5
-            except:
-                local_working = False
-        
         return {
             "local_available": local_available,
-            "local_working": local_working,
             "openrouter_available": openrouter_available,
             "current_priority": "local" if self.use_local_first else "openrouter",
             "local_status": self.local_llm.get_status(),
