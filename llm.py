@@ -26,7 +26,7 @@ class LLMIntegration:
         self.max_retries = 3
         self.retry_delay = 2.0
         
-        # ДОБАВЛЯЕМ ЛОКАЛЬНУЮ МОДЕЛЬ
+        # ЛОКАЛЬНАЯ МОДЕЛЬ
         self.local_llm = LocalLLM()
         self.use_local_first = True  # Флаг приоритета локальной модели
         
@@ -76,11 +76,11 @@ class LLMIntegration:
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000) -> Optional[str]:
-        """УЛУЧШЕННЫЙ ЗАПРОС С ПРИОРИТЕТОМ ЛОКАЛЬНОЙ МОДЕЛИ"""
+        """Запрос к LLM API с приоритетом локальной модели"""
         
         # 1. Пытаемся использовать локальную модель если включено
         if self.use_local_first and self.local_llm.is_available():
-            print("🔧 Использую локальную Llama модель...")
+            print("🔧 Использую локальную Qwen модель...")
             local_response = self.local_llm.generate(prompt, system_prompt, max_tokens)
             if local_response:
                 print("✅ Ответ получен от локальной модели")
@@ -624,4 +624,4 @@ if __name__ == "__main__":
     print(f"   Всего записей: {cache_stats['total_entries']}")
     print(f"   Предметы: {cache_stats['subjects']}")
     
-    print("\n🎉 Тестирование завершено!")
+    print("\n🎉 Тестирование завершено!"
