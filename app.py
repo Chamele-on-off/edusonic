@@ -30,7 +30,8 @@ socketio = SocketIO(
     max_http_buffer_size=1e8,  # Увеличенный размер буфера
     logger=True,               # Логирование для отладки
     engineio_logger=True,      # Логирование EngineIO
-    always_connect=True        # Всегда пытаться подключиться
+    always_connect=True,
+    transports=['polling']  # ← ТОЛЬКО POLLING
 )
 
 BASE_DIR = Path(__file__).parent
