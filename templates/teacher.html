@@ -548,8 +548,10 @@
                 <div class="form-group">
                     <label for="llm-priority-select">Приоритет моделей:</label>
                     <select id="llm-priority-select" class="subject-select">
-                        <option value="local">Сначала локальная модель (Qwen)</option>
-                        <option value="openrouter">Сначала OpenRouter</option>
+                        <option value="local_first">Сначала локальная модель (Qwen)</option>
+                        <option value="openrouter_first">Сначала OpenRouter</option>
+                        <option value="local_only">Только локальная модель</option>
+                        <option value="openrouter_only">Только OpenRouter</option>
                     </select>
                 </div>
                 
@@ -938,7 +940,14 @@
                 .then(data => {
                     if (data.success) {
                         const priority = data.status.current_priority;
-                        llmPrioritySelect.value = priority;
+                        // Преобразуем значение для отображения в select
+                        let displayPriority = priority;
+                        if (priority === 'local_first') displayPriority = 'local_first';
+                        if (priority === 'openrouter_first') displayPriority = 'openrouter_first';
+                        if (priority === 'local_only') displayPriority = 'local_only';
+                        if (priority === 'openrouter_only') displayPriority = 'openrouter_only';
+                        
+                        llmPrioritySelect.value = displayPriority;
                         updateLLMStatus(data.status);
                     }
                 })
@@ -947,7 +956,7 @@
                 });
         }
         
-        function setLLMPriority(useLocalFirst) {
+        function setLLMPriority(priority) {
             fetch('/api/llm/priority', {
                 method: 'POST',
                 headers: {
@@ -955,7 +964,7 @@
                 },
                 body: JSON.stringify({
                     room_id: currentRoom,
-                    use_local_first: useLocalFirst
+                    priority: priority
                 })
             })
             .then(response => response.json())
@@ -964,6 +973,14 @@
                     showStatus(llmPriorityStatus, data.message);
                     log(data.message);
                     loadLLMPriority(); // Обновляем статус после изменения
+                    
+                    // Отправляем сокет-запрос для применения приоритета
+                    if (socket) {
+                        socket.emit('set_llm_priority', {
+                            room_id: currentRoom,
+                            priority: priority
+                        });
+                    }
                 } else {
                     showStatus(llmPriorityStatus, 'Ошибка: ' + data.error, false);
                 }
@@ -977,7 +994,8 @@
             let html = `
                 <p><strong>Локальная модель:</strong> ${status.local_available ? '✅ Доступна' : '❌ Недоступна'}</p>
                 <p><strong>OpenRouter:</strong> ${status.openrouter_available ? '✅ Доступен' : '❌ Недоступен'}</p>
-                <p><strong>Текущий приоритет:</strong> ${status.current_priority === 'local' ? 'Локальная модель' : 'OpenRouter'}</p>
+                <p><strong>Текущий приоритет:</strong> ${getPriorityDisplayName(status.current_priority)}</p>
+                <p><strong>Фактический приоритет:</strong> ${getPriorityDisplayName(status.effective_priority)}</p>
             `;
             
             if (status.local_available && status.local_status) {
@@ -993,6 +1011,17 @@
             }
             
             llmStatusInfo.innerHTML = html;
+        }
+        
+        function getPriorityDisplayName(priority) {
+            const priorityNames = {
+                'local_first': 'Сначала локальная модель',
+                'openrouter_first': 'Сначала OpenRouter',
+                'local_only': 'Только локальная модель',
+                'openrouter_only': 'Только OpenRouter',
+                'fallback': 'Fallback режим'
+            };
+            return priorityNames[priority] || priority;
         }
         
         function refreshLLMStatus() {
@@ -1255,8 +1284,8 @@
             
             // Обработчики для локальной модели
             setLlmPriorityBtn.addEventListener('click', function() {
-                const useLocal = llmPrioritySelect.value === 'local';
-                setLLMPriority(useLocal);
+                const priority = llmPrioritySelect.value;
+                setLLMPriority(priority);
             });
             
             refreshLlmStatusBtn.addEventListener('click', function() {
