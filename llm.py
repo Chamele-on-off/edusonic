@@ -3,7 +3,7 @@ import json
 from typing import Optional, Dict, Callable
 from pathlib import Path
 import time
-from config import get_api_key, load_config, get_model_config
+from config import get_api_key, load_config, get_model_config, get_llm_priority, set_llm_priority
 import re
 from local_llm_manager import get_llm_manager
 import queue
@@ -29,12 +29,10 @@ class LLMIntegration:
         
         # Менеджер локальной LLM
         self.llm_manager = get_llm_manager()
-        self.use_local_first = True
         self.pending_requests = {}
         
-        # Настройки приоритетов из конфига
-        llm_config = config.get("llm", {})
-        self.priority_mode = llm_config.get("priority", "local_first")
+        # Настройки приоритетов из конфигурации
+        self.priority_mode = get_llm_priority()
         
     def _load_cache(self) -> Dict:
         """Загрузка кэша из файла"""
@@ -496,7 +494,7 @@ class LLMIntegration:
             B --> C[Процесс 2]
             C --> D[Результат]
 
-        Тема для диаграммы: {topic}
+        Тема для диаграмма: {topic}
         
         Верни ТОЛЬКО код Mermaid без каких-либо пояснений.
         Начни сразу с объявления типа диаграммы.
