@@ -1,7 +1,8 @@
 import threading
 import queue
 import time
-from typing import Dict, Optional
+import uuid
+from typing import Dict, Optional, Callable
 from local_llm import LocalLLM
 import json
 
@@ -12,7 +13,8 @@ class LocalLLMManager:
         self.response_queues: Dict[str, queue.Queue] = {}
         self.worker_thread = None
         self.running = False
-        self.room_callbacks = {}
+        self.room_callbacks: Dict[str, Callable] = {}
+        self.request_counter = 0
         
     def start(self):
         """Запуск менеджера в отдельном потоке"""
@@ -40,17 +42,28 @@ class LocalLLMManager:
                 except queue.Empty:
                     continue
                     
-                print(f"🔧 [LocalLLM Worker] Обработка запроса для комнаты {room_id}")
+                print(f"🔧 [LocalLLM Worker] Обработка запроса {request_id} для комнаты {room_id}")
                 
-                # Генерация ответа
+                # Генерация ответа (блокирующая операция в отдельном потоке)
                 response = self.local_llm.generate(prompt, system_prompt, max_tokens)
                 
-                # Отправка ответа через callback
+                # Вызов callback для комнаты
                 if room_id in self.room_callbacks:
                     try:
                         self.room_callbacks[room_id](request_id, response, room_id)
+                        print(f"✅ [LocalLLM Worker] Ответ отправлен через callback для комнаты {room_id}")
                     except Exception as e:
                         print(f"❌ Ошибка вызова callback для комнаты {room_id}: {e}")
+                
+                # Также сохраняем ответ в очередь для polling
+                if room_id not in self.response_queues:
+                    self.response_queues[room_id] = queue.Queue()
+                
+                self.response_queues[room_id].put({
+                    'request_id': request_id,
+                    'response': response,
+                    'timestamp': time.time()
+                })
                 
                 self.request_queue.task_done()
                 
@@ -61,14 +74,15 @@ class LocalLLMManager:
     def submit_request(self, prompt: str, system_prompt: str = "", max_tokens: int = 1000, 
                       room_id: str = "default") -> str:
         """Добавление запроса в очередь"""
-        request_id = f"{room_id}_{int(time.time()*1000)}"
+        request_id = f"{room_id}_{int(time.time()*1000)}_{self.request_counter}"
+        self.request_counter += 1
         
         self.request_queue.put((request_id, prompt, system_prompt, max_tokens, room_id))
         print(f"📨 [LocalLLM] Запрос добавлен в очередь: {request_id}")
         
         return request_id
         
-    def register_room_callback(self, room_id: str, callback):
+    def register_room_callback(self, room_id: str, callback: Callable):
         """Регистрация callback для комнаты"""
         self.room_callbacks[room_id] = callback
         print(f"🔧 [LocalLLM] Зарегистрирован callback для комнаты {room_id}")
@@ -82,6 +96,24 @@ class LocalLLMManager:
         """Получение размера очереди"""
         return self.request_queue.qsize()
         
+    def get_response(self, room_id: str, timeout: float = 1.0) -> Optional[Dict]:
+        """Получение ответа из очереди (для polling)"""
+        if room_id in self.response_queues:
+            try:
+                return self.response_queues[room_id].get(timeout=timeout)
+            except queue.Empty:
+                return None
+        return None
+        
+    def clear_responses(self, room_id: str):
+        """Очистка очереди ответов для комнаты"""
+        if room_id in self.response_queues:
+            while not self.response_queues[room_id].empty():
+                try:
+                    self.response_queues[room_id].get_nowait()
+                except queue.Empty:
+                    break
+        
     def get_status(self) -> Dict:
         """Получение статуса менеджера"""
         return {
@@ -89,11 +121,16 @@ class LocalLLMManager:
             "queue_size": self.get_queue_size(),
             "worker_alive": self.worker_thread.is_alive() if self.worker_thread else False,
             "registered_rooms": list(self.room_callbacks.keys()),
+            "response_queues": list(self.response_queues.keys()),
             "llm_status": self.local_llm.get_status()
         }
 
 # Глобальный экземпляр
-llm_manager = LocalLLMManager()
+_llm_manager = None
 
 def get_llm_manager() -> LocalLLMManager:
-    return llm_manager
+    """Получение глобального экземпляра менеджера LLM"""
+    global _llm_manager
+    if _llm_manager is None:
+        _llm_manager = LocalLLMManager()
+    return _llm_manager
