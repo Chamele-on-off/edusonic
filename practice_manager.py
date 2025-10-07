@@ -34,54 +34,45 @@ class PracticeManager:
                 print("🏁 Достигнут лимит вопросов")
                 return None
             
-            # Формируем промпт для генерации одного вопроса
+            # УПРОЩЕННЫЙ промпт для надежности
             prompt = f"""
-            На основе учебного материала сгенерируй ОДИН практический вопрос для проверки понимания.
+            Создай один учебный вопрос для проверки понимания темы: {self.current_subject}
             
-            КОНТЕКСТ УРОКА:
-            {self.current_lesson_context[:1000]}
+            Контекст: {self.current_lesson_context[:500]}
             
-            ТРЕБОВАНИЯ К ВОПРОСУ:
-            - Вопрос должен проверять понимание ключевых понятий из материала
-            - Вопрос должен быть четким и понятным
-            - Вопрос должен требовать развернутого ответа (не просто "да/нет")
-            - Вопрос должен быть адаптирован для учеников
-            - Только один вопрос, без нумерации
+            Требования:
+            - Один четкий вопрос
+            - Проверяет понимание материала  
+            - Требует развернутого ответа
+            - Без нумерации и лишних символов
             
-            ПРЕДМЕТ: {self.current_subject}
-            
-            Верни только текст вопроса без дополнительных комментариев.
+            Верни только текст вопроса.
             """
             
-            llm_response = self.llm._query_llm_api(
-                prompt=prompt,
+            # СИНХРОННЫЙ запрос к LLM
+            llm_response = self.llm.query(
+                question=prompt,
                 context="",
-                subject=self.current_subject,
-                system_prompt="Ты — помощник учителя. Создавай качественные вопросы для проверки понимания материала.",
-                max_tokens=200
+                subject=self.current_subject
             )
             
-            if llm_response:
-                # Очищаем ответ от лишних символов
+            if llm_response and not llm_response.startswith("Спасибо за вопрос!"):
+                # Очищаем ответ
                 question = self._clean_question_text(llm_response)
                 
-                # Проверяем, что вопрос не пустой и не слишком короткий
-                if not question or len(question.strip()) < 10:
-                    print("❌ Сгенерирован слишком короткий или пустой вопрос")
-                    return self._get_fallback_question()
-                
-                print(f"✅ Сгенерирован вопрос: {question}")
-                
-                # Сохраняем в историю
-                self.generated_questions.append({
-                    "question": question,
-                    "generated_at": time.time()
-                })
-                
-                return question
-            else:
-                print("❌ LLM не вернул ответ для генерации вопроса")
-                return self._get_fallback_question()
+                if question and len(question.strip()) > 10:
+                    print(f"✅ Сгенерирован вопрос: {question}")
+                    
+                    # Сохраняем в историю
+                    self.generated_questions.append({
+                        "question": question,
+                        "generated_at": time.time()
+                    })
+                    
+                    return question
+            
+            # Fallback если LLM не сработал
+            return self._get_fallback_question()
                 
         except Exception as e:
             print(f"❌ Ошибка генерации вопроса: {e}")
@@ -133,12 +124,10 @@ class PracticeManager:
             Верни только ответ без лишних слов.
             """
             
-            llm_response = self.llm._query_llm_api(
-                prompt=prompt,
+            llm_response = self.llm.query(
+                question=prompt,
                 context="",
-                subject=self.current_subject,
-                system_prompt="Ты — эксперт по предмету. Дай точный и краткий ответ на вопрос.",
-                max_tokens=150
+                subject=self.current_subject
             )
             
             return llm_response.strip() if llm_response else None
@@ -205,12 +194,10 @@ class PracticeManager:
             Твоя задача - помогать ученикам учиться на ошибках, а не ругать их.
             Всегда обращайся к ученику на "ты"."""
             
-            evaluation = self.llm._query_llm_api(
-                prompt=prompt,
+            evaluation = self.llm.query(
+                question=prompt,
                 context="",
-                subject=self.current_subject,
-                system_prompt=system_prompt,
-                max_tokens=300
+                subject=self.current_subject
             )
             
             # ДОПОЛНИТЕЛЬНАЯ ОБРАБОТКА: заменяем "ученик" на "ты"
@@ -402,12 +389,12 @@ if __name__ == "__main__":
     
     # Создаем mock LLM для тестирования
     class MockLLM:
-        def _query_llm_api(self, prompt, context, subject, system_prompt, max_tokens):
-            if "вопрос" in prompt.lower():
+        def query(self, question, context, subject):
+            if "вопрос" in question.lower():
                 return "Что такое основные принципы демократии?"
-            elif "ответ" in prompt.lower():
+            elif "ответ" in question.lower():
                 return "Демократия - это форма правления, при которой власть принадлежит народу."
-            elif "оцени" in prompt.lower():
+            elif "оцени" in question.lower():
                 return "Ты правильно понял основные идеи! Демократия действительно предполагает народовластие."
             return "Тестовый ответ"
     
