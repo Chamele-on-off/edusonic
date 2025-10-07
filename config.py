@@ -14,7 +14,8 @@ DEFAULT_CONFIG = {
         "provider": "openrouter",
         "max_tokens": 1000,
         "temperature": 0.7,
-        "timeout": 30
+        "timeout": 30,
+        "priority": "local_first"
     },
     "openrouter": {
         "api_key": "",
@@ -212,6 +213,34 @@ def set_llm_mode(mode):
         print("❌ Не удалось сохранить изменения режима LLM")
         return False
 
+def get_llm_priority():
+    """Получение приоритета моделей LLM"""
+    config = load_config()
+    return config.get("llm", {}).get("priority", "local_first")
+
+def set_llm_priority(priority):
+    """Установка приоритета моделей LLM"""
+    valid_priorities = ["local_first", "openrouter_first", "local_only", "openrouter_only"]
+    
+    if priority not in valid_priorities:
+        print(f"❌ Неверный приоритет: {priority}. Допустимые значения: {valid_priorities}")
+        return False
+        
+    config = load_config()
+    
+    if 'llm' not in config:
+        config['llm'] = {}
+    
+    old_priority = config['llm'].get('priority', 'local_first')
+    config['llm']['priority'] = priority
+    
+    if save_config(config):
+        print(f"✅ Приоритет LLM изменен: {old_priority} -> {priority}")
+        return True
+    else:
+        print("❌ Не удалось сохранить изменения приоритета LLM")
+        return False
+
 def get_dialogue_settings():
     """Получение настроек диалога"""
     config = load_config()
@@ -354,6 +383,11 @@ def validate_config():
     if llm_mode not in ['traditional', 'llm_first']:
         errors.append(f"Неверный режим LLM: {llm_mode}")
     
+    # Проверяем приоритет LLM
+    llm_priority = config.get('llm', {}).get('priority')
+    if llm_priority and llm_priority not in ['local_first', 'openrouter_first', 'local_only', 'openrouter_only']:
+        errors.append(f"Неверный приоритет LLM: {llm_priority}")
+    
     # Проверяем настройки диалога
     dialogue_settings = config.get('dialogue_settings', {})
     if not isinstance(dialogue_settings.get('context_window', 0), int):
@@ -426,6 +460,7 @@ if __name__ == "__main__":
     print(f"Config file: {CONFIG_FILE}")
     print(f"Config exists: {CONFIG_FILE.exists()}")
     print(f"LLM Mode: {get_llm_mode()}")
+    print(f"LLM Priority: {get_llm_priority()}")
     print(f"OpenRouter API Key: {'Set' if get_api_key('openrouter') else 'Not set'}")
     print(f"Local LLM Enabled: {LOCAL_LLM_CONFIG.get('enabled', False)}")
     print("=" * 50)
