@@ -19,8 +19,19 @@ import re
 import tempfile
 from local_llm_manager import get_llm_manager
 
+# Настройка SocketIO с правильными таймаутами
 app = Flask(__name__, static_folder='static')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='threading',
+    ping_timeout=60,           # Увеличенный таймаут ping
+    ping_interval=25,          # Более частые ping
+    max_http_buffer_size=1e8,  # Увеличенный размер буфера
+    logger=True,               # Логирование для отладки
+    engineio_logger=True,      # Логирование EngineIO
+    always_connect=True        # Всегда пытаться подключиться
+)
 
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
@@ -52,6 +63,10 @@ room_visualization_queue = defaultdict(list)
 # Флаг активной визуализации для каждой комнаты
 room_visualization_active = defaultdict(bool)
 
+# Очереди ответов LLM для polling
+room_llm_responses = defaultdict(list)
+room_last_poll_time = defaultdict(lambda: 0)
+
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
 
@@ -65,13 +80,28 @@ def setup_llm_manager():
         """Глобальный обработчик ответов от LLM"""
         print(f"🔧 [Global Callback] Получен ответ для комнаты {room_id}: {response[:100]}...")
         
-        # Отправляем ответ через WebSocket
-        socketio.emit('llm_async_response', {
+        # Добавляем ответ в очередь для polling
+        room_llm_responses[room_id].append({
             'request_id': request_id,
             'response': response,
-            'room_id': room_id,
             'timestamp': time.time()
-        }, room=room_id)
+        })
+        
+        # Ограничиваем размер очереди
+        if len(room_llm_responses[room_id]) > 10:
+            room_llm_responses[room_id].pop(0)
+        
+        # Отправляем ответ через WebSocket (если клиент подключен)
+        try:
+            socketio.emit('llm_async_response', {
+                'request_id': request_id,
+                'response': response,
+                'room_id': room_id,
+                'timestamp': time.time()
+            }, room=room_id)
+            print(f"✅ Ответ отправлен через WebSocket в комнату {room_id}")
+        except Exception as e:
+            print(f"⚠️ Не удалось отправить через WebSocket: {e}. Ответ сохранен для polling.")
     
     # Регистрируем глобальный callback
     llm_manager.register_room_callback('global', global_llm_callback)
@@ -175,10 +205,12 @@ def text_to_speech(text, lang='ru'):
 
 @socketio.on('connect')
 def handle_connect():
-    print('Client connected:', request.sid)
+    print(f'✅ Client connected: {request.sid}')
+    emit('connection_established', {'message': 'Connected to server', 'sid': request.sid})
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    print(f'❌ Client disconnected: {request.sid}')
     for room_id in list(room_participants.keys()):
         if request.sid in room_participants[room_id]:
             room_participants[room_id].remove(request.sid)
@@ -1015,6 +1047,7 @@ def handle_get_llm_priority_status(data):
             'status': status
         })
 
+# АСИНХРОННЫЕ ЗАПРОСЫ К LLM
 @socketio.on('async_llm_request')
 def handle_async_llm_request(data):
     """Обработчик асинхронных запросов к LLM"""
@@ -1025,7 +1058,7 @@ def handle_async_llm_request(data):
     
     print(f"📨 [Async LLM] Запрос от комнаты {room_id}")
     
-    # Отправляем запрос в менеджер
+    # Отправляем запрос в менеджер (не блокируем основной поток)
     request_id = llm_manager.submit_request(
         prompt=prompt,
         system_prompt=system_prompt,
@@ -1033,7 +1066,7 @@ def handle_async_llm_request(data):
         room_id=room_id
     )
     
-    # Подтверждаем получение запроса
+    # Немедленно подтверждаем получение запроса
     emit('llm_request_queued', {
         'request_id': request_id,
         'queue_position': llm_manager.get_queue_size(),
@@ -1063,6 +1096,66 @@ def handle_llm_async_response(data):
         
         # Озвучиваем ответ
         speak_text(room_id, response, voice_type='female', is_teacher=True)
+
+# POLLING ДЛЯ LLM ОТВЕТОВ (резервный механизм)
+@app.route('/api/llm/poll_response', methods=['POST'])
+def poll_llm_response():
+    """Polling endpoint для получения ответов от LLM"""
+    try:
+        data = request.json
+        room_id = data.get('room_id', 'default')
+        last_check = data.get('last_check', 0)
+        
+        current_time = time.time()
+        room_last_poll_time[room_id] = current_time
+        
+        # Проверяем новые ответы в очереди
+        if room_id in room_llm_responses and room_llm_responses[room_id]:
+            # Фильтруем ответы, которые пришли после last_check
+            new_responses = [
+                resp for resp in room_llm_responses[room_id] 
+                if resp['timestamp'] > last_check
+            ]
+            
+            if new_responses:
+                # Берем самый свежий ответ
+                latest_response = new_responses[-1]
+                
+                return jsonify({
+                    "success": True,
+                    "has_response": True,
+                    "response": latest_response['response'],
+                    "request_id": latest_response['request_id'],
+                    "timestamp": latest_response['timestamp'],
+                    "total_responses": len(new_responses)
+                })
+        
+        return jsonify({
+            "success": True, 
+            "has_response": False,
+            "timestamp": current_time,
+            "queue_size": len(room_llm_responses.get(room_id, []))
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/llm/clear_queue', methods=['POST'])
+def clear_llm_queue():
+    """Очистка очереди ответов LLM"""
+    try:
+        data = request.json
+        room_id = data.get('room_id', 'default')
+        
+        if room_id in room_llm_responses:
+            room_llm_responses[room_id].clear()
+            
+        return jsonify({
+            "success": True,
+            "message": f"Очередь ответов для комнаты {room_id} очищена"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
@@ -1619,7 +1712,7 @@ def download_practice_txt():
         # Создаем временный zip-файл
         import tempfile
         import zipfile
-        
+    
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
