@@ -315,6 +315,22 @@ def handle_student_answer(data):
             print(f"🔇 Система не ожидает ответа, игнорирую: {answer}")
             return
 
+    # ДОБАВЛЯЕМ ПРОВЕРКУ НА КОМАНДЫ
+    if any(cmd in answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
+        print(f"🔇 Игнорирую команду вместо ответа: {answer}")
+        # Вместо игнорирования, генерируем следующий вопрос
+        if room_id in room_dialogue:
+            next_question = room_dialogue[room_id]._generate_next_practice_question()
+            if next_question:
+                response = f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
+                emit('speech_text', {
+                    'text': f"Учитель: {response}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                speak_text(room_id, response, voice_type='female', is_teacher=True)
+        return
+
     # Добавляем ответ в историю
     room_speech_data[room_id].append({
         'text': f"Ответ ученика: {answer}",
@@ -369,6 +385,12 @@ def handle_student_message(data):
 
     print(f"📝 Получено сообщение от ученика: {message}")
     
+    # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Добавляем ту же проверку, что и для распознанной речи
+    # ИГНОРИРУЕМ сообщение, если учитель говорит
+    if room_teacher_speaking[room_id]:
+        print(f"🔇 Игнорирую сообщение ученика, так как учитель говорит: {message}")
+        return
+
     # Если активна практика, обрабатываем как ответ
     if room_practice_active[room_id]:
         handle_student_answer({
@@ -376,7 +398,8 @@ def handle_student_message(data):
             'answer': message
         })
     else:
-        # Иначе обрабатываем как обычную речь
+        # Иначе обрабатываем как обычную речь - но с той же логикой фильтрации
+        # что и handle_recognized_speech
         handle_recognized_speech({
             'room_id': room_id, 
             'text': message
