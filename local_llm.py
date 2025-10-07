@@ -11,9 +11,9 @@ class LocalLLM:
         
         self.base_url = (base_url or 
                         os.getenv('OLLAMA_HOST') or 
-                        config.get("base_url", "http://ollama:11434"))
+                        config.get("base_url", "http://localhost:11434"))
             
-        self.model = config.get("model", "qwen2.5:3b")  # Qwen вместо Llama
+        self.model = config.get("model", "qwen2.5:3b")
         self.timeout = config.get("timeout", 60)
         self.max_retries = config.get("max_retries", 2)
         self.retry_delay = config.get("retry_delay", 2.0)
@@ -49,6 +49,7 @@ class LocalLLM:
     def generate(self, prompt: str, system_prompt: str = "", max_tokens: int = 1000) -> Optional[str]:
         """Генерация ответа через локальную модель"""
         if not self.enabled:
+            print("🔧 LocalLLM отключен, пропускаем генерацию")
             return None
             
         for attempt in range(self.max_retries):
@@ -67,27 +68,39 @@ class LocalLLM:
                 }
                 
                 print(f"🔧 Запрос к локальной модели {self.model} (попытка {attempt + 1})...")
+                start_time = time.time()
+                
                 response = requests.post(
                     f"{self.base_url}/api/chat",
                     json=data,
                     timeout=self.timeout
                 )
                 
+                request_time = time.time() - start_time
+                print(f"⏱️ Время запроса к локальной модели: {request_time:.2f}с")
+                
                 if response.status_code == 200:
                     result = response.json()
                     if 'message' in result and 'content' in result['message']:
                         content = result['message']['content']
-                        print(f"✅ Локальная модель ответила: {content[:100]}...")
+                        print(f"✅ Локальная модель ответила ({len(content)} символов): {content[:100]}...")
                         return content
                     elif 'response' in result:
                         content = result['response']
-                        print(f"✅ Локальная модель ответила: {content[:100]}...")
+                        print(f"✅ Локальная модель ответила ({len(content)} символов): {content[:100]}...")
                         return content
                     else:
                         print(f"❌ Неожиданный формат ответа: {result}")
+                        # Пробуем извлечь ответ любым способом
+                        if 'choices' in result and len(result['choices']) > 0:
+                            if 'message' in result['choices'][0] and 'content' in result['choices'][0]['message']:
+                                content = result['choices'][0]['message']['content']
+                                print(f"✅ Извлечен ответ из choices: {content[:100]}...")
+                                return content
                 
                 print(f"❌ Локальная модель вернула статус {response.status_code}")
                 if attempt < self.max_retries - 1:
+                    print(f"🔄 Повторная попытка через {self.retry_delay} сек...")
                     time.sleep(self.retry_delay)
                 
             except requests.exceptions.Timeout:
@@ -102,6 +115,7 @@ class LocalLLM:
                     time.sleep(self.retry_delay)
                     continue
         
+        print("❌ Все попытки обращения к локальной модели завершились ошибкой")
         return None
 
     def get_status(self) -> Dict:
@@ -116,7 +130,8 @@ class LocalLLM:
                     "available": True,
                     "model_loaded": model_loaded,
                     "models": [model.get('name') for model in models],
-                    "base_url": self.base_url
+                    "base_url": self.base_url,
+                    "current_model": self.model
                 }
         except Exception as e:
             print(f"❌ Ошибка получения статуса локальной модели: {e}")
@@ -125,7 +140,8 @@ class LocalLLM:
             "available": False,
             "model_loaded": False,
             "models": [],
-            "base_url": self.base_url
+            "base_url": self.base_url,
+            "current_model": self.model
         }
 
 # Глобальный экземпляр для использования
