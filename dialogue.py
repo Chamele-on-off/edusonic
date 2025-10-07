@@ -845,6 +845,7 @@ class DialogueManager:
             return practice_message
 
     def _start_practice_session(self) -> str:
+        """ИСПРАВЛЕННАЯ версия запуска практики"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -854,9 +855,11 @@ class DialogueManager:
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ С ПОСЛЕДОВАТЕЛЬНОЙ ГЕНЕРАЦИЕЙ ===")
         print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
+        # Инициализируем менеджер практики
         lesson_context = " ".join(self.lesson_content)
         self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
+        # Сохраняем практику в файл
         if self.selected_lesson:
             lesson_id = self.selected_lesson.get('id', 'unknown')
             practice_data = {
@@ -866,18 +869,23 @@ class DialogueManager:
             }
             self.practice_manager.save_practice_to_txt(lesson_id, practice_data)
         
+        # Уведомляем клиентов о начале практики
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        first_question = self._generate_next_practice_question()
+        # ГЕНЕРИРУЕМ ПЕРВЫЙ ВОПРОС СИНХРОННО (без ожидания callback)
+        print("🔄 Синхронная генерация первого вопроса практики...")
+        first_question = self.practice_manager.generate_single_question()
+        
         if first_question:
-            print(f"Начинаем практику с вопроса: {first_question}")
-            print(f"Установлен waiting_for_answer: {self.waiting_for_answer}")
+            print(f"✅ Первый вопрос сгенерирован: {first_question}")
+            self.waiting_for_answer = True
+            print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
-            print("Не удалось сгенерировать первый вопрос практики")
+            print("❌ Не удалось сгенерировать первый вопрос практики")
             self.practice_active = False
-            return "Практические задания временно недоступны."
+            return "Практические задания временно недоступны. Давайте продолжим урок или выберем другую тему."
 
     def _generate_next_practice_question(self) -> Optional[str]:
         try:
@@ -907,6 +915,17 @@ class DialogueManager:
         if not self.practice_active:
             print("❌ Практика не активна")
             return "Практика не активна."
+        
+        # ПРОВЕРЯЕМ, НЕ ЯВЛЯЕТСЯ ЛИ ОТВЕТ КОМАНДОЙ
+        if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
+            print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
+            # Вместо игнорирования, генерируем следующий вопрос
+            next_question = self._generate_next_practice_question()
+            if next_question:
+                return f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
+            else:
+                self._end_practice_session()
+                return "Практика завершена."
         
         print(f"🎯 Оценка ответа и генерация следующего вопроса...")
         
