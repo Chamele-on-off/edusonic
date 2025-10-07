@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
         "max_tokens": 1000,
         "temperature": 0.7,
         "timeout": 30,
-        "priority": "local_first"
+        "priority": "openrouter_first"
     },
     "openrouter": {
         "api_key": "",
