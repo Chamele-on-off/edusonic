@@ -44,8 +44,8 @@ class DialogueManager:
         self.practice_active = False
         self.current_question_index = 0
         self.current_expected_answer = ""
-        self.waiting_for_answer = False  # Флаг ожидания ответа ученика
-        self.current_practice_question = None  # Текущий вопрос практики
+        self.waiting_for_answer = False
+        self.current_practice_question = None
         
         # Новые поля для улучшенного диалога
         self.last_subject_prompt_time = 0
@@ -58,13 +58,13 @@ class DialogueManager:
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
         
-        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - УЛУЧШЕННАЯ ЛОГИКА
-        self.visualization_enabled = True  # Флаг визуализации
+        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ
+        self.visualization_enabled = True
         self.last_visualization_time = 0
-        self.visualization_cooldown = 5  # Уменьшена пауза между визуализациями (сек)
-        self.visualization_counter = 0  # Счетчик для чередования визуализаций
-        self.paragraphs_since_last_viz = 0  # Счетчик абзацев с последней визуализации
-        self.viz_paragraph_interval = 2  # Генерировать визуализацию каждые N абзацев
+        self.visualization_cooldown = 5
+        self.visualization_counter = 0
+        self.paragraphs_since_last_viz = 0
+        self.viz_paragraph_interval = 2
         
         self._load_lessons()
         
@@ -208,7 +208,7 @@ class DialogueManager:
                 for sentence in sentences:
                     if sentence.strip():
                         current_paragraph.append(sentence.strip())
-                        if len(current_paragraph) >= 2:  # Группируем по 2-3 предложения
+                        if len(current_paragraph) >= 2:
                             paragraphs.append(' '.join(current_paragraph))
                             current_paragraph = []
                 
@@ -256,7 +256,7 @@ class DialogueManager:
             return ""
             
         context = []
-        for msg in self.conversation_history[-6:]:  # Последние 6 реплик
+        for msg in self.conversation_history[-6:]:
             speaker = "Ученик" if msg["is_user"] else "Учитель"
             context.append(f"{speaker}: {msg['text']}")
         
@@ -300,8 +300,8 @@ class DialogueManager:
         
         return None
 
-    def _handle_llm_dialogue(self, text: str) -> Optional[str]:
-        """Гарантированная обработка диалога через LLM с контекста"""
+    def _handle_llm_dialogue(self, text: str, room_id: str = None) -> Optional[str]:
+        """Гарантированная обработка диалога через LLM с контекстом"""
         try:
             # Собираем контекст диалога
             context = self._get_conversation_context()
@@ -313,36 +313,63 @@ class DialogueManager:
             else:
                 system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
             
-            # ГАРАНТИРОВАННЫЙ запрос к LLM - даже если API ключа нет!
-            llm_response = self.llm._query_llm_api(
-                prompt=text,
-                context=context,
-                subject=self.current_subject or "общее",
-                system_prompt=system_prompt,
-                max_tokens=150
-            )
-            
-            if llm_response:
-                # Ограничиваем длину ответа
-                limited_response = self._limit_response_length(
-                    llm_response, 
-                    self.dialogue_settings.get("max_response_length", 3)
+            # АСИНХРОННЫЙ запрос к локальной модели
+            if room_id and self.socketio:
+                # Используем асинхронный режим с callback
+                def llm_callback(response, r_id):
+                    if response:
+                        limited_response = self._limit_response_length(
+                            response, 
+                            self.dialogue_settings.get("max_response_length", 3)
+                        )
+                        
+                        # Отправляем ответ через WebSocket
+                        self.socketio.emit('llm_dialogue_response', {
+                            'room_id': r_id,
+                            'response': limited_response,
+                            'original_text': text
+                        }, room=r_id)
+                
+                # Асинхронный запрос - не блокируем основной поток
+                self.llm._query_llm_api(
+                    prompt=text,
+                    context=context,
+                    subject=self.current_subject or "общее",
+                    system_prompt=system_prompt,
+                    max_tokens=150,
+                    room_id=room_id,
+                    callback=llm_callback
                 )
                 
-                return limited_response
+                return None  # Ответ придет асинхронно
                 
+            else:
+                # Синхронный режим для обратной совместимости
+                llm_response = self.llm._query_llm_api(
+                    prompt=text,
+                    context=context,
+                    subject=self.current_subject or "общее",
+                    system_prompt=system_prompt,
+                    max_tokens=150
+                )
+                
+                if llm_response:
+                    limited_response = self._limit_response_length(
+                        llm_response, 
+                        self.dialogue_settings.get("max_response_length", 3)
+                    )
+                    return limited_response
+                    
         except Exception as e:
             print(f"Ошибка запроса к LLM для диалога: {e}")
-            # При ошибке возвращаем естественный ответ, а не сообщение об ошибке
         
-        # Fallback если LLM не ответил - предлагаем выбор предмета
         return self._get_subject_selection_prompt()
 
     def _get_subject_selection_prompt(self) -> Optional[str]:
         """Возвращает предложение выбора предмета с учетом кд"""
         current_time = time.time()
         if current_time - self.last_subject_prompt_time < self.subject_prompt_cooldown:
-            return None  # Не предлагать выбор слишком часто
+            return None
         
         self.last_subject_prompt_time = current_time
         subjects = self.get_available_subjects()
@@ -452,7 +479,7 @@ class DialogueManager:
                 context="",
                 subject="общее",
                 system_prompt=system_prompt,
-                max_tokens=2500  # Увеличиваем лимит токенов
+                max_tokens=2500
             )
             
             if not lesson_content:
@@ -462,10 +489,8 @@ class DialogueManager:
             print(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
             
             # Убедимся, что есть правильное разделение на абзацы
-            # Если в ответе нет двойных переводов строк, добавим их после предложений
             if '\n\n' not in lesson_content:
                 print("⚠️ В ответе нет двойных переводов строк, добавляем...")
-                # Разбиваем на предложения и добавляем двойные переводы строк
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
                 lesson_content = '\n\n'.join(sentences)
             
@@ -532,15 +557,12 @@ class DialogueManager:
             match = re.search(pattern, text_lower)
             if match:
                 topic = match.group(1).strip()
-                # Удаляем возможные вопросительные слова в конце
                 topic = re.sub(r'[.?]$', '', topic)
                 if topic and len(topic) > 2:
                     print(f"Обнаружен запрос на генерацию урока по теме: '{topic}'")
-                    # Пытаемся сгенерировать урок
                     generated_lesson = self.generate_lesson_on_demand(topic)
                     if generated_lesson:
                         print(f"Урок успешно сгенерирован: {generated_lesson['id']}")
-                        # ВАЖНО: Сразу начинаем сгенерированный урок!
                         self._start_generated_lesson(generated_lesson)
                         return True
                     else:
@@ -605,38 +627,31 @@ class DialogueManager:
         return has_trigger or has_structure
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация визуализации для текста - УЛУЧШЕННАЯ ВЕРСИЯ"""
+        """Генерация визуализации для текста"""
         if not self.visualization_enabled or not text.strip():
             return
     
-        # ПРОВЕРКА: Не генерируем визуализации слишком часто
         current_time = time.time()
         if current_time - self.last_visualization_time < self.visualization_cooldown:
             return
         
-        # УВЕЛИЧИВАЕМ счетчик абзацев
         self.paragraphs_since_last_viz += 1
         
-        # Генерируем визуализацию только для каждого 2-го абзаца ИЛИ если есть явные триггеры
         should_generate = (self.paragraphs_since_last_viz >= self.viz_paragraph_interval or 
                           self._has_visualization_triggers(text))
         
         if should_generate:
             try:
-                # Обновляем время последней визуализации
                 self.last_visualization_time = current_time
                 self.paragraphs_since_last_viz = 0
                 self.visualization_counter += 1
                 
                 print(f"🎨 Генерация визуализации для: {text[:100]}...")
                 
-                # НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ через LLM
                 if self.room_id and self.socketio:
-                    # Используем существующий LLM для генерации
                     viz_result = self.llm.generate_visualization(text, context)
                     
                     if viz_result and viz_result.get("success"):
-                        # Отправляем готовую визуализацию через WebSocket
                         self.socketio.emit('visualization_generated', {
                             'room_id': self.room_id,
                             'topic': text[:100],
@@ -663,11 +678,9 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ (всегда приоритет)
         continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
         recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
         
-        # Если урок начат и это команда продолжения
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands + recorded_commands):
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
@@ -675,10 +688,8 @@ class DialogueManager:
             else:
                 return "Урок завершен. Переходим к практике."
         
-        # Добавляем в историю диалога ВСЕГДА
         self._add_to_conversation_history(text, is_user=True)
         
-        # 1. Если урок уже начат - используем стандартную логику (ПЕРВОЕ условие!)
         if self.lesson_started:
             handler = self.dialogue_states.get(self.current_state)
             if handler:
@@ -688,42 +699,33 @@ class DialogueManager:
                     return response
             return None
         
-        # 2. ПРОВЕРКА НА КОМАНДУ ГЕНЕРАЦИИ УРОКА (только если урок не начат)
         generated_lesson = self._check_for_lesson_generation_intent(text_lower)
         if generated_lesson:
-            # Урок уже начат в _start_generated_lesson, возвращаем None для чтения первого абзаца
             return None
         
-        # 3. Если пользователь называет предмет - автоматически начинаем урок
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower and len(subject) > 3:
                 print(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
         
-        # 4. Если ждем ответ на вопрос практики - обрабатываем как ответ
         if self.practice_active and self.waiting_for_answer:
             return self._handle_practice_answer(text)
         
-        # 5. Поиск в диалоговых шаблонах (до выбора урока)
         dialogue_response = self._get_dialogue_response(text_lower)
         if dialogue_response:
-            # ДОБАВЛЯЕМ предложение выбора предмета к любому ответу
             final_response = self._add_subject_suggestion(dialogue_response)
             if final_response:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
-        # 6. ГАРАНТИРОВАННЫЙ запрос к LLM если не найден в шаблонах
         llm_response = self._handle_llm_dialogue(text)
         if llm_response:
-            # ДОБАВЛЯЕМ предложение выбора предмета к ответу LLM
             final_response = self._add_subject_suggestion(llm_response)
             if final_response:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
-        # 7. Финальный fallback с предложением выбора предмета
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
             self._add_to_conversation_history(fallback_response, is_user=False)
@@ -732,9 +734,8 @@ class DialogueManager:
         return None
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """Прямая обработка выбора предмета (без поиска в базе знаний)"""
+        """Прямая обработка выбора предмета"""
         self.current_subject = subject
-        # Автоматически выбираем первый доступный урок (демо-урок если есть)
         lessons = self.lessons.get(subject, [])
         demo_lessons = [l for l in lessons if l.get('is_demo', False)]
         
@@ -743,7 +744,6 @@ class DialogueManager:
         elif lessons:
             self.selected_lesson = lessons[0]
         else:
-            # Создаем временный урок
             self.selected_lesson = {
                 'id': f"demo_{subject}",
                 'title': f"Демо-урок по {subject}",
@@ -757,14 +757,11 @@ class DialogueManager:
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
         
-        # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
         self.enable_visualization()
         
-        # Очищаем историю диалога при начале урока
         self.conversation_history = []
         self.conversation_context = []
         
-        # Возвращаем None, чтобы сразу начать чтение урока без подтверждения
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
@@ -778,17 +775,14 @@ class DialogueManager:
     def _handle_subject_selection(self, text: str) -> Optional[str]:
         subjects = self.get_available_subjects()
         
-        # Поиск по названию предмета
         for subject in subjects:
             if subject.lower() in text.lower():
                 return self._handle_subject_selection_direct(subject)
                 
-        # Возврат к приветствию
         if any(word in text for word in ["назад", "вернуться", "сначала"]):
             self.current_state = "greeting"
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
-        # Если пользователь просто говорит "да" или соглашается
         if any(word in text for word in ["да", "ага", 'угу', "ладно", "хорошо"]):
             prompt = self._get_subject_selection_prompt()
             return prompt if prompt else "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
@@ -796,7 +790,6 @@ class DialogueManager:
         return None
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
-        """Обработка во время чтения урока"""
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
             self.lesson_started = False
             self.current_state = "greeting"
@@ -806,11 +799,9 @@ class DialogueManager:
             self.conversation_context = []
             return "Урок остановлен. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
             
-        # Если это не команда управления чтением, обрабатываем как вопрос
         return None
 
     def _handle_practice_session(self, text: str) -> Optional[str]:
-        """Обработка во время фазы практики"""
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
             self.practice_active = False
             self.waiting_for_answer = False
@@ -819,50 +810,41 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
-            # Отправляем событие завершения практики
             if self.room_id:
                 self.socketio.emit('practice_ended', {'room_id': self.room_id})
             
             return "Практика остановлена. Скажите 'привет' когда захотите продолжить или выбрать новый урок."
             
-        # Если ждем ответ, обрабатываем как ответ на вопрос практики
         if self.waiting_for_answer:
             return self._handle_practice_answer(text)
             
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
-        """Возвращает следующий абзац урока с возможной визуализацией"""
         print(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
-            # УСИЛЕННАЯ ЛОГИКА: ВИЗУАЛИЗАЦИЯ ТОЛЬКО ЕСЛИ ЕСТЬ КОНТЕНТ И ВКЛЮЧЕНА
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
                 
-                # Добавляем небольшую задержку перед генерацией визуализации
-                # чтобы не блокировать основной поток озвучивания
                 def delayed_visualization():
-                    time.sleep(0.5)  # Задержка для приоритета озвучивания
+                    time.sleep(0.5)
                     context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
                     self._generate_visualization(paragraph, context)
                 
-                # Запускаем в отдельном потоке чтобы не блокировать озвучивание
                 threading.Thread(target=delayed_visualization, daemon=True).start()
             
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
         else:
-            # Урок завершен - запускаем практику
             print("🏁 Урок завершен, запускаем практику")
             practice_message = self._start_practice_session()
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """Запускает фазу практики с последовательной генерацией вопросов"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -872,14 +854,11 @@ class DialogueManager:
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ С ПОСЛЕДОВАТЕЛЬНОЙ ГЕНЕРАЦИЕЙ ===")
         print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
-        # Инициализируем контекст для генерации вопросов
         lesson_context = " ".join(self.lesson_content)
         self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
-        # Сохраняем практику в TXT файл
         if self.selected_lesson:
             lesson_id = self.selected_lesson.get('id', 'unknown')
-            # Создаем базовую структуру практики для сохранения
             practice_data = {
                 'questions': [],
                 'lesson_id': lesson_id,
@@ -887,11 +866,9 @@ class DialogueManager:
             }
             self.practice_manager.save_practice_to_txt(lesson_id, practice_data)
         
-        # Отправляем событие начала практики
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # Генерируем и возвращаем ПЕРВЫЙ вопрос
         first_question = self._generate_next_practice_question()
         if first_question:
             print(f"Начинаем практику с вопроса: {first_question}")
@@ -903,18 +880,15 @@ class DialogueManager:
             return "Практические задания временно недоступны."
 
     def _generate_next_practice_question(self) -> Optional[str]:
-        """Генерирует следующий вопрос практики через LLM"""
         try:
-            # Генерируем вопрос на основе контекста урока
             question = self.practice_manager.generate_single_question()
             if question:
                 self.current_practice_question = {
                     "id": self.current_question_index + 1,
                     "question": question,
-                    "answer": ""  # Ответ будет сгенерирован при проверке
+                    "answer": ""
                 }
                 self.current_question_index += 1
-                # ВАЖНО: Устанавливаем флаг ожидания ответа!
                 self.waiting_for_answer = True
                 print(f"✅ Сгенерирован вопрос {self.current_question_index}: {question}")
                 print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
@@ -927,7 +901,6 @@ class DialogueManager:
             return None
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
-        """Оценивает ответ и генерирует следующий вопрос (новый метод)"""
         print(f"🔍 Обработка ответа: '{student_answer}'")
         print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
@@ -937,13 +910,11 @@ class DialogueManager:
         
         print(f"🎯 Оценка ответа и генерация следующего вопроса...")
         
-        # Получаем текущий вопрос
         current_question = self.current_practice_question
         if not current_question:
             self._end_practice_session()
             return "Практика завершена."
         
-        # Оцениваем ответ ученика и получаем обратную связь
         evaluation = self.practice_manager.evaluate_single_answer(
             student_answer, 
             current_question["question"]
@@ -951,8 +922,7 @@ class DialogueManager:
         
         print(f"📝 Оценка: {evaluation}")
         
-        # Проверяем, нужно ли генерировать следующий вопрос
-        if self.current_question_index < 5:  # Всего 5 вопросов
+        if self.current_question_index < 5:
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
@@ -960,28 +930,23 @@ class DialogueManager:
                 print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
                 return response
             else:
-                # Не удалось сгенерировать следующий вопрос
                 print("❌ Не удалось сгенерировать следующий вопрос")
                 self._end_practice_session()
                 return f"{evaluation}. Практика завершена - возникли трудности с генерацией вопросов."
         else:
-            # Достигли лимита вопросов
             print("🏁 Достигнут лимит вопросов (5)")
             self._end_practice_session()
             return f"{evaluation}. Практика завершена! Вы ответили на все 5 вопросов. Отличная работа!"
 
     def _handle_practice_answer(self, text: str) -> str:
-        """Обработчик ответов во время практики"""
         return self._evaluate_and_generate_next(text)
 
     def _end_practice_session(self):
-        """Корректно завершает сессию практики"""
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
         self.practice_manager.reset()
         
-        # ВАЖНО: Сбрасываем состояние урока, чтобы можно было начать новый
         self.lesson_started = False
         self.selected_lesson = None
         self.current_subject = None
@@ -993,140 +958,111 @@ class DialogueManager:
         print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
-        """Обработка вопросов во время урока с учетом выбранного режима"""
         if not question.strip():
             return "Повторите вопрос пожалуйста, я не расслышал."
             
         question_lower = question.lower().strip()
         
-        # АВТОМАТИЧЕСКАЯ ГЕНЕРАЦИЯ ВИЗУАЛИЗАЦИИ ДЛЯ ВОПРОСОВ
         if self.visualization_enabled:
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
             self._generate_visualization(question, context)
         
-        # НЕМЕДЛЕННАЯ обработка вопроса (без асинхронности)
         print(f"Немедленная обработка вопроса: '{question}'")
         final_response = None
         
-        # Режим "LLM в первую очередь"
         if self.llm_query_mode == "llm_first":
             print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
             
-            # 1. Сначала пробуем запрос к LLM
             current_context = ""
             if self.lesson_content and self.current_paragraph > 0:
-                # Берем текущий и предыдущий абзацы для контекста
                 context_start = max(0, self.current_paragraph - 2)
                 current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
             
             llm_response = self.llm.query(question, current_context, self.current_subject)
             if llm_response and not llm_response.startswith("Интересный вопрос!"):
-                # Сохраняем ответ и возвращаем его
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
                 if self.knowledge_base and self._should_save_to_knowledge_base(question):
-                    # Сохраняем ответ в базу знаний для будущего использования
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
-                    # Сохраняем в диалоговую базу
                     self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
                 print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
                 final_response = llm_response
             
-            # 2. Если LLM не дал ответ, проверяем базу знаний
             if not final_response and self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                     print(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
                     final_response = knowledge_response
             
-            # 3. Проверяем базу ответов LLM
             if not final_response and self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
                     print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
                     final_response = llm_answer
         
-        # Традиционный режим (оригинальная логика)
         else:
             print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
             
-            # 1. Сначала проверяем базу знаний по предмету
             if self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
                     final_response = knowledge_response
             
-            # 2. Быстрая проверка локальных шаблонов
             if not final_response:
                 for pattern, responses in self.local_patterns.items():
                     if pattern in question_lower:
                         final_response = random.choice(responses)
                         break
             
-            # 3. Проверка диалоговых шаблонов из базы знаний
             if not final_response and self.knowledge_base:
                 dialogue_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if dialogue_response:
                     final_response = dialogue_response
             
-            # 4. Поиск в предметной базе знаний с повышенным порогом схожести
             if not final_response and self.knowledge_base:
                 answer = self.knowledge_base.find_answer(question, threshold=0.5)
                 if answer and not answer.startswith("Интересный вопрос!"):
                     final_response = answer
             
-            # 5. Проверяем базу ответов LLM с высокой точностью (порог 0.8)
             if not final_response and self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
                     print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
                     final_response = llm_answer
             
-            # 6. Запрос к LLM с контекстом текущего урока
             if not final_response:
                 current_context = ""
                 if self.lesson_content and self.current_paragraph > 0:
-                    # Берем текущий и предыдущий абзацы для контекста
                     context_start = max(0, self.current_paragraph - 2)
                     current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
                 
                 llm_response = self.llm.query(question, current_context, self.current_subject)
                 if llm_response:
-                    # Сохраняем в кэш LLM и базу знаний ответов
                     self.llm.add_to_cache(question, llm_response, self.current_subject)
                     if self.knowledge_base and self._should_save_to_knowledge_base(question):
-                        # Сохраняем ответ в базу знаний для будущего использования
                         self.knowledge_base.add_llm_answer(question, llm_response)
                         self.knowledge_base.add_knowledge(question=question, answer=llm_response)
-                        # Сохраняем в диалоговую базу
                         self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
                     final_response = llm_response
         
-        # 7. Финальный fallback
         if not final_response:
             final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
-        # Возвращаем ответ сразу для озвучивания
         return final_response
 
     def get_selected_lesson(self) -> Optional[dict]:
-        """Возвращает данные выбранного урока"""
         return self.selected_lesson
 
     def is_lesson_started(self) -> bool:
-        """Проверяет, начат ли урок"""
         return self.lesson_started
 
     def get_current_subject(self) -> Optional[str]:
-        """Возвращает текущий предмет"""
         return self.current_subject
 
     def get_current_state(self) -> str:
-        """Возвращает текущее состояние диалога"""
         return self.current_state
 
     def reset(self):
-        """Сброс состояния диалога"""
         self.current_state = "greeting"
         self.current_subject = None
         self.selected_lesson = None
@@ -1142,30 +1078,24 @@ class DialogueManager:
         self.current_question_index = 0
 
     def get_available_subjects(self) -> List[str]:
-        """Возвращает список доступных предметов"""
         subjects = list(self.lessons.keys())
-        # Всегда добавляем обществознание, даже если нет уроков
         if "обществознание" not in subjects:
             subjects.append("обществознание")
         return subjects
 
     def get_lessons_for_subject(self, subject: str) -> List[dict]:
-        """Возвращает уроки для указанного предмета"""
         return self.lessons.get(subject, [])
 
     def set_llm_model(self, model: str):
-        """Установка модели LLM"""
         self.llm.set_model(model)
         print(f"Установлена модель LLM: {model}")
 
     def set_llm_mode(self, mode: str):
-        """Установка режима запросов к LLM"""
         if mode in ["traditional", "llm_first"]:
             self.llm_query_mode = mode
             print(f"Установлен режим LLM: {mode}")
 
     def get_knowledge_stats(self) -> Optional[Dict]:
-        """Получение статистики базы знаний"""
         if self.knowledge_base:
             return self.knowledge_base.get_stats()
         return None
