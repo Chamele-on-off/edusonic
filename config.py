@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
         "max_tokens": 1000,
         "temperature": 0.7,
         "timeout": 30,
-        "priority": "openrouter_first"
+        "priority": "local_first"
     },
     "openrouter": {
         "api_key": "",
@@ -26,8 +26,8 @@ DEFAULT_CONFIG = {
     },
     "local_llm": {
         "enabled": True,
-        "base_url": "http://ollama:11434",
-        "model": "qwen2.5:1.5b",
+        "base_url": "http://localhost:11434",
+        "model": "qwen2.5:3b",
         "timeout": 60,
         "max_retries": 2
     },
