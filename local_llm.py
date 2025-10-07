@@ -9,12 +9,11 @@ class LocalLLM:
     def __init__(self, base_url: str = None):
         config = get_local_llm_settings()
         
-        # Приоритет: переменная окружения -> параметр -> конфиг
         self.base_url = (base_url or 
                         os.getenv('OLLAMA_HOST') or 
                         config.get("base_url", "http://ollama:11434"))
             
-        self.model = config.get("model", "llama3.2:3b")
+        self.model = config.get("model", "qwen2.5:3b")  # Qwen вместо Llama
         self.timeout = config.get("timeout", 60)
         self.max_retries = config.get("max_retries", 2)
         self.retry_delay = config.get("retry_delay", 2.0)
