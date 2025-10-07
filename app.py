@@ -25,8 +25,8 @@ socketio = SocketIO(
     app, 
     cors_allowed_origins="*", 
     async_mode='threading',
-    ping_timeout=500,           # Увеличенный таймаут ping
-    ping_interval=25,          # Более частые ping
+    ping_timeout=15000,           # Увеличенный таймаут ping
+    ping_interval=40,          # Более частые ping
     max_http_buffer_size=1e8,  # Увеличенный размер буфера
     logger=True,               # Логирование для отладки
     engineio_logger=True,      # Логирование EngineIO
