@@ -13,7 +13,7 @@ class LocalLLM:
                         os.getenv('OLLAMA_HOST') or 
                         config.get("base_url", "http://localhost:11434"))
             
-        self.model = config.get("model", "qwen2.5:3b")
+        self.model = config.get("model", "qwen2.5:1.5b")
         self.timeout = config.get("timeout", 60)
         self.max_retries = config.get("max_retries", 2)
         self.retry_delay = config.get("retry_delay", 2.0)
