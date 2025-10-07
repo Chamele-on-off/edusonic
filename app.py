@@ -10,7 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode
+from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_llm_priority, set_llm_priority
 import requests
 import json
 from datetime import datetime
@@ -841,36 +841,38 @@ def set_llm_priority():
     try:
         data = request.json
         priority = data.get('priority')
-        room_id = data.get('room_id', 'default')
         
-        valid_priorities = ["local_first", "openrouter_first", "local_only", "openrouter_only"]
+        if not priority:
+            return jsonify({"success": False, "error": "Priority not specified"})
         
-        if priority not in valid_priorities:
-            return jsonify({
-                "success": False, 
-                "error": f"Invalid priority. Use: {valid_priorities}"
-            })
+        # Сохраняем в конфигурацию
+        success = set_llm_priority(priority)
         
-        if room_id in room_dialogue:
-            room_dialogue[room_id].llm.set_priority(priority)
-            
-            # Обновляем для всех комнат если указано
-            if data.get('apply_to_all', False):
-                for rid in room_dialogue:
-                    room_dialogue[rid].llm.set_priority(priority)
-            
-            status = room_dialogue[room_id].llm.get_priority_status()
+        if success:
+            # Обновляем для всех активных комнат
+            for room_id in room_dialogue:
+                room_dialogue[room_id].llm.set_priority(priority)
             
             return jsonify({
                 "success": True,
-                "priority": priority,
-                "room": room_id,
-                "status": status,
-                "message": f"Приоритет установлен: {priority}"
+                "message": f"Приоритет успешно изменен на '{priority}'",
+                "priority": priority
             })
-        
-        return jsonify({"success": False, "error": "Room not found"})
-    
+        else:
+            return jsonify({"success": False, "error": "Failed to save priority"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/llm/priority', methods=['GET'])
+def get_llm_priority():
+    """Получение текущего приоритета моделей LLM"""
+    try:
+        priority = get_llm_priority()
+        return jsonify({
+            "success": True,
+            "priority": priority
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
