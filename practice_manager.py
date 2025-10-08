@@ -27,18 +27,20 @@ class PracticeManager:
         print(f"🎯 Инициализирована генерация практики для предмета: {subject}")
 
     def generate_single_question(self) -> Optional[str]:
-        """Генерирует один вопрос на основе контекста урока"""
+        """Генерирует один вопрос на основе контекста урока с увеличенным таймаутом"""
         try:
             # Проверяем лимит вопросов
             if len(self.generated_questions) >= self.max_questions:
                 print("🏁 Достигнут лимит вопросов")
                 return None
             
+            print(f"🔄 Генерация вопроса {len(self.generated_questions) + 1}/{self.max_questions}...")
+            
             # УПРОЩЕННЫЙ промпт для надежности
             prompt = f"""
             Создай один учебный вопрос для проверки понимания темы: {self.current_subject}
             
-            Контекст: {self.current_lesson_context[:500]}
+            Контекст: {self.current_lesson_context[:800]}
             
             Требования:
             - Один четкий вопрос
@@ -49,33 +51,55 @@ class PracticeManager:
             Верни только текст вопроса.
             """
             
-            # СИНХРОННЫЙ запрос к LLM
-            llm_response = self.llm.query(
-                question=prompt,
-                context="",
-                subject=self.current_subject
-            )
-            
-            if llm_response and not llm_response.startswith("Спасибо за вопрос!"):
-                # Очищаем ответ
-                question = self._clean_question_text(llm_response)
-                
-                if question and len(question.strip()) > 10:
-                    print(f"✅ Сгенерирован вопрос: {question}")
+            # ДОБАВЛЯЕМ ТАЙМАУТ И ПОВТОРНЫЕ ПОПЫТКИ
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    print(f"📨 Попытка {attempt + 1}/{max_attempts} запроса к LLM...")
                     
-                    # Сохраняем в историю
-                    self.generated_questions.append({
-                        "question": question,
-                        "generated_at": time.time()
-                    })
+                    # СИНХРОННЫЙ запрос к LLM с увеличенным таймаутом
+                    llm_response = self.llm.query(
+                        question=prompt,
+                        context="",
+                        subject=self.current_subject
+                    )
                     
-                    return question
+                    if llm_response and not llm_response.startswith("Спасибо за вопрос!"):
+                        # Очищаем ответ
+                        question = self._clean_question_text(llm_response)
+                        
+                        if question and len(question.strip()) > 10:
+                            print(f"✅ Вопрос сгенерирован: {question[:100]}...")
+                            
+                            # Сохраняем в историю
+                            self.generated_questions.append({
+                                "question": question,
+                                "generated_at": time.time()
+                            })
+                            
+                            return question
+                        else:
+                            print(f"⚠️ Сгенерирован пустой или слишком короткий вопрос")
+                    
+                    # Если ответ не получен, ждем и пробуем снова
+                    if attempt < max_attempts - 1:
+                        wait_time = (attempt + 1) * 5  # Увеличивающаяся задержка
+                        print(f"⏳ Ожидание {wait_time} сек перед повторной попыткой...")
+                        time.sleep(wait_time)
+                        
+                except Exception as e:
+                    print(f"❌ Ошибка при попытке {attempt + 1}: {e}")
+                    if attempt < max_attempts - 1:
+                        wait_time = (attempt + 1) * 5
+                        print(f"⏳ Ожидание {wait_time} сек перед повторной попыткой...")
+                        time.sleep(wait_time)
             
-            # Fallback если LLM не сработал
+            # Fallback если все попытки не удались
+            print("❌ Все попытки генерации вопроса провалились, использую fallback")
             return self._get_fallback_question()
                 
         except Exception as e:
-            print(f"❌ Ошибка генерации вопроса: {e}")
+            print(f"❌ Критическая ошибка генерации вопроса: {e}")
             return self._get_fallback_question()
 
     def evaluate_single_answer(self, student_answer: str, question: str) -> str:
