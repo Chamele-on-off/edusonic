@@ -891,7 +891,7 @@ def handle_generate_visualization(data):
 
 # НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЛОКАЛЬНОЙ LLM
 @app.route('/api/llm/priority', methods=['POST'])
-def set_llm_priority():
+def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
     """Установка приоритета моделей LLM"""
     try:
         data = request.json
@@ -920,7 +920,7 @@ def set_llm_priority():
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['GET'])
-def get_llm_priority():
+def get_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
     """Получение текущего приоритета моделей LLM"""
     try:
         priority = get_llm_priority()
