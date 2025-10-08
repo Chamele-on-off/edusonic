@@ -25,7 +25,11 @@ class LLMIntegration:
         self.last_request_time = 0
         self.request_delay = 1.0
         self.max_retries = 3
-        self.retry_delay = 2.0
+        
+        # УВЕЛИЧЕННЫЕ ТАЙМАУТЫ
+        self.timeout = 120  # 2 минуты для локальной модели
+        self.request_timeout = 60  # 1 минута для OpenRouter
+        self.retry_delay = 5.0  # Увеличиваем задержку между попытками
         
         # Менеджер локальной LLM
         self.llm_manager = get_llm_manager()
@@ -128,7 +132,7 @@ class LLMIntegration:
             self.pending_requests[request_id] = callback
             return None
             
-        # Синхронный режим с таймаутом
+        # Синхронный режим с увеличенным таймаутом
         else:
             response_queue = queue.Queue()
             
@@ -145,7 +149,8 @@ class LLMIntegration:
             )
             
             try:
-                response = response_queue.get(timeout=25)
+                # УВЕЛИЧИВАЕМ ТАЙМАУТ ДО 120 СЕКУНД
+                response = response_queue.get(timeout=120)
                 self.llm_manager.unregister_room_callback(room_id)
                 return response
             except queue.Empty:
@@ -207,7 +212,7 @@ class LLMIntegration:
                         self.api_url,
                         headers=headers,
                         json=data,
-                        timeout=30
+                        timeout=self.request_timeout  # Используем увеличенный таймаут
                     )
                     
                     self.last_request_time = time.time()
@@ -684,7 +689,7 @@ class LLMIntegration:
     def get_available_models(self) -> list:
         """Получение списка доступных моделей"""
         return [
-            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
+            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрае модель от Meta"},
             {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
             {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
         ]
