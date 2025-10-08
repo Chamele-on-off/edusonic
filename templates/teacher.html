@@ -963,8 +963,7 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    room_id: currentRoom,
-                    priority: priority
+                    priority: priority  // УБРАН room_id
                 })
             })
             .then(response => response.json())
