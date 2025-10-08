@@ -13,13 +13,15 @@ class LocalLLM:
                         os.getenv('OLLAMA_HOST') or 
                         config.get("base_url", "http://localhost:11434"))
             
-        self.model = config.get("model", "qwen2.5:1.5b")
-        self.timeout = config.get("timeout", 60)
-        self.max_retries = config.get("max_retries", 2)
-        self.retry_delay = config.get("retry_delay", 2.0)
+        self.model = config.get("model", "qwen2.5:3b")
+        # УВЕЛИЧИВАЕМ ТАЙМАУТ ДО 3 МИНУТ ДЛЯ ГЕНЕРАЦИИ ВОПРОСОВ
+        self.timeout = 180  # 3 минуты для генерации вопросов
+        self.max_retries = 2
+        self.retry_delay = 3.0
         self.enabled = config.get("enabled", True)
         
         print(f"🔧 LocalLLM инициализирован с URL: {self.base_url}")
+        print(f"⏱️ Таймаут установлен: {self.timeout} секунд")
         
     def is_available(self) -> bool:
         """Проверяет доступность локальной модели"""
@@ -73,7 +75,7 @@ class LocalLLM:
                 response = requests.post(
                     f"{self.base_url}/api/chat",
                     json=data,
-                    timeout=self.timeout
+                    timeout=self.timeout  # Используем увеличенный таймаут
                 )
                 
                 request_time = time.time() - start_time
