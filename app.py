@@ -153,6 +153,12 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
 
 @app.route('/')
 def home():
+    """Основная страница - лендинг"""
+    return render_template('landing.html')
+
+@app.route('/teacher')
+def teacher():
+    """Страница учителя (личный кабинет)"""
     return render_template('teacher.html')
 
 @app.route('/conference')
