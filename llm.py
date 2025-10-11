@@ -161,9 +161,9 @@ class LLMIntegration:
     def _handle_openrouter_request(self, prompt: str, context: str, subject: str,
                                   system_prompt: str, max_tokens: int,
                                   room_id: str, callback: Callable) -> Optional[str]:
-        """Обработка запроса через OpenRouter с УЛУЧШЕННОЙ логикой"""
+        """Обработка запроса через OpenRouter с УЛУЧШЕННОЙ логикой доступности"""
         
-        # УЛУЧШЕННАЯ ПРОВЕРКА ДОСТУПНОСТИ - наличие сохраненного ключа достаточно
+        # УПРОЩЕННАЯ ПРОВЕРКА ДОСТУПНОСТИ - наличие ключа достаточно
         if not self.api_key or not self.api_key.strip():
             print("❌ [LLM] OpenRouter API ключ не установлен или пустой")
             return None if callback else self._get_fallback_response(prompt, subject)
@@ -216,7 +216,7 @@ class LLMIntegration:
                         self.api_url,
                         headers=headers,
                         json=data,
-                        timeout=self.request_timeout  # Используем увеличенный таймаут
+                        timeout=self.request_timeout
                     )
                     
                     self.last_request_time = time.time()
@@ -248,10 +248,8 @@ class LLMIntegration:
                         
                     elif response.status_code == 401:
                         print(f"❌ [LLM] Ошибка аутентификации OpenRouter (неверный API ключ)")
-                        if attempt < self.max_retries - 1:
-                            time.sleep(self.retry_delay)
-                            continue
-                        return self._get_fallback_response(prompt, subject)
+                        # Помечаем OpenRouter как недоступный для этого запроса
+                        return None if callback else self._get_fallback_response(prompt, subject)
                         
                     else:
                         print(f"❌ [LLM] Ошибка OpenRouter: {response.status_code}")
@@ -281,9 +279,9 @@ class LLMIntegration:
         return self._get_fallback_response(prompt, subject)
 
     def _test_openrouter_connection(self) -> bool:
-        """Проверка доступности OpenRouter API - УПРОЩЕННАЯ ВЕРСИЯ"""
+        """УПРОЩЕННАЯ проверка доступности OpenRouter API"""
         # Теперь считаем, что наличие ключа достаточно для доступности
-        # Фактическую проверку соединения делаем только при запросах
+        # Фактическую проверку соединения делаем только при реальных запросах
         return bool(self.api_key and self.api_key.strip())
 
     def _get_fallback_response(self, prompt: str, subject: str = "") -> str:
@@ -395,7 +393,9 @@ class LLMIntegration:
     def get_priority_status(self) -> Dict:
         """Получение статуса приоритетов"""
         local_available = self.llm_manager.local_llm.is_available()
-        openrouter_available = bool(self.api_key)
+        
+        # УПРОЩЕННАЯ ПРОВЕРКА OPENROUTER - наличие ключа = доступен
+        openrouter_available = bool(self.api_key and self.api_key.strip())
         
         return {
             "current_priority": self.priority_mode,
@@ -406,25 +406,29 @@ class LLMIntegration:
         }
     
     def _get_effective_priority(self) -> str:
-        """Фактический приоритет с учетом доступности"""
+        """Фактический приоритет с учетом доступности - УПРОЩЕННАЯ ВЕРСИЯ"""
         local_available = self.llm_manager.local_llm.is_available()
-        openrouter_available = bool(self.api_key)
         
-        if self.priority_mode == "local_only" and not local_available:
-            return "fallback"
-        elif self.priority_mode == "openrouter_only" and not openrouter_available:
-            return "fallback"
-        elif self.priority_mode == "local_first" and not local_available and openrouter_available:
-            return "openrouter_only"
-        elif self.priority_mode == "openrouter_first" and not openrouter_available and local_available:
+        # УПРОЩЕННАЯ ПРОВЕРКА OPENROUTER - наличие ключа = доступен
+        openrouter_available = bool(self.api_key and self.api_key.strip())
+        
+        if self.priority_mode == "local_only":
             return "local_only"
+        elif self.priority_mode == "openrouter_only":
+            return "openrouter_only" if openrouter_available else "fallback"
+        elif self.priority_mode == "local_first":
+            return "local_first" if local_available else ("openrouter_only" if openrouter_available else "fallback")
+        elif self.priority_mode == "openrouter_first":
+            return "openrouter_first" if openrouter_available else ("local_only" if local_available else "fallback")
         else:
             return self.priority_mode
 
     def get_llm_status(self) -> Dict:
-        """Получение статуса моделей"""
+        """Получение статуса моделей с УПРОЩЕННОЙ проверкой OpenRouter"""
         local_available = self.llm_manager.local_llm.is_available()
-        openrouter_available = bool(self.api_key)
+        
+        # УПРОЩЕННАЯ ПРОВЕРКА OPENROUTER - наличие ключа = доступен
+        openrouter_available = bool(self.api_key and self.api_key.strip())
         
         # ПРОВЕРЯЕМ РАБОТОСПОСОБНОСТЬ ЛОКАЛЬНОЙ МОДЕЛИ
         local_working = False
@@ -706,7 +710,7 @@ class LLMIntegration:
     def get_available_models(self) -> list:
         """Получение списка доступных моделей"""
         return [
-            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрае модель от Meta"},
+            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
             {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
             {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
         ]
