@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         :root {
             --primary: #4263EB;
@@ -1065,6 +1066,33 @@
             height: 15px;
             cursor: nwse-resize;
         }
+
+        /* LLM Status Indicator */
+        .llm-status-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: none;
+        }
+
+        .llm-status-working {
+            background: rgba(76, 201, 240, 0.8);
+        }
+
+        .llm-status-error {
+            background: rgba(247, 37, 133, 0.8);
+        }
+
+        .llm-status-success {
+            background: rgba(76, 201, 240, 0.8);
+        }
     </style>
 </head>
 <body>
@@ -1079,6 +1107,12 @@
     <div id="main">
         <div id="video-container">
             <div id="background-animation"></div>
+            
+            <!-- Индикатор статуса LLM -->
+            <div id="llm-status" class="llm-status-indicator">
+                <i class="fas fa-robot"></i>
+                <span id="llm-status-text">LLM: Ожидание</span>
+            </div>
             
             <!-- Индикатор загрузки аватара -->
             <div id="avatar-loading" class="loading-spinner" style="display: none;"></div>
@@ -1247,6 +1281,9 @@
                 </div>
                 <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">😴 Режим покоя</div>
                 <div id="speech-status">🎤 Распознавание: выкл</div>
+                <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">
+                    <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
+                </div>
             </div>
             
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
@@ -1284,7 +1321,6 @@
         </button>
     </div>
 
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Конфигурация
         const FPS = 10;
@@ -1341,6 +1377,10 @@
         const visualizationTabs = document.querySelectorAll('.visualization-tab');
         const mermaidTab = document.getElementById('mermaid-tab');
         const svgTab = document.getElementById('svg-tab');
+        const llmStatus = document.getElementById('llm-status');
+        const llmStatusText = document.getElementById('llm-status-text');
+        const llmPriorityStatus = document.getElementById('llm-priority-status');
+        const llmPriorityText = document.getElementById('llm-priority-text');
 
         // Глобальные переменные
         let userStream = null;
@@ -1408,6 +1448,11 @@
         let isPlayingAudio = false;
         let audioElements = [];
 
+        // Улучшенная система LLM
+        let llmPendingRequests = new Map();
+        let llmLastRequestTime = 0;
+        let currentLlmPriority = 'local_first';
+
         // Инициализация Mermaid
         mermaid.initialize({
             startOnLoad: true,
@@ -1419,6 +1464,81 @@
                 curve: 'basis'
             }
         });
+
+        // ========== УЛУЧШЕННАЯ СИСТЕМА LLM ==========
+        function initLlmSystem() {
+            // Запрашиваем текущий статус LLM при подключении
+            setTimeout(() => {
+                if (socket) {
+                    socket.emit('get_llm_priority_status', { room_id: roomId });
+                    socket.emit('get_llm_status', { room_id: roomId });
+                }
+            }, 2000);
+        }
+
+        function updateLlmStatus(status, type = 'info') {
+            if (!llmStatus || !llmStatusText) return;
+            
+            llmStatus.style.display = 'block';
+            llmStatusText.textContent = `LLM: ${status}`;
+            
+            // Убираем все классы статуса
+            llmStatus.classList.remove('llm-status-working', 'llm-status-error', 'llm-status-success');
+            
+            // Добавляем соответствующий класс
+            if (type === 'working') {
+                llmStatus.classList.add('llm-status-working');
+            } else if (type === 'error') {
+                llmStatus.classList.add('llm-status-error');
+            } else if (type === 'success') {
+                llmStatus.classList.add('llm-status-success');
+            }
+            
+            // Автоматически скрываем через 5 секунд для информационных сообщений
+            if (type === 'info' || type === 'success') {
+                setTimeout(() => {
+                    llmStatus.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        function sendLlmRequest(prompt, systemPrompt = '', maxTokens = 1000, type = 'general') {
+            if (!socket) {
+                console.error('Socket не подключен');
+                return null;
+            }
+
+            const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Сохраняем запрос в ожидании
+            llmPendingRequests.set(requestId, {
+                prompt: prompt,
+                timestamp: Date.now(),
+                type: type
+            });
+
+            // Очищаем старые запросы (старше 5 минут)
+            const currentTime = Date.now();
+            for (let [id, data] of llmPendingRequests.entries()) {
+                if (currentTime - data.timestamp > 300000) { // 5 минут
+                    llmPendingRequests.delete(id);
+                }
+            }
+
+            updateLlmStatus('Отправка запроса...', 'working');
+
+            // Отправляем асинхронный запрос
+            socket.emit('async_llm_request', {
+                room_id: roomId,
+                prompt: prompt,
+                system_prompt: systemPrompt,
+                max_tokens: maxTokens,
+                type: type,
+                request_id: requestId
+            });
+
+            return requestId;
+        }
 
         // ========== ФУНКЦИИ УПРАВЛЕНИЯ ОКНАМИ ==========
         function initWindowManagement() {
@@ -2568,6 +2688,9 @@
                 setTimeout(() => {
                     enableCameraAndMicrophone();
                 }, 1500);
+
+                // Инициализируем систему LLM
+                initLlmSystem();
             });
             
             socket.on('disconnect', () => {
@@ -2696,6 +2819,89 @@
                 console.log('Практика завершена');
                 setTool('text');
             });
+
+            // УЛУЧШЕННЫЕ ОБРАБОТЧИКИ LLM
+            socket.on('llm_request_queued', (data) => {
+                console.log('LLM запрос поставлен в очередь:', data.request_id);
+                updateLlmStatus('Запрос в очереди...', 'working');
+            });
+
+            socket.on('llm_async_response', (data) => {
+                console.log('Получен асинхронный ответ LLM:', data.request_id);
+                
+                // Удаляем из ожидающих запросов
+                if (llmPendingRequests.has(data.request_id)) {
+                    llmPendingRequests.delete(data.request_id);
+                }
+                
+                updateLlmStatus('Ответ получен!', 'success');
+                
+                // Автоматически показываем ответ учителя
+                if (data.response && data.response.trim()) {
+                    const responseText = data.response;
+                    
+                    // Отправляем ответ как речь учителя
+                    socket.emit('generate_speech', {
+                        room_id: roomId,
+                        text: responseText,
+                        voice: 'female',
+                        is_teacher: true
+                    });
+                    
+                    // Показываем в интерфейсе
+                    showTeacherSpeech(responseText);
+                    startSpeechAnimation(responseText);
+                }
+            });
+
+            socket.on('llm_status_update', (data) => {
+                console.log('Обновление статуса LLM:', data.status);
+                if (data.status && data.status.current_priority) {
+                    currentLlmPriority = data.status.current_priority;
+                    updateLlmPriorityDisplay();
+                }
+            });
+
+            socket.on('llm_priority_status', (data) => {
+                console.log('Статус приоритета LLM:', data.status);
+                if (data.status && data.status.current_priority) {
+                    currentLlmPriority = data.status.current_priority;
+                    updateLlmPriorityDisplay();
+                }
+            });
+
+            socket.on('llm_priority_changed', (data) => {
+                console.log('Приоритет LLM изменен:', data.priority);
+                currentLlmPriority = data.priority;
+                updateLlmPriorityDisplay();
+                updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
+            });
+        }
+
+        function updateLlmPriorityDisplay() {
+            if (llmPriorityText) {
+                llmPriorityText.textContent = getPriorityName(currentLlmPriority);
+                
+                // Добавляем иконку в зависимости от приоритета
+                let icon = 'fa-brain';
+                if (currentLlmPriority.includes('local')) {
+                    icon = 'fa-desktop';
+                } else if (currentLlmPriority.includes('openrouter')) {
+                    icon = 'fa-cloud';
+                }
+                
+                llmPriorityStatus.innerHTML = `<i class="fas ${icon}"></i> LLM: ${getPriorityName(currentLlmPriority)}`;
+            }
+        }
+
+        function getPriorityName(priority) {
+            const names = {
+                'local_first': 'Локальная модель',
+                'openrouter_first': 'OpenRouter', 
+                'local_only': 'Только локальная',
+                'openrouter_only': 'Только OpenRouter'
+            };
+            return names[priority] || priority;
         }
 
         async function enableCameraAndMicrophone() {
@@ -3087,6 +3293,26 @@
             isFullscreen = !!document.fullscreenElement;
             fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
         });
+
+        // Тестирование улучшенной системы LLM
+        function testLlmSystem() {
+            console.log('Тестирование системы LLM...');
+            
+            // Тестовый запрос к LLM
+            const testPrompt = "Привет! Расскажи кратко о себе и своих возможностях.";
+            const requestId = sendLlmRequest(testPrompt, "Ты - дружелюбный AI-учитель. Отвечай кратко и понятно.");
+            
+            if (requestId) {
+                console.log('Тестовый запрос отправлен:', requestId);
+            }
+        }
+
+        // Автоматическое тестирование через 10 секунд после загрузки
+        setTimeout(() => {
+            if (aiTeacherActivated) {
+                testLlmSystem();
+            }
+        }, 10000);
     </script>
 </body>
 </html>
