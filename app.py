@@ -67,45 +67,70 @@ room_visualization_active = defaultdict(bool)
 room_llm_responses = defaultdict(list)
 room_last_poll_time = defaultdict(lambda: 0)
 
+# Улучшенная система отслеживания запросов
+room_llm_pending_requests = defaultdict(dict)
+room_last_llm_update = defaultdict(lambda: 0)
+
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
 
 def setup_llm_manager():
-    """Настройка менеджера LLM"""
+    """Настройка менеджера LLM с улучшенным callback"""
     # Запускаем менеджер
     llm_manager.start()
     
     # Регистрируем глобальный callback для обработки ответов
-    def global_llm_callback(request_id, response, room_id):
-        """Глобальный обработчик ответов от LLM"""
+    def global_llm_callback(request_id, response, room_id, original_request_id=None):
+        """Глобальный обработчик ответов от LLM с немедленной доставкой"""
         print(f"🔧 [Global Callback] Получен ответ для комнаты {room_id}: {response[:100]}...")
         
-        # Добавляем ответ в очередь для polling
+        # Используем original_request_id если передан, иначе ищем по manager_id
+        target_request_id = original_request_id
+        if not target_request_id:
+            for req_id, req_data in room_llm_pending_requests[room_id].items():
+                if req_data.get('manager_id') == request_id:
+                    target_request_id = req_id
+                    break
+        
+        if not target_request_id:
+            print(f"⚠️ Не найден исходный request_id для manager_id: {request_id}")
+            target_request_id = f"unknown_{int(time.time() * 1000)}"
+        
+        # Добавляем ответ в очередь для polling (резервный механизм)
         room_llm_responses[room_id].append({
-            'request_id': request_id,
+            'request_id': target_request_id,
             'response': response,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'delivered_via_websocket': False  # Пока еще не доставлено через WS
         })
         
         # Ограничиваем размер очереди
         if len(room_llm_responses[room_id]) > 10:
             room_llm_responses[room_id].pop(0)
         
-        # Отправляем ответ через WebSocket (если клиент подключен)
+        # НЕМЕДЛЕННАЯ ДОСТАВКА ЧЕРЕЗ WEBSOCKET
         try:
             socketio.emit('llm_async_response', {
-                'request_id': request_id,
+                'request_id': target_request_id,
                 'response': response,
                 'room_id': room_id,
-                'timestamp': time.time()
+                'timestamp': time.time(),
+                'delivered_via': 'websocket'
             }, room=room_id)
-            print(f"✅ Ответ отправлен через WebSocket в комнату {room_id}")
+            print(f"✅ Ответ немедленно отправлен через WebSocket в комнату {room_id}")
+            
+            # Помечаем как доставленное через WS
+            for resp in room_llm_responses[room_id]:
+                if resp['request_id'] == target_request_id:
+                    resp['delivered_via_websocket'] = True
+                    break
+                    
         except Exception as e:
             print(f"⚠️ Не удалось отправить через WebSocket: {e}. Ответ сохранен для polling.")
     
     # Регистрируем глобальный callback
     llm_manager.register_room_callback('global', global_llm_callback)
-    print("✅ LLM Manager настроен")
+    print("✅ LLM Manager настроен с улучшенным callback")
 
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
@@ -1076,30 +1101,56 @@ def handle_get_llm_priority_status(data):
             'status': status
         })
 
-# АСИНХРОННЫЕ ЗАПРОСЫ К LLM
+# АСИНХРОННЫЕ ЗАПРОСЫ К LLM С УЛУЧШЕННОЙ ЛОГИКОЙ
 @socketio.on('async_llm_request')
 def handle_async_llm_request(data):
-    """Обработчик асинхронных запросов к LLM"""
+    """Обработчик асинхронных запросов к LLM с улучшенным отслеживанием"""
     room_id = data['room_id']
     prompt = data['prompt']
     system_prompt = data.get('system_prompt', '')
     max_tokens = data.get('max_tokens', 1000)
+    request_type = data.get('type', 'general')
+    client_request_id = data.get('request_id')  # ID от клиента
     
-    print(f"📨 [Async LLM] Запрос от комнаты {room_id}")
+    print(f"📨 [Async LLM] Запрос от комнаты {room_id}: {prompt[:100]}...")
     
-    # Отправляем запрос в менеджер (не блокируем основной поток)
-    request_id = llm_manager.submit_request(
+    # Генерируем уникальный ID запроса если не передан клиентом
+    request_id = client_request_id or f"{room_id}_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+    
+    # Сохраняем информацию о запросе
+    room_llm_pending_requests[room_id][request_id] = {
+        'prompt': prompt,
+        'system_prompt': system_prompt,
+        'max_tokens': max_tokens,
+        'timestamp': time.time(),
+        'type': request_type
+    }
+    
+    # Очищаем старые запросы (старше 5 минут)
+    current_time = time.time()
+    for req_id in list(room_llm_pending_requests[room_id].keys()):
+        if current_time - room_llm_pending_requests[room_id][req_id]['timestamp'] > 300:
+            del room_llm_pending_requests[room_id][req_id]
+    
+    # Отправляем запрос в менеджер
+    llm_request_id = llm_manager.submit_request(
         prompt=prompt,
         system_prompt=system_prompt,
         max_tokens=max_tokens,
-        room_id=room_id
+        room_id=room_id,
+        request_id=request_id  # Передаем наш request_id
     )
+    
+    # Связываем ID менеджера с нашим ID
+    room_llm_pending_requests[room_id][request_id]['manager_id'] = llm_request_id
     
     # Немедленно подтверждаем получение запроса
     emit('llm_request_queued', {
         'request_id': request_id,
+        'manager_id': llm_request_id,
         'queue_position': llm_manager.get_queue_size(),
-        'room_id': room_id
+        'room_id': room_id,
+        'timestamp': time.time()
     })
 
 @socketio.on('llm_async_response')
@@ -1110,6 +1161,10 @@ def handle_llm_async_response(data):
     request_id = data['request_id']
     
     print(f"🔧 [Async LLM] Ответ для комнаты {room_id}: {response[:100]}...")
+    
+    # Удаляем из ожидающих запросов
+    if room_id in room_llm_pending_requests and request_id in room_llm_pending_requests[room_id]:
+        del room_llm_pending_requests[room_id][request_id]
     
     # Обрабатываем ответ
     if response and room_id in room_dialogue:
@@ -1126,44 +1181,47 @@ def handle_llm_async_response(data):
         # Озвучиваем ответ
         speak_text(room_id, response, voice_type='female', is_teacher=True)
 
-# POLLING ДЛЯ LLM ОТВЕТОВ (резервный механизм)
+# УЛУЧШЕННЫЙ POLLING ДЛЯ LLM ОТВЕТОВ (резервный механизм)
 @app.route('/api/llm/poll_response', methods=['POST'])
 def poll_llm_response():
-    """Polling endpoint для получения ответов от LLM"""
+    """Улучшенный polling endpoint для получения ответов от LLM"""
     try:
         data = request.json
         room_id = data.get('room_id', 'default')
         last_check = data.get('last_check', 0)
+        request_id_filter = data.get('request_id')  # Опциональная фильтрация по request_id
         
         current_time = time.time()
         room_last_poll_time[room_id] = current_time
         
         # Проверяем новые ответы в очереди
+        new_responses = []
         if room_id in room_llm_responses and room_llm_responses[room_id]:
             # Фильтруем ответы, которые пришли после last_check
-            new_responses = [
-                resp for resp in room_llm_responses[room_id] 
-                if resp['timestamp'] > last_check
-            ]
+            for resp in room_llm_responses[room_id]:
+                if (resp['timestamp'] > last_check and 
+                    (not request_id_filter or resp['request_id'] == request_id_filter)):
+                    new_responses.append(resp)
+        
+        if new_responses:
+            # Сортируем по времени (самые свежие первыми)
+            new_responses.sort(key=lambda x: x['timestamp'], reverse=True)
             
-            if new_responses:
-                # Берем самый свежий ответ
-                latest_response = new_responses[-1]
-                
-                return jsonify({
-                    "success": True,
-                    "has_response": True,
-                    "response": latest_response['response'],
-                    "request_id": latest_response['request_id'],
-                    "timestamp": latest_response['timestamp'],
-                    "total_responses": len(new_responses)
-                })
+            # Возвращаем все новые ответы
+            return jsonify({
+                "success": True,
+                "has_response": True,
+                "responses": new_responses,
+                "timestamp": current_time,
+                "total_new_responses": len(new_responses)
+            })
         
         return jsonify({
             "success": True, 
             "has_response": False,
             "timestamp": current_time,
-            "queue_size": len(room_llm_responses.get(room_id, []))
+            "queue_size": len(room_llm_responses.get(room_id, [])),
+            "pending_requests": len(room_llm_pending_requests.get(room_id, {}))
         })
         
     except Exception as e:
@@ -1178,6 +1236,9 @@ def clear_llm_queue():
         
         if room_id in room_llm_responses:
             room_llm_responses[room_id].clear()
+            
+        if room_id in room_llm_pending_requests:
+            room_llm_pending_requests[room_id].clear()
             
         return jsonify({
             "success": True,
@@ -1918,6 +1979,36 @@ def health_check():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }), 500
+
+# ДИАГНОСТИКА OPENROUTER
+@app.route('/api/llm/debug_openrouter')
+def debug_openrouter():
+    """Диагностика проблем с OpenRouter"""
+    try:
+        from llm import LLMIntegration
+        llm = LLMIntegration()
+        
+        # Проверяем базовые настройки
+        config = load_config()
+        openrouter_config = config.get('openrouter', {})
+        api_key = openrouter_config.get('api_key', '')
+        
+        status = {
+            'api_key_set': bool(api_key and api_key.strip()),
+            'api_key_length': len(api_key) if api_key else 0,
+            'api_key_prefix': api_key[:8] + '...' if api_key else 'none',
+            'model': openrouter_config.get('model', 'not set'),
+            'test_connection': llm._test_openrouter_connection(),
+            'priority_mode': get_llm_priority()
+        }
+        
+        return jsonify({
+            "success": True,
+            "status": status
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
     print("🚀 Запуск AI Teacher системы...")
