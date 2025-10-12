@@ -26,8 +26,8 @@ socketio = SocketIO(
     app, 
     cors_allowed_origins="*", 
     async_mode='threading',
-    ping_timeout=60,           # Увеличенный таймаут ping
-    ping_interval=30,          # Более частые ping
+    ping_timeout=30,           # Увеличенный таймаут ping
+    ping_interval=15,          # Более частые ping
     max_http_buffer_size=1e8,  # Увеличенный размер буфера
     logger=True,               # Логирование для отладки
     engineio_logger=True,      # Логирование EngineIO
@@ -74,6 +74,9 @@ room_last_llm_update = defaultdict(lambda: 0)
 
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
+
+# Менеджер ключей API
+key_manager = get_key_manager()
 
 def setup_llm_manager():
     """Настройка менеджера LLM с улучшенным callback"""
@@ -467,11 +470,11 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - УБИРАЕМ БЛОКИРОВКУ ПОВТОРОВ
         continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
         recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
         
-        # Если урок начат и это команда продолжения - ВСЕГДА реагируем
+        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ
         if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands + recorded_commands):
             # Получаем следующий абзац урока
             next_paragraph = dialogue._get_next_paragraph()
@@ -484,17 +487,7 @@ def handle_recognized_speech(data):
                 }, room=room_id)
                 # Озвучиваем следующий абзац
                 speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-            else:
-                # Если абзацев больше нет, запускаем практику
-                practice_message = dialogue._start_practice_session()
-                if practice_message:
-                    emit('speech_text', {
-                        'text': f"Учитель: {practice_message}",
-                        'sid': 'teacher', 
-                        'is_teacher': True
-                    }, room=room_id)
-                    speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
-            return  # ВАЖНО: завершаем обработку после команды
+            return
         
         # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
@@ -2022,12 +2015,16 @@ def debug_openrouter():
         return jsonify({"success": False, "error": str(e)})
 
 # НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ КЛЮЧАМИ
-@app.route('/api/keys/status')
+@app.route('/api/keys/status', methods=['GET'])
 def get_keys_status():
     """Получение статуса API ключей"""
     try:
-        status = get_key_manager().get_status()
-        return jsonify({"success": True, "status": status})
+        key_manager = get_key_manager()
+        stats = key_manager.get_usage_stats()
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -2037,27 +2034,19 @@ def add_api_key_route():
     try:
         data = request.json
         api_key = data.get('api_key')
+        name = data.get('name', 'new_key')
         
         if not api_key:
             return jsonify({"success": False, "error": "API key is required"})
         
-        get_key_manager().add_key(api_key)
+        key_manager = get_key_manager()
+        key_manager.add_key(api_key, name)
         
         return jsonify({
-            "success": True, 
-            "message": "API ключ успешно добавлен",
-            "total_keys": len(get_key_manager().keys)
+            "success": True,
+            "message": f"Ключ {name} успешно добавлен",
+            "total_keys": len(key_manager.keys)
         })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/keys/reset_daily', methods=['POST'])  
-def reset_daily_counts():
-    """Принудительный сброс дневных счетчиков"""
-    try:
-        # Просто обновляем время сброса
-        get_key_manager()._setup_daily_reset()
-        return jsonify({"success": True, "message": "Счетчики будут сброшены в полночь"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
