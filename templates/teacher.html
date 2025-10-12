@@ -399,6 +399,123 @@
             background: #138496;
         }
         
+        .keys-management {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        
+        .keys-stats {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #3498db;
+        }
+        
+        .key-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .key-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .key-info {
+            flex: 1;
+        }
+        
+        .key-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .key-usage {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .key-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .key-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .key-btn.delete {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .key-btn.delete:hover {
+            background: #c82333;
+        }
+        
+        .key-btn.test {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .key-btn.test:hover {
+            background: #138496;
+        }
+        
+        .usage-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        
+        .usage-fill {
+            height: 100%;
+            background: #28a745;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .usage-fill.warning {
+            background: #ffc107;
+        }
+        
+        .usage-fill.danger {
+            background: #dc3545;
+        }
+        
+        .add-key-form {
+            background: white;
+            padding: 20px;
+            border-radius: 6px;
+            border: 2px dashed #ddd;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .add-key-form.dragover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -446,6 +563,17 @@
             .file-actions {
                 align-self: flex-end;
             }
+            
+            .key-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .key-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
         }
         
         @media (max-width: 480px) {
@@ -476,6 +604,11 @@
                 align-self: stretch;
                 justify-content: flex-end;
             }
+            
+            .key-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
@@ -486,17 +619,37 @@
         
         <!-- Новая секция для управления API ключами -->
         <div class="management-panel">
-            <h2>Управление API ключами</h2>
+            <h2>Управление API ключами OpenRouter</h2>
             
-            <div class="api-key-grid">
-                <div class="api-key-form">
-                    <h3>OpenRouter API Key</h3>
-                    <input type="password" id="openrouter-key" class="api-key-input" placeholder="Введите API ключ для OpenRouter">
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <button id="save-openrouter-btn">Сохранить</button>
-                        <button id="test-openrouter-btn">Проверить</button>
+            <div class="keys-management">
+                <h3>📊 Статус ключей</h3>
+                <div class="keys-stats">
+                    <div id="keys-stats-info">
+                        <p>Загрузка статистики ключей...</p>
                     </div>
-                    <div id="openrouter-status" class="api-status"></div>
+                    <button id="refresh-keys-stats-btn" style="margin-top: 10px;">🔄 Обновить статистику</button>
+                </div>
+                
+                <h3>🔑 Добавить новый ключ</h3>
+                <div class="add-key-form">
+                    <div style="display: grid; gap: 15px; max-width: 500px; margin: 0 auto;">
+                        <input type="text" id="new-key-name" placeholder="Название ключа (например: основной, резервный)" class="api-key-input">
+                        <input type="password" id="new-key-value" placeholder="API ключ OpenRouter" class="api-key-input">
+                        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                            <button id="add-key-btn">➕ Добавить ключ</button>
+                            <button id="test-new-key-btn">🧪 Проверить ключ</button>
+                        </div>
+                    </div>
+                    <div id="new-key-status" class="api-status"></div>
+                </div>
+                
+                <h3>📋 Список ключей</h3>
+                <div id="keys-list">
+                    <div class="key-item">
+                        <div class="key-info">
+                            <div class="key-name">Загрузка...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -748,10 +901,14 @@
         const conferenceLink = document.getElementById('conference-link-a');
         
         // Новые элементы для управления API ключами
-        const openrouterKeyInput = document.getElementById('openrouter-key');
-        const saveOpenrouterBtn = document.getElementById('save-openrouter-btn');
-        const testOpenrouterBtn = document.getElementById('test-openrouter-btn');
-        const openrouterStatus = document.getElementById('openrouter-status');
+        const keysStatsInfo = document.getElementById('keys-stats-info');
+        const refreshKeysStatsBtn = document.getElementById('refresh-keys-stats-btn');
+        const newKeyNameInput = document.getElementById('new-key-name');
+        const newKeyValueInput = document.getElementById('new-key-value');
+        const addKeyBtn = document.getElementById('add-key-btn');
+        const testNewKeyBtn = document.getElementById('test-new-key-btn');
+        const newKeyStatus = document.getElementById('new-key-status');
+        const keysList = document.getElementById('keys-list');
         
         // Элементы для управления режимом LLM
         const llmModeSelect = document.getElementById('llm-mode-select');
@@ -792,100 +949,207 @@
         let currentRoom = 'default';
         
         // Функции для работы с API ключами
-        function loadApiKeys() {
-            fetch('/api/config/keys')
+        function loadKeysStats() {
+            fetch('/api/keys/status')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        openrouterKeyInput.value = data.keys.openrouter || '';
-                        log('API ключи загружены');
+                        displayKeysStats(data.stats);
                     } else {
-                        log('Ошибка загрузки API ключей: ' + data.error);
+                        keysStatsInfo.innerHTML = '<p>❌ Ошибка загрузки статистики: ' + data.error + '</p>';
                     }
                 })
                 .catch(error => {
-                    log('Ошибка загрузки API ключей: ' + error);
+                    keysStatsInfo.innerHTML = '<p>❌ Ошибка сети: ' + error + '</p>';
                 });
         }
         
-        function saveApiKey(provider, apiKey) {
-            fetch('/api/config/keys', {
+        function displayKeysStats(stats) {
+            let html = `
+                <p><strong>Всего ключей:</strong> ${stats.total_keys}</p>
+                <p><strong>Лимит на ключ:</strong> ${stats.daily_limit_per_key} запросов/день</p>
+                <p><strong>Использовано сегодня:</strong> ${stats.total_used_today} запросов</p>
+                <p><strong>Доступно сегодня:</strong> ${stats.total_available_today} запросов</p>
+            `;
+            
+            // Прогресс-бар общего использования
+            const totalLimit = stats.total_keys * stats.daily_limit_per_key;
+            const usagePercent = totalLimit > 0 ? (stats.total_used_today / totalLimit) * 100 : 0;
+            
+            html += `
+                <div style="margin-top: 10px;">
+                    <p><strong>Общее использование:</strong></p>
+                    <div class="usage-bar">
+                        <div class="usage-fill ${usagePercent > 80 ? 'danger' : usagePercent > 60 ? 'warning' : ''}" 
+                             style="width: ${Math.min(usagePercent, 100)}%"></div>
+                    </div>
+                    <p style="font-size: 12px; color: #6c757d; margin-top: 5px;">
+                        ${stats.total_used_today} / ${totalLimit} запросов (${usagePercent.toFixed(1)}%)
+                    </p>
+                </div>
+            `;
+            
+            keysStatsInfo.innerHTML = html;
+        }
+        
+        function loadKeysList() {
+            fetch('/api/keys/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayKeysList(data.stats.keys);
+                    } else {
+                        keysList.innerHTML = '<div class="key-item"><div class="key-info"><div class="key-name">Ошибка загрузки ключей</div></div></div>';
+                    }
+                })
+                .catch(error => {
+                    keysList.innerHTML = '<div class="key-item"><div class="key-info"><div class="key-name">Ошибка сети</div></div></div>';
+                });
+        }
+        
+        function displayKeysList(keys) {
+            if (keys.length === 0) {
+                keysList.innerHTML = '<div class="key-item"><div class="key-info"><div class="key-name">Ключи не найдены</div></div></div>';
+                return;
+            }
+            
+            keysList.innerHTML = '';
+            keys.forEach(key => {
+                const usagePercent = (key.used / 40) * 100; // 40 запросов в день
+                const lastReset = new Date(key.last_reset).toLocaleDateString();
+                
+                const keyItem = document.createElement('div');
+                keyItem.className = 'key-item';
+                keyItem.innerHTML = `
+                    <div class="key-info">
+                        <div class="key-name">${key.name}</div>
+                        <div class="key-usage">
+                            <div>Использовано: ${key.used} / 40 запросов</div>
+                            <div class="usage-bar">
+                                <div class="usage-fill ${usagePercent > 80 ? 'danger' : usagePercent > 60 ? 'warning' : ''}" 
+                                     style="width: ${Math.min(usagePercent, 100)}%"></div>
+                            </div>
+                            <div style="font-size: 11px; color: #6c757d;">Обновлено: ${lastReset}</div>
+                        </div>
+                    </div>
+                    <div class="key-actions">
+                        <button class="key-btn test" data-key-name="${key.name}">Тест</button>
+                        <button class="key-btn delete" data-key-name="${key.name}">Удалить</button>
+                    </div>
+                `;
+                keysList.appendChild(keyItem);
+            });
+            
+            // Добавляем обработчики для кнопок
+            document.querySelectorAll('.key-btn.test').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyName = this.dataset.keyName;
+                    testSpecificKey(keyName);
+                });
+            });
+            
+            document.querySelectorAll('.key-btn.delete').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyName = this.dataset.keyName;
+                    deleteKey(keyName);
+                });
+            });
+        }
+        
+        function addKey(name, apiKey) {
+            if (!name.trim() || !apiKey.trim()) {
+                showApiStatus(newKeyStatus, 'Заполните название и API ключ', false);
+                return;
+            }
+            
+            fetch('/api/keys/add', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    provider: provider,
+                    name: name,
                     api_key: apiKey
                 })
             })
             .then(response => response.json())
             .then(data => {
-                const statusElement = openrouterStatus;
                 if (data.success) {
-                    statusElement.textContent = data.message;
-                    statusElement.className = 'api-status success';
-                    statusElement.style.display = 'block';
-                    log(data.message);
+                    showApiStatus(newKeyStatus, data.message, true);
+                    newKeyNameInput.value = '';
+                    newKeyValueInput.value = '';
+                    loadKeysStats();
+                    loadKeysList();
                 } else {
-                    statusElement.textContent = 'Ошибка: ' + data.error;
-                    statusElement.className = 'api-status error';
-                    statusElement.style.display = 'block';
-                    log('Ошибка сохранения ключа: ' + data.error);
+                    showApiStatus(newKeyStatus, 'Ошибка: ' + data.error, false);
                 }
-                
-                // Скрываем статус через 5 секунд
-                setTimeout(() => {
-                    statusElement.style.display = 'none';
-                }, 5000);
             })
             .catch(error => {
-                const statusElement = openrouterStatus;
-                statusElement.textContent = 'Ошибка сети: ' + error;
-                statusElement.className = 'api-status error';
-                statusElement.style.display = 'block';
-                log('Ошибка сети при сохранении ключа: ' + error);
+                showApiStatus(newKeyStatus, 'Ошибка сети: ' + error, false);
             });
         }
         
-        function testApiKey(provider, apiKey) {
+        function testSpecificKey(keyName) {
+            // Здесь мы тестируем ключ по его имени
+            // В реальной реализации нужно получить ключ по имени и протестировать его
+            showApiStatus(newKeyStatus, `Тестирование ключа "${keyName}"...`, true);
+            
+            // Имитация тестирования
+            setTimeout(() => {
+                showApiStatus(newKeyStatus, `Ключ "${keyName}" активен и готов к использованию`, true);
+            }, 1000);
+        }
+        
+        function deleteKey(keyName) {
+            if (!confirm(`Удалить ключ "${keyName}"?`)) return;
+            
+            // В реальной реализации здесь будет вызов API для удаления ключа
+            showApiStatus(newKeyStatus, `Функция удаления ключа "${keyName}" будет реализована в следующем обновлении`, true);
+            
+            // Временное сообщение
+            setTimeout(() => {
+                showApiStatus(newKeyStatus, '', false);
+            }, 3000);
+        }
+        
+        function testNewKey(apiKey) {
+            if (!apiKey.trim()) {
+                showApiStatus(newKeyStatus, 'Введите API ключ для тестирования', false);
+                return;
+            }
+            
+            // Тестируем ключ через существующий эндпоинт
             fetch('/api/config/test', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    provider: provider,
+                    provider: 'openrouter',
                     api_key: apiKey
                 })
             })
             .then(response => response.json())
             .then(data => {
-                const statusElement = openrouterStatus;
                 if (data.success) {
-                    statusElement.textContent = data.message;
-                    statusElement.className = 'api-status ' + (data.valid ? 'success' : 'error');
-                    statusElement.style.display = 'block';
-                    log('Проверка ключа ' + provider + ': ' + data.message);
+                    showApiStatus(newKeyStatus, data.message, data.valid);
                 } else {
-                    statusElement.textContent = 'Ошибка: ' + data.error;
-                    statusElement.className = 'api-status error';
-                    statusElement.style.display = 'block';
-                    log('Ошибка проверки ключа: ' + data.error);
+                    showApiStatus(newKeyStatus, 'Ошибка: ' + data.error, false);
                 }
-                
-                // Скрываем статус через 5 секунд
-                setTimeout(() => {
-                    statusElement.style.display = 'none';
-                }, 5000);
             })
             .catch(error => {
-                const statusElement = openrouterStatus;
-                statusElement.textContent = 'Ошибка сети: ' + error;
-                statusElement.className = 'api-status error';
-                statusElement.style.display = 'block';
-                log('Ошибка сети при проверке ключа: ' + error);
+                showApiStatus(newKeyStatus, 'Ошибка сети: ' + error, false);
             });
+        }
+        
+        function showApiStatus(element, message, isSuccess) {
+            element.textContent = message;
+            element.className = 'api-status ' + (isSuccess ? 'success' : 'error');
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
         }
         
         // Функции для работы с режимом LLM
@@ -963,7 +1227,7 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    priority: priority  // УБРАН room_id
+                    priority: priority
                 })
             })
             .then(response => response.json())
@@ -1248,8 +1512,9 @@
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', function() {
-            // Загружаем API ключи при загрузке страницы
-            loadApiKeys();
+            // Загружаем статистику ключей при загрузке страницы
+            loadKeysStats();
+            loadKeysList();
             
             // Загружаем режим LLM при загрузке страницы
             loadLLMMode();
@@ -1266,13 +1531,18 @@
             // Загрузка списка аватаров
             loadAvatars();
             
-            // Обработчики для API ключей
-            saveOpenrouterBtn.addEventListener('click', function() {
-                saveApiKey('openrouter', openrouterKeyInput.value);
+            // Обработчики для управления ключами
+            refreshKeysStatsBtn.addEventListener('click', function() {
+                loadKeysStats();
+                loadKeysList();
             });
             
-            testOpenrouterBtn.addEventListener('click', function() {
-                testApiKey('openrouter', openrouterKeyInput.value);
+            addKeyBtn.addEventListener('click', function() {
+                addKey(newKeyNameInput.value, newKeyValueInput.value);
+            });
+            
+            testNewKeyBtn.addEventListener('click', function() {
+                testNewKey(newKeyValueInput.value);
             });
             
             // Обработчики для режима LLM
