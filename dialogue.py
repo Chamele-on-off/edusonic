@@ -46,6 +46,7 @@ class DialogueManager:
         self.current_expected_answer = ""
         self.waiting_for_answer = False
         self.current_practice_question = None
+        self.max_questions = 5
         
         # Новые поля для улучшенного диалога
         self.last_subject_prompt_time = 0
@@ -889,6 +890,11 @@ class DialogueManager:
 
     def _generate_next_practice_question(self) -> Optional[str]:
         try:
+            # Проверяем лимит вопросов
+            if self.current_question_index >= self.max_questions:
+                print("🏁 Достигнут лимит вопросов")
+                return None
+                
             question = self.practice_manager.generate_single_question()
             if question:
                 self.current_practice_question = {
@@ -929,10 +935,16 @@ class DialogueManager:
         
         print(f"🎯 Оценка ответа и генерация следующего вопроса...")
         
+        # Оцениваем ответ
         current_question = self.current_practice_question
         if not current_question:
-            self._end_practice_session()
-            return "Практика завершена."
+            print("❌ Нет текущего вопроса для оценки")
+            next_question = self._generate_next_practice_question()
+            if next_question:
+                return f"Следующий вопрос: {next_question}"
+            else:
+                self._end_practice_session()
+                return "Практика завершена."
         
         evaluation = self.practice_manager.evaluate_single_answer(
             student_answer, 
@@ -941,7 +953,8 @@ class DialogueManager:
         
         print(f"📝 Оценка: {evaluation}")
         
-        if self.current_question_index < 5:
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ: Всегда генерируем следующий вопрос, если не достигнут лимит
+        if self.current_question_index < self.max_questions:
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
