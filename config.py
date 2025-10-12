@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
         "provider": "openrouter",
         "max_tokens": 1000,
         "temperature": 0.7,
-        "timeout": 30,
+        "timeout": 120,
         "priority": "openrouter_first"
     },
     "openrouter": {
@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "base_url": "http://localhost:11434",
         "model": "qwen2.5:3b",
-        "timeout": 60,
+        "timeout": 120,
         "max_retries": 2
     },
     "fallback": {
