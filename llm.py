@@ -7,6 +7,7 @@ from config import get_api_key, load_config, get_model_config, get_llm_priority,
 import re
 from local_llm_manager import get_llm_manager
 import queue
+from key_manager import get_key_manager
 
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
@@ -161,25 +162,21 @@ class LLMIntegration:
     def _handle_openrouter_request(self, prompt: str, context: str, subject: str,
                                   system_prompt: str, max_tokens: int,
                                   room_id: str, callback: Callable) -> Optional[str]:
-        """Обработка запроса через OpenRouter с УЛУЧШЕННОЙ логикой доступности"""
-        
-        # УПРОЩЕННАЯ ПРОВЕРКА ДОСТУПНОСТИ - наличие ключа достаточно
-        if not self.api_key or not self.api_key.strip():
-            print("❌ [LLM] OpenRouter API ключ не установлен или пустой")
-            return None if callback else self._get_fallback_response(prompt, subject)
-        
-        print(f"🔧 [LLM] Использую OpenRouter для комнаты {room_id} (ключ присутствует)")
-        
-        # Для OpenRouter всегда синхронный запрос
+        """Обработка запроса через OpenRouter с ротацией ключей"""
         try:
-            # Добавляем задержку между запросами
-            current_time = time.time()
-            time_since_last_request = current_time - self.last_request_time
-            if time_since_last_request < self.request_delay:
-                time.sleep(self.request_delay - time_since_last_request)
+            key_manager = get_key_manager()
+            
+            # Получаем текущий активный ключ
+            try:
+                api_key = key_manager.get_current_key()
+                current_key_index = key_manager.current_key_index
+                print(f"🔑 Используется ключ #{current_key_index + 1}")
+            except Exception as e:
+                print(f"❌ Нет доступных API ключей: {e}")
+                return None if callback else self._get_fallback_response(prompt, subject)
             
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://ai-teacher.com",
                 "X-Title": "AI Teacher"
@@ -230,6 +227,9 @@ class LLMIntegration:
                             
                             print(f"✅ [LLM] Ответ от OpenRouter получен: {processed_answer[:100]}...")
                             
+                            # Записываем успешный запрос
+                            key_manager.record_request(success=True)
+                            
                             # Если есть callback, вызываем его
                             if callback:
                                 callback(processed_answer, room_id)
@@ -238,21 +238,25 @@ class LLMIntegration:
                                 return processed_answer
                         else:
                             print("❌ [LLM] Неверный формат ответа от OpenRouter")
+                            key_manager.record_request(success=False)
                             return self._get_fallback_response(prompt, subject)
                             
                     elif response.status_code == 429:
                         wait_time = self.retry_delay * (attempt + 1)
                         print(f"⏳ [LLM] Rate Limit. Ждем {wait_time} сек...")
+                        key_manager.record_request(success=False)
                         time.sleep(wait_time)
                         continue
                         
                     elif response.status_code == 401:
                         print(f"❌ [LLM] Ошибка аутентификации OpenRouter (неверный API ключ)")
+                        key_manager.record_request(success=False)
                         # Помечаем OpenRouter как недоступный для этого запроса
                         return None if callback else self._get_fallback_response(prompt, subject)
                         
                     else:
                         print(f"❌ [LLM] Ошибка OpenRouter: {response.status_code}")
+                        key_manager.record_request(success=False)
                         if attempt < self.max_retries - 1:
                             time.sleep(self.retry_delay)
                             continue
@@ -260,6 +264,7 @@ class LLMIntegration:
                         
                 except requests.exceptions.Timeout:
                     print(f"⏰ [LLM] Таймаут OpenRouter. Попытка {attempt + 1}/{self.max_retries}")
+                    key_manager.record_request(success=False)
                     if attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay)
                         continue
@@ -267,6 +272,7 @@ class LLMIntegration:
                     
                 except Exception as e:
                     print(f"❌ [LLM] Ошибка OpenRouter (попытка {attempt + 1}): {e}")
+                    key_manager.record_request(success=False)
                     if attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay)
                         continue
