@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 import re
 import tempfile
 from local_llm_manager import get_llm_manager
+from key_manager import get_key_manager
 
 # Настройка SocketIO с правильными таймаутами
 app = Flask(__name__, static_folder='static')
@@ -25,8 +26,8 @@ socketio = SocketIO(
     app, 
     cors_allowed_origins="*", 
     async_mode='threading',
-    ping_timeout=30,           # Увеличенный таймаут ping
-    ping_interval=15,          # Более частые ping
+    ping_timeout=60,           # Увеличенный таймаут ping
+    ping_interval=30,          # Более частые ping
     max_http_buffer_size=1e8,  # Увеличенный размер буфера
     logger=True,               # Логирование для отладки
     engineio_logger=True,      # Логирование EngineIO
@@ -470,7 +471,7 @@ def handle_recognized_speech(data):
         continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
         recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
         
-        # Если урок начат и это команда продолжения
+        # Если урок начат и это команда продолжения - ВСЕГДА реагируем
         if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands + recorded_commands):
             # Получаем следующий абзац урока
             next_paragraph = dialogue._get_next_paragraph()
@@ -483,7 +484,17 @@ def handle_recognized_speech(data):
                 }, room=room_id)
                 # Озвучиваем следующий абзац
                 speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-            return
+            else:
+                # Если абзацев больше нет, запускаем практику
+                practice_message = dialogue._start_practice_session()
+                if practice_message:
+                    emit('speech_text', {
+                        'text': f"Учитель: {practice_message}",
+                        'sid': 'teacher', 
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
+            return  # ВАЖНО: завершаем обработку после команды
         
         # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
@@ -2007,6 +2018,46 @@ def debug_openrouter():
             "status": status
         })
         
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ КЛЮЧАМИ
+@app.route('/api/keys/status')
+def get_keys_status():
+    """Получение статуса API ключей"""
+    try:
+        status = get_key_manager().get_status()
+        return jsonify({"success": True, "status": status})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/add', methods=['POST'])
+def add_api_key_route():
+    """Добавление нового API ключа"""
+    try:
+        data = request.json
+        api_key = data.get('api_key')
+        
+        if not api_key:
+            return jsonify({"success": False, "error": "API key is required"})
+        
+        get_key_manager().add_key(api_key)
+        
+        return jsonify({
+            "success": True, 
+            "message": "API ключ успешно добавлен",
+            "total_keys": len(get_key_manager().keys)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/reset_daily', methods=['POST'])  
+def reset_daily_counts():
+    """Принудительный сброс дневных счетчиков"""
+    try:
+        # Просто обновляем время сброса
+        get_key_manager()._setup_daily_reset()
+        return jsonify({"success": True, "message": "Счетчики будут сброшены в полночь"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
