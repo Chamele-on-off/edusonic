@@ -11,10 +11,9 @@ class PracticeManager:
         self.practice_dir = Path("materials/practice")
         self.current_lesson_context = ""
         self.current_subject = ""
-        self.generated_questions = []  # История сгенерированных вопросов
+        self.generated_questions = []
         self.current_question_index = 0
         self.max_questions = 5
-        self.question_counter = 0  # Счетчик сгенерированных вопросов
         
         # Создаем директорию если не существует
         self.practice_dir.mkdir(parents=True, exist_ok=True)
@@ -25,18 +24,17 @@ class PracticeManager:
         self.current_subject = subject
         self.generated_questions = []
         self.current_question_index = 0
-        self.question_counter = 0
         print(f"🎯 Инициализирована генерация практики для предмета: {subject}")
 
     def generate_single_question(self) -> Optional[str]:
-        """Генерирует один вопрос на основе контекста урока с увеличенным таймаутом"""
+        """Генерирует один вопрос на основе контекста урока"""
         try:
-            # Проверяем лимит вопросов - ИСПРАВЛЕНИЕ: используем question_counter вместо len(generated_questions)
-            if self.question_counter >= self.max_questions:
+            # Проверяем лимит вопросов
+            if len(self.generated_questions) >= self.max_questions:
                 print("🏁 Достигнут лимит вопросов")
                 return None
             
-            print(f"🔄 Генерация вопроса {self.question_counter + 1}/{self.max_questions}...")
+            print(f"🔄 Генерация вопроса {len(self.generated_questions) + 1}/{self.max_questions}...")
             
             # УПРОЩЕННЫЙ промпт для надежности
             prompt = f"""
@@ -53,71 +51,46 @@ class PracticeManager:
             Верни только текст вопроса.
             """
             
-            # ДОБАВЛЯЕМ ТАЙМАУТ И ПОВТОРНЫЕ ПОПЫТКИ
-            max_attempts = 3
-            for attempt in range(max_attempts):
-                try:
-                    print(f"📨 Попытка {attempt + 1}/{max_attempts} запроса к LLM...")
+            # УПРОЩЕННАЯ логика с одной попыткой
+            try:
+                llm_response = self.llm.query(
+                    question=prompt,
+                    context="",
+                    subject=self.current_subject
+                )
+                
+                if llm_response and not llm_response.startswith("Спасибо за вопрос!"):
+                    # Очищаем ответ
+                    question = self._clean_question_text(llm_response)
                     
-                    # СИНХРОННЫЙ запрос к LLM с увеличенным таймаутом
-                    llm_response = self.llm.query(
-                        question=prompt,
-                        context="",
-                        subject=self.current_subject
-                    )
-                    
-                    if llm_response and not llm_response.startswith("Спасибо за вопрос!"):
-                        # Очищаем ответ
-                        question = self._clean_question_text(llm_response)
+                    if question and len(question.strip()) > 10:
+                        print(f"✅ Вопрос сгенерирован: {question[:100]}...")
                         
-                        if question and len(question.strip()) > 10:
-                            print(f"✅ Вопрос сгенерирован: {question[:100]}...")
-                            
-                            # Сохраняем в историю и увеличиваем счетчик
-                            self.generated_questions.append({
-                                "question": question,
-                                "generated_at": time.time()
-                            })
-                            self.question_counter += 1  # ВАЖНОЕ ИСПРАВЛЕНИЕ: увеличиваем счетчик
-                            
-                            return question
-                        else:
-                            print(f"⚠️ Сгенерирован пустой или слишком короткий вопрос")
-                    
-                    # Если ответ не получен, ждем и пробуем снова
-                    if attempt < max_attempts - 1:
-                        wait_time = (attempt + 1) * 5  # Увеличивающаяся задержка
-                        print(f"⏳ Ожидание {wait_time} сек перед повторной попыткой...")
-                        time.sleep(wait_time)
+                        # Сохраняем в историю
+                        self.generated_questions.append({
+                            "question": question,
+                            "generated_at": time.time()
+                        })
                         
-                except Exception as e:
-                    print(f"❌ Ошибка при попытке {attempt + 1}: {e}")
-                    if attempt < max_attempts - 1:
-                        wait_time = (attempt + 1) * 5
-                        print(f"⏳ Ожидание {wait_time} сек перед повторной попыткой...")
-                        time.sleep(wait_time)
+                        return question
+                    
+            except Exception as e:
+                print(f"❌ Ошибка генерации вопроса: {e}")
             
-            # Fallback если все попытки не удались
-            print("❌ Все попытки генерации вопроса провалились, использую fallback")
+            # Fallback если не удалось сгенерировать
             fallback_question = self._get_fallback_question()
             if fallback_question:
                 self.generated_questions.append({
                     "question": fallback_question,
                     "generated_at": time.time()
                 })
-                self.question_counter += 1
-            return fallback_question
+                return fallback_question
+                
+            return None
                 
         except Exception as e:
             print(f"❌ Критическая ошибка генерации вопроса: {e}")
-            fallback_question = self._get_fallback_question()
-            if fallback_question:
-                self.generated_questions.append({
-                    "question": fallback_question,
-                    "generated_at": time.time()
-                })
-                self.question_counter += 1
-            return fallback_question
+            return self._get_fallback_question()
 
     def evaluate_single_answer(self, student_answer: str, question: str) -> str:
         """Оценивает один ответ ученика и генерирует обратную связь"""
@@ -137,7 +110,7 @@ class PracticeManager:
             if not correct_answer:
                 correct_answer = "Информация содержится в учебном материале."
             
-            # Оцениваем ответ через LLM
+            # УПРОЩЕННАЯ оценка через LLM
             evaluation = self._evaluate_with_llm_context(question, student_answer, correct_answer)
             return evaluation if evaluation else self._get_fallback_feedback(student_answer, correct_answer)
             
@@ -206,13 +179,12 @@ class PracticeManager:
             КОНТЕКСТ УРОКА (для справки):
             {self.current_lesson_context[:500]}
             
-            ВАЖНОЕ ПРАВИЛО: Всегда обращайся к ученику на "ты", а не "ученик" или "он".
-            Например: "Ты близко подошел к правильному ответу" вместо "Ученик близко подошел"
+            ВАЖНОЕ ПРАВИЛО: Всегда обращайся к ученику на "ты".
             
             Твоя задача - дать добрую и поддерживающую обратную связь:
             
             ЕСЛИ ОТВЕТ ПРАВИЛЬНЫЙ:
-            - Похвали ученика конкретно, обращаясь на "ты"
+            - Похвали ученика конкретно
             - Подтверди правильность ответа
             - Скажи что-то ободряющее
             
@@ -228,12 +200,7 @@ class PracticeManager:
             
             Будь добрым и поддерживающим учителем! 
             Максимум 2-3 предложения. Отвечай на русском языке.
-            Всегда обращайся к ученику на "ты".
             """
-            
-            system_prompt = f"""Ты - опытный и добрый учитель по предмету {self.current_subject}. 
-            Твоя задача - помогать ученикам учиться на ошибках, а не ругать их.
-            Всегда обращайся к ученику на "ты"."""
             
             evaluation = self.llm.query(
                 question=prompt,
@@ -241,46 +208,11 @@ class PracticeManager:
                 subject=self.current_subject
             )
             
-            # ДОПОЛНИТЕЛЬНАЯ ОБРАБОТКА: заменяем "ученик" на "ты"
-            if evaluation:
-                evaluation = self._fix_student_addressing(evaluation)
-            
             return evaluation if evaluation else self._get_fallback_feedback(student_answer, correct_answer)
             
         except Exception as e:
             print(f"❌ Ошибка оценки через LLM: {e}")
             return self._get_fallback_feedback(student_answer, correct_answer)
-
-    def _fix_student_addressing(self, text: str) -> str:
-        """Исправляет обращение к ученику с 'ученик' на 'ты'"""
-        if not text:
-            return text
-        
-        # Заменяем различные формы обращения
-        replacements = {
-            'ученик': 'ты',
-            'ученица': 'ты', 
-            'ученики': 'вы',
-            'ученикам': 'вам',
-            'учеников': 'вас',
-            'он': 'ты',
-            'она': 'ты',
-            'его': 'твой',
-            'её': 'твой',
-            'ему': 'тебе',
-            'ей': 'тебе',
-            'свой': 'твой',
-            'свою': 'твою',
-            'свое': 'твое',
-            'свои': 'твои'
-        }
-        
-        result = text
-        for old, new in replacements.items():
-            # Заменяем с учетом регистра
-            result = re.sub(r'\b' + re.escape(old) + r'\b', new, result, flags=re.IGNORECASE)
-        
-        return result
 
     def _get_fallback_question(self) -> str:
         """Fallback вопрос когда не удается сгенерировать через LLM"""
@@ -299,28 +231,15 @@ class PracticeManager:
 
     def _get_fallback_feedback(self, student_answer: str, correct_answer: str) -> str:
         """Fallback обратная связь когда LLM недоступен"""
-        # Простая эвристическая оценка
-        student_lower = student_answer.lower()
-        correct_lower = correct_answer.lower()
-        
-        # Проверяем наличие ключевых слов из правильного ответа
-        key_words = [word for word in correct_lower.split() if len(word) > 4]
-        matches = sum(1 for word in key_words if word in student_lower)
-        
-        if matches >= len(key_words) * 0.7:
-            return "Отличный ответ! Ты хорошо понял материал."
-        elif matches >= len(key_words) * 0.4:
-            return "Хорошая попытка! Ты уловил основные идеи, но можно добавить детали."
-        else:
-            return f"Спасибо за ответ! Правильный ответ: {correct_answer}"
+        return f"Спасибо за ответ! Правильный ответ: {correct_answer}"
 
     def has_more_questions(self) -> bool:
         """Проверяет, можно ли генерировать еще вопросы"""
-        return self.question_counter < self.max_questions
+        return len(self.generated_questions) < self.max_questions
 
     def get_generated_questions_count(self) -> int:
         """Возвращает количество сгенерированных вопросов"""
-        return self.question_counter
+        return len(self.generated_questions)
 
     def reset(self):
         """Сброс состояния менеджера практики"""
@@ -328,98 +247,19 @@ class PracticeManager:
         self.current_subject = ""
         self.generated_questions = []
         self.current_question_index = 0
-        self.question_counter = 0  # ВАЖНОЕ ИСПРАВЛЕНИЕ: сбрасываем счетчик
         print("🔄 Менеджер практики сброшен")
 
-    def save_practice_to_txt(self, lesson_id: str, practice_data: dict):
-        """Сохраняет практические задания в TXT файл"""
-        try:
-            txt_filename = f"{lesson_id}_practice.txt"
-            txt_path = self.practice_dir / txt_filename
-            
-            with open(txt_path, 'w', encoding='utf-8') as f:
-                f.write(f"ПРАКТИЧЕСКИЕ ЗАДАНИЯ: {lesson_id}\n")
-                f.write("=" * 50 + "\n\n")
-                
-                # Сохраняем сгенерированные вопросы
-                for i, question_data in enumerate(self.generated_questions, 1):
-                    f.write(f"ВОПРОС {i}: {question_data.get('question', '')}\n\n")
-                    
-                    # Генерируем и сохраняем правильный ответ
-                    correct_answer = self._generate_correct_answer(question_data['question'])
-                    if correct_answer:
-                        f.write(f"Правильный ответ: {correct_answer}\n")
-                    
-                    f.write("\n" + "-" * 30 + "\n\n")
-            
-            print(f"✅ Практика сохранена в TXT: {txt_path}")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Ошибка сохранения практики в TXT: {e}")
-            return False
+    def get_current_question(self) -> Optional[str]:
+        """Возвращает текущий вопрос"""
+        if self.generated_questions:
+            return self.generated_questions[-1]["question"]
+        return None
 
     def get_practice_stats(self) -> Dict:
         """Возвращает статистику по практике"""
         return {
-            "total_questions": self.question_counter,  # ВАЖНОЕ ИСПРАВЛЕНИЕ: используем счетчик
+            "total_questions": len(self.generated_questions),
             "current_subject": self.current_subject,
             "max_questions": self.max_questions,
             "has_more_questions": self.has_more_questions()
         }
-
-    def validate_student_answer(self, answer: str) -> Tuple[bool, str]:
-        """Проверяет валидность ответа ученика"""
-        if not answer or not answer.strip():
-            return False, "Ответ не может быть пустым"
-        
-        if len(answer.strip()) < 2:
-            return False, "Ответ слишком короткий"
-        
-        # Проверяем на команды
-        commands = ['продолжай', 'дальше', 'следующий', 'стоп', 'останови', 'закончи']
-        if any(cmd in answer.lower() for cmd in commands):
-            return False, "Это команда, а не ответ на вопрос"
-        
-        # Проверяем на шумовые паттерны
-        noise_patterns = [
-            r'^[а-я]*ммм[а-я]*$',
-            r'^[а-я]*эээ[а-я]*$', 
-            r'^[а-я]*ах[а-я]*$',
-            r'^[а-я]*ох[а-я]*$',
-        ]
-        
-        for pattern in noise_patterns:
-            if re.match(pattern, answer.lower()):
-                return False, "Ответ похож на случайный шум"
-        
-        return True, "Ответ валиден"
-
-    # Старые методы для обратной совместимости
-    def load_practice(self, lesson_id: str) -> bool:
-        """Загружает практические задания (для обратной совместимости)"""
-        print(f"📥 Загрузка практики для урока: {lesson_id}")
-        return False
-
-    def generate_practice(self, lesson_text: str, subject: str) -> bool:
-        """Генерирует практические задания (для обратной совместимости)"""
-        print(f"🔧 Генерация практики для предмета: {subject}")
-        self.initialize_practice_generation(lesson_text, subject)
-        return True
-
-    def get_current_question(self) -> Optional[Dict]:
-        """Возвращает текущий вопрос (для обратной совместимости)"""
-        if self.generated_questions:
-            return {
-                "question": self.generated_questions[-1]["question"],
-                "answer": ""
-            }
-        return None
-
-    def move_to_next_question(self) -> bool:
-        """Переходит к следующему вопросу (для обратной совместимости)"""
-        return self.has_more_questions()
-
-    def evaluate_answer_with_context(self, student_answer: str, question: str, correct_answer: str, context: str = "") -> str:
-        """Оценивает ответ с контекстом (для обратной совместимости)"""
-        return self.evaluate_single_answer(student_answer, question)
