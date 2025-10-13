@@ -14,6 +14,7 @@ class PracticeManager:
         self.generated_questions = []  # История сгенерированных вопросов
         self.current_question_index = 0
         self.max_questions = 5
+        self.question_counter = 0  # Счетчик сгенерированных вопросов
         
         # Создаем директорию если не существует
         self.practice_dir.mkdir(parents=True, exist_ok=True)
@@ -24,17 +25,18 @@ class PracticeManager:
         self.current_subject = subject
         self.generated_questions = []
         self.current_question_index = 0
+        self.question_counter = 0
         print(f"🎯 Инициализирована генерация практики для предмета: {subject}")
 
     def generate_single_question(self) -> Optional[str]:
         """Генерирует один вопрос на основе контекста урока с увеличенным таймаутом"""
         try:
-            # Проверяем лимит вопросов
-            if len(self.generated_questions) >= self.max_questions:
+            # Проверяем лимит вопросов - ИСПРАВЛЕНИЕ: используем question_counter вместо len(generated_questions)
+            if self.question_counter >= self.max_questions:
                 print("🏁 Достигнут лимит вопросов")
                 return None
             
-            print(f"🔄 Генерация вопроса {len(self.generated_questions) + 1}/{self.max_questions}...")
+            print(f"🔄 Генерация вопроса {self.question_counter + 1}/{self.max_questions}...")
             
             # УПРОЩЕННЫЙ промпт для надежности
             prompt = f"""
@@ -71,11 +73,12 @@ class PracticeManager:
                         if question and len(question.strip()) > 10:
                             print(f"✅ Вопрос сгенерирован: {question[:100]}...")
                             
-                            # Сохраняем в историю
+                            # Сохраняем в историю и увеличиваем счетчик
                             self.generated_questions.append({
                                 "question": question,
                                 "generated_at": time.time()
                             })
+                            self.question_counter += 1  # ВАЖНОЕ ИСПРАВЛЕНИЕ: увеличиваем счетчик
                             
                             return question
                         else:
@@ -96,11 +99,25 @@ class PracticeManager:
             
             # Fallback если все попытки не удались
             print("❌ Все попытки генерации вопроса провалились, использую fallback")
-            return self._get_fallback_question()
+            fallback_question = self._get_fallback_question()
+            if fallback_question:
+                self.generated_questions.append({
+                    "question": fallback_question,
+                    "generated_at": time.time()
+                })
+                self.question_counter += 1
+            return fallback_question
                 
         except Exception as e:
             print(f"❌ Критическая ошибка генерации вопроса: {e}")
-            return self._get_fallback_question()
+            fallback_question = self._get_fallback_question()
+            if fallback_question:
+                self.generated_questions.append({
+                    "question": fallback_question,
+                    "generated_at": time.time()
+                })
+                self.question_counter += 1
+            return fallback_question
 
     def evaluate_single_answer(self, student_answer: str, question: str) -> str:
         """Оценивает один ответ ученика и генерирует обратную связь"""
@@ -299,11 +316,11 @@ class PracticeManager:
 
     def has_more_questions(self) -> bool:
         """Проверяет, можно ли генерировать еще вопросы"""
-        return len(self.generated_questions) < self.max_questions
+        return self.question_counter < self.max_questions
 
     def get_generated_questions_count(self) -> int:
         """Возвращает количество сгенерированных вопросов"""
-        return len(self.generated_questions)
+        return self.question_counter
 
     def reset(self):
         """Сброс состояния менеджера практики"""
@@ -311,6 +328,7 @@ class PracticeManager:
         self.current_subject = ""
         self.generated_questions = []
         self.current_question_index = 0
+        self.question_counter = 0  # ВАЖНОЕ ИСПРАВЛЕНИЕ: сбрасываем счетчик
         print("🔄 Менеджер практики сброшен")
 
     def save_practice_to_txt(self, lesson_id: str, practice_data: dict):
@@ -344,7 +362,7 @@ class PracticeManager:
     def get_practice_stats(self) -> Dict:
         """Возвращает статистику по практике"""
         return {
-            "total_questions": len(self.generated_questions),
+            "total_questions": self.question_counter,  # ВАЖНОЕ ИСПРАВЛЕНИЕ: используем счетчик
             "current_subject": self.current_subject,
             "max_questions": self.max_questions,
             "has_more_questions": self.has_more_questions()
@@ -405,55 +423,3 @@ class PracticeManager:
     def evaluate_answer_with_context(self, student_answer: str, question: str, correct_answer: str, context: str = "") -> str:
         """Оценивает ответ с контекстом (для обратной совместимости)"""
         return self.evaluate_single_answer(student_answer, question)
-
-
-# Тестирование модуля
-if __name__ == "__main__":
-    print("🧪 Тестирование PracticeManager...")
-    
-    # Создаем mock LLM для тестирования
-    class MockLLM:
-        def query(self, question, context, subject):
-            if "вопрос" in question.lower():
-                return "Что такое основные принципы демократии?"
-            elif "ответ" in question.lower():
-                return "Демократия - это форма правления, при которой власть принадлежит народу."
-            elif "оцени" in question.lower():
-                return "Ты правильно понял основные идеи! Демократия действительно предполагает народовластие."
-            return "Тестовый ответ"
-    
-    # Тестируем
-    llm = MockLLM()
-    pm = PracticeManager(llm)
-    
-    # Инициализация
-    test_context = "Демократия - это форма правления, при которой народ является источником власти. Основные принципы демократии включают разделение властей, верховенство закона, защиту прав человека и свободные выборы."
-    pm.initialize_practice_generation(test_context, "обществознание")
-    
-    # Генерация вопроса
-    question = pm.generate_single_question()
-    print(f"📝 Сгенерированный вопрос: {question}")
-    
-    # Оценка ответа
-    test_answer = "Демократия - это когда народ выбирает власть"
-    feedback = pm.evaluate_single_answer(test_answer, question)
-    print(f"📊 Обратная связь: {feedback}")
-    
-    # Статистика
-    stats = pm.get_practice_stats()
-    print(f"📈 Статистика: {stats}")
-    
-    # Тестирование валидации ответов
-    test_answers = [
-        "",
-        "а",
-        "продолжай",
-        "ммм",
-        "Демократия это народовластие"
-    ]
-    
-    for answer in test_answers:
-        is_valid, message = pm.validate_student_answer(answer)
-        print(f"✅ Валидация '{answer}': {is_valid} - {message}")
-    
-    print("🎉 Тестирование завершено!")
