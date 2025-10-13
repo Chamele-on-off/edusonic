@@ -61,7 +61,7 @@ room_current_avatar = defaultdict(lambda: 'teacher')
 diagram_cache = {}
 # Очередь визуализаций для каждой комнаты
 room_visualization_queue = defaultdict(list)
-# Флаг активной визуализации для каждой комнаты
+# Флаг активной визуализации для каждой комната
 room_visualization_active = defaultdict(bool)
 
 # Очереди ответов LLM для polling
@@ -378,8 +378,8 @@ def handle_student_answer(data):
     if room_id in room_dialogue:
         print(f"🔄 Обработка ответа через диалог менеджер...")
         
-        # Сбрасываем флаг ожидания ПЕРЕД обработкой
-        room_dialogue[room_id].waiting_for_answer = False
+        # НЕ СБРАСЫВАЕМ ФЛАГ ОЖИДАНИЯ ЗДЕСЬ - это сделает диалог менеджер
+        # room_dialogue[room_id].waiting_for_answer = False
         
         # Используем новый метод для последовательной обработки
         response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
