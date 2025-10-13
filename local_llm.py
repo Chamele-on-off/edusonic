@@ -66,7 +66,7 @@ class LocalLLM:
                     "messages": messages,
                     "max_tokens": max_tokens,
                     "temperature": 0.7,
-                    "stream": False
+                    "stream": False  # ← ОТКЛЮЧАЕМ ПОТОКОВУЮ ПЕРЕДАЧУ
                 }
                 
                 print(f"🔧 Запрос к локальной модели {self.model} (попытка {attempt + 1})...")
