@@ -47,7 +47,6 @@ class DialogueManager:
         self.waiting_for_answer = False
         self.current_practice_question = None
         self.max_questions = 5  # Лимит вопросов для практики
-        self.practice_question_counter = 0  # Счетчик вопросов в текущей сессии
         
         # Новые поля для улучшенного диалога
         self.last_subject_prompt_time = 0
@@ -847,44 +846,37 @@ class DialogueManager:
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """ИСПРАВЛЕННАЯ версия запуска практики"""
+        """УПРОЩЕННАЯ версия запуска практики"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
         self.waiting_for_answer = False
         self.current_question_index = 0
-        self.practice_question_counter = 0  # ВАЖНОЕ ИСПРАВЛЕНИЕ: сбрасываем счетчик вопросов
         
-        print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ С ПОСЛЕДОВАТЕЛЬНОЙ ГЕНЕРАЦИЕЙ ===")
+        print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
         print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
         # Инициализируем менеджер практики
         lesson_context = " ".join(self.lesson_content)
         self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
-        # Сохраняем практику в файл
-        if self.selected_lesson:
-            lesson_id = self.selected_lesson.get('id', 'unknown')
-            practice_data = {
-                'questions': [],
-                'lesson_id': lesson_id,
-                'subject': self.current_subject
-            }
-            self.practice_manager.save_practice_to_txt(lesson_id, practice_data)
-        
         # Уведомляем клиентов о начале практики
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # ГЕНЕРИРУЕМ ПЕРВЫЙ ВОПРОС СИНХРОННО (без ожидания callback)
-        print("🔄 Синхронная генерация первого вопроса практики...")
+        # ГЕНЕРИРУЕМ ПЕРВЫЙ ВОПРОС
+        print("🔄 Генерация первого вопроса практики...")
         first_question = self.practice_manager.generate_single_question()
         
         if first_question:
             print(f"✅ Первый вопрос сгенерирован: {first_question}")
             self.waiting_for_answer = True
-            self.practice_question_counter += 1  # ВАЖНОЕ ИСПРАВЛЕНИЕ: увеличиваем счетчик
-            print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}, вопросов сгенерировано: {self.practice_question_counter}")
+            self.current_practice_question = {
+                "id": 1,
+                "question": first_question,
+                "answer": ""
+            }
+            print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
             print("❌ Не удалось сгенерировать первый вопрос практики")
@@ -892,19 +884,19 @@ class DialogueManager:
             return "Практические задания временно недоступны. Давайте продолжим урок или выберем другую тему."
 
     def _generate_next_practice_question(self) -> Optional[str]:
+        """Генерирует следующий вопрос практики"""
         try:
             question = self.practice_manager.generate_single_question()
             if question:
+                self.current_question_index += 1
                 self.current_practice_question = {
                     "id": self.current_question_index + 1,
                     "question": question,
                     "answer": ""
                 }
-                self.current_question_index += 1
                 self.waiting_for_answer = True
-                self.practice_question_counter += 1  # ВАЖНОЕ ИСПРАВЛЕНИЕ: увеличиваем счетчик
-                print(f"✅ Сгенерирован вопрос {self.current_question_index}: {question}")
-                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}, вопросов сгенерировано: {self.practice_question_counter}")
+                print(f"✅ Сгенерирован вопрос {self.current_question_index + 1}: {question}")
+                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
                 return question
             else:
                 print("❌ Не удалось сгенерировать вопрос")
@@ -915,7 +907,7 @@ class DialogueManager:
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
         print(f"🔍 Обработка ответа: '{student_answer}'")
-        print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}, вопросов сгенерировано: {self.practice_question_counter}")
+        print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
         if not self.practice_active:
             print("❌ Практика не активна")
@@ -924,7 +916,6 @@ class DialogueManager:
         # ПРОВЕРЯЕМ, НЕ ЯВЛЯЕТСЯ ЛИ ОТВЕТ КОМАНДОЙ
         if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
             print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
-            # Вместо игнорирования, генерируем следующий вопрос
             next_question = self._generate_next_practice_question()
             if next_question:
                 return f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
@@ -936,9 +927,11 @@ class DialogueManager:
         
         current_question = self.current_practice_question
         if not current_question:
+            print("❌ Нет текущего вопроса практики")
             self._end_practice_session()
             return "Практика завершена."
         
+        # Оцениваем ответ
         evaluation = self.practice_manager.evaluate_single_answer(
             student_answer, 
             current_question["question"]
@@ -946,13 +939,13 @@ class DialogueManager:
         
         print(f"📝 Оценка: {evaluation}")
         
-        # ВАЖНОЕ ИСПРАВЛЕНИЕ: Проверяем счетчик вопросов вместо current_question_index
-        if self.practice_question_counter < self.max_questions:
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ: Проверяем можно ли генерировать еще вопросы
+        if self.practice_manager.has_more_questions():
             next_question = self._generate_next_practice_question()
             if next_question:
                 response = f"{evaluation}. Следующий вопрос: {next_question}"
                 print(f"➡️ Следующий вопрос сгенерирован: {next_question}")
-                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}, вопросов сгенерировано: {self.practice_question_counter}")
+                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
                 return response
             else:
                 print("❌ Не удалось сгенерировать следующий вопрос")
@@ -977,7 +970,6 @@ class DialogueManager:
         self.current_subject = None
         self.lesson_content = []
         self.current_paragraph = 0
-        self.practice_question_counter = 0  # ВАЖНОЕ ИСПРАВЛЕНИЕ: сбрасываем счетчик
         
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
@@ -1102,7 +1094,6 @@ class DialogueManager:
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_question_index = 0
-        self.practice_question_counter = 0  # ВАЖНОЕ ИСПРАВЛЕНИЕ: сбрасываем счетчик
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
