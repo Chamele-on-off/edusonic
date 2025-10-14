@@ -64,25 +64,35 @@ class LLMIntegration:
             print(f"Ошибка сохранения кэша: {e}")
 
     def _clean_llm_response(self, content: str) -> str:
-        """Очистка ответа LLM от форматирования и специальных символов"""
+        """УЛУЧШЕННАЯ очистка ответа LLM от форматирования и специальных символов"""
         if not content:
             return ""
-            
-        # Удаляем звездочки и другие маркеры форматирования
-        content = re.sub(r'[\*\#\-\_]{2,}', '', content)
-        content = re.sub(r'^\s*[\*\-\+]\s*', '', content, flags=re.MULTILINE)
         
-        # Удаляем префиксы типа "Ответ:" или "AI:"
-        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:", "**", "*"]
+        # Удаляем различные маркеры форматирования
+        content = re.sub(r'[\*\#\-\_]{2,}', '', content)  # Удаляем последовательности ***, ###, ---, ___
+        content = re.sub(r'^\s*[\*\-\+]\s*', '', content, flags=re.MULTILINE)  # Удаляем маркеры списков
+        content = re.sub(r'```[\s\S]*?```', '', content)  # Удаляем блоки кода
+        content = re.sub(r'`[^`]*`', '', content)  # Удаляем inline код
+        
+        # Удаляем префиксы типа "Ответ:", "AI:" и т.д.
+        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:", "**", "*", "# "]
         for prefix in prefixes:
             if content.startswith(prefix):
                 content = content[len(prefix):].strip()
         
-        # Удаляем лишние пробелы и переносы строк
-        content = re.sub(r'\s+', ' ', content)
-        content = re.sub(r'\n+', '\n', content)
+        # Удаляем английские и китайские символы (если нужно только русское содержание)
+        # Раскомментируйте при необходимости:
+        # content = re.sub(r'[^\u0400-\u04FF\u0020-\u007E\u00A0-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D\u2026]', '', content)
         
-        return content.strip()
+        # Удаляем лишние пробелы и переносы строк, но сохраняем структуру абзацев
+        content = re.sub(r'[ \t]+', ' ', content)  # Заменяем множественные пробелы и табы
+        content = re.sub(r'\n\s*\n', '\n\n', content)  # Сохраняем двойные переводы как разделители абзацев
+        content = re.sub(r'\n+', '\n', content)  # Убираем множественные одиночные переводы
+        
+        # Удаляем начальные и конечные пробелы/переводы
+        content = content.strip()
+        
+        return content
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000, 
