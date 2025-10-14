@@ -182,7 +182,7 @@ class DialogueManager:
             return "общее"
 
     def _load_lesson_content(self, lesson_file: Path) -> List[str]:
-        """Загружает содержание урока из текстового файла"""
+        """Загружает содержание урока из текстового файла с улучшенной очисткой"""
         try:
             print(f"📖 Загрузка урока из файла: {lesson_file}")
             
@@ -194,6 +194,9 @@ class DialogueManager:
                 content = f.read()
             
             print(f"✅ Файл прочитан, длина: {len(content)} символов")
+            
+            # УЛУЧШЕННАЯ ОЧИСТКА СОДЕРЖАНИЯ
+            content = self._clean_lesson_content(content)
             
             # Разбиваем на абзацы (по пустым строкам)
             paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
@@ -228,6 +231,28 @@ class DialogueManager:
         except Exception as e:
             print(f"❌ Ошибка загрузки содержания урока: {e}")
             return ["Ошибка загрузки урока. Попробуйте позже."]
+
+    def _clean_lesson_content(self, content: str) -> str:
+        """Очистка содержания урока от лишнего форматирования"""
+        if not content:
+            return content
+        
+        # Удаляем маркеры форматирования
+        content = re.sub(r'[\*\#]{1,}', '', content)  # Удаляем одиночные * и #
+        content = re.sub(r'\-\-\-+', '', content)  # Удаляем разделители ---
+        content = re.sub(r'\+\+\+', '', content)  # Удаляем +++
+        
+        # Удаляем HTML-теги если есть
+        content = re.sub(r'<[^>]+>', '', content)
+        
+        # Нормализуем переводы строк
+        content = re.sub(r'\r\n', '\n', content)
+        content = re.sub(r'\n\s*\n', '\n\n', content)
+        
+        # Удаляем начальные/конечные пробелы
+        content = content.strip()
+        
+        return content
 
     def _similarity(self, a: str, b: str) -> float:
         """Вычисление схожести строк"""
@@ -679,14 +704,20 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
-        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
-        recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
-        
-        if self.lesson_started and any(cmd in text_lower for cmd in continue_commands + recorded_commands):
+        # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ - РАБОТАЕТ ЛЮБАЯ ИЗ НИХ В ЛЮБОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
+        continue_commands = [
+            "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
+            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
+            "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"
+        ]
+
+        if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
+                print(f"✅ Команда продолжения обработана: '{text_lower}' -> следующий абзац")
                 return next_paragraph
             else:
+                print("🏁 Урок завершен по команде продолжения")
                 return "Урок завершен. Переходим к практике."
         
         self._add_to_conversation_history(text, is_user=True)
