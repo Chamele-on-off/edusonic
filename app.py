@@ -470,12 +470,11 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - УБИРАЕМ БЛОКИРОВКУ ПОВТОРОВ
-        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
-        recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
-        
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - РАБОТАЕТ ЛЮБАЯ КОМАНДА В ЛЮБОЙ МОМЕНТ
+        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше", "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно", "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"]
+
         # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ
-        if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands + recorded_commands):
+        if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands):
             # Получаем следующий абзац урока
             next_paragraph = dialogue._get_next_paragraph()
             if next_paragraph:
@@ -487,6 +486,15 @@ def handle_recognized_speech(data):
                 }, room=room_id)
                 # Озвучиваем следующий абзац
                 speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+            else:
+                # Если урок закончился, начинаем практику
+                practice_message = "Урок завершен. Переходим к практике."
+                emit('speech_text', {
+                    'text': f"Учитель: {practice_message}",
+                    'sid': 'teacher', 
+                    'is_teacher': True
+                }, room=room_id)
+                speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
             return
         
         # Команды остановки
