@@ -13,7 +13,7 @@ class LocalLLM:
                         os.getenv('OLLAMA_HOST') or 
                         config.get("base_url", "http://localhost:11434"))
             
-        self.model = config.get("model", "qwen2.5:3b")
+        self.model = config.get("model", "llama3.2:3b-q4_K_M")
         # УВЕЛИЧИВАЕМ ТАЙМАУТ ДО 3 МИНУТ ДЛЯ ГЕНЕРАЦИИ ВОПРОСОВ
         self.timeout = 180  # 3 минуты для генерации вопросов
         self.max_retries = 2
