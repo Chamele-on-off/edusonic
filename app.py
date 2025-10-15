@@ -136,6 +136,18 @@ def setup_llm_manager():
     llm_manager.register_room_callback('global', global_llm_callback)
     print("✅ LLM Manager настроен с улучшенным callback")
 
+def debug_dialogue_state(room_id):
+    """Вывод отладочной информации о состоянии диалога"""
+    if room_id in room_dialogue:
+        dialogue = room_dialogue[room_id]
+        print(f"🔍 DEBUG Room {room_id}:")
+        print(f"   lesson_started: {dialogue.lesson_started}")
+        print(f"   current_state: {dialogue.current_state}")
+        print(f"   current_paragraph: {dialogue.current_paragraph}")
+        print(f"   total_paragraphs: {len(dialogue.lesson_content) if dialogue.lesson_content else 0}")
+        print(f"   practice_active: {dialogue.practice_active}")
+        print(f"   waiting_for_answer: {dialogue.waiting_for_answer}")
+
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
@@ -448,7 +460,7 @@ def handle_recognized_speech(data):
 
     # ИГНОРИРУЕМ распознанную речь, если учитель говорит
     if room_teacher_speaking[room_id]:
-        print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
+        print(f"🔇 Игнорирую речь ученика, так как учитель говорит: {text}")
         return
 
     # Игнорируем распознавание системных сообщений и короткие фразы
@@ -470,11 +482,20 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - РАБОТАЕТ ЛЮБАЯ КОМАНДА В ЛЮБОЙ МОМЕНТ
-        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше", "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно", "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"]
+        # 🔥 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ
+        debug_dialogue_state(room_id)
+        
+        # 🔥 УПРОЩЕННАЯ ЛОГИКА: ВСЕ команды продолжения обрабатываются одинаково
+        continue_commands = [
+            "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
+            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
+            "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"
+        ]
 
-        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ
+        # Если урок начат и это ЛЮБАЯ команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ
         if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands):
+            print(f"🎯 App: Обработка команды продолжения: '{text}'")
+            
             # Получаем следующий абзац урока
             next_paragraph = dialogue._get_next_paragraph()
             if next_paragraph:
@@ -495,19 +516,17 @@ def handle_recognized_speech(data):
                     'is_teacher': True
                 }, room=room_id)
                 speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
-            return
+            return  # 🔥 ВАЖНО: Выходим после обработки команды
         
         # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
             stop_response = dialogue.process_input(text)
             if stop_response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {stop_response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # Озвучиваем ответ на остановку
                 speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
             return
         
@@ -516,13 +535,11 @@ def handle_recognized_speech(data):
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
             # Обработка диалога выбора урока
@@ -530,7 +547,6 @@ def handle_recognized_speech(data):
             
             # Если response None - это значит был выбран предмет и нужно начать урок
             if response is None:
-                # Урок выбран, начинаем чтение
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data:
                     emit('lesson_started', {
@@ -542,23 +558,18 @@ def handle_recognized_speech(data):
                     # Немедленно начинаем чтение первого абзаца урока
                     first_paragraph = dialogue._get_next_paragraph()
                     if first_paragraph:
-                        # Отправляем текст
                         emit('speech_text', {
                             'text': f"Учитель: {first_paragraph}",
                             'sid': 'teacher',
                             'is_teacher': True
                         }, room=room_id)
-                        # Озвучиваем первый абзац
                         speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
             elif response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                
-                # Озвучиваем ответ (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
