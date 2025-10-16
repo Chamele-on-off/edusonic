@@ -9,6 +9,42 @@ from local_llm_manager import get_llm_manager
 import queue
 from key_manager import get_key_manager
 
+def clean_text_for_speech(text: str) -> str:
+    """Тщательная очистка текста для озвучивания"""
+    if not text:
+        return ""
+    
+    # Удаляем markdown разметку
+    text = re.sub(r'[#\*\_\~`]', '', text)
+    
+    # Удаляем лишние пробелы и переносы
+    text = re.sub(r'\n+', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Удаляем технические символы и специальные последовательности
+    text = re.sub(r'\\n', ' ', text)
+    text = re.sub(r'\\t', ' ', text)
+    text = re.sub(r'\\r', ' ', text)
+    
+    # Удаляем английские и китайские символы (оставляем только кириллицу, латиницу, цифры и пунктуацию)
+    text = re.sub(r'[^\u0400-\u04FFa-zA-Z0-9\s\.,!?;:()\-—]', '', text)
+    
+    # Удаляем множественные точки и запятые
+    text = re.sub(r'[\.\,]{2,}', '.', text)
+    
+    # Восстанавливаем нормальную пунктуацию
+    text = re.sub(r'\s+([\.,!?;:)])', r'\1', text)
+    text = re.sub(r'([(\-])\s+', r'\1', text)
+    
+    # Удаляем пробелы в начале и конце
+    text = text.strip()
+    
+    # Обеспечиваем, что предложения начинаются с заглавной буквы
+    if text and len(text) > 1:
+        text = text[0].upper() + text[1:]
+    
+    return text
+
 class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
@@ -64,35 +100,25 @@ class LLMIntegration:
             print(f"Ошибка сохранения кэша: {e}")
 
     def _clean_llm_response(self, content: str) -> str:
-        """УЛУЧШЕННАЯ очистка ответа LLM от форматирования и специальных символов"""
+        """Очистка ответа LLM от форматирования и специальных символов"""
         if not content:
             return ""
+            
+        # Удаляем звездочки и другие маркеры форматирования
+        content = re.sub(r'[\*\#\-\_]{2,}', '', content)
+        content = re.sub(r'^\s*[\*\-\+]\s*', '', content, flags=re.MULTILINE)
         
-        # Удаляем различные маркеры форматирования
-        content = re.sub(r'[\*\#\-\_]{2,}', '', content)  # Удаляем последовательности ***, ###, ---, ___
-        content = re.sub(r'^\s*[\*\-\+]\s*', '', content, flags=re.MULTILINE)  # Удаляем маркеры списков
-        content = re.sub(r'```[\s\S]*?```', '', content)  # Удаляем блоки кода
-        content = re.sub(r'`[^`]*`', '', content)  # Удаляем inline код
-        
-        # Удаляем префиксы типа "Ответ:", "AI:" и т.д.
-        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:", "**", "*", "# "]
+        # Удаляем префиксы типа "Ответ:" или "AI:"
+        prefixes = ["Ответ:", "AI:", "Ассистент:", "Assistant:", "**", "*"]
         for prefix in prefixes:
             if content.startswith(prefix):
                 content = content[len(prefix):].strip()
         
-        # Удаляем английские и китайские символы (если нужно только русское содержание)
-        # Раскомментируйте при необходимости:
-        # content = re.sub(r'[^\u0400-\u04FF\u0020-\u007E\u00A0-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D\u2026]', '', content)
+        # Удаляем лишние пробелы и переносы строк
+        content = re.sub(r'\s+', ' ', content)
+        content = re.sub(r'\n+', '\n', content)
         
-        # Удаляем лишние пробелы и переносы строк, но сохраняем структуру абзацев
-        content = re.sub(r'[ \t]+', ' ', content)  # Заменяем множественные пробелы и табы
-        content = re.sub(r'\n\s*\n', '\n\n', content)  # Сохраняем двойные переводы как разделители абзацев
-        content = re.sub(r'\n+', '\n', content)  # Убираем множественные одиночные переводы
-        
-        # Удаляем начальные и конечные пробелы/переводы
-        content = content.strip()
-        
-        return content
+        return content.strip()
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000, 
@@ -241,9 +267,11 @@ class LLMIntegration:
                         
                         if 'choices' in result and len(result['choices']) > 0:
                             answer = result['choices'][0]['message']['content']
+                            # ОЧИСТКА ТЕКСТА ПЕРЕД ВОЗВРАТОМ
+                            answer = clean_text_for_speech(answer)
                             processed_answer = self._clean_llm_response(answer)
                             
-                            print(f"✅ [LLM] Ответ от OpenRouter получен: {processed_answer[:100]}...")
+                            print(f"✅ [LLM] Ответ от OpenRouter получен и очищен: {processed_answer[:100]}...")
                             
                             # Если есть callback, вызываем его
                             if callback:
