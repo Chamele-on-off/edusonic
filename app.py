@@ -136,6 +136,42 @@ def setup_llm_manager():
     llm_manager.register_room_callback('global', global_llm_callback)
     print("✅ LLM Manager настроен с улучшенным callback")
 
+def clean_text_for_speech(text: str) -> str:
+    """Тщательная очистка текста для озвучивания"""
+    if not text:
+        return ""
+    
+    # Удаляем markdown разметку
+    text = re.sub(r'[#\*\_\~`]', '', text)
+    
+    # Удаляем лишние пробелы и переносы
+    text = re.sub(r'\n+', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Удаляем технические символы и специальные последовательности
+    text = re.sub(r'\\n', ' ', text)
+    text = re.sub(r'\\t', ' ', text)
+    text = re.sub(r'\\r', ' ', text)
+    
+    # Удаляем английские и китайские символы (оставляем только кириллицу, латиницу, цифры и пунктуацию)
+    text = re.sub(r'[^\u0400-\u04FFa-zA-Z0-9\s\.,!?;:()\-—]', '', text)
+    
+    # Удаляем множественные точки и запятые
+    text = re.sub(r'[\.\,]{2,}', '.', text)
+    
+    # Восстанавливаем нормальную пунктуацию
+    text = re.sub(r'\s+([\.,!?;:)])', r'\1', text)
+    text = re.sub(r'([(\-])\s+', r'\1', text)
+    
+    # Удаляем пробелы в начале и конце
+    text = text.strip()
+    
+    # Обеспечиваем, что предложения начинаются с заглавной буквы
+    if text and len(text) > 1:
+        text = text[0].upper() + text[1:]
+    
+    return text
+
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
@@ -148,6 +184,13 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     if not text.strip():
         return
         
+    # ОЧИСТКА ТЕКСТА ПЕРЕД ОЗВУЧИВАНИЕМ
+    cleaned_text = clean_text_for_speech(text)
+    
+    if not cleaned_text.strip():
+        print(f"⚠️ Текст пуст после очистки: {text[:100]}...")
+        return
+        
     # Устанавливаем флаг, что учитель начинает говорить
     if is_teacher:
         room_teacher_speaking[room_id] = True
@@ -155,11 +198,11 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    audio_data = text_to_speech(text, lang='ru')
+    audio_data = text_to_speech(cleaned_text, lang='ru')
     if audio_data:
         emit('speech_audio', {
             'audio': audio_data,
-            'text': text,
+            'text': cleaned_text,  # Используем очищенный текст
             'timestamp': time.time(),
             'voice_type': voice_type,
             'is_teacher': is_teacher
@@ -167,7 +210,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
         
         if not skip_history:
             room_speech_data[room_id].append({
-                'text': text,
+                'text': cleaned_text,  # Сохраняем очищенный текст
                 'timestamp': time.time(),
                 'type': 'generated',
                 'voice_type': voice_type,
@@ -177,7 +220,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 room_speech_data[room_id].pop(0)
     
     # Длительность речи рассчитываем на основе длины текста
-    speech_duration = max(2, len(text) * 0.1)
+    speech_duration = max(2, len(cleaned_text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
 @app.route('/')
@@ -470,32 +513,39 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - РАБОТАЕТ ЛЮБАЯ КОМАНДА В ЛЮБОЙ МОМЕНТ
-        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше", "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно", "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"]
-
-        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ
-        if dialogue.is_lesson_started() and any(cmd in text.lower() for cmd in continue_commands):
-            # Получаем следующий абзац урока
-            next_paragraph = dialogue._get_next_paragraph()
-            if next_paragraph:
-                # Отправляем текст
-                emit('speech_text', {
-                    'text': f"Учитель: {next_paragraph}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                # Озвучиваем следующий абзац
-                speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-            else:
-                # Если урок закончился, начинаем практику
-                practice_message = "Урок завершен. Переходим к практике."
-                emit('speech_text', {
-                    'text': f"Учитель: {practice_message}",
-                    'sid': 'teacher', 
-                    'is_teacher': True
-                }, room=room_id)
-                speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
-            return
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - УБИРАЕМ БЛОКИРОВКУ ПОВТОРОВ
+        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ ЛЮБОЕ СИСТЕМНОЕ СЛОВО
+        if dialogue.is_lesson_started():
+            # Расширенный список команд продолжения
+            all_continue_commands = [
+                "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
+                "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
+                "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
+            ]
+            
+            # Проверяем ЛЮБОЕ системное слово без ограничений
+            if any(cmd in text.lower() for cmd in all_continue_commands):
+                # Получаем следующий абзац урока
+                next_paragraph = dialogue._get_next_paragraph()
+                if next_paragraph:
+                    # Отправляем текст
+                    emit('speech_text', {
+                        'text': f"Учитель: {next_paragraph}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=room_id)
+                    # Озвучиваем следующий абзац
+                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                else:
+                    # Если урок закончился, начинаем практику
+                    practice_msg = "Урок завершен. Переходим к практике."
+                    emit('speech_text', {
+                        'text': f"Учитель: {practice_msg}",
+                        'sid': 'teacher', 
+                        'is_teacher': True
+                    }, room=room_id)
+                    speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
+                return
         
         # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
