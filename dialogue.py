@@ -67,31 +67,83 @@ class DialogueManager:
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
         
-        # ВАЖНОЕ ИСПРАВЛЕНИЕ: Убираем все переменные, которые могут блокировать повторные команды
-        # НЕТ переменных для отслеживания последней команды или состояния блокировки
+        # НОВЫЕ ПОЛЯ ДЛЯ АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ
+        self.auto_continue_timer = None
+        self.auto_continue_delay = 25  # 25 секунд
+        self.last_paragraph_time = 0
+        self.auto_continue_enabled = True
         
         self._load_lessons()
+
+    def _start_auto_continue_timer(self, room_id: str):
+        """Запускает таймер автоматического продолжения"""
+        # Отменяем предыдущий таймер если есть
+        self._cancel_auto_continue_timer()
         
-        # Расширенные локальные шаблоны
-        self.local_patterns = {
-            "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
-            "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
-            "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
-            "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
-            "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
-            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
-            "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
-            "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
-            "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
-            "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
-            "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
-            "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
-                      "AI-учитель, который сделает ваше обучение интересным и эффективным."],
-            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
-                          "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
-            "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
-                               "Моя задача - помочь вам учиться с удовольствием и пониманием."]
-        }
+        # Запускаем новый таймер
+        self.auto_continue_timer = threading.Timer(
+            self.auto_continue_delay, 
+            self._auto_continue_paragraph, 
+            [room_id]
+        )
+        self.auto_continue_timer.daemon = True
+        self.auto_continue_timer.start()
+        self.last_paragraph_time = time.time()
+        print(f"⏰ Таймер автоматического продолжения запущен ({self.auto_continue_delay} сек)")
+        
+    def _cancel_auto_continue_timer(self):
+        """Отменяет таймер автоматического продолжения"""
+        if self.auto_continue_timer:
+            self.auto_continue_timer.cancel()
+            self.auto_continue_timer = None
+            print("⏰ Таймер автоматического продолжения отменен")
+            
+    def _auto_continue_paragraph(self, room_id: str):
+        """Автоматически переходит к следующему абзацу"""
+        if not self.lesson_started or not self.auto_continue_enabled:
+            return
+            
+        print("🔄 Автоматический переход к следующему абзацу (таймер)")
+        
+        # Получаем следующий абзац
+        next_paragraph = self._get_next_paragraph(room_id)
+        
+        if next_paragraph:
+            # Отправляем через WebSocket
+            if self.socketio and room_id:
+                self.socketio.emit('speech_text', {
+                    'text': f"Учитель: {next_paragraph}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=room_id)
+                
+                # Озвучиваем следующий абзац
+                try:
+                    from app import speak_text
+                    speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                except ImportError:
+                    print("⚠️ Не удалось импортировать speak_text из app.py")
+        else:
+            # Урок завершен, начинаем практику
+            self._handle_lesson_completion(room_id)
+            
+    def _handle_lesson_completion(self, room_id: str):
+        """Обрабатывает завершение урока"""
+        print("🏁 Урок завершен по таймеру, запускаем практику")
+        practice_message = self._start_practice_session()
+        
+        if self.socketio and room_id and practice_message:
+            self.socketio.emit('speech_text', {
+                'text': f"Учитель: {practice_message}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            
+            try:
+                from app import speak_text
+                speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
+            except ImportError:
+                print("⚠️ Не удалось импортировать speak_text из app.py")
 
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка расширенной базы диалоговых шаблонов"""
@@ -191,7 +243,7 @@ class DialogueManager:
             
             if not lesson_file.exists():
                 print(f"❌ Файл урока не существует: {lesson_file}")
-                return ["Файл урока не найден. Попробуйте выбрать другой урок."]
+                return ["Файл урока не найден. Попробуйте другой урок."]
                 
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -711,17 +763,10 @@ class DialogueManager:
         continue_commands = [
             "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
             "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
-            "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все",
-            "дальше можно", "можно дальше", "продолжаем урок", "следующий абзац",
-            "да", "ага", "угу", "хорошо", "ясно", "понял", "понятно", "записал",
-            "слушаю", "поняла", "ясненько", "ладушки", "окей", "хорош", "ясно понятно",
-            "продолжение", "следующая часть", "дальше урок", "продолжи урок", "читай дальше"
+            "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"
         ]
 
-        # ВАЖНОЕ ИСПРАВЛЕНИЕ: ЛЮБАЯ команда продолжения всегда работает без ограничений
-        # УБИРАЕМ ВСЕ ПРОВЕРКИ НА ПОВТОРЫ И БЛОКИРОВКИ
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
-            print(f"🎯 ОБРАБОТКА КОМАНДЫ ПРОДОЛЖЕНИЯ: '{text_lower}'")
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
                 print(f"✅ Команда продолжения обработана: '{text_lower}' -> следующий абзац")
@@ -862,14 +907,19 @@ class DialogueManager:
             
         return None
 
-    def _get_next_paragraph(self) -> Optional[str]:
+    def _get_next_paragraph(self, room_id: str = None) -> Optional[str]:
         print(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
-        # ВАЖНОЕ ИСПРАВЛЕНИЕ: ПРОСТАЯ ЛОГИКА БЕЗ БЛОКИРОВОК
-        # НЕТ проверок на повторные команды или блокировки
+        # ОТМЕНЯЕМ ПРЕДЫДУЩИЙ ТАЙМЕР ПРИ ЛЮБОМ ПЕРЕХОДЕ
+        self._cancel_auto_continue_timer()
+        
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
+            
+            # ЗАПУСКАЕМ ТАЙМЕР АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ
+            if room_id and self.auto_continue_enabled and self.lesson_started:
+                self._start_auto_continue_timer(room_id)
             
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
@@ -885,11 +935,15 @@ class DialogueManager:
             return paragraph
         else:
             print("🏁 Урок завершен, запускаем практику")
-            practice_message = self._start_practice_session()
-            return practice_message
+            # Отменяем таймер при завершении урока
+            self._cancel_auto_continue_timer()
+            return None
 
     def _start_practice_session(self) -> str:
         """УПРОЩЕННАЯ версия запуска практики"""
+        # ОТМЕНЯЕМ ТАЙМЕР ПРИ ЗАПУСКЕ ПРАКТИКИ
+        self._cancel_auto_continue_timer()
+        
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -1160,3 +1214,42 @@ class DialogueManager:
         if self.knowledge_base:
             return self.knowledge_base.get_stats()
         return None
+
+    # НОВЫЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ АВТОМАТИЧЕСКИМ ПРОДОЛЖЕНИЕМ
+    def enable_auto_continue(self, delay: int = 25):
+        """Включает автоматическое продолжение"""
+        self.auto_continue_enabled = True
+        self.auto_continue_delay = delay
+        print(f"✅ Автоматическое продолжение включено ({delay} сек)")
+
+    def disable_auto_continue(self):
+        """Выключает автоматическое продолжение"""
+        self.auto_continue_enabled = False
+        self._cancel_auto_continue_timer()
+        print("❌ Автоматическое продолжение выключено")
+
+    def set_auto_continue_delay(self, delay: int):
+        """Устанавливает задержку автоматического продолжения"""
+        self.auto_continue_delay = delay
+        print(f"⏰ Задержка автоматического продолжения установлена: {delay} сек")
+
+    # Локальные шаблоны ответов
+    local_patterns = {
+        "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
+        "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
+        "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
+        "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
+        "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
+        "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
+        "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
+        "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
+        "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
+        "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
+        "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
+        "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
+                  "AI-учитель, который сделает ваше обучение интересным и эффективным."],
+        "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
+                      "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
+        "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
+                           "Моя задача - помочь вам учиться с удовольствием и пониманием."]
+    }
