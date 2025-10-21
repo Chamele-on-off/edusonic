@@ -513,8 +513,7 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - УБИРАЕМ БЛОКИРОВКУ ПОВТОРОВ
-        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ ЛЮБОЕ СИСТЕМНОЕ СЛОВО
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ
         if dialogue.is_lesson_started():
             # Расширенный список команд продолжения
             all_continue_commands = [
@@ -525,6 +524,9 @@ def handle_recognized_speech(data):
             
             # Проверяем ЛЮБОЕ системное слово без ограничений
             if any(cmd in text.lower() for cmd in all_continue_commands):
+                # ОТМЕНЯЕМ ТАЙМЕР ПРИ РУЧНОЙ КОМАНДЕ ПРОДОЛЖЕНИЯ
+                dialogue._cancel_auto_continue_timer()
+                
                 # Получаем следующий абзац урока с передачей room_id
                 next_paragraph = dialogue._get_next_paragraph(room_id)
                 if next_paragraph:
@@ -549,6 +551,9 @@ def handle_recognized_speech(data):
         
         # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
+            # ОТМЕНЯЕМ ТАЙМЕР ПРИ КОМАНДЕ ОСТАНОВКИ
+            dialogue._cancel_auto_continue_timer()
+            
             stop_response = dialogue.process_input(text)
             if stop_response:
                 # Отправляем текст
@@ -563,7 +568,7 @@ def handle_recognized_speech(data):
         
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
-            # Обработка вопросов во время чтения урока
+            # Обработка вопросов во время урока - ТАЙМЕР БУДЕТ ОСТАНОВЛЕН ВНУТРИ МЕТОДА
             response = dialogue.handle_question_during_lesson(text)
             if response:
                 # Отправляем текст
@@ -1266,7 +1271,7 @@ def poll_llm_response():
                     new_responses.append(resp)
         
         if new_responses:
-            # Сортируем по времени (самые свежие первыми)
+            # Сортируем по времени (самые свечие первыми)
             new_responses.sort(key=lambda x: x['timestamp'], reverse=True)
             
             # Возвращаем все новые ответы
