@@ -99,7 +99,7 @@ class DialogueManager:
             print("⏰ Таймер автоматического продолжения отменен")
             
     def _auto_continue_paragraph(self, room_id: str):
-        """Автоматически переходит к следующему абзацу"""
+        """Автоматически переходит к следующему абзацу с ОЗВУЧИВАНИЕМ"""
         if not self.lesson_started or not self.auto_continue_enabled:
             return
             
@@ -109,6 +109,8 @@ class DialogueManager:
         next_paragraph = self._get_next_paragraph(room_id)
         
         if next_paragraph:
+            print(f"🔊 Автоматическое озвучивание абзаца: {next_paragraph[:100]}...")
+            
             # Отправляем через WebSocket
             if self.socketio and room_id:
                 self.socketio.emit('speech_text', {
@@ -117,12 +119,30 @@ class DialogueManager:
                     'is_teacher': True
                 }, room=room_id)
                 
-                # Озвучиваем следующий абзац
+                # ОБЯЗАТЕЛЬНО ОЗВУЧИВАЕМ АБЗАЦ
                 try:
+                    # Импортируем speak_text из app.py
+                    import sys
+                    import os
+                    # Добавляем родительскую директорию в путь для импорта
+                    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                     from app import speak_text
+                    
+                    # Озвучиваем абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-                except ImportError:
-                    print("⚠️ Не удалось импортировать speak_text из app.py")
+                    print("✅ Абзац успешно озвучен через автоматическое продолжение")
+                    
+                except ImportError as e:
+                    print(f"❌ Ошибка импорта speak_text: {e}")
+                    # Альтернативный способ - отправляем событие для озвучивания
+                    self.socketio.emit('generate_speech', {
+                        'room_id': room_id,
+                        'text': next_paragraph,
+                        'voice': 'female',
+                        'is_teacher': True
+                    }, room=room_id)
+                except Exception as e:
+                    print(f"❌ Ошибка озвучивания: {e}")
         else:
             # Урок завершен, начинаем практику
             self._handle_lesson_completion(room_id)
@@ -140,6 +160,9 @@ class DialogueManager:
             }, room=room_id)
             
             try:
+                import sys
+                import os
+                sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                 from app import speak_text
                 speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
             except ImportError:
@@ -243,7 +266,7 @@ class DialogueManager:
             
             if not lesson_file.exists():
                 print(f"❌ Файл урока не существует: {lesson_file}")
-                return ["Файл урока не найден. Попробуйте другой урок."]
+                return ["Файл урока не найден. Попробуйте выбрать другой урок."]
                 
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -1073,9 +1096,14 @@ class DialogueManager:
         print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
+        """Обработка вопросов во время урока с остановкой таймера"""
         if not question.strip():
             return "Повторите вопрос пожалуйста, я не расслышал."
             
+        # ОСТАНАВЛИВАЕМ ТАЙМЕР АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ПРИ ВОПРОСЕ
+        self._cancel_auto_continue_timer()
+        print("⏸️ Таймер автоматического продолжения остановлен из-за вопроса ученика")
+        
         question_lower = question.lower().strip()
         
         if self.visualization_enabled:
@@ -1163,6 +1191,11 @@ class DialogueManager:
         if not final_response:
             final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
+        # ВОЗОБНОВЛЯЕМ ТАЙМЕР ПОСЛЕ ОТВЕТА НА ВОПРОС
+        if self.lesson_started and self.auto_continue_enabled and self.room_id:
+            print("▶️ Возобновление таймера автоматического продолжения после ответа на вопрос")
+            self._start_auto_continue_timer(self.room_id)
+        
         return final_response
 
     def get_selected_lesson(self) -> Optional[dict]:
@@ -1232,6 +1265,30 @@ class DialogueManager:
         """Устанавливает задержку автоматического продолжения"""
         self.auto_continue_delay = delay
         print(f"⏰ Задержка автоматического продолжения установлена: {delay} сек")
+
+    def speak_paragraph(self, room_id: str, paragraph: str):
+        """Принудительное озвучивание абзаца через app.py"""
+        try:
+            import sys
+            import os
+            # Добавляем родительскую директорию в путь для импорта
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from app import speak_text
+            
+            # Озвучиваем абзац
+            speak_text(room_id, paragraph, voice_type='female', is_teacher=True)
+            print(f"✅ Абзац озвучен через speak_paragraph: {paragraph[:100]}...")
+            
+        except Exception as e:
+            print(f"❌ Ошибка озвучивания абзаца: {e}")
+            # Fallback - отправляем событие WebSocket
+            if self.socketio:
+                self.socketio.emit('generate_speech', {
+                    'room_id': room_id,
+                    'text': paragraph,
+                    'voice': 'female',
+                    'is_teacher': True
+                }, room=room_id)
 
     # Локальные шаблоны ответов
     local_patterns = {
