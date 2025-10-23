@@ -67,6 +67,11 @@ class DialogueManager:
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
         
+        # НОВОЕ: Таймер автоматического продолжения
+        self.auto_continue_timer = None
+        self.auto_continue_paused = False
+        self.auto_continue_delay = 30  # 30 секунд
+        
         self._load_lessons()
         
         # Расширенные локальные шаблоны
@@ -700,6 +705,59 @@ class DialogueManager:
         self.visualization_enabled = False
         print("❌ Автоматическая визуализация выключена")
 
+    # НОВЫЕ МЕТОДЫ ДЛЯ АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ
+    def _start_auto_continue_timer(self):
+        """Запускает таймер автоматического продолжения"""
+        if not self.lesson_started or self.auto_continue_paused:
+            return
+            
+        # Останавливаем предыдущий таймер
+        self._stop_auto_continue_timer()
+        
+        print(f"⏰ Запуск таймера автоматического продолжения через {self.auto_continue_delay} секунд")
+        
+        def auto_continue():
+            if (self.lesson_started and not self.auto_continue_paused and 
+                self.current_paragraph < len(self.lesson_content)):
+                print("⏰ Автоматический переход к следующему абзацу")
+                next_paragraph = self._get_next_paragraph()
+                if next_paragraph and self.room_id and self.socketio:
+                    # Отправляем следующий абзац через WebSocket
+                    self.socketio.emit('speech_text', {
+                        'text': f"Учитель: {next_paragraph}",
+                        'sid': 'teacher',
+                        'is_teacher': True
+                    }, room=self.room_id)
+                    
+                    # Озвучиваем следующий абзац
+                    if hasattr(self.socketio, 'speak_text'):
+                        self.socketio.speak_text(self.room_id, next_paragraph, voice_type='female', is_teacher=True)
+        
+        # Запускаем новый таймер
+        self.auto_continue_timer = threading.Timer(self.auto_continue_delay, auto_continue)
+        self.auto_continue_timer.daemon = True
+        self.auto_continue_timer.start()
+
+    def _stop_auto_continue_timer(self):
+        """Останавливает таймер автоматического продолжения"""
+        if self.auto_continue_timer:
+            self.auto_continue_timer.cancel()
+            self.auto_continue_timer = None
+            print("⏹️ Таймер автоматического продолжения остановлен")
+
+    def pause_auto_continue(self):
+        """Приостанавливает автоматическое продолжение"""
+        self.auto_continue_paused = True
+        self._stop_auto_continue_timer()
+        print("⏸️ Автоматическое продолжение приостановлено")
+
+    def resume_auto_continue(self):
+        """Возобновляет автоматическое продолжение"""
+        self.auto_continue_paused = False
+        if self.lesson_started:
+            self._start_auto_continue_timer()
+        print("▶️ Автоматическое продолжение возобновлено")
+
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
@@ -712,6 +770,9 @@ class DialogueManager:
         ]
 
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
+            # ВОССТАНАВЛИВАЕМ автоматическое продолжение после команды
+            self.resume_auto_continue()
+            
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
                 print(f"✅ Команда продолжения обработана: '{text_lower}' -> следующий абзац")
@@ -719,6 +780,11 @@ class DialogueManager:
             else:
                 print("🏁 Урок завершен по команде продолжения")
                 return "Урок завершен. Переходим к практике."
+        
+        # ПРИ ЛЮБОЙ РЕЧИ УЧЕНИКА ПРИОСТАНАВЛИВАЕМ АВТОМАТИЧЕСКОЕ ПРОДОЛЖЕНИЕ
+        if self.lesson_started and not any(cmd in text_lower for cmd in continue_commands):
+            self.pause_auto_continue()
+            print(f"⏸️ Автоматическое продолжение приостановлено из-за речи ученика: {text}")
         
         self._add_to_conversation_history(text, is_user=True)
         
@@ -791,6 +857,9 @@ class DialogueManager:
         
         self.enable_visualization()
         
+        # ЗАПУСКАЕМ АВТОМАТИЧЕСКОЕ ПРОДОЛЖЕНИЕ ПРИ НАЧАЛЕ УРОКА
+        self.resume_auto_continue()
+        
         self.conversation_history = []
         self.conversation_context = []
         
@@ -823,6 +892,10 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
+            # ОСТАНАВЛИВАЕМ ВСЕ ТАЙМЕРЫ ПРИ ОСТАНОВКЕ УРОКА
+            self._stop_auto_continue_timer()
+            self.auto_continue_paused = False
+            
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
@@ -835,6 +908,10 @@ class DialogueManager:
 
     def _handle_practice_session(self, text: str) -> Optional[str]:
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
+            # ОСТАНАВЛИВАЕМ ВСЕ ТАЙМЕРЫ ПРИ ОСТАНОВКЕ ПРАКТИКИ
+            self._stop_auto_continue_timer()
+            self.auto_continue_paused = False
+            
             self.practice_active = False
             self.waiting_for_answer = False
             self.current_state = "greeting"
@@ -859,6 +936,10 @@ class DialogueManager:
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
+            # ЗАПУСКАЕМ ТАЙМЕР АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ПОСЛЕ КАЖДОГО АБЗАЦА
+            if self.lesson_started:
+                self._start_auto_continue_timer()
+            
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
                 
@@ -872,12 +953,17 @@ class DialogueManager:
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
         else:
+            # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ ЗАВЕРШЕНИИ УРОКА
+            self._stop_auto_continue_timer()
             print("🏁 Урок завершен, запускаем практику")
             practice_message = self._start_practice_session()
             return practice_message
 
     def _start_practice_session(self) -> str:
         """УПРОЩЕННАЯ версия запуска практики"""
+        # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ НАЧАЛЕ ПРАКТИКИ
+        self._stop_auto_continue_timer()
+        
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -1012,6 +1098,9 @@ class DialogueManager:
             
         question_lower = question.lower().strip()
         
+        # ПРИОСТАНАВЛИВАЕМ АВТОМАТИЧЕСКОЕ ПРОДОЛЖЕНИЕ ПРИ ВОПРОСЕ УЧЕНИКА
+        self.pause_auto_continue()
+        
         if self.visualization_enabled:
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
             self._generate_visualization(question, context)
@@ -1097,6 +1186,10 @@ class DialogueManager:
         if not final_response:
             final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
+        # ПОСЛЕ ОТВЕТА НА ВОПРОС ТРЕБУЕТСЯ КОМАНДА "ПРОДОЛЖАЙ"
+        # Не восстанавливаем автоматическое продолжение - ждем команду
+        print("⏸️ После ответа на вопрос требуется команда 'продолжай'")
+        
         return final_response
 
     def get_selected_lesson(self) -> Optional[dict]:
@@ -1112,6 +1205,10 @@ class DialogueManager:
         return self.current_state
 
     def reset(self):
+        # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ СБРОСЕ
+        self._stop_auto_continue_timer()
+        self.auto_continue_paused = False
+        
         self.current_state = "greeting"
         self.current_subject = None
         self.selected_lesson = None
