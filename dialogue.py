@@ -722,16 +722,14 @@ class DialogueManager:
                 print("⏰ Автоматический переход к следующему абзацу")
                 next_paragraph = self._get_next_paragraph()
                 if next_paragraph and self.room_id and self.socketio:
-                    # Отправляем следующий абзац через WebSocket
-                    self.socketio.emit('speech_text', {
-                        'text': f"Учитель: {next_paragraph}",
-                        'sid': 'teacher',
-                        'is_teacher': True
+                    # ВАЖНОЕ ИСПРАВЛЕНИЕ: Используем специальное событие для автоматических абзацев
+                    # которое будет обработано в app.py с вызовом speak_text
+                    self.socketio.emit('auto_continue_paragraph', {
+                        'room_id': self.room_id,
+                        'paragraph': next_paragraph,
+                        'paragraph_number': self.current_paragraph,
+                        'timestamp': time.time()
                     }, room=self.room_id)
-                    
-                    # Озвучиваем следующий абзац
-                    if hasattr(self.socketio, 'speak_text'):
-                        self.socketio.speak_text(self.room_id, next_paragraph, voice_type='female', is_teacher=True)
         
         # Запускаем новый таймер
         self.auto_continue_timer = threading.Timer(self.auto_continue_delay, auto_continue)
