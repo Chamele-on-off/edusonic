@@ -631,6 +631,9 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
+            # ВАЖНОЕ ИСПРАВЛЕНИЕ: Сразу запускаем таймер при начале урока
+            self._start_auto_continue_timer()
+            
             print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат!")
             
         except Exception as e:
@@ -709,14 +712,19 @@ class DialogueManager:
     def _start_auto_continue_timer(self):
         """Запускает таймер автоматического продолжения"""
         if not self.lesson_started or self.auto_continue_paused:
+            print(f"⚠️ Таймер не запущен: lesson_started={self.lesson_started}, auto_continue_paused={self.auto_continue_paused}")
             return
             
         # Останавливаем предыдущий таймер
         self._stop_auto_continue_timer()
         
         print(f"⏰ Запуск таймера автоматического продолжения через {self.auto_continue_delay} секунд")
+        print(f"📊 Состояние: paragraph {self.current_paragraph}/{len(self.lesson_content)}, lesson_started={self.lesson_started}")
         
         def auto_continue():
+            print(f"🔔 Таймер сработал! Проверяем условия...")
+            print(f"📊 Состояние: lesson_started={self.lesson_started}, auto_continue_paused={self.auto_continue_paused}, paragraph {self.current_paragraph}/{len(self.lesson_content)}")
+            
             if (self.lesson_started and not self.auto_continue_paused and 
                 self.current_paragraph < len(self.lesson_content)):
                 print("⏰ Автоматический переход к следующему абзацу")
@@ -730,6 +738,11 @@ class DialogueManager:
                         'paragraph_number': self.current_paragraph,
                         'timestamp': time.time()
                     }, room=self.room_id)
+                    print(f"✅ Автоматический абзац отправлен в комнату {self.room_id}")
+                else:
+                    print(f"❌ Не удалось получить следующий абзац или нет комнаты: next_paragraph={next_paragraph is not None}, room_id={self.room_id}")
+            else:
+                print(f"⚠️ Условия для автоматического продолжения не выполнены")
         
         # Запускаем новый таймер
         self.auto_continue_timer = threading.Timer(self.auto_continue_delay, auto_continue)
@@ -757,7 +770,7 @@ class DialogueManager:
             self._start_auto_continue_timer()
             print("▶️ Автоматическое продолжение возобновлено")
         else:
-            print("⚠️ Не удалось возобновить автоматическое продолжение - урок завершен")
+            print(f"⚠️ Не удалось возобновить автоматическое продолжение: lesson_started={self.lesson_started}, paragraph {self.current_paragraph}/{len(self.lesson_content)}")
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -858,8 +871,8 @@ class DialogueManager:
         
         self.enable_visualization()
         
-        # ЗАПУСКАЕМ АВТОМАТИЧЕСКОЕ ПРОДОЛЖЕНИЕ ПРИ НАЧАЛЕ УРОКА
-        self.resume_auto_continue()
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ: Сразу запускаем таймер при начале урока
+        self._start_auto_continue_timer()
         
         self.conversation_history = []
         self.conversation_context = []
@@ -940,7 +953,10 @@ class DialogueManager:
             # ВАЖНОЕ ИСПРАВЛЕНИЕ: ЗАПУСКАЕМ ТАЙМЕР АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ПОСЛЕ КАЖДОГО АБЗАЦА
             # но только если урок еще продолжается
             if self.lesson_started and self.current_paragraph < len(self.lesson_content):
+                print(f"🔄 Перезапуск таймера после абзаца {self.current_paragraph}")
                 self._start_auto_continue_timer()
+            else:
+                print(f"⚠️ Таймер не перезапущен: lesson_started={self.lesson_started}, paragraph {self.current_paragraph}/{len(self.lesson_content)}")
             
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
