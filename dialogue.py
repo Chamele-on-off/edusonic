@@ -714,7 +714,7 @@ class DialogueManager:
         # Останавливаем предыдущий таймер
         self._stop_auto_continue_timer()
         
-        print(f"⏰ Запуск таймера автоматического продолжения через {self.auto_continue_delay} секунд")
+        print(f"⏰ Запуск таймер автоматического продолжения через {self.auto_continue_delay} секунд")
         
         def auto_continue():
             if (self.lesson_started and not self.auto_continue_paused and 
@@ -1186,9 +1186,10 @@ class DialogueManager:
         if not final_response:
             final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
-        # ПОСЛЕ ОТВЕТА НА ВОПРОС ТРЕБУЕТСЯ КОМАНДА "ПРОДОЛЖАЙ"
-        # Не восстанавливаем автоматическое продолжение - ждем команду
-        print("⏸️ После ответа на вопрос требуется команда 'продолжай'")
+        # ВАЖНОЕ ИСПРАВЛЕНИЕ: ВОССТАНАВЛИВАЕМ ТАЙМЕР ПОСЛЕ ОТВЕТА НА ВОПРОС
+        if self.lesson_started and self.current_paragraph < len(self.lesson_content):
+            self.resume_auto_continue()
+            print("▶️ Автоматическое продолжение восстановлено после ответа на вопрос")
         
         return final_response
 
