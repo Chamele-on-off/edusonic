@@ -706,6 +706,25 @@ def handle_visualization_generated(data):
         'timestamp': data.get('timestamp', time.time())
     }, room=room_id)
 
+# НОВЫЙ ОБРАБОТЧИК ДЛЯ АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ
+@socketio.on('auto_continue_paragraph')
+def handle_auto_continue_paragraph(data):
+    """Обработчик автоматического продолжения урока"""
+    room_id = data['room_id']
+    paragraph = data['paragraph']
+    
+    print(f"⏰ Автоматический абзац для комнаты {room_id}: {paragraph[:100]}...")
+    
+    # Отправляем текст в комнату
+    emit('speech_text', {
+        'text': f"Учитель: {paragraph}",
+        'sid': 'teacher',
+        'is_teacher': True
+    }, room=room_id)
+    
+    # Озвучиваем абзац
+    speak_text(room_id, paragraph, voice_type='female', is_teacher=True)
+
 # НОВЫЕ ФУНКЦИИ ДЛЯ POLLING ВИЗУАЛИЗАЦИИ
 def add_visualization_to_queue(room_id, topic, context):
     """Добавляет визуализацию в очередь для комнаты"""
