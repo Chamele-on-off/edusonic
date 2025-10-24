@@ -714,7 +714,7 @@ class DialogueManager:
         # Останавливаем предыдущий таймер
         self._stop_auto_continue_timer()
         
-        print(f"⏰ Запуск таймер автоматического продолжения через {self.auto_continue_delay} секунд")
+        print(f"⏰ Запуск таймера автоматического продолжения через {self.auto_continue_delay} секунд")
         
         def auto_continue():
             if (self.lesson_started and not self.auto_continue_paused and 
@@ -735,6 +735,7 @@ class DialogueManager:
         self.auto_continue_timer = threading.Timer(self.auto_continue_delay, auto_continue)
         self.auto_continue_timer.daemon = True
         self.auto_continue_timer.start()
+        print(f"✅ Таймер запущен, следующий абзац через {self.auto_continue_delay} секунд")
 
     def _stop_auto_continue_timer(self):
         """Останавливает таймер автоматического продолжения"""
@@ -752,9 +753,11 @@ class DialogueManager:
     def resume_auto_continue(self):
         """Возобновляет автоматическое продолжение"""
         self.auto_continue_paused = False
-        if self.lesson_started:
+        if self.lesson_started and self.current_paragraph < len(self.lesson_content):
             self._start_auto_continue_timer()
-        print("▶️ Автоматическое продолжение возобновлено")
+            print("▶️ Автоматическое продолжение возобновлено")
+        else:
+            print("⚠️ Не удалось возобновить автоматическое продолжение - урок завершен")
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -934,8 +937,9 @@ class DialogueManager:
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
-            # ЗАПУСКАЕМ ТАЙМЕР АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ПОСЛЕ КАЖДОГО АБЗАЦА
-            if self.lesson_started:
+            # ВАЖНОЕ ИСПРАВЛЕНИЕ: ЗАПУСКАЕМ ТАЙМЕР АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ПОСЛЕ КАЖДОГО АБЗАЦА
+            # но только если урок еще продолжается
+            if self.lesson_started and self.current_paragraph < len(self.lesson_content):
                 self._start_auto_continue_timer()
             
             if (self.visualization_enabled and paragraph and 
