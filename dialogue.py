@@ -67,6 +67,10 @@ class DialogueManager:
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
         
+        # Ссылка на менеджер уроков для таймера
+        from lesson import lesson_manager
+        self.lesson_manager = lesson_manager
+        
         self._load_lessons()
         
         # Расширенные локальные шаблоны
@@ -84,7 +88,7 @@ class DialogueManager:
             "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
             "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
                       "AI-учитель, который сделает ваше обучение интересным и эффективным."],
-            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные тепы и делать обучение увлекательным!", 
+            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
                           "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
             "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
                                "Моя задача - помочь вам учиться с удовольствием и пониманием."]
@@ -116,7 +120,7 @@ class DialogueManager:
                 "хочу учиться": ["Отлично! Какой предмет тебя интересует?", "Супер! Давай выберем тему!"]
             },
             "subject_questions": {
-                "что преподаешь": ["У меня есть уроки по разным предметам! Что хочешь изучить?"]
+                "что преподаешь": ["У меня есть уроки по разным предметы! Что хочешь изучить?"]
             },
             "metadata": {
                 "version": "1.0",
@@ -712,6 +716,11 @@ class DialogueManager:
         ]
 
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
+            # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ КОМАНДЕ ПРОДОЛЖЕНИЯ
+            if hasattr(self, 'lesson_manager') and self.lesson_manager.is_timer_active():
+                self.lesson_manager.stop_auto_continue_timer()
+                print("⏹️ Таймер остановлен по команде продолжения")
+            
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
                 print(f"✅ Команда продолжения обработана: '{text_lower}' -> следующий абзац")
@@ -823,6 +832,11 @@ class DialogueManager:
 
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
+            # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ КОМАНДЕ СТОП
+            if hasattr(self, 'lesson_manager') and self.lesson_manager.is_timer_active():
+                self.lesson_manager.stop_auto_continue_timer()
+                print("⏹️ Таймер остановлен по команде стоп")
+            
             self.lesson_started = False
             self.current_state = "greeting"
             self.conversation_counter = 0
@@ -859,6 +873,12 @@ class DialogueManager:
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
+            # ЗАПУСКАЕМ ТАЙМЕР ПОСЛЕ КАЖДОГО АБЗАЦА
+            if self.room_id and hasattr(self, 'lesson_manager'):
+                self.lesson_manager.set_auto_continue_callback(self._get_next_paragraph, self.room_id)
+                self.lesson_manager.start_auto_continue_timer()
+                print(f"⏰ Таймер запущен после абзаца {self.current_paragraph}")
+            
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
                 
@@ -872,6 +892,11 @@ class DialogueManager:
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
         else:
+            # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ ЗАВЕРШЕНИИ УРОКА
+            if hasattr(self, 'lesson_manager'):
+                self.lesson_manager.stop_auto_continue_timer()
+                print("⏹️ Таймер остановлен - урок завершен")
+            
             print("🏁 Урок завершен, запускаем практику")
             practice_message = self._start_practice_session()
             return practice_message
@@ -1007,10 +1032,16 @@ class DialogueManager:
         print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
+        """Обработка вопросов ученика во время урока с управлением таймером"""
         if not question.strip():
             return "Повторите вопрос пожалуйста, я не расслышал."
             
         question_lower = question.lower().strip()
+        
+        # ПРИ ВОПРОСЕ УЧЕНИКА - ПАУЗИМ ТАЙМЕР
+        if hasattr(self, 'lesson_manager') and self.lesson_manager.is_timer_active():
+            self.lesson_manager.pause_auto_continue()
+            print("⏸️ Таймер приостановлен из-за вопроса ученика")
         
         if self.visualization_enabled:
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
@@ -1097,6 +1128,11 @@ class DialogueManager:
         if not final_response:
             final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
+        # ПОСЛЕ ОТВЕТА НА ВОПРОС - НЕ ВОЗОБНОВЛЯЕМ ТАЙМЕР АВТОМАТИЧЕСКИ
+        # Ученик должен сказать "продолжай" чтобы продолжить урок
+        print("⏸️ Таймер остается приостановленным после ответа на вопрос")
+        print("ℹ️ Для продолжения урока скажите 'продолжай'")
+        
         return final_response
 
     def get_selected_lesson(self) -> Optional[dict]:
@@ -1125,6 +1161,10 @@ class DialogueManager:
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_question_index = 0
+        
+        # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ СБРОСЕ
+        if hasattr(self, 'lesson_manager'):
+            self.lesson_manager.stop_auto_continue_timer()
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
