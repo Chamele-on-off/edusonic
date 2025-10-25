@@ -59,6 +59,11 @@ room_current_avatar = defaultdict(lambda: 'teacher')
 
 # Кэш для визуализаций
 diagram_cache = {}
+# Очередь визуализаций для каждой комнаты
+room_visualization_queue = defaultdict(list)
+# Флаг активной визуализации для каждой комната
+room_visualization_active = defaultdict(bool)
+
 # Очереди ответов LLM для polling
 room_llm_responses = defaultdict(list)
 room_last_poll_time = defaultdict(lambda: 0)
@@ -66,10 +71,6 @@ room_last_poll_time = defaultdict(lambda: 0)
 # Улучшенная система отслеживания запросов
 room_llm_pending_requests = defaultdict(dict)
 room_last_llm_update = defaultdict(lambda: 0)
-
-# Таймеры для автоматического продолжения уроков
-room_auto_continue_timers = defaultdict(lambda: None)
-room_auto_continue_enabled = defaultdict(lambda: True)
 
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
@@ -222,76 +223,6 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     speech_duration = max(2, len(cleaned_text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
-def start_auto_continue_timer(room_id):
-    """Запускает таймер автоматического продолжения для комнаты"""
-    if not room_auto_continue_enabled[room_id]:
-        return
-        
-    # Останавливаем предыдущий таймер если есть
-    stop_auto_continue_timer(room_id)
-    
-    # Запускаем новый таймер на 25 секунд
-    timer = threading.Timer(25.0, auto_continue_lesson, [room_id])
-    timer.daemon = True
-    timer.start()
-    
-    room_auto_continue_timers[room_id] = timer
-    print(f"⏰ Таймер автоматического продолжения запущен для комнаты {room_id}")
-
-def stop_auto_continue_timer(room_id):
-    """Останавливает таймер автоматического продолжения для комнаты"""
-    if room_auto_continue_timers[room_id]:
-        room_auto_continue_timers[room_id].cancel()
-        room_auto_continue_timers[room_id] = None
-        print(f"⏹️ Таймер автоматического продолжения остановлен для комнаты {room_id}")
-
-def auto_continue_lesson(room_id):
-    """Автоматическое продолжение урока через 25 секунд"""
-    print(f"🔄 Автоматическое продолжение урока для комнаты {room_id}")
-    
-    # Проверяем, активен ли урок и не говорит ли учитель в данный момент
-    if (room_id in room_dialogue and 
-        room_dialogue[room_id].is_lesson_started() and 
-        not room_teacher_speaking[room_id] and
-        not room_practice_active[room_id]):
-        
-        # Получаем следующий абзац урока
-        next_paragraph = room_dialogue[room_id]._get_next_paragraph()
-        if next_paragraph:
-            print(f"📖 Автоматический переход к следующему абзацу: {next_paragraph[:100]}...")
-            
-            # Отправляем текст
-            socketio.emit('speech_text', {
-                'text': f"Учитель: {next_paragraph}",
-                'sid': 'teacher',
-                'is_teacher': True
-            }, room=room_id)
-            
-            # Озвучиваем следующий абзац
-            speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-            
-            # Запускаем таймер для следующего автоматического продолжения
-            start_auto_continue_timer(room_id)
-        else:
-            # Если урок закончился, начинаем практику
-            practice_msg = "Урок завершен. Переходим к практике."
-            socketio.emit('speech_text', {
-                'text': f"Учитель: {practice_msg}",
-                'sid': 'teacher', 
-                'is_teacher': True
-            }, room=room_id)
-            speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
-            
-            # Запускаем практику
-            practice_message = room_dialogue[room_id]._start_practice_session()
-            if practice_message:
-                socketio.emit('speech_text', {
-                    'text': f"Учитель: {practice_message}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                speak_text(room_id, practice_message, voice_type='female', is_teacher=True)
-
 @app.route('/')
 def home():
     """Основная страница - лендинг"""
@@ -363,12 +294,6 @@ def handle_disconnect():
             room_participants[room_id].remove(request.sid)
             emit('participant_left', {'sid': request.sid}, room=room_id)
             emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-    
-    # Останавливаем таймеры при отключении
-    for room_id in list(room_auto_continue_timers.keys()):
-        if room_auto_continue_timers[room_id]:
-            room_auto_continue_timers[room_id].cancel()
-            room_auto_continue_timers[room_id] = None
 
 @socketio.on('join_room')
 def handle_join_room(data):
@@ -600,9 +525,6 @@ def handle_recognized_speech(data):
             
             # Проверяем ЛЮБОЕ системное слово без ограничений
             if any(cmd in text.lower() for cmd in all_continue_commands):
-                # ОСТАНАВЛИВАЕМ таймер автоматического продолжения при ручной команде
-                stop_auto_continue_timer(room_id)
-                
                 # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
@@ -614,9 +536,6 @@ def handle_recognized_speech(data):
                     }, room=room_id)
                     # Озвучиваем следующий абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-                    
-                    # ЗАПУСКАЕМ таймер для следующего автоматического продолжения
-                    start_auto_continue_timer(room_id)
                 else:
                     # Если урок закончился, начинаем практику
                     practice_msg = "Урок завершен. Переходим к практике."
@@ -626,16 +545,10 @@ def handle_recognized_speech(data):
                         'is_teacher': True
                     }, room=room_id)
                     speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
-                    
-                    # Останавливаем таймер при завершении урока
-                    stop_auto_continue_timer(room_id)
                 return
         
         # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
-            # Останавливаем таймер при команде остановки
-            stop_auto_continue_timer(room_id)
-            
             stop_response = dialogue.process_input(text)
             if stop_response:
                 # Отправляем текст
@@ -650,9 +563,6 @@ def handle_recognized_speech(data):
         
         # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
-            # ОСТАНАВЛИВАЕМ таймер автоматического продолжения при вопросе ученика
-            stop_auto_continue_timer(room_id)
-            
             # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
@@ -664,9 +574,6 @@ def handle_recognized_speech(data):
                 }, room=room_id)
                 # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
-                
-                # НЕ ЗАПУСКАЕМ таймер автоматического продолжения после ответа на вопрос
-                # Пользователь должен сказать "продолжай" чтобы продолжить урок
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
@@ -693,9 +600,6 @@ def handle_recognized_speech(data):
                         }, room=room_id)
                         # Озвучиваем первый абзац
                         speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
-                        
-                        # ЗАПУСКАЕМ таймер автоматического продолжения после начала урока
-                        start_auto_continue_timer(room_id)
             elif response:
                 # Отправляем текст
                 emit('speech_text', {
@@ -772,10 +676,6 @@ def handle_practice_started(data):
     room_id = data['room_id']
     room_practice_active[room_id] = True
     room_current_question_index[room_id] = 0
-    
-    # Останавливаем таймер автоматического продолжения при начале практики
-    stop_auto_continue_timer(room_id)
-    
     emit('practice_started', {}, room=room_id)
     print(f"Практика начата в комнате {room_id}")
 
@@ -803,42 +703,6 @@ def handle_visualization_generated(data):
         'svg_code': data.get('svg_code', ''),
         'timestamp': data.get('timestamp', time.time())
     }, room=room_id)
-
-# НОВЫЕ ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АВТОМАТИЧЕСКИМ ПРОДОЛЖЕНИЕМ
-@socketio.on('set_auto_continue')
-def handle_set_auto_continue(data):
-    """Включение/выключение автоматического продолжения"""
-    room_id = data['room_id']
-    enabled = data.get('enabled', True)
-    
-    room_auto_continue_enabled[room_id] = enabled
-    
-    if enabled:
-        print(f"✅ Автоматическое продолжение включено для комнаты {room_id}")
-        # Если урок активен, запускаем таймер
-        if (room_id in room_dialogue and 
-            room_dialogue[room_id].is_lesson_started() and 
-            not room_teacher_speaking[room_id]):
-            start_auto_continue_timer(room_id)
-    else:
-        print(f"❌ Автоматическое продолжение выключено для комнаты {room_id}")
-        stop_auto_continue_timer(room_id)
-    
-    emit('auto_continue_changed', {
-        'enabled': enabled,
-        'room_id': room_id
-    }, room=room_id)
-
-@socketio.on('get_auto_continue_status')
-def handle_get_auto_continue_status(data):
-    """Получение статуса автоматического продолжения"""
-    room_id = data['room_id']
-    
-    emit('auto_continue_status', {
-        'enabled': room_auto_continue_enabled[room_id],
-        'room_id': room_id,
-        'timer_active': room_auto_continue_timers[room_id] is not None
-    })
 
 # НОВЫЕ ФУНКЦИИ ДЛЯ POLLING ВИЗУАЛИЗАЦИИ
 def add_visualization_to_queue(room_id, topic, context):
@@ -2242,6 +2106,60 @@ def add_api_key_route():
             "total_keys": len(key_manager.keys)
         })
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# НОВЫЙ ЭНДПОИНТ ДЛЯ АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ
+@app.route('/api/auto_continue/<room_id>', methods=['POST'])
+def trigger_auto_continue(room_id):
+    """Триггер для автоматического продолжения урока (вызывается из lesson.py)"""
+    try:
+        print(f"🔄 API вызов автоматического продолжения для комнаты {room_id}")
+        
+        if room_id not in room_dialogue:
+            return jsonify({"success": False, "error": "Room not found"})
+        
+        dialogue = room_dialogue[room_id]
+        
+        if not dialogue.is_lesson_started():
+            return jsonify({"success": False, "error": "Lesson not started"})
+        
+        # Получаем следующий абзац
+        next_paragraph = dialogue._get_next_paragraph()
+        
+        if next_paragraph:
+            # Отправляем следующий абзац через WebSocket
+            emit('speech_text', {
+                'text': f"Учитель: {next_paragraph}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            
+            # Озвучиваем следующий абзац
+            speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+            
+            return jsonify({
+                "success": True,
+                "message": "Автоматическое продолжение выполнено",
+                "paragraph": next_paragraph[:100] + "..."
+            })
+        else:
+            # Урок завершен
+            practice_msg = "Урок завершен. Переходим к практике."
+            emit('speech_text', {
+                'text': f"Учитель: {practice_msg}",
+                'sid': 'teacher', 
+                'is_teacher': True
+            }, room=room_id)
+            speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
+            
+            return jsonify({
+                "success": True,
+                "message": "Урок завершен, начинается практика",
+                "lesson_finished": True
+            })
+            
+    except Exception as e:
+        print(f"❌ Ошибка автоматического продолжения: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
