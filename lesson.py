@@ -4,6 +4,8 @@ from typing import List, Optional
 import threading
 import time
 from typing import Callable
+import requests
+import json
 
 class LessonManager:
     def __init__(self, lessons_dir: str = "lessons"):
@@ -16,6 +18,7 @@ class LessonManager:
         self.auto_continue_delay = 25  # 25 секунд
         self.timer_active = False
         self.room_id = None
+        self.app_url = "http://localhost:5000"  # URL для вызова API
         
         self._ensure_lessons_dir()
     
@@ -141,23 +144,40 @@ class LessonManager:
         print(f"⏹️ Таймер авто-продолжения остановлен для комнаты {self.room_id}")
     
     def _on_auto_continue_timeout(self):
-        """Вызывается при срабатывании таймера"""
-        if not self.timer_active or not self.auto_continue_callback:
+        """Вызывается при срабатывании таймера - ВЫЗЫВАЕТ API ДЛЯ РЕАЛЬНОГО ПРОДОЛЖЕНИЯ"""
+        if not self.timer_active:
             return
             
         print(f"🔄 Таймер сработал, автоматическое продолжение для комнаты {self.room_id}")
         
         try:
-            # Вызываем callback для получения следующего абзаца
-            next_paragraph = self.auto_continue_callback()
-            if next_paragraph:
-                print(f"✅ Автоматически переходим к следующему абзацу: {next_paragraph[:100]}...")
+            # ВЫЗЫВАЕМ API ДЛЯ РЕАЛЬНОГО ПРОДОЛЖЕНИЯ УРОКА
+            response = requests.post(
+                f"{self.app_url}/api/auto_continue/{self.room_id}",
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    print(f"✅ Автоматическое продолжение выполнено: {result.get('message', '')}")
+                    
+                    # Если урок завершен, останавливаем таймер
+                    if result.get("lesson_finished"):
+                        print("🏁 Урок завершен, останавливаем таймер")
+                        self.stop_auto_continue_timer()
+                else:
+                    print(f"❌ Ошибка автоматического продолжения: {result.get('error', '')}")
+                    self.stop_auto_continue_timer()
             else:
-                print("🏁 Нет следующего абзаца для автоматического продолжения")
+                print(f"❌ HTTP ошибка: {response.status_code}")
                 self.stop_auto_continue_timer()
                 
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Ошибка соединения при автоматическом продолжении: {e}")
+            self.stop_auto_continue_timer()
         except Exception as e:
-            print(f"❌ Ошибка при автоматическом продолжении: {e}")
+            print(f"❌ Неожиданная ошибка при автоматическом продолжении: {e}")
             self.stop_auto_continue_timer()
     
     def pause_auto_continue(self):
