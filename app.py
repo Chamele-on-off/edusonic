@@ -198,19 +198,39 @@ def start_auto_continue_timer(room_id, delay=25):
             
             print(f"🕒 Автоматический переход к следующему абзацу в комнате {room_id}")
             
-            # Получаем следующий абзац через стандартный процесс
-            next_paragraph = room_dialogue[room_id]._get_next_paragraph_for_auto_continue()
+            # ИСПОЛЬЗУЕМ СТАНДАРТНЫЙ ПРОЦЕСС как для команды "продолжай"
+            # Получаем следующий абзац через стандартный метод диалог менеджера
+            next_paragraph = room_dialogue[room_id]._get_next_paragraph()
             if next_paragraph:
-                # Отправляем текст
+                print(f"✅ Автоматически получен абзац: {next_paragraph[:100]}...")
+                
+                # Отправляем текст в комнату
                 socketio.emit('speech_text', {
                     'text': f"Учитель: {next_paragraph}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # Озвучиваем следующий абзац ТАК ЖЕ, как обычные фразы
+                
+                # ОЗВУЧИВАЕМ абзац ТАК ЖЕ, как обычные фразы
                 speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                
+                # ЗАПУСКАЕМ ТАЙМЕР ДЛЯ СЛЕДУЮЩЕГО АВТОПРОДОЛЖЕНИЯ
+                # после того как текущий абзац будет озвучен
+                def start_next_timer():
+                    if (room_id in room_dialogue and 
+                        room_dialogue[room_id].is_lesson_started() and
+                        not room_teacher_speaking[room_id] and
+                        not room_practice_active[room_id] and
+                        room_auto_continue_enabled[room_id]):
+                        start_auto_continue_timer(room_id, 25)
+                
+                # Запускаем следующий таймер после окончания речи
+                speech_duration = max(2, len(next_paragraph) * 0.1)
+                threading.Timer(speech_duration + 1, start_next_timer).start()
+                
             else:
                 # Если урок закончился, начинаем практику
+                print("🏁 Урок завершен автоматически")
                 practice_msg = "Урок завершен. Переходим к практике."
                 socketio.emit('speech_text', {
                     'text': f"Учитель: {practice_msg}",
@@ -232,12 +252,13 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     if is_teacher and room_id in room_lesson_timers and room_lesson_timers[room_id]:
         room_lesson_timers[room_id].cancel()
         room_lesson_timers[room_id] = None
+        print(f"⏸️ Таймер автопродолжения остановлен для речи учителя")
     
     # ОЧИСТКА ТЕКСТА ПЕРЕД ОЗВУЧИВАНИЕМ
     cleaned_text = clean_text_for_speech(text)
     
     if not cleaned_text.strip():
-        print(f"⚠️ Текст пуст после очистки: {text[:100]}...")
+        print(f"⚠️ Текст пуст после очистка: {text[:100]}...")
         return
         
     # Устанавливаем флаг, что учитель начинает говорить
@@ -272,17 +293,17 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     speech_duration = max(2, len(cleaned_text) * 0.1)
     
     # Запускаем таймер сброса состояния речи
-    def reset_and_start_timer():
+    def reset_and_manage_timers():
         reset_speaking_state(room_id, is_teacher)
-        # ЗАПУСКАЕМ ТАЙМЕР АВТОПРОДОЛЖЕНИЯ ТОЛЬКО ДЛЯ УЧИТЕЛЯ ВО ВРЕМЯ УРОКА
-        if (is_teacher and 
-            room_id in room_dialogue and 
-            room_dialogue[room_id].is_lesson_started() and
-            not room_practice_active[room_id] and
-            room_auto_continue_enabled[room_id]):
-            start_auto_continue_timer(room_id, 25)  # 25 секунд после окончания речи
+        
+        # НЕ ЗАПУСКАЕМ автоматически таймер здесь
+        # Таймер теперь запускается явно в нужных местах:
+        # - После автоматического продолжения
+        # - После команды "продолжай" 
+        # - После ответа на вопрос
+        # - После начала урока
     
-    threading.Timer(speech_duration, reset_and_start_timer).start()
+    threading.Timer(speech_duration, reset_and_manage_timers).start()
 
 @app.route('/')
 def home():
@@ -570,11 +591,11 @@ def handle_recognized_speech(data):
         print(f"Игнорирую речь ученика, так как учитель говорит: {text}")
         return
 
-    # ОСТАНАВЛИВАЕМ ТАЙМЕР АВТОПРОДОЛЖЕНИЯ ПРИ ВОПРОСЕ УЧЕНИКА
+    # ОСТАНАВЛИВАЕМ ТАЙМЕР АВТОПРОДОЛЖЕНИЯ ПРИ ЛЮБОЙ РЕЧИ УЧЕНИКА
     if room_id in room_lesson_timers and room_lesson_timers[room_id]:
         room_lesson_timers[room_id].cancel()
         room_lesson_timers[room_id] = None
-        print(f"⏸️ Таймер автопродолжения остановлен для вопроса ученика: {text}")
+        print(f"⏸️ Таймер автопродолжения остановлен для речи ученика: {text}")
 
     # Игнорируем распознавание системных сообщений и короткие фразы
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
@@ -595,8 +616,8 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - УБИРАЕМ БЛОКИРОВКУ ПОВТОРОВ
-        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ ЛЮБОЕ СИСТЕМНОЕ СЛОВО
+        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ
+        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ
         if dialogue.is_lesson_started():
             # Расширенный список команд продолжения
             all_continue_commands = [
@@ -607,6 +628,8 @@ def handle_recognized_speech(data):
             
             # Проверяем ЛЮБОЕ системное слово без ограничений
             if any(cmd in text.lower() for cmd in all_continue_commands):
+                print(f"🎯 Обработка команды продолжения: '{text}'")
+                
                 # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
@@ -618,6 +641,20 @@ def handle_recognized_speech(data):
                     }, room=room_id)
                     # Озвучиваем следующий абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
+                    
+                    # ЗАПУСКАЕМ ТАЙМЕР АВТОПРОДОЛЖЕНИЯ ПОСЛЕ КОМАНДЫ
+                    def start_timer_after_command():
+                        if (room_id in room_dialogue and 
+                            room_dialogue[room_id].is_lesson_started() and
+                            not room_teacher_speaking[room_id] and
+                            not room_practice_active[room_id] and
+                            room_auto_continue_enabled[room_id]):
+                            start_auto_continue_timer(room_id, 25)
+                    
+                    # Запускаем таймер после окончания речи
+                    speech_duration = max(2, len(next_paragraph) * 0.1)
+                    threading.Timer(speech_duration + 1, start_timer_after_command).start()
+                    
                 else:
                     # Если урок закончился, начинаем практику
                     practice_msg = "Урок завершен. Переходим к практике."
@@ -656,6 +693,19 @@ def handle_recognized_speech(data):
                 }, room=room_id)
                 # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
+                
+                # ЗАПУСКАЕМ ТАЙМЕР АВТОПРОДОЛЖЕНИЯ ПОСЛЕ ОТВЕТА НА ВОПРОС
+                def start_timer_after_answer():
+                    if (room_id in room_dialogue and 
+                        room_dialogue[room_id].is_lesson_started() and
+                        not room_teacher_speaking[room_id] and
+                        not room_practice_active[room_id] and
+                        room_auto_continue_enabled[room_id]):
+                        start_auto_continue_timer(room_id, 25)
+                
+                # Запускаем таймер после окончания речи
+                speech_duration = max(2, len(response) * 0.1)
+                threading.Timer(speech_duration + 1, start_timer_after_answer).start()
         else:
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
@@ -682,6 +732,19 @@ def handle_recognized_speech(data):
                         }, room=room_id)
                         # Озвучиваем первый абзац
                         speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
+                        
+                        # ЗАПУСКАЕМ ТАЙМЕР АВТОПРОДОЛЖЕНИЯ ПОСЛЕ НАЧАЛА УРОКА
+                        def start_timer_after_lesson_start():
+                            if (room_id in room_dialogue and 
+                                room_dialogue[room_id].is_lesson_started() and
+                                not room_teacher_speaking[room_id] and
+                                not room_practice_active[room_id] and
+                                room_auto_continue_enabled[room_id]):
+                                start_auto_continue_timer(room_id, 25)
+                        
+                        # Запускаем таймер после окончания речи
+                        speech_duration = max(2, len(first_paragraph) * 0.1)
+                        threading.Timer(speech_duration + 1, start_timer_after_lesson_start).start()
             elif response:
                 # Отправляем текст
                 emit('speech_text', {
@@ -1415,7 +1478,7 @@ def set_llm_model():
 def get_llm_models():
     """Получение списка доступных моделей LLM"""
     models = [
-        {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta", "provider": "openrouter"},
+        {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрае модель от Meta", "provider": "openrouter"},
         {"id": "llama3", "name": "Llama 3.3 8B Instruct", "description": "Инструктивная версия Llama 3.3", "provider": "openrouter"},
         {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba", "provider": "openrouter"},
         {"id": "qwen-turbo", "name": "Qwen Coder", "description": "Специализированная модель для программирования", "provider": "openrouter"},
