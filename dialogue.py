@@ -704,6 +704,31 @@ class DialogueManager:
         self.visualization_enabled = False
         print("❌ Автоматическая визуализация выключена")
 
+    def _start_auto_continue_timer(self):
+        """Запускает таймер автоматического продолжения"""
+        if hasattr(self, 'lesson_manager') and self.lesson_manager:
+            self.lesson_manager.set_auto_continue_callback(self._get_next_paragraph, self.room_id)
+            self.lesson_manager.start_auto_continue_timer()
+            print(f"⏰ Таймер запущен для комнаты {self.room_id}")
+
+    def _stop_auto_continue_timer(self):
+        """Останавливает таймер автоматического продолжения"""
+        if hasattr(self, 'lesson_manager') and self.lesson_manager:
+            self.lesson_manager.stop_auto_continue_timer()
+            print(f"⏹️ Таймер остановлен для комнаты {self.room_id}")
+
+    def _pause_auto_continue_timer(self):
+        """Приостанавливает таймер (при вопросе ученика)"""
+        if hasattr(self, 'lesson_manager') and self.lesson_manager:
+            self.lesson_manager.pause_auto_continue()
+            print(f"⏸️ Таймер приостановлен для комнаты {self.room_id}")
+
+    def _resume_auto_continue_timer(self):
+        """Возобновляет таймер после паузы"""
+        if hasattr(self, 'lesson_manager') and self.lesson_manager:
+            self.lesson_manager.resume_auto_continue()
+            print(f"▶️ Таймер возобновлен для комнаты {self.room_id}")
+
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
@@ -717,9 +742,7 @@ class DialogueManager:
 
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
             # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ КОМАНДЕ ПРОДОЛЖЕНИЯ
-            if hasattr(self, 'lesson_manager') and self.lesson_manager.is_timer_active():
-                self.lesson_manager.stop_auto_continue_timer()
-                print("⏹️ Таймер остановлен по команде продолжения")
+            self._stop_auto_continue_timer()
             
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
@@ -833,9 +856,7 @@ class DialogueManager:
     def _handle_lesson_reading(self, text: str) -> Optional[str]:
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
             # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ КОМАНДЕ СТОП
-            if hasattr(self, 'lesson_manager') and self.lesson_manager.is_timer_active():
-                self.lesson_manager.stop_auto_continue_timer()
-                print("⏹️ Таймер остановлен по команде стоп")
+            self._stop_auto_continue_timer()
             
             self.lesson_started = False
             self.current_state = "greeting"
@@ -874,10 +895,7 @@ class DialogueManager:
             self.current_paragraph += 1
             
             # ЗАПУСКАЕМ ТАЙМЕР ПОСЛЕ КАЖДОГО АБЗАЦА
-            if self.room_id and hasattr(self, 'lesson_manager'):
-                self.lesson_manager.set_auto_continue_callback(self._get_next_paragraph, self.room_id)
-                self.lesson_manager.start_auto_continue_timer()
-                print(f"⏰ Таймер запущен после абзаца {self.current_paragraph}")
+            self._start_auto_continue_timer()
             
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
@@ -893,10 +911,7 @@ class DialogueManager:
             return paragraph
         else:
             # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ ЗАВЕРШЕНИИ УРОКА
-            if hasattr(self, 'lesson_manager'):
-                self.lesson_manager.stop_auto_continue_timer()
-                print("⏹️ Таймер остановлен - урок завершен")
-            
+            self._stop_auto_continue_timer()
             print("🏁 Урок завершен, запускаем практику")
             practice_message = self._start_practice_session()
             return practice_message
@@ -1039,9 +1054,7 @@ class DialogueManager:
         question_lower = question.lower().strip()
         
         # ПРИ ВОПРОСЕ УЧЕНИКА - ПАУЗИМ ТАЙМЕР
-        if hasattr(self, 'lesson_manager') and self.lesson_manager.is_timer_active():
-            self.lesson_manager.pause_auto_continue()
-            print("⏸️ Таймер приостановлен из-за вопроса ученика")
+        self._pause_auto_continue_timer()
         
         if self.visualization_enabled:
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
@@ -1163,8 +1176,7 @@ class DialogueManager:
         self.current_question_index = 0
         
         # ОСТАНАВЛИВАЕМ ТАЙМЕР ПРИ СБРОСЕ
-        if hasattr(self, 'lesson_manager'):
-            self.lesson_manager.stop_auto_continue_timer()
+        self._stop_auto_continue_timer()
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
