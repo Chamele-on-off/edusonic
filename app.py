@@ -304,6 +304,10 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
         room_dialogue[room_id].room_id = room_id
+        
+        # ПЕРЕДАЕМ МЕНЕДЖЕР УРОКОВ В ДИАЛОГ МЕНЕДЖЕР
+        from lesson import lesson_manager
+        room_dialogue[room_id].lesson_manager = lesson_manager
     
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -617,6 +621,10 @@ def handle_activate_ai_teacher(data):
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
     room_dialogue[room_id].room_id = room_id
+    
+    # Передаем менеджер уроков в новый диалог менеджер
+    from lesson import lesson_manager
+    room_dialogue[room_id].lesson_manager = lesson_manager
     
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -984,7 +992,7 @@ def handle_generate_visualization(data):
 
 # НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЛОКАЛЬНОЙ LLM
 @app.route('/api/llm/priority', methods=['POST'])
-def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
+def set_llm_priority_route():
     """Установка приоритета моделей LLM"""
     try:
         data = request.json
@@ -1013,7 +1021,7 @@ def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИ�
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['GET'])
-def get_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
+def get_llm_priority_route():
     """Получение текущего приоритета моделей LLM"""
     try:
         priority = get_llm_priority()
@@ -2128,7 +2136,7 @@ def trigger_auto_continue(room_id):
         
         if next_paragraph:
             # Отправляем следующий абзац через WebSocket
-            emit('speech_text', {
+            socketio.emit('speech_text', {
                 'text': f"Учитель: {next_paragraph}",
                 'sid': 'teacher',
                 'is_teacher': True
@@ -2145,7 +2153,7 @@ def trigger_auto_continue(room_id):
         else:
             # Урок завершен
             practice_msg = "Урок завершен. Переходим к практике."
-            emit('speech_text', {
+            socketio.emit('speech_text', {
                 'text': f"Учитель: {practice_msg}",
                 'sid': 'teacher', 
                 'is_teacher': True
