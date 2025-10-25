@@ -853,12 +853,14 @@ class DialogueManager:
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
+        """Получает следующий абзац урока - ЕДИНЫЙ МЕТОД ДЛЯ ВСЕХ СЛУЧАЕВ"""
         print(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
+            # ВИЗУАЛИЗАЦИЯ для всех абзацев (автоматических и по команде)
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
                 
@@ -873,31 +875,6 @@ class DialogueManager:
             return paragraph
         else:
             print("🏁 Урок завершен, запускаем практику")
-            practice_message = self._start_practice_session()
-            return practice_message
-
-    def _get_next_paragraph_for_auto_continue(self) -> Optional[str]:
-        """Специальный метод для автоматического продолжения - ТОЧНО ТАК ЖЕ, как обычный метод"""
-        print(f"🤖 АВТОПРОДОЛЖЕНИЕ: получение абзаца {self.current_paragraph}, всего {len(self.lesson_content)}")
-        
-        if self.current_paragraph < len(self.lesson_content):
-            paragraph = self.lesson_content[self.current_paragraph]
-            self.current_paragraph += 1
-            
-            if (self.visualization_enabled and paragraph and 
-                len(paragraph.strip()) > 10 and self.room_id):
-                
-                def delayed_visualization():
-                    time.sleep(0.5)
-                    context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
-                    self._generate_visualization(paragraph, context)
-                
-                threading.Thread(target=delayed_visualization, daemon=True).start()
-            
-            print(f"✅ АВТОПРОДОЛЖЕНИЕ: возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
-            return paragraph
-        else:
-            print("🏁 АВТОПРОДОЛЖЕНИЕ: урок завершен")
             practice_message = self._start_practice_session()
             return practice_message
 
