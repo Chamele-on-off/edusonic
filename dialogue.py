@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 import random
 import re
 from knowledge.knowledge_base import KnowledgeBase
-from llm import LLMIntegration
+from llm import LLMIntegration, clean_text_for_speech
 from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
@@ -182,7 +182,7 @@ class DialogueManager:
             return "общее"
 
     def _load_lesson_content(self, lesson_file: Path) -> List[str]:
-        """Загружает содержание урока из текстового файла с улучшенной очисткой"""
+        """Загружает содержание урока из текстового файла с очисткой"""
         try:
             print(f"📖 Загрузка урока из файла: {lesson_file}")
             
@@ -195,8 +195,8 @@ class DialogueManager:
             
             print(f"✅ Файл прочитан, длина: {len(content)} символов")
             
-            # 🔥 ИСПОЛЬЗУЕМ УНИВЕРСАЛЬНУЮ ОЧИСТКУ ИЗ LLM
-            content = self.llm.clean_text_content(content)
+            # ОЧИСТКА ВСЕГО СОДЕРЖАНИЯ УРОКА
+            content = clean_text_for_speech(content)
             
             # Разбиваем на абзацы (по пустым строкам)
             paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
@@ -220,14 +220,14 @@ class DialogueManager:
                 if current_paragraph:
                     paragraphs.append(' '.join(current_paragraph))
             
-            # 🔥 ДОПОЛНИТЕЛЬНАЯ ОЧИСТКА КАЖДОГО АБЗАЦА
+            # ДОПОЛНИТЕЛЬНАЯ ОЧИСТКА КАЖДОГО АБЗАЦА
             cleaned_paragraphs = []
             for paragraph in paragraphs:
-                cleaned_paragraph = self.llm.clean_text_content(paragraph)
-                if cleaned_paragraph and len(cleaned_paragraph.strip()) > 10:
-                    cleaned_paragraphs.append(cleaned_paragraph)
+                cleaned_para = clean_text_for_speech(paragraph)
+                if cleaned_para and len(cleaned_para.strip()) > 10:  # Минимальная длина абзаца
+                    cleaned_paragraphs.append(cleaned_para)
             
-            print(f"✅ Урок разбит на {len(cleaned_paragraphs)} абзацев")
+            print(f"✅ Урок разбит на {len(cleaned_paragraphs)} абзацев после очистки")
             
             if not cleaned_paragraphs:
                 print("❌ Не удалось разбить урок на абзацы")
@@ -689,23 +689,16 @@ class DialogueManager:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
         
-        # 🔥 УПРОЩЕННАЯ ЛОГИКА КОМАНД ПРОДОЛЖЕНИЯ
-        continue_commands = [
-            "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
-            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
-            "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"
-        ]
-
-        # 🔥 ЕДИНСТВЕННОЕ МЕСТО ОБРАБОТКИ КОМАНД ПРОДОЛЖЕНИЯ
-        if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
-            print(f"🎯 DialogueManager: Обработка команды продолжения '{text}'")
+        continue_commands = ["продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше"]
+        recorded_commands = ["записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно"]
+        
+        if self.lesson_started and any(cmd in text_lower for cmd in continue_commands + recorded_commands):
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
                 return next_paragraph
             else:
                 return "Урок завершен. Переходим к практике."
         
-        # 🔥 ОСТАЛЬНАЯ ЛОГИКА ТОЛЬКО ДЛЯ НЕ-КОМАНД
         self._add_to_conversation_history(text, is_user=True)
         
         if self.lesson_started:
