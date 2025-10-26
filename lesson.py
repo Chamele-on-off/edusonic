@@ -166,6 +166,10 @@ class LessonManager:
                     if result.get("lesson_finished"):
                         print("🏁 Урок завершен, останавливаем таймер")
                         self.stop_auto_continue_timer()
+                    else:
+                        # Если урок продолжается, перезапускаем таймер для следующего абзаца
+                        print("🔄 Урок продолжается, перезапускаем таймер")
+                        self.start_auto_continue_timer()
                 else:
                     print(f"❌ Ошибка автоматического продолжения: {result.get('error', '')}")
                     self.stop_auto_continue_timer()
@@ -185,11 +189,12 @@ class LessonManager:
         if self.timer_active and self.auto_continue_timer:
             self.auto_continue_timer.cancel()
             self.auto_continue_timer = None
+            self.timer_active = False
             print(f"⏸️ Таймер приостановлен для комнаты {self.room_id}")
     
     def resume_auto_continue(self):
         """Возобновляет таймер после паузы"""
-        if self.timer_active and not self.auto_continue_timer:
+        if not self.timer_active:
             self.start_auto_continue_timer()
             print(f"▶️ Таймер возобновлен для комнаты {self.room_id}")
     
