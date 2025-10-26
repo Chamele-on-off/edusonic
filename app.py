@@ -1891,7 +1891,7 @@ def download_practice_txt():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# Новые API эндпоинты для управления API ключами
+# Новые API эндпоинты для управления API ключей
 @app.route('/api/config/keys', methods=['GET'])
 def get_api_keys():
     """Получение текущих API ключей"""
