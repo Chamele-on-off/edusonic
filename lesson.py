@@ -1,11 +1,25 @@
 from pathlib import Path
 import re
 from typing import List, Optional
+import threading
+import time
+from typing import Callable
+import requests
+import json
 
 class LessonManager:
     def __init__(self, lessons_dir: str = "lessons"):
         self.lessons_dir = Path(lessons_dir)
         self.current_lessons = {}
+        
+        # НОВЫЕ ПОЛЯ ДЛЯ ТАЙМЕРА
+        self.auto_continue_timer = None
+        self.auto_continue_callback = None
+        self.auto_continue_delay = 25  # 25 секунд
+        self.timer_active = False
+        self.room_id = None
+        self.app_url = "http://localhost:5000"  # URL для вызова API
+        
         self._ensure_lessons_dir()
     
     def _ensure_lessons_dir(self):
@@ -97,6 +111,96 @@ class LessonManager:
             return "русский язык"
         else:
             return "общее"
+
+    # НОВЫЕ МЕТОДЫ ДЛЯ АВТОПРОДОЛЖЕНИЯ
+    
+    def set_auto_continue_callback(self, callback: Callable, room_id: str):
+        """Устанавливает callback для автоматического продолжения"""
+        self.auto_continue_callback = callback
+        self.room_id = room_id
+        print(f"🔧 Установлен callback авто-продолжения для комнаты {room_id}")
+    
+    def start_auto_continue_timer(self):
+        """Запускает таймер автоматического продолжения"""
+        if self.timer_active:
+            self.stop_auto_continue_timer()
+            
+        self.timer_active = True
+        print(f"⏰ Таймер авто-продолжения запущен для комнаты {self.room_id} ({self.auto_continue_delay} сек)")
+        
+        self.auto_continue_timer = threading.Timer(
+            self.auto_continue_delay, 
+            self._on_auto_continue_timeout
+        )
+        self.auto_continue_timer.daemon = True
+        self.auto_continue_timer.start()
+    
+    def stop_auto_continue_timer(self):
+        """Останавливает таймер автоматического продолжения"""
+        if self.auto_continue_timer:
+            self.auto_continue_timer.cancel()
+            self.auto_continue_timer = None
+        self.timer_active = False
+        print(f"⏹️ Таймер авто-продолжения остановлен для комнаты {self.room_id}")
+    
+    def _on_auto_continue_timeout(self):
+        """Вызывается при срабатывании таймера - ВЫЗЫВАЕТ API ДЛЯ РЕАЛЬНОГО ПРОДОЛЖЕНИЯ"""
+        if not self.timer_active:
+            return
+            
+        print(f"🔄 Таймер сработал, автоматическое продолжение для комнаты {self.room_id}")
+        
+        try:
+            # ВЫЗЫВАЕМ API ДЛЯ РЕАЛЬНОГО ПРОДОЛЖЕНИЯ УРОКА
+            response = requests.post(
+                f"{self.app_url}/api/auto_continue/{self.room_id}",
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success"):
+                    print(f"✅ Автоматическое продолжение выполнено: {result.get('message', '')}")
+                    
+                    # Если урок завершен, останавливаем таймер
+                    if result.get("lesson_finished"):
+                        print("🏁 Урок завершен, останавливаем таймер")
+                        self.stop_auto_continue_timer()
+                    else:
+                        # Если урок продолжается, перезапускаем таймер для следующего абзаца
+                        print("🔄 Урок продолжается, перезапускаем таймер")
+                        self.start_auto_continue_timer()
+                else:
+                    print(f"❌ Ошибка автоматического продолжения: {result.get('error', '')}")
+                    self.stop_auto_continue_timer()
+            else:
+                print(f"❌ HTTP ошибка: {response.status_code}")
+                self.stop_auto_continue_timer()
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Ошибка соединения при автоматическом продолжении: {e}")
+            self.stop_auto_continue_timer()
+        except Exception as e:
+            print(f"❌ Неожиданная ошибка при автоматическом продолжении: {e}")
+            self.stop_auto_continue_timer()
+    
+    def pause_auto_continue(self):
+        """Временно приостанавливает таймер (при вопросе ученика)"""
+        if self.timer_active and self.auto_continue_timer:
+            self.auto_continue_timer.cancel()
+            self.auto_continue_timer = None
+            self.timer_active = False
+            print(f"⏸️ Таймер приостановлен для комнаты {self.room_id}")
+    
+    def resume_auto_continue(self):
+        """Возобновляет таймер после паузы"""
+        if not self.timer_active:
+            self.start_auto_continue_timer()
+            print(f"▶️ Таймер возобновлен для комнаты {self.room_id}")
+    
+    def is_timer_active(self) -> bool:
+        """Проверяет, активен ли таймер"""
+        return self.timer_active
 
 # Создаем глобальный экземпляр менеджера уроков
 lesson_manager = LessonManager()
