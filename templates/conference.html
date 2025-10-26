@@ -1093,6 +1093,13 @@
         .llm-status-success {
             background: rgba(76, 201, 240, 0.8);
         }
+
+        /* Auto-continue status */
+        #auto-continue-status {
+            font-size: 12px;
+            margin-top: 3px;
+            color: #95a5a6;
+        }
     </style>
 </head>
 <body>
@@ -1281,6 +1288,7 @@
                 </div>
                 <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">😴 Режим покоя</div>
                 <div id="speech-status">🎤 Распознавание: выкл</div>
+                <div id="auto-continue-status">⏰ Автопродолжение: выкл</div>
                 <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">
                     <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
                 </div>
@@ -1372,6 +1380,7 @@
         const avatarLoading = document.getElementById('avatar-loading');
         const animationStatus = document.getElementById('animation-status');
         const speechStatus = document.getElementById('speech-status');
+        const autoContinueStatus = document.getElementById('auto-continue-status');
         const mermaidDiagram = document.getElementById('mermaid-diagram');
         const svgDiagram = document.getElementById('svg-diagram');
         const visualizationTabs = document.querySelectorAll('.visualization-tab');
@@ -1452,6 +1461,93 @@
         let llmPendingRequests = new Map();
         let llmLastRequestTime = 0;
         let currentLlmPriority = 'local_first';
+
+        // ========== СИСТЕМА АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ==========
+        let autoContinueTimer = null;
+        let autoContinueEnabled = false;
+        let isPracticeActive = false;
+        let lastTeacherSpeechTime = 0;
+
+        // Функция для запуска/сброса таймера автоматического продолжения
+        function resetAutoContinueTimer() {
+            if (autoContinueTimer) {
+                clearTimeout(autoContinueTimer);
+                autoContinueTimer = null;
+            }
+            
+            // Таймер работает только во время урока и не во время практики
+            if (isLessonActive && !isPracticeActive && autoContinueEnabled) {
+                autoContinueTimer = setTimeout(() => {
+                    console.log('Автоматическое продолжение: таймер сработал');
+                    simulateContinueCommand();
+                }, 25000); // 25 секунд
+                
+                updateAutoContinueStatus('активен (25с)');
+            }
+        }
+
+        // Функция для имитации команды продолжения
+        function simulateContinueCommand() {
+            if (socket && isLessonActive && !isPracticeActive) {
+                console.log('Отправка автоматической команды продолжения');
+                socket.emit('recognized_speech', {
+                    room_id: roomId,
+                    text: 'продолжай'
+                });
+                
+                // Показываем визуальную обратную связь
+                showStudentSpeech('продолжай', 'auto');
+                updateAutoContinueStatus('команда отправлена');
+                
+                // Перезапускаем таймер для следующего абзаца
+                setTimeout(() => {
+                    if (isLessonActive && !isPracticeActive) {
+                        resetAutoContinueTimer();
+                    }
+                }, 1000);
+            }
+        }
+
+        // Функция для включения/выключения автоматического продолжения
+        function setAutoContinueEnabled(enabled) {
+            autoContinueEnabled = enabled;
+            if (enabled && isLessonActive && !isPracticeActive) {
+                resetAutoContinueTimer();
+                updateAutoContinueStatus('активен (25с)');
+            } else {
+                if (autoContinueTimer) {
+                    clearTimeout(autoContinueTimer);
+                    autoContinueTimer = null;
+                }
+                updateAutoContinueStatus('выкл');
+            }
+        }
+
+        // Обновление статуса автопродолжения в интерфейсе
+        function updateAutoContinueStatus(status) {
+            if (autoContinueStatus) {
+                if (status.includes('активен')) {
+                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: #4cc9f0;">' + status + '</span>';
+                } else if (status.includes('отправлена')) {
+                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: #f72585;">' + status + '</span>';
+                } else {
+                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: #95a5a6;">' + status + '</span>';
+                }
+            }
+        }
+
+        // Останавливаем таймер при любой активности ученика
+        function handleStudentActivity() {
+            if (autoContinueTimer) {
+                console.log('Сброс таймера автопродолжения - активность ученика');
+                resetAutoContinueTimer();
+                
+                // Перезапускаем таймер, если урок еще активен
+                if (isLessonActive && !isPracticeActive) {
+                    resetAutoContinueTimer();
+                }
+            }
+        }
 
         // Инициализация Mermaid
         mermaid.initialize({
@@ -1876,6 +1972,9 @@
                         console.log('Распознана речь:', cleanText);
                         lastFinalResult = cleanText;
                         
+                        // СБРАСЫВАЕМ таймер автопродолжения при любой речи ученика
+                        handleStudentActivity();
+                        
                         if (socket) {
                             socket.emit('recognized_speech', {
                                 room_id: roomId,
@@ -2168,9 +2267,17 @@
             isSpeechAnimating = true;
             updateAnimationStatus();
             
+            // СБРАСЫВАЕМ таймер когда учитель начинает говорить
+            resetAutoContinueTimer();
+            
             speechAnimationTimeout = setTimeout(() => {
                 stopSpeechAnimation();
                 console.log('Анимация речи завершена');
+                
+                // ЗАПУСКАЕМ таймер после того как учитель закончил говорить
+                if (isLessonActive && !isPracticeActive) {
+                    resetAutoContinueTimer();
+                }
             }, duration);
         }
 
@@ -2608,6 +2715,9 @@
         function submitAnswer() {
             const answer = answerInput.value.trim();
             if (answer) {
+                // СБРАСЫВАЕМ таймер при отправке ответа
+                handleStudentActivity();
+                
                 if (socket) {
                     socket.emit('student_message', {
                         room_id: roomId,
@@ -2695,6 +2805,8 @@
             
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
+                // Останавливаем таймер при отключении
+                setAutoContinueEnabled(false);
             });
             
             socket.on('avatar_changed', (data) => {
@@ -2714,12 +2826,15 @@
                     console.log('Получено аудио сообщение, текст:', data.text.substring(0, 100) + '...');
                     
                     startSpeechAnimation(data.text);
-                    
                     playAudio(data.audio);
                     
                     if (!isLessonActive) {
                         showTeacherSpeech(data.text);
                     }
+                    
+                    // ОБНОВЛЯЕМ время последней речи учителя
+                    lastTeacherSpeechTime = Date.now();
+                    
                 } catch (error) {
                     console.error('Ошибка обработки аудио:', error);
                     if (!isLessonActive) {
@@ -2740,6 +2855,9 @@
                         const lessonText = data.text.replace('Учитель: ', '');
                         updateLessonText(lessonText);
                     }
+                    
+                    // ОБНОВЛЯЕМ время последней речи учителя
+                    lastTeacherSpeechTime = Date.now();
                 } else {
                     showStudentSpeech(data.text, data.sid);
                 }
@@ -2771,8 +2889,13 @@
             
             socket.on('lesson_started', (data) => {
                 isLessonActive = true;
+                isPracticeActive = false;
                 currentLesson = data;
                 currentParagraph = 0;
+                
+                // ВКЛЮЧАЕМ автоматическое продолжение при начале урока
+                setAutoContinueEnabled(true);
+                
                 loadLessonContent(data.lesson_id);
             });
 
@@ -2812,11 +2935,17 @@
             // Обработчик для практики
             socket.on('practice_started', () => {
                 console.log('Практика начата');
+                isPracticeActive = true;
+                setAutoContinueEnabled(false); // ВЫКЛЮЧАЕМ таймер во время практики
                 setTool('answer');
             });
 
             socket.on('practice_ended', () => {
                 console.log('Практика завершена');
+                isPracticeActive = false;
+                if (isLessonActive) {
+                    setAutoContinueEnabled(true); // ВКЛЮЧАЕМ таймер если урок еще идет
+                }
                 setTool('text');
             });
 
@@ -2988,6 +3117,8 @@
                 lessonContent.style.display = 'none';
                 currentLesson = null;
                 isLessonActive = false;
+                // ВЫКЛЮЧАЕМ таймер при завершении урока
+                setAutoContinueEnabled(false);
             }
         }
 
@@ -3174,6 +3305,9 @@
                 recognition.stop();
             }
             stopAnimation();
+            // Останавливаем таймер автопродолжения
+            setAutoContinueEnabled(false);
+            
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
                 socket.disconnect();
@@ -3287,6 +3421,9 @@
             }
             
             setDrawingTool('pen');
+            
+            // Инициализация системы автоматического продолжения (изначально выключена)
+            setAutoContinueEnabled(false);
         });
 
         document.addEventListener('fullscreenchange', () => {
