@@ -304,10 +304,6 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
         room_dialogue[room_id].room_id = room_id
-        
-        # ПЕРЕДАЕМ МЕНЕДЖЕР УРОКОВ В ДИАЛОГ МЕНЕДЖЕР
-        from lesson import lesson_manager
-        room_dialogue[room_id].lesson_manager = lesson_manager
     
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -621,10 +617,6 @@ def handle_activate_ai_teacher(data):
     room_ai_activated[room_id] = True
     room_dialogue[room_id] = DialogueManager(socketio)
     room_dialogue[room_id].room_id = room_id
-    
-    # Передаем менеджер уроков в новый диалог менеджер
-    from lesson import lesson_manager
-    room_dialogue[room_id].lesson_manager = lesson_manager
     
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
@@ -992,7 +984,7 @@ def handle_generate_visualization(data):
 
 # НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЛОКАЛЬНОЙ LLM
 @app.route('/api/llm/priority', methods=['POST'])
-def set_llm_priority_route():
+def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
     """Установка приоритета моделей LLM"""
     try:
         data = request.json
@@ -1021,7 +1013,7 @@ def set_llm_priority_route():
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['GET'])
-def get_llm_priority_route():
+def get_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
     """Получение текущего приоритета моделей LLM"""
     try:
         priority = get_llm_priority()
@@ -1891,7 +1883,7 @@ def download_practice_txt():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# Новые API эндпоинты для управления API ключей
+# Новые API эндпоинты для управления API ключами
 @app.route('/api/config/keys', methods=['GET'])
 def get_api_keys():
     """Получение текущих API ключей"""
@@ -2114,60 +2106,6 @@ def add_api_key_route():
             "total_keys": len(key_manager.keys)
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-# НОВЫЙ ЭНДПОИНТ ДЛЯ АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ
-@app.route('/api/auto_continue/<room_id>', methods=['POST'])
-def trigger_auto_continue(room_id):
-    """Триггер для автоматического продолжения урока (вызывается из lesson.py)"""
-    try:
-        print(f"🔄 API вызов автоматического продолжения для комнаты {room_id}")
-        
-        if room_id not in room_dialogue:
-            return jsonify({"success": False, "error": "Room not found"})
-        
-        dialogue = room_dialogue[room_id]
-        
-        if not dialogue.is_lesson_started():
-            return jsonify({"success": False, "error": "Lesson not started"})
-        
-        # Получаем следующий абзац
-        next_paragraph = dialogue._get_next_paragraph()
-        
-        if next_paragraph:
-            # Отправляем следующий абзац через WebSocket
-            socketio.emit('speech_text', {
-                'text': f"Учитель: {next_paragraph}",
-                'sid': 'teacher',
-                'is_teacher': True
-            }, room=room_id)
-            
-            # Озвучиваем следующий абзац
-            speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
-            
-            return jsonify({
-                "success": True,
-                "message": "Автоматическое продолжение выполнено",
-                "paragraph": next_paragraph[:100] + "..."
-            })
-        else:
-            # Урок завершен
-            practice_msg = "Урок завершен. Переходим к практике."
-            socketio.emit('speech_text', {
-                'text': f"Учитель: {practice_msg}",
-                'sid': 'teacher', 
-                'is_teacher': True
-            }, room=room_id)
-            speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
-            
-            return jsonify({
-                "success": True,
-                "message": "Урок завершен, начинается практика",
-                "lesson_finished": True
-            })
-            
-    except Exception as e:
-        print(f"❌ Ошибка автоматического продолжения: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 if __name__ == '__main__':
