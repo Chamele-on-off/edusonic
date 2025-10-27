@@ -770,6 +770,160 @@
             color: var(--primary);
         }
         
+        /* SVG специфичные стили */
+        .svg-diagram-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .svg-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            padding: 10px;
+        }
+
+        .svg-content svg {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+
+        .svg-loading {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+
+        .svg-loading .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4263EB;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        .svg-error {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+            color: #d32f2f;
+        }
+
+        .error-title {
+            background: linear-gradient(135deg, #d32f2f, #b71c1c) !important;
+        }
+
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.7;
+        }
+
+        .error-details {
+            font-size: 12px;
+            margin: 10px 0;
+            color: #666;
+            max-width: 300px;
+            word-break: break-word;
+        }
+
+        .retry-button, .fallback-button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .retry-button {
+            background: #4263EB;
+            color: white;
+        }
+
+        .fallback-button {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .retry-button:hover {
+            background: #3a0ca3;
+        }
+
+        .fallback-button:hover {
+            background: #e0e0e0;
+        }
+
+        /* Улучшения для Mermaid диаграмм */
+        .mermaid {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            overflow: auto;
+            max-width: 100%;
+        }
+
+        .mermaid svg {
+            max-width: 100%;
+            height: auto !important;
+        }
+
+        .diagram-title {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 16px;
+            padding: 10px;
+            background: linear-gradient(135deg, #4263EB, #3a0ca3);
+            color: white;
+            border-radius: 8px 8px 0 0;
+        }
+
+        /* Контейнер для визуализаций */
+        .visualization-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #mermaid-diagram, #svg-diagram {
+            flex: 1;
+            min-height: 300px;
+            background: white;
+            border-radius: 8px;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .visualization-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -1037,8 +1191,8 @@
             width: 40px;
             height: 40px;
             border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
             border-top-color: var(--teacher-color);
+            border-radius: 50%;
             animation: spin 1s ease-in-out infinite;
             z-index: 100;
         }
@@ -1137,6 +1291,12 @@
             font-size: 12px;
             margin-top: 3px;
             color: #95a5a6;
+        }
+
+        /* Анимации */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -1367,6 +1527,442 @@
         </button>
     </div>
 
+    <!-- Mermaid Fix -->
+    <script>
+        class MermaidFix {
+            constructor() {
+                this.initialized = false;
+                this.queue = [];
+                this.init();
+            }
+
+            init() {
+                if (typeof mermaid === 'undefined') {
+                    console.error('Mermaid library not loaded');
+                    return;
+                }
+
+                try {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'default',
+                        securityLevel: 'loose',
+                        flowchart: {
+                            useMaxWidth: true,
+                            htmlLabels: true,
+                            curve: 'basis'
+                        },
+                        fontFamily: 'Arial, sans-serif'
+                    });
+                    this.initialized = true;
+                    console.log('Mermaid initialized successfully');
+                    this.processQueue();
+                } catch (error) {
+                    console.error('Mermaid initialization error:', error);
+                }
+            }
+
+            renderDiagram(containerId, mermaidCode, topic) {
+                if (!this.initialized) {
+                    this.queue.push({ containerId, mermaidCode, topic });
+                    return;
+                }
+
+                this._render(containerId, mermaidCode, topic);
+            }
+
+            _render(containerId, mermaidCode, topic) {
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.error(`Container ${containerId} not found`);
+                    return;
+                }
+
+                container.innerHTML = '';
+
+                const diagramElement = document.createElement('div');
+                diagramElement.className = 'mermaid';
+                diagramElement.textContent = this.cleanMermaidCode(mermaidCode);
+                
+                container.appendChild(diagramElement);
+
+                const title = document.createElement('div');
+                title.className = 'diagram-title';
+                title.textContent = topic || 'Диаграмма';
+                title.style.cssText = `
+                    text-align: center;
+                    font-weight: bold;
+                    margin-bottom: 10px;
+                    color: #333;
+                    font-size: 16px;
+                `;
+                container.insertBefore(title, diagramElement);
+
+                setTimeout(() => {
+                    try {
+                        mermaid.init(undefined, [diagramElement]).then(() => {
+                            console.log('Diagram rendered successfully:', topic);
+                            this.applyStyles(container);
+                        }).catch(error => {
+                            console.error('Mermaid rendering error:', error);
+                            this.showError(container, error, mermaidCode);
+                        });
+                    } catch (error) {
+                        console.error('Mermaid execution error:', error);
+                        this.showError(container, error, mermaidCode);
+                    }
+                }, 100);
+            }
+
+            cleanMermaidCode(code) {
+                if (!code) return 'graph TD\nA["Пустая диаграмма"]';
+                
+                let cleaned = code.replace(/```[\s\S]*?```/g, '');
+                cleaned = cleaned.replace(/`/g, '');
+                cleaned = cleaned.replace(/%%[^%\n]*/g, '');
+                
+                const validStarts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt'];
+                const hasValidStart = validStarts.some(start => cleaned.trim().startsWith(start));
+                
+                if (!hasValidStart) {
+                    cleaned = 'flowchart TD\n' + cleaned;
+                }
+                
+                if (!cleaned.includes('-->') && !cleaned.includes('->')) {
+                    cleaned += '\nA["Элемент A"] --> B["Элемент B"]';
+                }
+                
+                return cleaned.trim();
+            }
+
+            applyStyles(container) {
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    svg.style.maxWidth = '100%';
+                    svg.style.height = 'auto';
+                    svg.style.display = 'block';
+                    svg.style.margin = '0 auto';
+                    
+                    const textElements = svg.querySelectorAll('text');
+                    textElements.forEach(text => {
+                        text.style.fontFamily = 'Arial, sans-serif';
+                        text.style.fontSize = '14px';
+                    });
+                }
+            }
+
+            showError(container, error, originalCode) {
+                container.innerHTML = `
+                    <div class="visualization-error" style="
+                        padding: 20px;
+                        text-align: center;
+                        color: #d32f2f;
+                        background: #ffebee;
+                        border-radius: 8px;
+                        border: 1px solid #ffcdd2;
+                    ">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
+                        <p><strong>Ошибка отображения диаграммы</strong></p>
+                        <p style="font-size: 12px; margin: 10px 0;">${error.message}</p>
+                        <details style="text-align: left; margin-top: 10px;">
+                            <summary style="cursor: pointer; font-size: 12px;">Исходный код</summary>
+                            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; font-size: 10px; margin-top: 5px;">${originalCode}</pre>
+                        </details>
+                        <button onclick="mermaidFix.retryLast()" style="
+                            margin-top: 10px;
+                            padding: 8px 16px;
+                            background: #4263EB;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        ">Повторить</button>
+                    </div>
+                `;
+            }
+
+            processQueue() {
+                while (this.queue.length > 0) {
+                    const item = this.queue.shift();
+                    this._render(item.containerId, item.mermaidCode, item.topic);
+                }
+            }
+
+            retryLast() {
+                console.log('Retry last visualization');
+            }
+        }
+
+        window.mermaidFix = new MermaidFix();
+    </script>
+
+    <!-- SVG Fix -->
+    <script>
+        class SVGFix {
+            constructor() {
+                this.initialized = false;
+                this.queue = [];
+                this.init();
+            }
+
+            init() {
+                this.initialized = true;
+                this.processQueue();
+                console.log('SVG Fix initialized');
+            }
+
+            renderSVG(containerId, svgCode, topic) {
+                if (!this.initialized) {
+                    this.queue.push({ containerId, svgCode, topic });
+                    return;
+                }
+
+                this._render(containerId, svgCode, topic);
+            }
+
+            _render(containerId, svgCode, topic) {
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.error(`SVG container ${containerId} not found`);
+                    return;
+                }
+
+                this.showLoading(container, topic);
+
+                setTimeout(() => {
+                    try {
+                        const processedSVG = this.processSVGCode(svgCode, topic);
+                        container.innerHTML = processedSVG;
+                        this.applySVGStyles(container);
+                        console.log('SVG rendered successfully:', topic);
+                    } catch (error) {
+                        console.error('SVG rendering error:', error);
+                        this.showError(container, error, svgCode, topic);
+                    }
+                }, 100);
+            }
+
+            processSVGCode(svgCode, topic) {
+                if (!svgCode || svgCode.trim() === '') {
+                    return this.generateFallbackSVG(topic || 'Пустая диаграмма');
+                }
+
+                let cleaned = this.cleanSVGCode(svgCode);
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(cleaned, 'image/svg+xml');
+                
+                const parserError = doc.querySelector('parsererror');
+                if (parserError) {
+                    throw new Error(`SVG parsing error: ${parserError.textContent}`);
+                }
+
+                const svgElement = doc.querySelector('svg');
+                if (!svgElement) {
+                    throw new Error('No SVG element found in code');
+                }
+
+                this.applyRequiredAttributes(svgElement);
+                return this.wrapWithTitle(svgElement.outerHTML, topic);
+            }
+
+            cleanSVGCode(svgCode) {
+                let cleaned = svgCode.trim();
+                cleaned = cleaned.replace(/<\?xml[^>]*\?>/g, '');
+                cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, '');
+                cleaned = cleaned.replace(/<script[\s\S]*?<\/script>/gi, '');
+                cleaned = cleaned.replace(/<style[\s\S]*?<\/style>/gi, '');
+                
+                if (!cleaned.includes('xmlns=')) {
+                    cleaned = cleaned.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                
+                if (!cleaned.includes('</svg>')) {
+                    cleaned += '</svg>';
+                }
+                
+                return cleaned;
+            }
+
+            applyRequiredAttributes(svgElement) {
+                if (!svgElement.hasAttribute('width')) {
+                    svgElement.setAttribute('width', '100%');
+                }
+                
+                if (!svgElement.hasAttribute('height')) {
+                    svgElement.setAttribute('height', '100%');
+                }
+                
+                if (!svgElement.hasAttribute('viewBox')) {
+                    svgElement.setAttribute('viewBox', '0 0 400 300');
+                }
+                
+                if (!svgElement.hasAttribute('preserveAspectRatio')) {
+                    svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                }
+                
+                svgElement.removeAttribute('onload');
+                svgElement.removeAttribute('onerror');
+                this.addBaseStyles(svgElement);
+            }
+
+            addBaseStyles(svgElement) {
+                let styleElement = svgElement.querySelector('style');
+                if (!styleElement) {
+                    styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+                    svgElement.insertBefore(styleElement, svgElement.firstChild);
+                }
+                
+                const baseStyles = `
+                    text { 
+                        font-family: Arial, sans-serif; 
+                        font-size: 14px; 
+                        fill: #333; 
+                    }
+                    rect, circle, ellipse, polygon { 
+                        stroke-width: 2; 
+                    }
+                    path, line, polyline {
+                        stroke-width: 2;
+                        fill: none;
+                    }
+                `;
+                
+                if (!styleElement.textContent.includes('text {')) {
+                    styleElement.textContent += baseStyles;
+                }
+            }
+
+            wrapWithTitle(svgContent, topic) {
+                return `
+                    <div class="svg-diagram-container">
+                        <div class="diagram-title">
+                            <i class="fas fa-shapes"></i>
+                            ${topic || 'SVG Диаграмма'}
+                        </div>
+                        <div class="svg-content">
+                            ${svgContent}
+                        </div>
+                    </div>
+                `;
+            }
+
+            generateFallbackSVG(topic) {
+                return `
+                    <div class="svg-diagram-container">
+                        <div class="diagram-title">
+                            <i class="fas fa-shapes"></i>
+                            ${topic}
+                        </div>
+                        <div class="svg-content">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet">
+                                <style>
+                                    .fallback-text { font-family: Arial; font-size: 14px; fill: #666; }
+                                    .fallback-shape { fill: #4263EB; stroke: #3a0ca3; stroke-width: 2; }
+                                </style>
+                                <rect x="50" y="50" width="300" height="200" rx="10" class="fallback-shape" opacity="0.1"/>
+                                <text x="200" y="120" text-anchor="middle" class="fallback-text">
+                                    <tspan x="200" dy="0">Диаграмма</tspan>
+                                    <tspan x="200" dy="20">не сгенерирована</tspan>
+                                </text>
+                                <text x="200" y="180" text-anchor="middle" class="fallback-text" font-size="12">
+                                    Попробуйте обновить страницу
+                                </text>
+                            </svg>
+                        </div>
+                    </div>
+                `;
+            }
+
+            applySVGStyles(container) {
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    svg.style.maxWidth = '100%';
+                    svg.style.maxHeight = '100%';
+                    svg.style.display = 'block';
+                    svg.style.margin = 'auto';
+                    svg.style.overflow = 'visible';
+                }
+                
+                const svgContent = container.querySelector('.svg-content');
+                if (svgContent) {
+                    svgContent.style.flex = '1';
+                    svgContent.style.display = 'flex';
+                    svgContent.style.alignItems = 'center';
+                    svgContent.style.justifyContent = 'center';
+                    svgContent.style.overflow = 'auto';
+                }
+            }
+
+            showLoading(container, topic) {
+                container.innerHTML = `
+                    <div class="svg-diagram-container">
+                        <div class="diagram-title">
+                            <i class="fas fa-shapes"></i>
+                            ${topic || 'Загрузка SVG...'}
+                        </div>
+                        <div class="svg-loading">
+                            <div class="loading-spinner"></div>
+                            <p>Генерация SVG диаграммы...</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            showError(container, error, originalCode, topic) {
+                console.error('SVG Error:', error);
+                
+                container.innerHTML = `
+                    <div class="svg-diagram-container">
+                        <div class="diagram-title error-title">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Ошибка загрузки: ${topic}
+                        </div>
+                        <div class="svg-error">
+                            <div class="error-icon">
+                                <i class="fas fa-times-circle"></i>
+                            </div>
+                            <div class="error-message">
+                                <p><strong>Не удалось отобразить SVG диаграмму</strong></p>
+                                <p class="error-details">${error.message}</p>
+                                <button onclick="svgFix.retryRender('${container.id}', ${JSON.stringify(originalCode).replace(/'/g, "\\'")}, '${topic}')" 
+                                        class="retry-button">
+                                    <i class="fas fa-redo"></i> Повторить
+                                </button>
+                                <button onclick="svgFix.showFallback('${container.id}', '${topic}')" 
+                                        class="fallback-button">
+                                    <i class="fas fa-shapes"></i> Показать шаблон
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            retryRender(containerId, svgCode, topic) {
+                console.log('Retrying SVG render...');
+                this.renderSVG(containerId, svgCode, topic);
+            }
+
+            showFallback(containerId, topic) {
+                const container = document.getElementById(containerId);
+                if (container) {
+                    container.innerHTML = this.generateFallbackSVG(topic);
+                    this.applySVGStyles(container);
+                }
+            }
+
+            processQueue() {
+                while (this.queue.length > 0) {
+                    const item = this.queue.shift();
+                    this._render(item.containerId, item.svgCode, item.topic);
+                }
+            }
+        }
+
+        window.svgFix = new SVGFix();
+    </script>
+
     <script>
         // Конфигурация
         const FPS = 10;
@@ -1455,7 +2051,7 @@
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
-        let currentAnimationMode = 'neutral'; // 'neutral' или 'speech'
+        let currentAnimationMode = 'neutral';
         
         // Переменные для управления анимацией речи на основе текста
         let speechAnimationTimeout = null;
@@ -1492,7 +2088,7 @@
         let startX = 0;
         let startY = 0;
 
-        // iOS Audio Fix - ключевые переменные из работающей версии
+        // iOS Audio Fix
         let audioQueue = [];
         let isPlayingAudio = false;
         let audioElements = [];
@@ -1502,31 +2098,29 @@
         let llmLastRequestTime = 0;
         let currentLlmPriority = 'local_first';
 
-        // ========== СИСТЕМА АВТОМАТИЧЕСКОГО ПРОДОЛЖЕНИЯ ==========
+        // Система автоматического продолжения
         let autoContinueTimer = null;
         let autoContinueEnabled = false;
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
 
-        // Функция для запуска/сброса таймера автоматического продолжения
+        // Функции автоматического продолжения
         function resetAutoContinueTimer() {
             if (autoContinueTimer) {
                 clearTimeout(autoContinueTimer);
                 autoContinueTimer = null;
             }
             
-            // Таймер работает только во время урока и не во время практики
             if (isLessonActive && !isPracticeActive && autoContinueEnabled) {
                 autoContinueTimer = setTimeout(() => {
                     console.log('Автоматическое продолжение: таймер сработал');
                     simulateContinueCommand();
-                }, 25000); // 25 секунд
+                }, 25000);
                 
                 updateAutoContinueStatus('активен (25с)');
             }
         }
 
-        // Функция для имитации команды продолжения
         function simulateContinueCommand() {
             if (socket && isLessonActive && !isPracticeActive) {
                 console.log('Отправка автоматической команды продолжения');
@@ -1535,11 +2129,9 @@
                     text: 'продолжай'
                 });
                 
-                // Показываем визуальную обратную связь
                 showStudentSpeech('продолжай', 'auto');
                 updateAutoContinueStatus('команда отправлена');
                 
-                // Перезапускаем таймер для следующего абзаца
                 setTimeout(() => {
                     if (isLessonActive && !isPracticeActive) {
                         resetAutoContinueTimer();
@@ -1548,7 +2140,6 @@
             }
         }
 
-        // Функция для включения/выключения автоматического продолжения
         function setAutoContinueEnabled(enabled) {
             autoContinueEnabled = enabled;
             if (enabled && isLessonActive && !isPracticeActive) {
@@ -1563,7 +2154,6 @@
             }
         }
 
-        // Обновление статуса автопродолжения в интерфейсе
         function updateAutoContinueStatus(status) {
             if (autoContinueStatus) {
                 if (status.includes('активен')) {
@@ -1576,22 +2166,19 @@
             }
         }
 
-        // Останавливаем таймер при любой активности ученика
         function handleStudentActivity() {
             if (autoContinueTimer) {
                 console.log('Сброс таймера автопродолжения - активность ученика');
                 resetAutoContinueTimer();
                 
-                // Перезапускаем таймер, если урок еще активен
                 if (isLessonActive && !isPracticeActive) {
                     resetAutoContinueTimer();
                 }
             }
         }
 
-        // ========== УЛУЧШЕННАЯ СИСТЕМА LLM ==========
+        // Функции LLM системы
         function initLlmSystem() {
-            // Запрашиваем текущий статус LLM при подключении
             setTimeout(() => {
                 if (socket) {
                     socket.emit('get_llm_priority_status', { room_id: roomId });
@@ -1606,10 +2193,8 @@
             llmStatus.style.display = 'block';
             llmStatusText.textContent = `LLM: ${status}`;
             
-            // Убираем все классы статуса
             llmStatus.classList.remove('llm-status-working', 'llm-status-error', 'llm-status-success');
             
-            // Добавляем соответствующий класс
             if (type === 'working') {
                 llmStatus.classList.add('llm-status-working');
             } else if (type === 'error') {
@@ -1618,7 +2203,6 @@
                 llmStatus.classList.add('llm-status-success');
             }
             
-            // Автоматически скрываем через 5 секунд для информационных сообщений
             if (type === 'info' || type === 'success') {
                 setTimeout(() => {
                     llmStatus.style.display = 'none';
@@ -1626,45 +2210,28 @@
             }
         }
 
-        function sendLlmRequest(prompt, systemPrompt = '', maxTokens = 1000, type = 'general') {
-            if (!socket) {
-                console.error('Socket не подключен');
-                return null;
-            }
-
-            const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            
-            // Сохраняем запрос в ожидании
-            llmPendingRequests.set(requestId, {
-                prompt: prompt,
-                timestamp: Date.now(),
-                type: type
-            });
-
-            // Очищаем старые запросы (старше 5 минут)
-            const currentTime = Date.now();
-            for (let [id, data] of llmPendingRequests.entries()) {
-                if (currentTime - data.timestamp > 300000) { // 5 минут
-                    llmPendingRequests.delete(id);
+        function updateLlmPriorityDisplay() {
+            if (llmPriorityText) {
+                const names = {
+                    'local_first': 'Локальная модель',
+                    'openrouter_first': 'OpenRouter', 
+                    'local_only': 'Только локальная',
+                    'openrouter_only': 'Только OpenRouter'
+                };
+                llmPriorityText.textContent = names[currentLlmPriority] || currentLlmPriority;
+                
+                let icon = 'fa-brain';
+                if (currentLlmPriority.includes('local')) {
+                    icon = 'fa-desktop';
+                } else if (currentLlmPriority.includes('openrouter')) {
+                    icon = 'fa-cloud';
                 }
+                
+                llmPriorityStatus.innerHTML = `<i class="fas ${icon}"></i> LLM: ${names[currentLlmPriority] || currentLlmPriority}`;
             }
-
-            updateLlmStatus('Отправка запроса...', 'working');
-
-            // Отправляем асинхронный запрос
-            socket.emit('async_llm_request', {
-                room_id: roomId,
-                prompt: prompt,
-                system_prompt: systemPrompt,
-                max_tokens: maxTokens,
-                type: type,
-                request_id: requestId
-            });
-
-            return requestId;
         }
 
-        // ========== ФУНКЦИИ УПРАВЛЕНИЯ ОКНАМИ ==========
+        // Функции управления окнами
         function initWindowManagement() {
             initWindowDragging();
             initWindowResizing();
@@ -1672,7 +2239,6 @@
         }
 
         function initWindowFocus() {
-            // Устанавливаем z-index при клике на окно
             const windows = [lessonContent, drawingWindow, visualizationWindow];
             let maxZIndex = 10;
             
@@ -1691,7 +2257,6 @@
             const windows = [lessonContent, drawingWindow, visualizationWindow];
             let maxZIndex = 5;
             
-            // Находим текущий максимальный z-index
             windows.forEach(win => {
                 if (win.style.display === 'block') {
                     const zIndex = parseInt(win.style.zIndex) || 5;
@@ -1699,7 +2264,6 @@
                 }
             });
             
-            // Устанавливаем новый z-index для активного окна
             windowElement.style.zIndex = maxZIndex + 1;
         }
 
@@ -1716,7 +2280,6 @@
                     isResizingWindow = true;
                     currentResizedWindow = windowElement;
                     
-                    // Определяем направление изменения размера
                     if (e.target.classList.contains('resize-handle-e')) {
                         resizeDirection = 'e';
                     } else if (e.target.classList.contains('resize-handle-s')) {
@@ -1771,7 +2334,6 @@
                 currentResizedWindow.style.width = newWidth + 'px';
                 currentResizedWindow.style.height = newHeight + 'px';
                 
-                // Обновляем canvas при изменении размера окна рисования
                 if (currentResizedWindow === drawingWindow) {
                     setTimeout(() => {
                         const rect = drawingCanvas.getBoundingClientRect();
@@ -1796,196 +2358,116 @@
             initResizeForWindow(visualizationWindow);
         }
 
-        // ========== УЛУЧШЕННЫЕ ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
-        function initMermaid() {
-            mermaid.initialize({
-                startOnLoad: true,
-                theme: 'default',
-                securityLevel: 'loose',
-                flowchart: {
-                    useMaxWidth: true,
-                    htmlLabels: true,
-                    curve: 'basis'
-                },
-                themeCSS: `
-                    .node rect, .node circle, .node ellipse, .node polygon {
-                        fill: #4263EB;
-                        stroke: #3a0ca3;
-                        stroke-width: 2px;
-                    }
-                    .edgePath path {
-                        stroke: #333;
-                        stroke-width: 2px;
-                    }
-                `
-            });
-        }
-
+        // Функции визуализации
         function displayMermaidDiagram(mermaidCode) {
-            if (!mermaidCode) {
+            if (!mermaidCode || mermaidCode.trim() === '') {
                 console.warn('Пустой Mermaid код');
+                mermaidDiagram.innerHTML = `
+                    <div class="visualization-placeholder">
+                        <i class="fas fa-project-diagram"></i>
+                        <p>Диаграмма будет сгенерирована автоматически во время урока</p>
+                    </div>
+                `;
                 return;
             }
             
+            console.log('Rendering Mermaid diagram:', mermaidCode.substring(0, 100) + '...');
+            
+            if (window.mermaidFix) {
+                window.mermaidFix.renderDiagram('mermaid-diagram', mermaidCode, 'Визуализация урока');
+            } else {
+                fallbackMermaidRender(mermaidCode);
+            }
+        }
+
+        function fallbackMermaidRender(mermaidCode) {
             try {
-                // Очищаем контейнер
                 mermaidDiagram.innerHTML = '';
+                const diagramElement = document.createElement('div');
+                diagramElement.className = 'mermaid';
+                diagramElement.textContent = mermaidCode;
+                mermaidDiagram.appendChild(diagramElement);
                 
-                // Создаем контейнер для диаграммы
-                const diagramContainer = document.createElement('div');
-                diagramContainer.className = 'mermaid';
-                
-                // Убедимся, что код начинается с правильного типа диаграммы
-                let processedCode = mermaidCode.trim();
-                if (!processedCode.startsWith('graph') && 
-                    !processedCode.startsWith('flowchart') && 
-                    !processedCode.startsWith('sequenceDiagram') &&
-                    !processedCode.startsWith('classDiagram')) {
-                    processedCode = 'flowchart TD\n' + processedCode;
-                }
-                
-                diagramContainer.textContent = processedCode;
-                mermaidDiagram.appendChild(diagramContainer);
-                
-                // Переинициализируем Mermaid для нового контента
-                mermaid.init(undefined, [diagramContainer]).then(() => {
-                    console.log('Mermaid диаграмма успешно отображена');
-                    
-                    // Принудительно применяем стили
-                    const svgElement = mermaidDiagram.querySelector('svg');
-                    if (svgElement) {
-                        svgElement.style.maxWidth = '100%';
-                        svgElement.style.height = 'auto';
-                        svgElement.style.display = 'block';
-                        svgElement.style.margin = '0 auto';
-                    }
-                }).catch(error => {
-                    console.error('Ошибка инициализации Mermaid:', error);
-                    showMermaidError(error);
-                });
-                
+                mermaid.init(undefined, [diagramElement]);
             } catch (error) {
-                console.error('Ошибка отображения Mermaid диаграммы:', error);
-                showMermaidError(error);
+                console.error('Fallback Mermaid error:', error);
+                mermaidDiagram.innerHTML = `
+                    <div style="padding: 20px; text-align: center; color: #666;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка отображения диаграммы</p>
+                    </div>
+                `;
             }
         }
 
         function displaySvgDiagram(svgCode) {
-            if (!svgCode) {
+            if (!svgCode || svgCode.trim() === '') {
                 console.warn('Пустой SVG код');
-                svgDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-shapes"></i>
-                        <p>SVG схема будет сгенерирована автоматически</p>
-                    </div>
-                `;
+                if (window.svgFix) {
+                    window.svgFix.showFallback('svg-diagram', 'Пустая диаграмма');
+                } else {
+                    svgDiagram.innerHTML = `
+                        <div class="visualization-placeholder">
+                            <i class="fas fa-shapes"></i>
+                            <p>SVG схема будет сгенерирована автоматически</p>
+                        </div>
+                    `;
+                }
                 return;
             }
             
-            try {
-                // Очищаем контейнер
-                svgDiagram.innerHTML = '';
-                
-                // Создаем контейнер для правильного масштабирования
-                const container = document.createElement('div');
-                container.className = 'svg-container';
-                
-                // Очищаем и валидируем SVG код
-                let processedSvg = svgCode.trim();
-                
-                // Удаляем лишние теги и комментарии
-                processedSvg = processedSvg.replace(/<!--[\s\S]*?-->/g, '');
-                processedSvg = processedSvg.replace(/<\?xml[\s\S]*?\?>/g, '');
-                
-                // Если код не начинается с <svg, добавляем обертку
-                if (!processedSvg.startsWith('<svg')) {
-                    processedSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">${processedSvg}</svg>`;
-                }
-                
-                // Убедимся, что есть namespace
-                if (!processedSvg.includes('xmlns=')) {
-                    processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
-                }
-                
-                // Добавляем viewBox если его нет
-                if (!processedSvg.includes('viewBox=')) {
-                    processedSvg = processedSvg.replace('<svg', '<svg viewBox="0 0 400 300"');
-                }
-                
-                container.innerHTML = processedSvg;
-                
-                // Получаем SVG элемент и настраиваем его
-                const svgElement = container.querySelector('svg');
-                if (svgElement) {
-                    // Устанавливаем атрибуты для правильного отображения
-                    svgElement.setAttribute('width', '100%');
-                    svgElement.setAttribute('height', '100%');
-                    svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-                    
-                    // Стили для корректного отображения
-                    svgElement.style.display = 'block';
-                    svgElement.style.maxWidth = '100%';
-                    svgElement.style.maxHeight = '100%';
-                    svgElement.style.margin = 'auto';
-                    
-                    // Принудительно применяем стили ко всем внутренним элементам
-                    const applyStyles = (element) => {
-                        if (element.style) {
-                            element.style.vectorEffect = 'non-scaling-stroke';
-                        }
-                        if (element.children) {
-                            Array.from(element.children).forEach(applyStyles);
-                        }
-                    };
-                    
-                    applyStyles(svgElement);
-                }
-                
-                svgDiagram.appendChild(container);
-                console.log('SVG диаграмма успешно отображена');
-                
-            } catch (error) {
-                console.error('Ошибка отображения SVG диаграммы:', error);
-                svgDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка отображения SVG</p>
-                        <small>${error.message}</small>
-                        <button onclick="retryLastVisualization()" style="margin-top: 10px; padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            Повторить
-                        </button>
-                    </div>
-                `;
+            console.log('Rendering SVG diagram, length:', svgCode.length);
+            
+            if (window.svgFix) {
+                window.svgFix.renderSVG('svg-diagram', svgCode, 'SVG Визуализация');
+            } else {
+                fallbackSvgRender(svgCode);
             }
         }
 
-        function showMermaidError(error) {
-            mermaidDiagram.innerHTML = `
-                <div class="visualization-placeholder">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>Ошибка отображения диаграммы</p>
-                    <small>${error.message}</small>
-                    <button onclick="retryLastVisualization()" style="margin-top: 10px; padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Повторить
-                    </button>
-                </div>
-            `;
-        }
-
-        function retryLastVisualization() {
-            if (socket) {
-                socket.emit('force_visualization', {
-                    room_id: roomId,
-                    topic: 'Повторная генерация',
-                    context: 'Повторная попытка отображения диаграммы'
-                });
+        function fallbackSvgRender(svgCode) {
+            try {
+                let cleaned = svgCode.trim();
+                cleaned = cleaned.replace(/<\?xml[^>]*\?>/g, '');
+                cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, '');
+                
+                if (!cleaned.includes('xmlns=')) {
+                    cleaned = cleaned.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                
+                svgDiagram.innerHTML = `
+                    <div class="svg-diagram-container">
+                        <div class="diagram-title">
+                            <i class="fas fa-shapes"></i>
+                            SVG Диаграмма
+                        </div>
+                        <div class="svg-content">
+                            ${cleaned}
+                        </div>
+                    </div>
+                `;
+                
+                const svg = svgDiagram.querySelector('svg');
+                if (svg) {
+                    if (!svg.hasAttribute('width')) svg.setAttribute('width', '100%');
+                    if (!svg.hasAttribute('height')) svg.setAttribute('height', '100%');
+                    if (!svg.hasAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 400 300');
+                    svg.style.maxWidth = '100%';
+                    svg.style.maxHeight = '100%';
+                }
+                
+            } catch (error) {
+                console.error('Fallback SVG error:', error);
+                svgDiagram.innerHTML = `
+                    <div class="visualization-error">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка отображения SVG</p>
+                    </div>
+                `;
             }
         }
 
         function initVisualization() {
-            initMermaid();
-            
-            // Обработчики вкладок визуализации
             visualizationTabs.forEach(tab => {
                 tab.addEventListener('click', () => {
                     const tabName = tab.dataset.tab;
@@ -1993,14 +2475,12 @@
                 });
             });
             
-            // Инициализация polling для визуализаций
             startVisualizationPolling();
         }
 
         function switchVisualizationTab(tabName) {
             currentVisualizationTab = tabName;
             
-            // Обновляем активные вкладки
             visualizationTabs.forEach(tab => {
                 if (tab.dataset.tab === tabName) {
                     tab.classList.add('active');
@@ -2009,7 +2489,6 @@
                 }
             });
             
-            // Показываем соответствующую вкладку
             if (tabName === 'mermaid') {
                 mermaidTab.style.display = 'flex';
                 svgTab.style.display = 'none';
@@ -2049,7 +2528,6 @@
         }
 
         function startVisualizationPolling() {
-            // Polling каждые 3 секунды для проверки новых визуализаций
             setInterval(async () => {
                 if (!socket || !isVisualizationWindowOpen) return;
                 
@@ -2073,7 +2551,7 @@
             }, 3000);
         }
 
-        // ========== УЛУЧШЕННОЕ РАСПОЗНАВАНИЕ РЕЧИ ==========
+        // Функции распознавания речи
         function initSpeechRecognition() {
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
@@ -2081,7 +2559,6 @@
                 recognition.interimResults = true;
                 recognition.lang = 'ru-RU';
                 
-                // НАСТРОЙКИ ЧУВСТВИТЕЛЬНОСТИ
                 recognition.continuous = true;
                 recognition.interimResults = false;
                 recognition.maxAlternatives = 1;
@@ -2107,7 +2584,6 @@
                     if (finalTranscript) {
                         const cleanText = finalTranscript.trim();
                         
-                        // ФИЛЬТРЫ ДЛЯ УМЕНЬШЕНИЯ ЛОЖНЫХ СРАБАТЫВАНИЙ
                         if (cleanText.length < 3) {
                             console.log('Отфильтрована короткая фраза:', cleanText);
                             return;
@@ -2134,7 +2610,6 @@
                         console.log('Распознана речь:', cleanText);
                         lastFinalResult = cleanText;
                         
-                        // СБРАСЫВАЕМ таймер автопродолжения при любой речи ученика
                         handleStudentActivity();
                         
                         if (socket) {
@@ -2219,7 +2694,7 @@
             }
         }
 
-        // ========== iOS AUDIO FIX ИЗ СТАРОГО ОБРАЗЦА ==========
+        // iOS Audio Fix
         function playNextAudio() {
             if (isPlayingAudio || audioQueue.length === 0) return;
             
@@ -2259,7 +2734,7 @@
             }
         }
 
-        // ========== УЛУЧШЕННАЯ СИСТЕМА АНИМАЦИИ АВАТАРА ==========
+        // Функции анимации аватара
         function loadImage(src, retries = 3) {
             return new Promise(function(resolve, reject) {
                 const img = new Image();
@@ -2316,7 +2791,6 @@
                         speechFrames = result.speech;
                         statusDiv.textContent = `${avatarName}: нейтральных ${neutralFrames.length}, речевых ${speechFrames.length}`;
                         
-                        // Запускаем анимацию в нейтральном режиме
                         startNeutralAnimation();
                         console.log('Анимация запущена в нейтральном режиме');
                     } else {
@@ -2349,7 +2823,6 @@
                     
                     loadImage(imageUrl, 2)
                         .then(img => {
-                            // Определяем тип кадра по имени файла
                             if (isSpeechFrame(frame)) {
                                 speech.push(img);
                             } else {
@@ -2386,21 +2859,18 @@
             
             const lowerName = frameName.toLowerCase();
             
-            // Сначала проверяем нейтральные паттерны
             for (const pattern of neutralPatterns) {
                 if (lowerName.includes(pattern)) {
                     return false;
                 }
             }
             
-            // Затем проверяем речевые паттерны
             for (const pattern of speechPatterns) {
                 if (lowerName.includes(pattern)) {
                     return true;
                 }
             }
             
-            // По умолчанию считаем нейтральным
             return false;
         }
 
@@ -2409,7 +2879,6 @@
             
             if (neutralFrames.length === 0) {
                 console.warn('Нет нейтральных кадров для анимации');
-                // Если нет нейтральных кадров, используем все кадры как нейтральные
                 if (speechFrames.length > 0) {
                     neutralFrames = speechFrames;
                 } else {
@@ -2423,7 +2892,7 @@
             animationInterval = setInterval(() => {
                 currentFrame = (currentFrame + 1) % neutralFrames.length;
                 showFrame(neutralFrames[currentFrame]);
-            }, 1000 / 8); // 8 FPS для нейтральной анимации
+            }, 1000 / 8);
             
             showFrame(neutralFrames[0]);
             updateAnimationStatus();
@@ -2434,7 +2903,6 @@
             
             if (speechFrames.length === 0) {
                 console.warn('Нет речевых кадров для анимации');
-                // Если нет речевых кадров, используем нейтральные
                 startNeutralAnimation();
                 return;
             }
@@ -2442,16 +2910,14 @@
             console.log('Запуск речевой анимации с', speechFrames.length, 'кадрами');
             currentAnimationMode = 'speech';
             
-            // Останавливаем предыдущую анимацию
             if (animationInterval) {
                 clearInterval(animationInterval);
             }
             
-            // Запускаем речевую анимацию с большей скоростью
             animationInterval = setInterval(() => {
                 currentFrame = (currentFrame + 1) % speechFrames.length;
                 showFrame(speechFrames[currentFrame]);
-            }, 1000 / 12); // 12 FPS для речевой анимации
+            }, 1000 / 12);
             
             showFrame(speechFrames[0]);
             updateAnimationStatus();
@@ -2462,10 +2928,8 @@
                 stopSpeechAnimation();
                 console.log('Речевая анимация завершена, возврат к нейтральной');
                 
-                // Возвращаемся к нейтральной анимации
                 startNeutralAnimation();
                 
-                // Запускаем таймер после того как учитель закончил говорить
                 if (isLessonActive && !isPracticeActive) {
                     resetAutoContinueTimer();
                 }
@@ -2596,7 +3060,7 @@
             }
         }
 
-        // ========== ФУНКЦИИ ИНИЦИАЛИЗАЦИИ ==========
+        // Функции инициализации
         function createBackgroundAnimation() {
             for (let i = 0; i < 8; i++) {
                 const circle = document.createElement('div');
@@ -2868,19 +3332,16 @@
         }
 
         function setTool(tool) {
-            // Сбрасываем активные состояния
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
             visualizationToolBtn.classList.remove('active');
             
-            // Скрываем все окна
             lessonContent.style.display = 'none';
             drawingWindow.style.display = 'none';
             visualizationWindow.style.display = 'none';
             answerInputContainer.style.display = 'none';
             
-            // Показываем нужное окно и устанавливаем активное состояние
             if (tool === 'text') {
                 textToolBtn.classList.add('active');
                 lessonContent.style.display = 'block';
@@ -2913,7 +3374,6 @@
         function submitAnswer() {
             const answer = answerInput.value.trim();
             if (answer) {
-                // СБРАСЫВАЕМ таймер при отправке ответа
                 handleStudentActivity();
                 
                 if (socket) {
@@ -2997,13 +3457,11 @@
                     enableCameraAndMicrophone();
                 }, 1500);
 
-                // Инициализируем систему LLM
                 initLlmSystem();
             });
             
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
-                // Останавливаем таймер при отключении
                 setAutoContinueEnabled(false);
             });
             
@@ -3030,7 +3488,6 @@
                         showTeacherSpeech(data.text);
                     }
                     
-                    // ОБНОВЛЯЕМ время последней речи учителя
                     lastTeacherSpeechTime = Date.now();
                     
                 } catch (error) {
@@ -3054,7 +3511,6 @@
                         updateLessonText(lessonText);
                     }
                     
-                    // ОБНОВЛЯЕМ время последней речи учителя
                     lastTeacherSpeechTime = Date.now();
                 } else {
                     showStudentSpeech(data.text, data.sid);
@@ -3091,7 +3547,6 @@
                 currentLesson = data;
                 currentParagraph = 0;
                 
-                // ВКЛЮЧАЕМ автоматическое продолжение при начале урока
                 setAutoContinueEnabled(true);
                 
                 loadLessonContent(data.lesson_id);
@@ -3104,19 +3559,15 @@
                 }
             });
 
-            // Обработчик для визуализаций
             socket.on('visualization_generated', (data) => {
                 console.log('Получена визуализация:', data.topic);
                 
-                // Автоматически показываем окно визуализации
                 if (!isVisualizationWindowOpen) {
                     setTool('visualization');
                 }
                 
-                // Показываем индикатор загрузки
                 showVisualizationLoading();
                 
-                // Обновляем диаграммы с небольшой задержкой для плавности
                 setTimeout(() => {
                     if (data.mermaid_code) {
                         displayMermaidDiagram(data.mermaid_code);
@@ -3130,11 +3581,10 @@
                 }, 500);
             });
 
-            // Обработчик для практики
             socket.on('practice_started', () => {
                 console.log('Практика начата');
                 isPracticeActive = true;
-                setAutoContinueEnabled(false); // ВЫКЛЮЧАЕМ таймер во время практики
+                setAutoContinueEnabled(false);
                 setTool('answer');
             });
 
@@ -3142,43 +3592,9 @@
                 console.log('Практика завершена');
                 isPracticeActive = false;
                 if (isLessonActive) {
-                    setAutoContinueEnabled(true); // ВКЛЮЧАЕМ таймер если урок еще идет
+                    setAutoContinueEnabled(true);
                 }
                 setTool('text');
-            });
-
-            // УЛУЧШЕННЫЕ ОБРАБОТЧИКИ LLM
-            socket.on('llm_request_queued', (data) => {
-                console.log('LLM запрос поставлен в очередь:', data.request_id);
-                updateLlmStatus('Запрос в очереди...', 'working');
-            });
-
-            socket.on('llm_async_response', (data) => {
-                console.log('Получен асинхронный ответ LLM:', data.request_id);
-                
-                // Удаляем из ожидающих запросов
-                if (llmPendingRequests.has(data.request_id)) {
-                    llmPendingRequests.delete(data.request_id);
-                }
-                
-                updateLlmStatus('Ответ получен!', 'success');
-                
-                // Автоматически показываем ответ учителя
-                if (data.response && data.response.trim()) {
-                    const responseText = data.response;
-                    
-                    // Отправляем ответ как речь учителя
-                    socket.emit('generate_speech', {
-                        room_id: roomId,
-                        text: responseText,
-                        voice: 'female',
-                        is_teacher: true
-                    });
-                    
-                    // Показываем в интерфейсе
-                    showTeacherSpeech(responseText);
-                    startSpeechAnimation(responseText);
-                }
             });
 
             socket.on('llm_status_update', (data) => {
@@ -3203,22 +3619,6 @@
                 updateLlmPriorityDisplay();
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
             });
-        }
-
-        function updateLlmPriorityDisplay() {
-            if (llmPriorityText) {
-                llmPriorityText.textContent = getPriorityName(currentLlmPriority);
-                
-                // Добавляем иконку в зависимости от приоритета
-                let icon = 'fa-brain';
-                if (currentLlmPriority.includes('local')) {
-                    icon = 'fa-desktop';
-                } else if (currentLlmPriority.includes('openrouter')) {
-                    icon = 'fa-cloud';
-                }
-                
-                llmPriorityStatus.innerHTML = `<i class="fas ${icon}"></i> LLM: ${getPriorityName(currentLlmPriority)}`;
-            }
         }
 
         function getPriorityName(priority) {
@@ -3315,7 +3715,6 @@
                 lessonContent.style.display = 'none';
                 currentLesson = null;
                 isLessonActive = false;
-                // ВЫКЛЮЧАЕМ таймер при завершении урока
                 setAutoContinueEnabled(false);
             }
         }
@@ -3503,7 +3902,6 @@
                 recognition.stop();
             }
             stopAnimation();
-            // Останавливаем таймер автопродолжения
             setAutoContinueEnabled(false);
             
             if (socket) {
@@ -3518,7 +3916,7 @@
             }
         }
 
-        // ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ ==========
+        // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
             createBackgroundAnimation();
@@ -3619,8 +4017,6 @@
             }
             
             setDrawingTool('pen');
-            
-            // Инициализация системы автоматического продолжения (изначально выключена)
             setAutoContinueEnabled(false);
         });
 
@@ -3628,26 +4024,6 @@
             isFullscreen = !!document.fullscreenElement;
             fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
         });
-
-        // Тестирование улучшенной системы LLM
-        function testLlmSystem() {
-            console.log('Тестирование системы LLM...');
-            
-            // Тестовый запрос к LLM
-            const testPrompt = "Привет! Расскажи кратко о себе и своих возможностях.";
-            const requestId = sendLlmRequest(testPrompt, "Ты - дружелюбный AI-учитель. Отвечай кратко и понятно.");
-            
-            if (requestId) {
-                console.log('Тестовый запрос отправлен:', requestId);
-            }
-        }
-
-        // Автоматическое тестирование через 10 секунд после загрузки
-        setTimeout(() => {
-            if (aiTeacherActivated) {
-                testLlmSystem();
-            }
-        }, 10000);
     </script>
 </body>
 </html>
