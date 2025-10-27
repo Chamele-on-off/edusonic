@@ -327,6 +327,44 @@
             justify-content: center;
         }
         
+        /* Исправление для SVG диаграмм */
+        #svg-diagram svg {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        /* Контейнер для SVG с правильным масштабированием */
+        .svg-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+        }
+        
+        .svg-container svg {
+            flex-shrink: 0;
+            transition: transform 0.3s ease;
+        }
+        
+        /* Улучшение для Mermaid */
+        #mermaid-diagram .mermaid {
+            max-width: 100%;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+        }
+        
+        #mermaid-diagram .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        
         .visualization-placeholder {
             text-align: center;
             color: var(--gray);
@@ -1854,10 +1892,31 @@
                 // Очищаем контейнер
                 svgDiagram.innerHTML = '';
                 
-                // Вставляем SVG код
-                svgDiagram.innerHTML = svgCode;
+                // Создаем контейнер для правильного масштабирования
+                const container = document.createElement('div');
+                container.className = 'svg-container';
                 
-                console.log('SVG диаграмма отображена');
+                // Вставляем SVG код
+                container.innerHTML = svgCode;
+                
+                // Получаем SVG элемент
+                const svgElement = container.querySelector('svg');
+                if (svgElement) {
+                    // Устанавливаем атрибуты для правильного масштабирования
+                    if (!svgElement.hasAttribute('width') && !svgElement.hasAttribute('height')) {
+                        svgElement.setAttribute('width', '100%');
+                        svgElement.setAttribute('height', '100%');
+                    }
+                    
+                    // Убираем фиксированные размеры если они мешают
+                    svgElement.style.maxWidth = '100%';
+                    svgElement.style.maxHeight = '100%';
+                    svgElement.style.display = 'block';
+                }
+                
+                svgDiagram.appendChild(container);
+                
+                console.log('SVG диаграмма отображена с правильным масштабированием');
             } catch (error) {
                 console.error('Ошибка отображения SVG диаграммы:', error);
                 svgDiagram.innerHTML = `
@@ -2151,8 +2210,10 @@
                     if (images && images.length > 0) {
                         loadedImages = images;
                         statusDiv.textContent = avatarName + ': загружено ' + loadedImages.length + ' кадров';
-                        startAnimation();
-                        console.log('Анимация запущена с', loadedImages.length, 'кадрами');
+                        
+                        // ЗАПУСКАЕМ АНИМАЦИЮ С ПОСТОЯННОЙ СКОРОСТЬЮ 10 FPS
+                        startConstantAnimation();
+                        console.log('Анимация запущена с постоянной скоростью 10 FPS');
                     } else {
                         throw new Error('Не удалось загрузить кадры');
                     }
@@ -2256,14 +2317,36 @@
             }
         }
 
+        // ПОСТОЯННАЯ АНИМАЦИЯ 10 FPS ВСЕГДА
+        function startConstantAnimation() {
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            if (loadedImages.length === 0) {
+                console.warn('Нет загруженных кадров для анимации');
+                return;
+            }
+            
+            console.log('Запуск постоянной анимации 10 FPS с', loadedImages.length, 'кадрами');
+            
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % loadedImages.length;
+                showFrame();
+            }, 1000 / 10); // Всегда 10 кадров в секунду
+            
+            showFrame();
+            updateAnimationStatus();
+        }
+
         function startSpeechAnimation(text) {
-            stopSpeechAnimation();
+            stopSpeechAnimationTimer();
             
             const duration = calculateSpeechDuration(text);
             
             console.log(`Запуск анимации речи на ${duration}ms для текста: "${text.substring(0, 50)}..."`);
             
-            startFastAnimation();
+            // Анимация уже работает на 10 FPS, просто обновляем статус
             isSpeechAnimating = true;
             updateAnimationStatus();
             
@@ -2289,9 +2372,15 @@
             
             if (isSpeechAnimating) {
                 isSpeechAnimating = false;
-                startSlowAnimation();
                 updateAnimationStatus();
-                console.log('Анимация речи остановлена, переход в режим покоя');
+                console.log('Анимация речи остановлена');
+            }
+        }
+
+        function stopSpeechAnimationTimer() {
+            if (speechAnimationTimeout) {
+                clearTimeout(speechAnimationTimeout);
+                speechAnimationTimeout = null;
             }
         }
 
@@ -2312,50 +2401,8 @@
             return Math.max(minDuration, Math.min(maxDuration, totalDuration));
         }
 
-        function startFastAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-            }
-            
-            if (loadedImages.length === 0) return;
-            
-            animationInterval = setInterval(() => {
-                currentFrame = (currentFrame + 1) % loadedImages.length;
-                showFrame();
-            }, 1000 / 15);
-        }
-
-        function startSlowAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-            }
-            
-            if (loadedImages.length === 0) return;
-            
-            animationInterval = setInterval(() => {
-                currentFrame = (currentFrame + 1) % loadedImages.length;
-                showFrame();
-            }, 1000 / 3);
-        }
-
-        function startAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-            }
-            
-            if (loadedImages.length === 0) {
-                console.warn('Нет загруженных кадров для анимации');
-                return;
-            }
-            
-            console.log('Запуск анимации покоя с', loadedImages.length, 'кадрами');
-            startSlowAnimation();
-            showFrame();
-            updateAnimationStatus();
-        }
-
         function stopAnimation() {
-            stopSpeechAnimation();
+            stopSpeechAnimationTimer();
             
             if (animationInterval) {
                 clearInterval(animationInterval);
@@ -2374,10 +2421,10 @@
             if (!animationStatus) return;
             
             if (isSpeechAnimating) {
-                animationStatus.textContent = '🗣️ Анимация речи';
+                animationStatus.textContent = '🗣️ Анимация речи (10 FPS)';
                 animationStatus.style.color = '#4cc9f0';
             } else {
-                animationStatus.textContent = '😴 Режим покоя';
+                animationStatus.textContent = '😴 Постоянная анимация (10 FPS)';
                 animationStatus.style.color = '#95a5a6';
             }
         }
@@ -2902,7 +2949,7 @@
             socket.on('animation_ready', (data) => {
                 console.log('Анимация готова:', data.status);
                 if (data.status === 'ready' && loadedImages.length > 0) {
-                    startAnimation();
+                    startConstantAnimation();
                 }
             });
 
