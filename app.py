@@ -809,45 +809,13 @@ def generate_diagram():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-def clean_and_validate_mermaid_code(code: str) -> str:
-    """Тщательная очистка и валидация Mermaid кода"""
-    if not code:
-        return ""
-    
-    # Удаляем markdown обратные кавычки
-    code = re.sub(r'```[\s\S]*?```', '', code)
-    code = re.sub(r'`[^`]*`', '', code)
-    
-    # Удаляем комментарии Mermaid
-    code = re.sub(r'%%.*', '', code)
-    
-    # Удаляем лишние пробелы и пустые строки
-    code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
-    
-    # Проверяем базовый синтаксис
-    valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
-    
-    # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
-    if not any(code.strip().startswith(start) for start in valid_starts):
-        code = 'flowchart TD\n' + code
-    
-    # Убедимся, что есть базовые элементы
-    lines = code.split('\n')
-    if len(lines) < 2 or ('-->' not in code and '->' not in code):
-        # Добавляем простую структуру если нет связей
-        if len(lines) > 1:
-            code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
-        else:
-            code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
-    
-    return code.strip()
-
 def generate_mermaid_code(topic: str, context: str = "") -> str:
-    """Генерация Mermaid кода через LLM с улучшенной обработкой"""
+    """Генерация Mermaid кода через LLM"""
     print(f"🔧 Генерация Mermaid для: {topic[:100]}...")
     
+    # УПРОЩЕННЫЙ ПРОМПТ
     prompt = f"""
-    Создай простую и понятную Mermaid.js диаграмму для темы: "{topic}".
+    Создай Mermaid.js диаграмму для темы: "{topic}".
     Контекст: {context}
     
     Требования:
@@ -855,21 +823,20 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     - Максимум 6-8 элементов
     - Русские подписи в двойных кавычках
     - Логическая структура
-    - Простые связи между элементами
     
-    Пример правильного формата:
+    Пример:
     flowchart TD
-        A["Начало"] --> B["Процесс 1"]
-        A --> C["Процесс 2"] 
-        B --> D["Результат"]
-        C --> D
+        A["Общее понятие"] --> B["Частный случай"]
+        A --> C["Другой случай"]
+        B --> D["Пример"]
 
     Тема: {topic}
     
-    Верни ТОЛЬКО код Mermaid без каких-либо пояснений, комментариев или обратных кавычек.
+    Верни ТОЛЬКО код Mermaid без пояснений.
     """
     
     try:
+        # Используем существующий LLM
         from llm import LLMIntegration
         llm = LLMIntegration()
         
@@ -877,13 +844,13 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
             prompt=prompt,
             context="",
             subject="general",
-            system_prompt="Ты создаешь простые Mermaid диаграммы для образования. Используй только корректный синтаксис Mermaid. Возвращай только код без пояснений.",
-            max_tokens=300
+            system_prompt="Ты создаешь простые Mermaid диаграммы. Используй только корректный синтаксис Mermaid.",
+            max_tokens=300  # Уменьшаем токены для более простых диаграмм
         )
         
         if response:
-            # Тщательная очистка кода
-            cleaned_code = clean_and_validate_mermaid_code(response)
+            # Очищаем и проверяем синтаксис
+            cleaned_code = clean_mermaid_code(response)
             print(f"✅ Сгенерирован Mermaid код для: {topic[:50]}...")
             print(f"   Код: {cleaned_code[:100]}...")
             return cleaned_code
@@ -895,9 +862,9 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     
     # Fallback - простая диаграмма по умолчанию
     return f'''flowchart TD
-    A["{topic}"] --> B["Основной аспект"]
-    A --> C["Дополнительный аспект"]
-    B --> D["Детали"]
+    A["{topic}"] --> B["Аспект 1"]
+    A --> C["Аспект 2"]
+    B --> D["Деталь"]
     C --> D'''
 
 def generate_svg_code(topic: str, context: str = "") -> str:
@@ -957,6 +924,39 @@ def generate_svg_code(topic: str, context: str = "") -> str:
         print(f"❌ Ошибка генерации SVG кода: {e}")
     
     return ""
+
+def clean_mermaid_code(code: str) -> str:
+    """Очистка Mermaid кода от лишних символов и проверка синтаксиса"""
+    if not code:
+        return ""
+    
+    # Удаляем markdown обратные кавычки и все что между ними
+    code = re.sub(r'```[\s\S]*?```', '', code)
+    code = re.sub(r'`[^`]*`', '', code)
+    
+    # Удаляем комментарии Mermaid
+    code = re.sub(r'%%.*', '', code)
+    
+    # Удаляем лишние пробелы и пустые строки
+    code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
+    
+    # Проверяем базовый синтаксис
+    valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
+    
+    # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
+    if not any(code.strip().startswith(start) for start in valid_starts):
+        code = 'flowchart TD\n' + code
+    
+    # Убедимся, что есть базовые элементы
+    lines = code.split('\n')
+    if len(lines) < 2 or ('-->' not in code and '->' not in code):
+        # Добавляем простую структуру если нет связей
+        if len(lines) > 1:
+            code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
+        else:
+            code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
+    
+    return code.strip()
 
 @socketio.on('generate_visualization')
 def handle_generate_visualization(data):
