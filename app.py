@@ -578,7 +578,7 @@ def handle_recognized_speech(data):
             # Обработка диалога выбора урока
             response = dialogue.process_input(text)
             
-            # Если response None - это значит был выбран предмет и нужно начать урок
+            # Если response is None - это значит был выбран предмет и нужно начать урок
             if response is None:
                 # Урок выбран, начинаем чтение
                 lesson_data = dialogue.get_selected_lesson()
@@ -813,29 +813,26 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     """Генерация Mermaid кода через LLM"""
     print(f"🔧 Генерация Mermaid для: {topic[:100]}...")
     
+    # УПРОЩЕННЫЙ ПРОМПТ
     prompt = f"""
-    Создай простую и понятную Mermaid.js диаграмму для объяснения темы: "{topic}".
-    
+    Создай Mermaid.js диаграмму для темы: "{topic}".
     Контекст: {context}
     
-    ТРЕБОВАНИЯ:
-    1. Используй ТОЛЬКО корректный синтаксис Mermaid
-    2. Максимум 8-10 элементов для наглядности
-    3. Простые прямоугольники и стрелки
-    4. Русские подписи в двойных кавычках
-    5. Логическая структура от общего к частному
+    Требования:
+    - Только корректный синтаксис Mermaid
+    - Максимум 6-8 элементов
+    - Русские подписи в двойных кавычках
+    - Логическая структура
     
-    ПРИМЕР КОРРЕКТНОГО СИНТАКСИСА:
+    Пример:
     flowchart TD
-        A["Общее понятие"] --> B["Частный случай 1"]
-        A --> C["Частный случай 2"]
+        A["Общее понятие"] --> B["Частный случай"]
+        A --> C["Другой случай"]
         B --> D["Пример"]
-        C --> D
 
-    Тема для диаграммы: {topic}
+    Тема: {topic}
     
-    Верни ТОЛЬКО код Mermaid без каких-либо пояснений.
-    Начни сразу с объявления типа диаграммы.
+    Верни ТОЛЬКО код Mermaid без пояснений.
     """
     
     try:
@@ -847,10 +844,8 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
             prompt=prompt,
             context="",
             subject="general",
-            system_prompt="""Ты - эксперт по созданию образовательных диаграмм. 
-            Создавай ПРОСТЫЕ и ПОНЯТНЫЕ Mermaid диаграммы.
-            ВАЖНО: Всегда используй корректный синтаксис Mermaid.""",
-            max_tokens=500
+            system_prompt="Ты создаешь простые Mermaid диаграммы. Используй только корректный синтаксис Mermaid.",
+            max_tokens=300  # Уменьшаем токены для более простых диаграмм
         )
         
         if response:
@@ -867,9 +862,9 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     
     # Fallback - простая диаграмма по умолчанию
     return f'''flowchart TD
-    A["{topic}"] --> B["Основной аспект 1"]
-    A --> C["Основной аспект 2"]
-    B --> D["Пример или свойство"]
+    A["{topic}"] --> B["Аспект 1"]
+    A --> C["Аспект 2"]
+    B --> D["Деталь"]
     C --> D'''
 
 def generate_svg_code(topic: str, context: str = "") -> str:
@@ -935,24 +930,27 @@ def clean_mermaid_code(code: str) -> str:
     if not code:
         return ""
     
-    # Удаляем markdown обратные кавычки
-    code = re.sub(r'```mermaid\s*', '', code)
-    code = re.sub(r'```\s*', '', code)
+    # Удаляем markdown обратные кавычки и все что между ними
+    code = re.sub(r'```[\s\S]*?```', '', code)
+    code = re.sub(r'`[^`]*`', '', code)
     
-    # Удаляем лишние пробелы и комментарии
-    code = re.sub(r'%%.*', '', code)  # Удаляем комментарии Mermaid
-    code = '\n'.join([line for line in code.split('\n') if line.strip()])
+    # Удаляем комментарии Mermaid
+    code = re.sub(r'%%.*', '', code)
     
-    # Проверяем базовый синтаксис Mermaid
-    valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt', 'gitGraph']
+    # Удаляем лишние пробелы и пустые строки
+    code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
+    
+    # Проверяем базовый синтаксис
+    valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
+    
+    # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
     if not any(code.strip().startswith(start) for start in valid_starts):
-        # Если не начинается с правильного типа, добавляем flowchart по умолчанию
         code = 'flowchart TD\n' + code
     
-    # Убедимся, что есть хотя бы одна стрелка или связь
-    if '-->' not in code and '->' not in code and '--' not in code:
+    # Убедимся, что есть базовые элементы
+    lines = code.split('\n')
+    if len(lines) < 2 or ('-->' not in code and '->' not in code):
         # Добавляем простую структуру если нет связей
-        lines = code.split('\n')
         if len(lines) > 1:
             code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
         else:
