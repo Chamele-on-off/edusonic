@@ -1450,10 +1450,12 @@
         
         // Анимация аватара - переменные
         let currentAvatar = 'teacher';
-        let frames = [];
+        let neutralFrames = [];
+        let speechFrames = [];
         let loadedImages = [];
         let currentFrame = 0;
         let animationInterval = null;
+        let currentAnimationMode = 'neutral'; // 'neutral' или 'speech'
         
         // Переменные для управления анимацией речи на основе текста
         let speechAnimationTimeout = null;
@@ -1586,18 +1588,6 @@
                 }
             }
         }
-
-        // Инициализация Mermaid
-        mermaid.initialize({
-            startOnLoad: true,
-            theme: 'default',
-            securityLevel: 'loose',
-            flowchart: {
-                useMaxWidth: true,
-                htmlLabels: true,
-                curve: 'basis'
-            }
-        });
 
         // ========== УЛУЧШЕННАЯ СИСТЕМА LLM ==========
         function initLlmSystem() {
@@ -1806,8 +1796,195 @@
             initResizeForWindow(visualizationWindow);
         }
 
-        // ========== ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
+        // ========== УЛУЧШЕННЫЕ ФУНКЦИИ ВИЗУАЛИЗАЦИИ ==========
+        function initMermaid() {
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: 'default',
+                securityLevel: 'loose',
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis'
+                },
+                themeCSS: `
+                    .node rect, .node circle, .node ellipse, .node polygon {
+                        fill: #4263EB;
+                        stroke: #3a0ca3;
+                        stroke-width: 2px;
+                    }
+                    .edgePath path {
+                        stroke: #333;
+                        stroke-width: 2px;
+                    }
+                `
+            });
+        }
+
+        function displayMermaidDiagram(mermaidCode) {
+            if (!mermaidCode) {
+                console.warn('Пустой Mermaid код');
+                return;
+            }
+            
+            try {
+                // Очищаем контейнер
+                mermaidDiagram.innerHTML = '';
+                
+                // Создаем контейнер для диаграммы
+                const diagramContainer = document.createElement('div');
+                diagramContainer.className = 'mermaid';
+                
+                // Убедимся, что код начинается с правильного типа диаграммы
+                let processedCode = mermaidCode.trim();
+                if (!processedCode.startsWith('graph') && 
+                    !processedCode.startsWith('flowchart') && 
+                    !processedCode.startsWith('sequenceDiagram') &&
+                    !processedCode.startsWith('classDiagram')) {
+                    processedCode = 'flowchart TD\n' + processedCode;
+                }
+                
+                diagramContainer.textContent = processedCode;
+                mermaidDiagram.appendChild(diagramContainer);
+                
+                // Переинициализируем Mermaid для нового контента
+                mermaid.init(undefined, [diagramContainer]).then(() => {
+                    console.log('Mermaid диаграмма успешно отображена');
+                    
+                    // Принудительно применяем стили
+                    const svgElement = mermaidDiagram.querySelector('svg');
+                    if (svgElement) {
+                        svgElement.style.maxWidth = '100%';
+                        svgElement.style.height = 'auto';
+                        svgElement.style.display = 'block';
+                        svgElement.style.margin = '0 auto';
+                    }
+                }).catch(error => {
+                    console.error('Ошибка инициализации Mermaid:', error);
+                    showMermaidError(error);
+                });
+                
+            } catch (error) {
+                console.error('Ошибка отображения Mermaid диаграммы:', error);
+                showMermaidError(error);
+            }
+        }
+
+        function displaySvgDiagram(svgCode) {
+            if (!svgCode) {
+                console.warn('Пустой SVG код');
+                svgDiagram.innerHTML = `
+                    <div class="visualization-placeholder">
+                        <i class="fas fa-shapes"></i>
+                        <p>SVG схема будет сгенерирована автоматически</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                // Очищаем контейнер
+                svgDiagram.innerHTML = '';
+                
+                // Создаем контейнер для правильного масштабирования
+                const container = document.createElement('div');
+                container.className = 'svg-container';
+                
+                // Очищаем и валидируем SVG код
+                let processedSvg = svgCode.trim();
+                
+                // Удаляем лишние теги и комментарии
+                processedSvg = processedSvg.replace(/<!--[\s\S]*?-->/g, '');
+                processedSvg = processedSvg.replace(/<\?xml[\s\S]*?\?>/g, '');
+                
+                // Если код не начинается с <svg, добавляем обертку
+                if (!processedSvg.startsWith('<svg')) {
+                    processedSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">${processedSvg}</svg>`;
+                }
+                
+                // Убедимся, что есть namespace
+                if (!processedSvg.includes('xmlns=')) {
+                    processedSvg = processedSvg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+                }
+                
+                // Добавляем viewBox если его нет
+                if (!processedSvg.includes('viewBox=')) {
+                    processedSvg = processedSvg.replace('<svg', '<svg viewBox="0 0 400 300"');
+                }
+                
+                container.innerHTML = processedSvg;
+                
+                // Получаем SVG элемент и настраиваем его
+                const svgElement = container.querySelector('svg');
+                if (svgElement) {
+                    // Устанавливаем атрибуты для правильного отображения
+                    svgElement.setAttribute('width', '100%');
+                    svgElement.setAttribute('height', '100%');
+                    svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                    
+                    // Стили для корректного отображения
+                    svgElement.style.display = 'block';
+                    svgElement.style.maxWidth = '100%';
+                    svgElement.style.maxHeight = '100%';
+                    svgElement.style.margin = 'auto';
+                    
+                    // Принудительно применяем стили ко всем внутренним элементам
+                    const applyStyles = (element) => {
+                        if (element.style) {
+                            element.style.vectorEffect = 'non-scaling-stroke';
+                        }
+                        if (element.children) {
+                            Array.from(element.children).forEach(applyStyles);
+                        }
+                    };
+                    
+                    applyStyles(svgElement);
+                }
+                
+                svgDiagram.appendChild(container);
+                console.log('SVG диаграмма успешно отображена');
+                
+            } catch (error) {
+                console.error('Ошибка отображения SVG диаграммы:', error);
+                svgDiagram.innerHTML = `
+                    <div class="visualization-placeholder">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Ошибка отображения SVG</p>
+                        <small>${error.message}</small>
+                        <button onclick="retryLastVisualization()" style="margin-top: 10px; padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            Повторить
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        function showMermaidError(error) {
+            mermaidDiagram.innerHTML = `
+                <div class="visualization-placeholder">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Ошибка отображения диаграммы</p>
+                    <small>${error.message}</small>
+                    <button onclick="retryLastVisualization()" style="margin-top: 10px; padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Повторить
+                    </button>
+                </div>
+            `;
+        }
+
+        function retryLastVisualization() {
+            if (socket) {
+                socket.emit('force_visualization', {
+                    room_id: roomId,
+                    topic: 'Повторная генерация',
+                    context: 'Повторная попытка отображения диаграммы'
+                });
+            }
+        }
+
         function initVisualization() {
+            initMermaid();
+            
             // Обработчики вкладок визуализации
             visualizationTabs.forEach(tab => {
                 tab.addEventListener('click', () => {
@@ -1853,80 +2030,6 @@
             visualizationWindow.style.display = 'none';
             isVisualizationWindowOpen = false;
             visualizationToolBtn.classList.remove('active');
-        }
-
-        function displayMermaidDiagram(mermaidCode) {
-            if (!mermaidCode) return;
-            
-            try {
-                // Очищаем контейнер
-                mermaidDiagram.innerHTML = '';
-                
-                // Создаем элемент для диаграммы
-                const diagramElement = document.createElement('div');
-                diagramElement.className = 'mermaid';
-                diagramElement.textContent = mermaidCode;
-                
-                mermaidDiagram.appendChild(diagramElement);
-                
-                // Инициализируем Mermaid
-                mermaid.init(undefined, diagramElement);
-                
-                console.log('Mermaid диаграмма отображена');
-            } catch (error) {
-                console.error('Ошибка отображения Mermaid диаграммы:', error);
-                mermaidDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка отображения диаграммы</p>
-                        <small>${error.message}</small>
-                    </div>
-                `;
-            }
-        }
-
-        function displaySvgDiagram(svgCode) {
-            if (!svgCode) return;
-            
-            try {
-                // Очищаем контейнер
-                svgDiagram.innerHTML = '';
-                
-                // Создаем контейнер для правильного масштабирования
-                const container = document.createElement('div');
-                container.className = 'svg-container';
-                
-                // Вставляем SVG код
-                container.innerHTML = svgCode;
-                
-                // Получаем SVG элемент
-                const svgElement = container.querySelector('svg');
-                if (svgElement) {
-                    // Устанавливаем атрибуты для правильного масштабирования
-                    if (!svgElement.hasAttribute('width') && !svgElement.hasAttribute('height')) {
-                        svgElement.setAttribute('width', '100%');
-                        svgElement.setAttribute('height', '100%');
-                    }
-                    
-                    // Убираем фиксированные размеры если они мешают
-                    svgElement.style.maxWidth = '100%';
-                    svgElement.style.maxHeight = '100%';
-                    svgElement.style.display = 'block';
-                }
-                
-                svgDiagram.appendChild(container);
-                
-                console.log('SVG диаграмма отображена с правильным масштабированием');
-            } catch (error) {
-                console.error('Ошибка отображения SVG диаграммы:', error);
-                svgDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка отображения SVG</p>
-                        <small>${error.message}</small>
-                    </div>
-                `;
-            }
         }
 
         function showVisualizationLoading() {
@@ -2156,7 +2259,7 @@
             }
         }
 
-        // ========== ФУНКЦИИ АНИМАЦИИ АВАТАРА ==========
+        // ========== УЛУЧШЕННАЯ СИСТЕМА АНИМАЦИИ АВАТАРА ==========
         function loadImage(src, retries = 3) {
             return new Promise(function(resolve, reject) {
                 const img = new Image();
@@ -2187,7 +2290,8 @@
         function loadAvatarFrames(avatarName) {
             console.log('Начало загрузки аватара:', avatarName);
             statusDiv.textContent = 'Загрузка ' + avatarName + '...';
-            loadedImages = [];
+            neutralFrames = [];
+            speechFrames = [];
             avatarLoading.style.display = 'block';
             
             stopAnimation();
@@ -2202,18 +2306,19 @@
                     if (!data.frames || data.frames.length === 0) throw new Error('Нет доступных кадров');
                     
                     console.log('Найдено кадров:', data.frames.length);
-                    return loadAllFrames(avatarName, data.frames);
+                    return loadAndCategorizeFrames(avatarName, data.frames);
                 })
-                .then(function(images) {
+                .then(function(result) {
                     avatarLoading.style.display = 'none';
                     
-                    if (images && images.length > 0) {
-                        loadedImages = images;
-                        statusDiv.textContent = avatarName + ': загружено ' + loadedImages.length + ' кадров';
+                    if (result.neutral.length > 0 || result.speech.length > 0) {
+                        neutralFrames = result.neutral;
+                        speechFrames = result.speech;
+                        statusDiv.textContent = `${avatarName}: нейтральных ${neutralFrames.length}, речевых ${speechFrames.length}`;
                         
-                        // ЗАПУСКАЕМ АНИМАЦИЮ С ПОСТОЯННОЙ СКОРОСТЬЮ 10 FPS
-                        startConstantAnimation();
-                        console.log('Анимация запущена с постоянной скоростью 10 FPS');
+                        // Запускаем анимацию в нейтральном режиме
+                        startNeutralAnimation();
+                        console.log('Анимация запущена в нейтральном режиме');
                     } else {
                         throw new Error('Не удалось загрузить кадры');
                     }
@@ -2226,21 +2331,16 @@
                 });
         }
 
-        function loadAllFrames(avatarName, frameList) {
+        function loadAndCategorizeFrames(avatarName, frameList) {
             return new Promise((resolve) => {
-                const images = [];
+                const neutral = [];
+                const speech = [];
                 let loadedCount = 0;
-                let errorCount = 0;
-                
-                if (!frameList || frameList.length === 0) {
-                    resolve([]);
-                    return;
-                }
                 
                 function loadNext(index) {
                     if (index >= frameList.length) {
-                        console.log('Загружено кадров:', images.length, 'из', frameList.length);
-                        resolve(images);
+                        console.log('Загружено: нейтральных -', neutral.length, 'речевых -', speech.length);
+                        resolve({ neutral, speech });
                         return;
                     }
                     
@@ -2249,7 +2349,13 @@
                     
                     loadImage(imageUrl, 2)
                         .then(img => {
-                            images.push(img);
+                            // Определяем тип кадра по имени файла
+                            if (isSpeechFrame(frame)) {
+                                speech.push(img);
+                            } else {
+                                neutral.push(img);
+                            }
+                            
                             loadedCount++;
                             
                             if (loadedCount % 5 === 0 || loadedCount === frameList.length) {
@@ -2259,7 +2365,6 @@
                             loadNext(index + 1);
                         })
                         .catch(error => {
-                            errorCount++;
                             console.warn('Ошибка загрузки кадра', frame, error);
                             loadNext(index + 1);
                         });
@@ -2267,6 +2372,183 @@
                 
                 loadNext(0);
             });
+        }
+
+        function isSpeechFrame(frameName) {
+            const speechPatterns = [
+                'mouth_aa', 'mouth_ee', 'mouth_oo', 'mouth_oh', 'mouth_mm',
+                'speaking', 'talk', 'speech', 'aa_', 'ee_', 'oo_', 'oh_'
+            ];
+            
+            const neutralPatterns = [
+                'neutral', 'idle', 'rest', 'default', 'mouth_neutral'
+            ];
+            
+            const lowerName = frameName.toLowerCase();
+            
+            // Сначала проверяем нейтральные паттерны
+            for (const pattern of neutralPatterns) {
+                if (lowerName.includes(pattern)) {
+                    return false;
+                }
+            }
+            
+            // Затем проверяем речевые паттерны
+            for (const pattern of speechPatterns) {
+                if (lowerName.includes(pattern)) {
+                    return true;
+                }
+            }
+            
+            // По умолчанию считаем нейтральным
+            return false;
+        }
+
+        function startNeutralAnimation() {
+            stopAnimation();
+            
+            if (neutralFrames.length === 0) {
+                console.warn('Нет нейтральных кадров для анимации');
+                // Если нет нейтральных кадров, используем все кадры как нейтральные
+                if (speechFrames.length > 0) {
+                    neutralFrames = speechFrames;
+                } else {
+                    return;
+                }
+            }
+            
+            console.log('Запуск нейтральной анимации с', neutralFrames.length, 'кадрами');
+            currentAnimationMode = 'neutral';
+            
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % neutralFrames.length;
+                showFrame(neutralFrames[currentFrame]);
+            }, 1000 / 8); // 8 FPS для нейтральной анимации
+            
+            showFrame(neutralFrames[0]);
+            updateAnimationStatus();
+        }
+
+        function startSpeechAnimation(text) {
+            stopSpeechAnimationTimer();
+            
+            if (speechFrames.length === 0) {
+                console.warn('Нет речевых кадров для анимации');
+                // Если нет речевых кадров, используем нейтральные
+                startNeutralAnimation();
+                return;
+            }
+            
+            console.log('Запуск речевой анимации с', speechFrames.length, 'кадрами');
+            currentAnimationMode = 'speech';
+            
+            // Останавливаем предыдущую анимацию
+            if (animationInterval) {
+                clearInterval(animationInterval);
+            }
+            
+            // Запускаем речевую анимацию с большей скоростью
+            animationInterval = setInterval(() => {
+                currentFrame = (currentFrame + 1) % speechFrames.length;
+                showFrame(speechFrames[currentFrame]);
+            }, 1000 / 12); // 12 FPS для речевой анимации
+            
+            showFrame(speechFrames[0]);
+            updateAnimationStatus();
+            
+            const duration = calculateSpeechDuration(text);
+            
+            speechAnimationTimeout = setTimeout(() => {
+                stopSpeechAnimation();
+                console.log('Речевая анимация завершена, возврат к нейтральной');
+                
+                // Возвращаемся к нейтральной анимации
+                startNeutralAnimation();
+                
+                // Запускаем таймер после того как учитель закончил говорить
+                if (isLessonActive && !isPracticeActive) {
+                    resetAutoContinueTimer();
+                }
+            }, duration);
+        }
+
+        function stopSpeechAnimation() {
+            if (speechAnimationTimeout) {
+                clearTimeout(speechAnimationTimeout);
+                speechAnimationTimeout = null;
+            }
+            
+            if (currentAnimationMode === 'speech') {
+                currentAnimationMode = 'neutral';
+                startNeutralAnimation();
+            }
+        }
+
+        function stopSpeechAnimationTimer() {
+            if (speechAnimationTimeout) {
+                clearTimeout(speechAnimationTimeout);
+                speechAnimationTimeout = null;
+            }
+        }
+
+        function calculateSpeechDuration(text) {
+            if (!text || text.length === 0) return 2000;
+            
+            const punctuationPauses = (text.match(/[.!?;:]/g) || []).length;
+            const pauseBonus = punctuationPauses * 300;
+            
+            const charsPerSecond = 15;
+            const baseDuration = (text.length / charsPerSecond) * 1000;
+            
+            const totalDuration = baseDuration + pauseBonus;
+            
+            const minDuration = 2000;
+            const maxDuration = 45000;
+            
+            return Math.max(minDuration, Math.min(maxDuration, totalDuration));
+        }
+
+        function showFrame(img) {
+            if (!img || !img.src) {
+                console.warn('Нет изображения для отображения');
+                return;
+            }
+            
+            try {
+                teacherVideo.src = img.src;
+                teacherVideo.style.display = 'block';
+            } catch (error) {
+                console.error('Ошибка показа кадра:', error);
+            }
+        }
+
+        function stopAnimation() {
+            stopSpeechAnimationTimer();
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            
+            if (neutralFrames.length > 0) {
+                currentFrame = 0;
+                showFrame(neutralFrames[0]);
+            }
+            
+            currentAnimationMode = 'neutral';
+            updateAnimationStatus();
+        }
+
+        function updateAnimationStatus() {
+            if (!animationStatus) return;
+            
+            if (currentAnimationMode === 'speech') {
+                animationStatus.textContent = '🗣️ Речевая анимация (12 FPS)';
+                animationStatus.style.color = '#4cc9f0';
+            } else {
+                animationStatus.textContent = '😴 Нейтральная анимация (8 FPS)';
+                animationStatus.style.color = '#95a5a6';
+            }
         }
 
         function showAvatarPlaceholder() {
@@ -2296,137 +2578,6 @@
             
             teacherVideo.src = canvas.toDataURL();
             stopAnimation();
-        }
-
-        function showFrame() {
-            if (loadedImages.length === 0) {
-                console.warn('Нет кадров для отображения');
-                return;
-            }
-            
-            try {
-                currentFrame = currentFrame % loadedImages.length;
-                const img = loadedImages[currentFrame];
-                
-                if (img && img.src) {
-                    teacherVideo.src = img.src;
-                    teacherVideo.style.display = 'block';
-                }
-            } catch (error) {
-                console.error('Ошибка показа кадра:', error);
-            }
-        }
-
-        // ПОСТОЯННАЯ АНИМАЦИЯ 10 FPS ВСЕГДА
-        function startConstantAnimation() {
-            if (animationInterval) {
-                clearInterval(animationInterval);
-            }
-            
-            if (loadedImages.length === 0) {
-                console.warn('Нет загруженных кадров для анимации');
-                return;
-            }
-            
-            console.log('Запуск постоянной анимации 10 FPS с', loadedImages.length, 'кадрами');
-            
-            animationInterval = setInterval(() => {
-                currentFrame = (currentFrame + 1) % loadedImages.length;
-                showFrame();
-            }, 1000 / 10); // Всегда 10 кадров в секунду
-            
-            showFrame();
-            updateAnimationStatus();
-        }
-
-        function startSpeechAnimation(text) {
-            stopSpeechAnimationTimer();
-            
-            const duration = calculateSpeechDuration(text);
-            
-            console.log(`Запуск анимации речи на ${duration}ms для текста: "${text.substring(0, 50)}..."`);
-            
-            // Анимация уже работает на 10 FPS, просто обновляем статус
-            isSpeechAnimating = true;
-            updateAnimationStatus();
-            
-            // СБРАСЫВАЕМ таймер когда учитель начинает говорить
-            resetAutoContinueTimer();
-            
-            speechAnimationTimeout = setTimeout(() => {
-                stopSpeechAnimation();
-                console.log('Анимация речи завершена');
-                
-                // ЗАПУСКАЕМ таймер после того как учитель закончил говорить
-                if (isLessonActive && !isPracticeActive) {
-                    resetAutoContinueTimer();
-                }
-            }, duration);
-        }
-
-        function stopSpeechAnimation() {
-            if (speechAnimationTimeout) {
-                clearTimeout(speechAnimationTimeout);
-                speechAnimationTimeout = null;
-            }
-            
-            if (isSpeechAnimating) {
-                isSpeechAnimating = false;
-                updateAnimationStatus();
-                console.log('Анимация речи остановлена');
-            }
-        }
-
-        function stopSpeechAnimationTimer() {
-            if (speechAnimationTimeout) {
-                clearTimeout(speechAnimationTimeout);
-                speechAnimationTimeout = null;
-            }
-        }
-
-        function calculateSpeechDuration(text) {
-            if (!text || text.length === 0) return 2000;
-            
-            const punctuationPauses = (text.match(/[.!?;:]/g) || []).length;
-            const pauseBonus = punctuationPauses * 300;
-            
-            const charsPerSecond = 15;
-            const baseDuration = (text.length / charsPerSecond) * 1000;
-            
-            const totalDuration = baseDuration + pauseBonus;
-            
-            const minDuration = 2000;
-            const maxDuration = 45000;
-            
-            return Math.max(minDuration, Math.min(maxDuration, totalDuration));
-        }
-
-        function stopAnimation() {
-            stopSpeechAnimationTimer();
-            
-            if (animationInterval) {
-                clearInterval(animationInterval);
-                animationInterval = null;
-            }
-            
-            if (loadedImages.length > 0) {
-                currentFrame = 0;
-                showFrame();
-            }
-            
-            updateAnimationStatus();
-        }
-
-        function updateAnimationStatus() {
-            if (!animationStatus) return;
-            
-            if (isSpeechAnimating) {
-                animationStatus.textContent = '🗣️ Анимация речи (10 FPS)';
-                animationStatus.style.color = '#4cc9f0';
-            } else {
-                animationStatus.textContent = '😴 Постоянная анимация (10 FPS)';
-                animationStatus.style.color = '#95a5a6';
-            }
         }
 
         function playAudio(base64Audio) {
@@ -2948,8 +3099,8 @@
 
             socket.on('animation_ready', (data) => {
                 console.log('Анимация готова:', data.status);
-                if (data.status === 'ready' && loadedImages.length > 0) {
-                    startConstantAnimation();
+                if (data.status === 'ready' && neutralFrames.length > 0) {
+                    startNeutralAnimation();
                 }
             });
 
