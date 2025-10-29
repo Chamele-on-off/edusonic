@@ -537,82 +537,97 @@ class LLMIntegration:
         return code.strip()
 
     def generate_mermaid_diagram(self, topic: str, context: str = "") -> str:
-        """Генерация Mermaid диаграммы через LLM"""
-        # УПРОЩЕННЫЙ ПРОМПТ
+        """Генерация Mermaid диаграммы через LLM с УЛУЧШЕННЫМ промптом"""
         prompt = f"""
-        Создай Mermaid.js диаграмму для темы: "{topic}".
-        Контекст: {context}
+        СОЗДАЙ ДИАГРАММУ MERMAID.JS ДЛЯ ТЕМЫ: "{topic}"
         
-        Требования:
-        - Только корректный синтаксис Mermaid
-        - Максимум 6-8 элементов
-        - Русские подписи в двойных кавычках
-        - Логическая структура
+        КОНТЕКСТ: {context}
         
-        Пример:
+        ТРЕБОВАНИЯ:
+        1. Используй ТОЛЬКО корректный синтаксис Mermaid
+        2. Начни с 'flowchart TD' или 'graph TD'
+        3. Используй русские подписи в двойных кавычках: A["Текст"]
+        4. Максимум 6-8 элементов
+        5. Простая логическая структура
+        6. Связи через --> 
+        7. Без лишних комментариев
+        
+        ПРИМЕР КОРРЕКТНОГО КОДА:
         flowchart TD
-            A["Общее понятие"] --> B["Частный случай"]
-            A --> C["Другой случай"]
+            A["Основное понятие"] --> B["Характеристика 1"]
+            A --> C["Характеристика 2"] 
             B --> D["Пример"]
-
-        Тема: {topic}
+            C --> D
         
-        Верни ТОЛЬКО код Mermaid без пояснений.
+        ТЕМА: {topic}
+        
+        ВЕРНИ ТОЛЬКО КОД MERMAID БЕЗ ЛЮБЫХ ПОЯСНЕНИЙ И ОБРАТНЫХ КАВЫЧЕК!
         """
         
         try:
             response = self._query_llm_api(
                 prompt=prompt,
                 context="",
-                subject="general",
-                system_prompt="Ты создаешь простые Mermaid диаграммы. Используй только корректный синтаксис Mermaid.",
-                max_tokens=300  # Уменьшаем токены для более простых диаграмм
+                subject="general", 
+                system_prompt="""Ты - генератор Mermaid диаграмм. Строго соблюдай правила:
+                - Начинай каждый код с 'flowchart TD'
+                - Используй только корректный синтаксис Mermaid
+                - Русский текст в двойных кавычках: ["Текст"]
+                - Связи через -->
+                - Без комментариев и пояснений
+                - Максимум 8 элементов""",
+                max_tokens=500
             )
             
             if response:
-                # Очищаем и проверяем синтаксис
+                # СИЛЬНАЯ очистка кода
                 cleaned_code = self.clean_and_validate_mermaid_code(response)
-                print(f"✅ Сгенерирован Mermaid код для: {topic}")
-                return cleaned_code
-            
+                if self.validate_mermaid_syntax(cleaned_code):
+                    print(f"✅ Сгенерирован ВАЛИДНЫЙ Mermaid код для: {topic}")
+                    return cleaned_code
+                else:
+                    print(f"⚠️ Mermaid код не прошел валидацию, используется fallback")
+                    
         except Exception as e:
-            print(f"❌ Ошибка генерации Mermaid кода: {e}")
+            print(f"❌ Ошибка генерации Mermaid: {e}")
         
-        # Fallback - простая диаграмма по умолчанию
+        # Fallback - гарантированно работающая диаграмма
         return f'''flowchart TD
-    A["{topic}"] --> B["Аспект 1"]
-    A --> C["Аспект 2"]
-    B --> D["Деталь"]
-    C --> D'''
+    A["{topic}"] --> B["Основной аспект"]
+    A --> C["Дополнительный аспект"]
+    B --> D["Конкретный пример"]
+    C --> D
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px'''
 
     def generate_svg_diagram(self, topic: str, context: str = "") -> str:
-        """Генерация простого SVG через LLM с улучшенной валидацией"""
+        """Генерация SVG с ЖЕСТКИМИ требованиями"""
         prompt = f"""
-        Создай простой SVG код для визуализации: "{topic}".
+        СОЗДАЙ ПРОСТОЙ SVG ДЛЯ ТЕМЫ: "{topic}"
         
-        Контекст: {context}
+        КОНТЕКСТ: {context}
         
-        ТРЕБОВАНИЯ К SVG:
-        1. Обязательные атрибуты: xmlns="http://www.w3.org/2000/svg", viewBox="0 0 400 300"
-        2. Размер: width="100%" height="100%"
-        3. Простая структура: прямоугольники, круги, линии, текст
-        4. Русские подписи в тегах <text>
-        5. Базовые цвета для различия элементов
-        6. НЕ используй: script, style, foreignObject, сложные фильтры
-        7. НЕ используй: анимации, события (onclick, onload)
-        8. Максимум 10-15 элементов
+        КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ:
+        1. Начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+        2. Заканчивай: </svg>
+        3. Используй ПРОБЕЛЫ между атрибутами: x="50" y="50" width="300"
+        4. Только базовые элементы: <rect>, <circle>, <text>, <line>
+        5. Русский текст в тегах <text>
+        6. Без JavaScript, без стилей, без анимаций
+        7. Простая цветовая схема
+        8. Закрывай все теги правильно
         
-        Пример корректного SVG:
+        ПРИМЕР КОРРЕКТНОГО SVG:
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
-            <rect x="50" y="50" width="300" height="200" fill="#f0f8ff" stroke="#4263EB" stroke-width="2"/>
+            <rect x="50" y="50" width="300" height="200" fill="#f0f8ff" stroke="#4263EB" stroke-width="2" rx="10"/>
             <text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="16" fill="#333">Заголовок</text>
             <circle cx="100" cy="150" r="30" fill="#4263EB" opacity="0.7"/>
             <line x1="150" y1="150" x2="250" y2="150" stroke="#333" stroke-width="2"/>
         </svg>
-
-        Тема: {topic}
         
-        Верни ТОЛЬКО SVG код без пояснений и обратных кавычек.
+        ТЕМА: {topic}
+        
+        ВЕРНИ ТОЛЬКО SVG КОД БЕЗ ПОЯСНЕНИЙ!
         """
         
         try:
@@ -620,106 +635,124 @@ class LLMIntegration:
                 prompt=prompt,
                 context="",
                 subject="general",
-                system_prompt="""Ты создаешь простые SVG схемы для образования. 
-                Строго соблюдай требования:
-                - Всегда добавляй xmlns и viewBox
-                - Используй только базовые элементы SVG
-                - Не добавляй JavaScript и стили
-                - Русский текст в двойных кавычках
-                - Простая и понятная структура""",
+                system_prompt="""Ты - генератор SVG схем. СТРОГО соблюдай:
+                - Всегда начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+                - Всегда заканчивай: </svg>
+                - Используй ПРОБЕЛЫ между атрибутами
+                - Только базовые элементы SVG
+                - Без JavaScript и сложных функций
+                - Русский текст в <text>""",
                 max_tokens=800
             )
             
             if svg_code:
-                # Улучшенная очистка SVG кода
-                svg_code = self.clean_svg_code(svg_code)
-                
-                # Валидация базовой структуры
-                if self.validate_svg_structure(svg_code):
-                    print(f"✅ Сгенерирован валидный SVG код для: {topic}")
+                # АГРЕССИВНАЯ очистка
+                svg_code = self.clean_svg_code_aggressive(svg_code)
+                if self.validate_svg_strict(svg_code):
+                    print(f"✅ Сгенерирован ВАЛИДНЫЙ SVG для: {topic}")
                     return svg_code
-                else:
-                    print(f"⚠️ SVG не прошел валидацию, используется fallback")
-            
+                    
         except Exception as e:
-            print(f"❌ Ошибка генерации SVG кода: {e}")
+            print(f"❌ Ошибка генерации SVG: {e}")
         
-        # Fallback - простой валидный SVG
-        return self.generate_fallback_svg(topic)
+        # Гарантированно работающий fallback
+        return self.generate_guaranteed_svg(topic)
 
-    def clean_svg_code(self, svg_code: str) -> str:
-        """Тщательная очистка SVG кода"""
+    def clean_svg_code_aggressive(self, svg_code: str) -> str:
+        """Агрессивная очистка SVG кода"""
         if not svg_code:
             return ""
         
-        # Удаляем всё между ``` и ```
-        svg_code = re.sub(r'```[\s\S]*?```', '', svg_code)
-        svg_code = re.sub(r'`', '', svg_code)
+        # Удаляем ВСЁ что не SVG
+        svg_code = re.sub(r'```[^`]*```', '', svg_code)
+        svg_code = re.sub(r'`[^`]*`', '', svg_code)
+        svg_code = re.sub(r'[^\x00-\x7F]+', '', svg_code)  # Удаляем не-ASCII
         
-        # Удаляем XML declaration и комментарии
-        svg_code = re.sub(r'<\?xml[^>]*\?>', '', svg_code)
-        svg_code = re.sub(r'<!--[\s\S]*?-->', '', svg_code)
+        # Удаляем опасные конструкции
+        dangerous = [r'<script.*?</script>', r'on\w+="[^"]*"', r'<!--.*?-->']
+        for pattern in dangerous:
+            svg_code = re.sub(pattern, '', svg_code, flags=re.IGNORECASE | re.DOTALL)
         
-        # Удаляем опасные элементы
-        dangerous_patterns = [
-            r'<script[\s\S]*?</script>',
-            r'<style[\s\S]*?</style>', 
-            r'on\w+="[^"]*"',
-            r'<foreignObject[\s\S]*?</foreignObject>',
-            r'<animate[\s\S]*?>',
-            r'<set[\s\S]*?>'
-        ]
+        # Гарантируем правильное начало
+        if not svg_code.strip().startswith('<svg'):
+            # Ищем начало тега svg в тексте
+            match = re.search(r'<svg[^>]*>', svg_code)
+            if match:
+                svg_code = svg_code[match.start():]
+            else:
+                # Создаем новый SVG
+                svg_code = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">{svg_code}'
         
-        for pattern in dangerous_patterns:
-            svg_code = re.sub(pattern, '', svg_code)
-        
-        # Убеждаемся в наличии namespace
+        # Гарантируем namespace
         if 'xmlns=' not in svg_code:
             svg_code = svg_code.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
         
-        # Добавляем базовые атрибуты если их нет
-        if 'viewBox=' not in svg_code:
-            svg_code = svg_code.replace('<svg', '<svg viewBox="0 0 400 300"')
-        
-        if 'width=' not in svg_code:
-            svg_code = svg_code.replace('<svg', '<svg width="100%"')
-        
-        if 'height=' not in svg_code:
-            svg_code = svg_code.replace('<svg', '<svg height="100%"')
+        # Гарантируем закрывающий тег
+        if '</svg>' not in svg_code:
+            svg_code += '</svg>'
         
         return svg_code.strip()
 
-    def validate_svg_structure(self, svg_code: str) -> bool:
-        """Базовая валидация структуры SVG"""
-        if not svg_code:
+    def validate_mermaid_syntax(self, code: str) -> bool:
+        """Валидация синтаксиса Mermaid"""
+        if not code:
             return False
         
-        # Проверяем базовые требования
+        # Проверяем базовый синтаксис
         checks = [
-            svg_code.strip().startswith('<svg'),
-            '</svg>' in svg_code,
-            'xmlns=' in svg_code,
-            'viewBox=' in svg_code
+            code.strip().startswith(('graph', 'flowchart', 'sequenceDiagram')),
+            '-->' in code or '->' in code,  # Есть связи
+            '["' in code,  # Есть подписи
+            len(code.split('\n')) >= 3  # Не пустая
         ]
         
         return all(checks)
 
-    def generate_fallback_svg(self, topic: str) -> str:
-        """Генерация fallback SVG когда LLM не справляется"""
+    def validate_svg_strict(self, svg_code: str) -> bool:
+        """Строгая валидация SVG"""
+        if not svg_code:
+            return False
+        
+        checks = [
+            svg_code.strip().startswith('<svg'),
+            svg_code.strip().endswith('</svg>'),
+            'xmlns="http://www.w3.org/2000/svg"' in svg_code,
+            'viewBox=' in svg_code,
+            len(svg_code) > 100  # Не слишком короткий
+        ]
+        
+        return all(checks)
+
+    def generate_guaranteed_svg(self, topic: str) -> str:
+        """Гарантированно работающий SVG"""
+        short_topic = topic[:25] + "..." if len(topic) > 25 else topic
+        
         return f'''
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
-            <rect x="50" y="50" width="300" height="200" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2" rx="10"/>
-            <text x="200" y="120" text-anchor="middle" font-family="Arial" font-size="16" fill="#495057">
-                <tspan x="200" dy="0">Визуализация:</tspan>
-                <tspan x="200" dy="24" font-size="14">{topic[:30]}</tspan>
+            <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#f8f9fa"/>
+                    <stop offset="100%" stop-color="#e9ecef"/>
+                </linearGradient>
+            </defs>
+            
+            <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
+            
+            <rect x="50" y="80" width="300" height="60" fill="#4263EB" opacity="0.8" rx="10"/>
+            <text x="200" y="115" text-anchor="middle" font-family="Arial" font-size="18" fill="white" font-weight="bold">
+                {short_topic}
             </text>
-            <text x="200" y="180" text-anchor="middle" font-family="Arial" font-size="12" fill="#6c757d">
-                <tspan x="200" dy="0">Диаграмма будет доступна</tspan>
-                <tspan x="200" dy="16">после улучшения генерации</tspan>
-            </text>
-            <circle cx="200" cy="220" r="8" fill="#4263EB" opacity="0.6"/>
-            <circle cx="180" cy="220" r="6" fill="#3a0ca3" opacity="0.4"/>
-            <circle cx="220" cy="220" r="6" fill="#4cc9f0" opacity="0.4"/>
+            
+            <circle cx="120" cy="190" r="25" fill="#4cc9f0" opacity="0.7"/>
+            <circle cx="200" cy="190" r="25" fill="#3a0ca3" opacity="0.7"/>
+            <circle cx="280" cy="190" r="25" fill="#f72585" opacity="0.7"/>
+            
+            <text x="120" y="230" text-anchor="middle" font-family="Arial" font-size="12" fill="#495057">Аспект 1</text>
+            <text x="200" y="230" text-anchor="middle" font-family="Arial" font-size="12" fill="#495057">Аспект 2</text>
+            <text x="280" y="230" text-anchor="middle" font-family="Arial" font-size="12" fill="#495057">Аспект 3</text>
+            
+            <line x1="145" y1="190" x2="175" y2="190" stroke="#333" stroke-width="2"/>
+            <line x1="225" y1="190" x2="255" y2="190" stroke="#333" stroke-width="2"/>
         </svg>
         '''
 
