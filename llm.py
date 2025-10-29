@@ -538,31 +538,36 @@ class LLMIntegration:
 
     def generate_mermaid_diagram(self, topic: str, context: str = "") -> str:
         """Генерация Mermaid диаграммы через LLM с УЛУЧШЕННЫМ промптом"""
+        # Извлекаем ключевые понятия из темы для создания осмысленной диаграммы
+        key_concepts = self._extract_key_concepts(topic)
+        
         prompt = f"""
-        СОЗДАЙ ДИАГРАММУ MERMAID.JS ДЛЯ ТЕМЫ: "{topic}"
-        
-        КОНТЕКСТ: {context}
-        
-        ТРЕБОВАНИЯ:
-        1. Используй ТОЛЬКО корректный синтаксис Mermaid
-        2. Начни с 'flowchart TD' или 'graph TD'
-        3. Используй русские подписи в двойных кавычках: A["Текст"]
-        4. Максимум 6-8 элементов
-        5. Простая логическая структура
-        6. Связи через --> 
-        7. Без лишних комментариев
-        
-        ПРИМЕР КОРРЕКТНОГО КОДА:
-        flowchart TD
-            A["Основное понятие"] --> B["Характеристика 1"]
-            A --> C["Характеристика 2"] 
-            B --> D["Пример"]
-            C --> D
-        
-        ТЕМА: {topic}
-        
-        ВЕРНИ ТОЛЬКО КОД MERMAID БЕЗ ЛЮБЫХ ПОЯСНЕНИЙ И ОБРАТНЫХ КАВЫЧЕК!
-        """
+СОЗДАЙ ДИАГРАММУ MERMAID.JS ДЛЯ ТЕМЫ: "{topic}"
+
+КОНТЕКСТ: {context}
+
+КЛЮЧЕВЫЕ ПОНЯТИЯ: {', '.join(key_concepts)}
+
+ТРЕБОВАНИЯ:
+1. Используй ТОЛЬКО корректный синтаксис Mermaid
+2. Начни с 'flowchart TD'
+3. Используй русские подписи в двойных кавычках: A["Текст"]
+4. Максимум 6-8 элементов
+5. Простая логическая структура
+6. Связи через --> 
+7. Без лишних комментариев
+8. НЕ добавляй текст темы в подписи узлов
+9. Создай логическую структуру на основе ключевых понятий
+
+ПРИМЕР КОРРЕКТНОГО КОДА:
+flowchart TD
+    A["Основное понятие"] --> B["Характеристика 1"]
+    A --> C["Характеристика 2"] 
+    B --> D["Пример"]
+    C --> D
+
+ВЕРНИ ТОЛЬКО КОД MERMAID БЕЗ ЛЮБЫХ ПОЯСНЕНИЙ И ОБРАТНЫХ КАВЫЧЕК!
+"""
         
         try:
             response = self._query_llm_api(
@@ -570,18 +575,23 @@ class LLMIntegration:
                 context="",
                 subject="general", 
                 system_prompt="""Ты - генератор Mermaid диаграмм. Строго соблюдай правила:
-                - Начинай каждый код с 'flowchart TD'
-                - Используй только корректный синтаксис Mermaid
-                - Русский текст в двойных кавычках: ["Текст"]
-                - Связи через -->
-                - Без комментариев и пояснений
-                - Максимум 8 элементов""",
+- Начинай каждый код с 'flowchart TD'
+- Используй только корректный синтаксис Mermaid
+- Русский текст в двойных кавычках: ["Текст"]
+- Связи через -->
+- Без комментариев и пояснений
+- Максимум 8 элементов
+- Создавай логические связи между понятиями""",
                 max_tokens=500
             )
             
             if response:
+                print(f"🔧 [Mermaid] Сырой ответ от LLM: {response[:200]}...")
+                
                 # СИЛЬНАЯ очистка кода
                 cleaned_code = self.clean_and_validate_mermaid_code(response)
+                print(f"🔧 [Mermaid] Очищенный код: {cleaned_code[:200]}...")
+                
                 if self.validate_mermaid_syntax(cleaned_code):
                     print(f"✅ Сгенерирован ВАЛИДНЫЙ Mermaid код для: {topic}")
                     return cleaned_code
@@ -591,10 +601,46 @@ class LLMIntegration:
         except Exception as e:
             print(f"❌ Ошибка генерации Mermaid: {e}")
         
-        # Fallback - гарантированно работающая диаграмма
-        return f'''flowchart TD
-    A["{topic}"] --> B["Основной аспект"]
-    A --> C["Дополнительный аспект"]
+        # Умный fallback на основе ключевых понятий
+        return self._generate_smart_mermaid_fallback(key_concepts, topic)
+
+    def _extract_key_concepts(self, text: str) -> list:
+        """Извлекает ключевые понятия из текста"""
+        # Простая эвристика для извлечения ключевых слов
+        words = re.findall(r'\b[А-Яа-яA-Za-z]{4,}\b', text)
+        
+        # Убираем стоп-слова
+        stop_words = {'это', 'которые', 'который', 'которых', 'включает', 'себя', 'основные', 
+                     'понятия', 'статистики', 'описательная', 'индуктивная', 'другими', 'словами'}
+        
+        concepts = [word for word in words if word.lower() not in stop_words]
+        
+        # Берем первые 3-5 уникальных понятий
+        unique_concepts = list(dict.fromkeys(concepts))[:5]
+        
+        if not unique_concepts:
+            unique_concepts = ["Основное понятие", "Аспект 1", "Аспект 2"]
+            
+        return unique_concepts
+
+    def _generate_smart_mermaid_fallback(self, concepts: list, topic: str) -> str:
+        """Генерация умного fallback для Mermaid"""
+        if len(concepts) >= 3:
+            main_concept = concepts[0]
+            sub_concepts = concepts[1:3]
+            
+            return f'''flowchart TD
+    A["{main_concept}"] --> B["{sub_concepts[0]}"]
+    A --> C["{sub_concepts[1]}"]
+    B --> D["Пример {sub_concepts[0]}"]
+    C --> E["Пример {sub_concepts[1]}"]
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#bfb,stroke:#333,stroke-width:2px'''
+        else:
+            return f'''flowchart TD
+    A["Основное понятие"] --> B["Характеристика 1"]
+    A --> C["Характеристика 2"] 
     B --> D["Конкретный пример"]
     C --> D
     style A fill:#f9f,stroke:#333,stroke-width:2px
@@ -603,32 +649,32 @@ class LLMIntegration:
     def generate_svg_diagram(self, topic: str, context: str = "") -> str:
         """Генерация SVG с ЖЕСТКИМИ требованиями"""
         prompt = f"""
-        СОЗДАЙ ПРОСТОЙ SVG ДЛЯ ТЕМЫ: "{topic}"
-        
-        КОНТЕКСТ: {context}
-        
-        КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ:
-        1. Начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
-        2. Заканчивай: </svg>
-        3. Используй ПРОБЕЛЫ между атрибутами: x="50" y="50" width="300"
-        4. Только базовые элементы: <rect>, <circle>, <text>, <line>
-        5. Русский текст в тегах <text>
-        6. Без JavaScript, без стилей, без анимаций
-        7. Простая цветовая схема
-        8. Закрывай все теги правильно
-        
-        ПРИМЕР КОРРЕКТНОГО SVG:
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
-            <rect x="50" y="50" width="300" height="200" fill="#f0f8ff" stroke="#4263EB" stroke-width="2" rx="10"/>
-            <text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="16" fill="#333">Заголовок</text>
-            <circle cx="100" cy="150" r="30" fill="#4263EB" opacity="0.7"/>
-            <line x1="150" y1="150" x2="250" y2="150" stroke="#333" stroke-width="2"/>
-        </svg>
-        
-        ТЕМА: {topic}
-        
-        ВЕРНИ ТОЛЬКО SVG КОД БЕЗ ПОЯСНЕНИЙ!
-        """
+СОЗДАЙ ПРОСТОЙ SVG ДЛЯ ТЕМЫ: "{topic}"
+
+КОНТЕКСТ: {context}
+
+КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ:
+1. Начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+2. Заканчивай: </svg>
+3. Используй ПРОБЕЛЫ между атрибутами: x="50" y="50" width="300"
+4. Только базовые элементы: <rect>, <circle>, <text>, <line>
+5. Русский текст в тегах <text>
+6. Без JavaScript, без стилей, без анимаций
+7. Простая цветовая схема
+8. Закрывай все теги правильно
+9. Используй text-anchor="middle" для центрирования текста
+10. Указывай font-family="Arial"
+
+ПРИМЕР КОРРЕКТНОГО SVG:
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+    <rect x="50" y="50" width="300" height="200" fill="#f0f8ff" stroke="#4263EB" stroke-width="2" rx="10"/>
+    <text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="16" fill="#333">Заголовок</text>
+    <circle cx="100" cy="150" r="30" fill="#4263EB" opacity="0.7"/>
+    <line x1="150" y1="150" x2="250" y2="150" stroke="#333" stroke-width="2"/>
+</svg>
+
+ВЕРНИ ТОЛЬКО SVG КОД БЕЗ ПОЯСНЕНИЙ!
+"""
         
         try:
             svg_code = self._query_llm_api(
@@ -636,21 +682,29 @@ class LLMIntegration:
                 context="",
                 subject="general",
                 system_prompt="""Ты - генератор SVG схем. СТРОГО соблюдай:
-                - Всегда начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
-                - Всегда заканчивай: </svg>
-                - Используй ПРОБЕЛЫ между атрибутами
-                - Только базовые элементы SVG
-                - Без JavaScript и сложных функций
-                - Русский текст в <text>""",
+- Всегда начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+- Всегда заканчивай: </svg>
+- Используй ПРОБЕЛЫ между атрибутами
+- Только базовые элементы SVG
+- Без JavaScript и сложных функций
+- Русский текст в <text>
+- Всегда используй text-anchor="middle" и font-family="Arial"
+- Закрывай все теги""",
                 max_tokens=800
             )
             
             if svg_code:
+                print(f"🔧 [SVG] Сырой ответ от LLM: {svg_code[:200]}...")
+                
                 # АГРЕССИВНАЯ очистка
                 svg_code = self.clean_svg_code_aggressive(svg_code)
+                print(f"🔧 [SVG] Очищенный код: {svg_code[:200]}...")
+                
                 if self.validate_svg_strict(svg_code):
                     print(f"✅ Сгенерирован ВАЛИДНЫЙ SVG для: {topic}")
                     return svg_code
+                else:
+                    print(f"⚠️ SVG не прошел валидацию, используется fallback")
                     
         except Exception as e:
             print(f"❌ Ошибка генерации SVG: {e}")
@@ -666,7 +720,16 @@ class LLMIntegration:
         # Удаляем ВСЁ что не SVG
         svg_code = re.sub(r'```[^`]*```', '', svg_code)
         svg_code = re.sub(r'`[^`]*`', '', svg_code)
-        svg_code = re.sub(r'[^\x00-\x7F]+', '', svg_code)  # Удаляем не-ASCII
+        
+        # Исправляем распространенные ошибки LLM
+        svg_code = re.sub(r'Svg xmlnshttp', '<svg xmlns="http', svg_code)
+        svg_code = re.sub(r'viewBox0 0', 'viewBox="0 0', svg_code)
+        svg_code = re.sub(r'width100', 'width="100', svg_code)
+        svg_code = re.sub(r'height100', 'height="100', svg_code)
+        
+        # Добавляем кавычки к атрибутам
+        svg_code = re.sub(r'(\w+)=(\d+)', r'\1="\2"', svg_code)
+        svg_code = re.sub(r'(\w+)=([^"\s]+)(?=\s|>)', r'\1="\2"', svg_code)
         
         # Удаляем опасные конструкции
         dangerous = [r'<script.*?</script>', r'on\w+="[^"]*"', r'<!--.*?-->']
@@ -681,11 +744,15 @@ class LLMIntegration:
                 svg_code = svg_code[match.start():]
             else:
                 # Создаем новый SVG
-                svg_code = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">{svg_code}'
+                svg_code = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">{svg_code}'
         
         # Гарантируем namespace
         if 'xmlns=' not in svg_code:
             svg_code = svg_code.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+        
+        # Гарантируем viewBox
+        if 'viewBox=' not in svg_code:
+            svg_code = svg_code.replace('<svg', '<svg viewBox="0 0 400 300"')
         
         # Гарантируем закрывающий тег
         if '</svg>' not in svg_code:
@@ -702,8 +769,9 @@ class LLMIntegration:
         checks = [
             code.strip().startswith(('graph', 'flowchart', 'sequenceDiagram')),
             '-->' in code or '->' in code,  # Есть связи
-            '["' in code,  # Есть подписи
-            len(code.split('\n')) >= 3  # Не пустая
+            '["' in code or '[ "' in code,  # Есть подписи
+            len(code.split('\n')) >= 3,  # Не пустая
+            len(code) > 50  # Достаточно длинный
         ]
         
         return all(checks)
@@ -718,17 +786,18 @@ class LLMIntegration:
             svg_code.strip().endswith('</svg>'),
             'xmlns="http://www.w3.org/2000/svg"' in svg_code,
             'viewBox=' in svg_code,
-            len(svg_code) > 100  # Не слишком короткий
+            len(svg_code) > 100,  # Не слишком короткий
+            '<text' in svg_code or '<rect' in svg_code or '<circle' in svg_code  # Есть графические элементы
         ]
         
         return all(checks)
 
     def generate_guaranteed_svg(self, topic: str) -> str:
         """Гарантированно работающий SVG"""
-        short_topic = topic[:25] + "..." if len(topic) > 25 else topic
+        short_topic = topic[:30] + "..." if len(topic) > 30 else topic
         
         return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="100%" height="100%">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
             <defs>
                 <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stop-color="#f8f9fa"/>
@@ -754,7 +823,7 @@ class LLMIntegration:
             <line x1="145" y1="190" x2="175" y2="190" stroke="#333" stroke-width="2"/>
             <line x1="225" y1="190" x2="255" y2="190" stroke="#333" stroke-width="2"/>
         </svg>
-        '''
+        '''.strip()
 
     def check_visualization_need(self, text: str) -> bool:
         """Проверяет, нужна ли визуализация для данного текста"""
