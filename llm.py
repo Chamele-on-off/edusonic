@@ -1,6 +1,6 @@
 import requests
 import json
-from typing import Optional, Dict, Callable
+from typing import Optional, Dict, Callable, List
 from pathlib import Path
 import time
 from config import get_api_key, load_config, get_model_config, get_llm_priority, set_llm_priority
@@ -502,299 +502,271 @@ class LLMIntegration:
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
-    def clean_and_validate_mermaid_code(self, code: str) -> str:
-        """Очистка и валидация Mermaid кода"""
-        if not code:
-            return ""
-        
-        # Удаляем markdown обратные кавычки и все что между ними
-        code = re.sub(r'```[\s\S]*?```', '', code)
-        code = re.sub(r'`[^`]*`', '', code)
-        code = re.sub(r'[\*\#\-\_]{2,}', '', code)
-        
-        # Удаляем комментарии Mermaid
-        code = re.sub(r'%%.*', '', code)
-        
-        # Удаляем лишние пробелы и пустые строки
-        code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
-        
-        # Проверяем базовый синтаксис
-        valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
-        
-        # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
-        if not any(code.strip().startswith(start) for start in valid_starts):
-            code = 'flowchart TD\n' + code
-        
-        # Убедимся, что есть базовые элементы
-        lines = code.split('\n')
-        if len(lines) < 2 or ('-->' not in code and '->' not in code):
-            # Добавляем простую структуру если нет связей
-            if len(lines) > 1:
-                code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
-            else:
-                code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
-        
-        return code.strip()
-
-    def generate_mermaid_diagram(self, topic: str, context: str = "") -> str:
-        """Генерация Mermaid диаграммы через LLM с УЛУЧШЕННЫМ промптом"""
-        # Извлекаем ключевые понятия из темы для создания осмысленной диаграммы
-        key_concepts = self._extract_key_concepts(topic)
-        
+    def get_visualization_data(self, topic: str, context: str = "") -> Dict:
+        """Запрашивает у LLM структурированные данные для визуализации"""
         prompt = f"""
-СОЗДАЙ ДИАГРАММУ MERMAID.JS ДЛЯ ТЕМЫ: "{topic}"
+На основе темы урока предоставь дополнительные структурированные данные для визуализации.
 
+ТЕМА УРОКА: {topic}
 КОНТЕКСТ: {context}
 
-КЛЮЧЕВЫЕ ПОНЯТИЯ: {', '.join(key_concepts)}
-
 ТРЕБОВАНИЯ:
-1. Используй ТОЛЬКО корректный синтаксис Mermaid
-2. Начни с 'flowchart TD'
-3. Используй русские подписи в двойных кавычках: A["Текст"]
-4. Максимум 6-8 элементов
-5. Простая логическая структура
-6. Связи через --> 
-7. Без лишних комментариев
-8. НЕ добавляй текст темы в подписи узлов
-9. Создай логическую структуру на основе ключевых понятий
+1. НЕ повторяй текст урока - предоставь ДОПОЛНИТЕЛЬНУЮ информацию
+2. Выдели 3-5 ключевых понятий или аспектов
+3. Укажи связи между ними
+4. Предложи тип визуализации: классификация, процесс, иерархия, сравнение
+5. Добавь краткие пояснения для каждого элемента
 
-ПРИМЕР КОРРЕКТНОГО КОДА:
-flowchart TD
-    A["Основное понятие"] --> B["Характеристика 1"]
-    A --> C["Характеристика 2"] 
-    B --> D["Пример"]
-    C --> D
+ФОРМАТ ОТВЕТА (JSON):
+{{
+    "type": "тип_визуализации",
+    "main_concept": "главное_понятие",
+    "elements": [
+        {{
+            "name": "название_элемента",
+            "description": "краткое_пояснение",
+            "connections": ["связанный_элемент1", "связанный_элемент2"]
+        }}
+    ],
+    "additional_info": "дополнительная_информация_для_углубления"
+}}
 
-ВЕРНИ ТОЛЬКО КОД MERMAID БЕЗ ЛЮБЫХ ПОЯСНЕНИЙ И ОБРАТНЫХ КАВЫЧЕК!
+Пример для темы "Фотосинтез":
+{{
+    "type": "process",
+    "main_concept": "Фотосинтез",
+    "elements": [
+        {{
+            "name": "Световая фаза",
+            "description": "Поглощение света и расщепление воды",
+            "connections": ["Темновая фаза"]
+        }},
+        {{
+            "name": "Темновая фаза", 
+            "description": "Синтез глюкозы из CO2",
+            "connections": ["Световая фаза"]
+        }}
+    ],
+    "additional_info": "Эффективность фотосинтеза зависит от интенсивности света и концентрации CO2"
+}}
+
+Верни ТОЛЬКО JSON без пояснений!
 """
         
         try:
             response = self._query_llm_api(
                 prompt=prompt,
                 context="",
-                subject="general", 
-                system_prompt="""Ты - генератор Mermaid диаграмм. Строго соблюдай правила:
-- Начинай каждый код с 'flowchart TD'
-- Используй только корректный синтаксис Mermaid
-- Русский текст в двойных кавычках: ["Текст"]
-- Связи через -->
-- Без комментариев и пояснений
-- Максимум 8 элементов
-- Создавай логические связи между понятиями""",
-                max_tokens=500
-            )
-            
-            if response:
-                print(f"🔧 [Mermaid] Сырой ответ от LLM: {response[:200]}...")
-                
-                # СИЛЬНАЯ очистка кода
-                cleaned_code = self.clean_and_validate_mermaid_code(response)
-                print(f"🔧 [Mermaid] Очищенный код: {cleaned_code[:200]}...")
-                
-                if self.validate_mermaid_syntax(cleaned_code):
-                    print(f"✅ Сгенерирован ВАЛИДНЫЙ Mermaid код для: {topic}")
-                    return cleaned_code
-                else:
-                    print(f"⚠️ Mermaid код не прошел валидацию, используется fallback")
-                    
-        except Exception as e:
-            print(f"❌ Ошибка генерации Mermaid: {e}")
-        
-        # Умный fallback на основе ключевых понятий
-        return self._generate_smart_mermaid_fallback(key_concepts, topic)
-
-    def _extract_key_concepts(self, text: str) -> list:
-        """Извлекает ключевые понятия из текста"""
-        # Простая эвристика для извлечения ключевых слов
-        words = re.findall(r'\b[А-Яа-яA-Za-z]{4,}\b', text)
-        
-        # Убираем стоп-слова
-        stop_words = {'это', 'которые', 'который', 'которых', 'включает', 'себя', 'основные', 
-                     'понятия', 'статистики', 'описательная', 'индуктивная', 'другими', 'словами'}
-        
-        concepts = [word for word in words if word.lower() not in stop_words]
-        
-        # Берем первые 3-5 уникальных понятий
-        unique_concepts = list(dict.fromkeys(concepts))[:5]
-        
-        if not unique_concepts:
-            unique_concepts = ["Основное понятие", "Аспект 1", "Аспект 2"]
-            
-        return unique_concepts
-
-    def _generate_smart_mermaid_fallback(self, concepts: list, topic: str) -> str:
-        """Генерация умного fallback для Mermaid"""
-        if len(concepts) >= 3:
-            main_concept = concepts[0]
-            sub_concepts = concepts[1:3]
-            
-            return f'''flowchart TD
-    A["{main_concept}"] --> B["{sub_concepts[0]}"]
-    A --> C["{sub_concepts[1]}"]
-    B --> D["Пример {sub_concepts[0]}"]
-    C --> E["Пример {sub_concepts[1]}"]
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#333,stroke-width:2px
-    style C fill:#bfb,stroke:#333,stroke-width:2px'''
-        else:
-            return f'''flowchart TD
-    A["Основное понятие"] --> B["Характеристика 1"]
-    A --> C["Характеристика 2"] 
-    B --> D["Конкретный пример"]
-    C --> D
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#333,stroke-width:2px'''
-
-    def generate_svg_diagram(self, topic: str, context: str = "") -> str:
-        """Генерация SVG с ЖЕСТКИМИ требованиями"""
-        prompt = f"""
-СОЗДАЙ ПРОСТОЙ SVG ДЛЯ ТЕМЫ: "{topic}"
-
-КОНТЕКСТ: {context}
-
-КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ:
-1. Начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
-2. Заканчивай: </svg>
-3. Используй ПРОБЕЛЫ между атрибутами: x="50" y="50" width="300"
-4. Только базовые элементы: <rect>, <circle>, <text>, <line>
-5. Русский текст в тегах <text>
-6. Без JavaScript, без стилей, без анимаций
-7. Простая цветовая схема
-8. Закрывай все теги правильно
-9. Используй text-anchor="middle" для центрирования текста
-10. Указывай font-family="Arial"
-
-ПРИМЕР КОРРЕКТНОГО SVG:
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
-    <rect x="50" y="50" width="300" height="200" fill="#f0f8ff" stroke="#4263EB" stroke-width="2" rx="10"/>
-    <text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="16" fill="#333">Заголовок</text>
-    <circle cx="100" cy="150" r="30" fill="#4263EB" opacity="0.7"/>
-    <line x1="150" y1="150" x2="250" y2="150" stroke="#333" stroke-width="2"/>
-</svg>
-
-ВЕРНИ ТОЛЬКО SVG КОД БЕЗ ПОЯСНЕНИЙ!
-"""
-        
-        try:
-            svg_code = self._query_llm_api(
-                prompt=prompt,
-                context="",
                 subject="general",
-                system_prompt="""Ты - генератор SVG схем. СТРОГО соблюдай:
-- Всегда начинай с: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
-- Всегда заканчивай: </svg>
-- Используй ПРОБЕЛЫ между атрибутами
-- Только базовые элементы SVG
-- Без JavaScript и сложных функций
-- Русский текст в <text>
-- Всегда используй text-anchor="middle" и font-family="Arial"
-- Закрывай все теги""",
+                system_prompt="""Ты предоставляешь структурированные данные для визуализации учебного материала.
+                Строго соблюдай формат JSON.
+                Предоставляй ДОПОЛНИТЕЛЬНУЮ информацию, не повторяй текст урока.
+                Выделяй ключевые связи и структуры.""",
                 max_tokens=800
             )
             
-            if svg_code:
-                print(f"🔧 [SVG] Сырой ответ от LLM: {svg_code[:200]}...")
+            if response:
+                print(f"🔧 [Visualization] Сырой ответ от LLM: {response[:200]}...")
                 
-                # АГРЕССИВНАЯ очистка
-                svg_code = self.clean_svg_code_aggressive(svg_code)
-                print(f"🔧 [SVG] Очищенный код: {svg_code[:200]}...")
-                
-                if self.validate_svg_strict(svg_code):
-                    print(f"✅ Сгенерирован ВАЛИДНЫЙ SVG для: {topic}")
-                    return svg_code
+                # Пытаемся извлечь JSON из ответа
+                json_data = self._extract_json_from_response(response)
+                if json_data and self._validate_visualization_data(json_data):
+                    print(f"✅ Получены структурированные данные для визуализации")
+                    return json_data
                 else:
-                    print(f"⚠️ SVG не прошел валидацию, используется fallback")
+                    print(f"⚠️ Не удалось извлечь JSON, используется fallback")
                     
         except Exception as e:
+            print(f"❌ Ошибка получения данных визуализации: {e}")
+        
+        # Fallback данные
+        return self._get_fallback_visualization_data(topic)
+
+    def _extract_json_from_response(self, response: str) -> Optional[Dict]:
+        """Извлекает JSON из ответа LLM"""
+        try:
+            # Ищем JSON в ответе
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                return json.loads(json_str)
+        except Exception as e:
+            print(f"❌ Ошибка парсинга JSON: {e}")
+        
+        return None
+
+    def _validate_visualization_data(self, data: Dict) -> bool:
+        """Проверяет валидность данных визуализации"""
+        required_fields = ['type', 'main_concept', 'elements']
+        return all(field in data for field in required_fields)
+
+    def _get_fallback_visualization_data(self, topic: str) -> Dict:
+        """Fallback данные для визуализации"""
+        concepts = self._extract_key_concepts(topic)
+        
+        return {
+            "type": "classification",
+            "main_concept": concepts[0] if concepts else "Основное понятие",
+            "elements": [
+                {
+                    "name": concepts[1] if len(concepts) > 1 else "Аспект 1",
+                    "description": "Важная характеристика",
+                    "connections": [concepts[0] if concepts else "Основное понятие"]
+                },
+                {
+                    "name": concepts[2] if len(concepts) > 2 else "Аспект 2", 
+                    "description": "Дополнительная информация",
+                    "connections": [concepts[0] if concepts else "Основное понятие"]
+                }
+            ],
+            "additional_info": "Изучите взаимосвязи между понятиями для лучшего понимания"
+        }
+
+    def _extract_key_concepts(self, text: str) -> List[str]:
+        """Извлекает ключевые понятия из текста"""
+        stop_words = {
+            'это', 'которые', 'который', 'которых', 'включает', 'себя', 'основные', 
+            'понятия', 'статистики', 'описательная', 'индуктивная', 'другими', 
+            'словами', 'является', 'также', 'может', 'иметь', 'быть', 'очень'
+        }
+        
+        words = re.findall(r'\b[А-Яа-я]{4,}\b', text.lower())
+        filtered_words = [word for word in words if word not in stop_words]
+        unique_concepts = list(dict.fromkeys(filtered_words))
+        
+        if len(unique_concepts) < 3:
+            unique_concepts.extend(["Основное понятие", "Характеристика", "Пример"])
+        
+        return unique_concepts[:5]
+
+    def generate_mermaid_from_data(self, viz_data: Dict) -> str:
+        """Генерирует Mermaid код из структурированных данных"""
+        try:
+            viz_type = viz_data.get('type', 'classification')
+            main_concept = viz_data.get('main_concept', 'Основное понятие')
+            elements = viz_data.get('elements', [])
+            
+            if viz_type == 'process':
+                return self._generate_process_mermaid(main_concept, elements)
+            elif viz_type == 'hierarchy':
+                return self._generate_hierarchy_mermaid(main_concept, elements)
+            elif viz_type == 'comparison':
+                return self._generate_comparison_mermaid(main_concept, elements)
+            else:  # classification
+                return self._generate_classification_mermaid(main_concept, elements)
+                
+        except Exception as e:
+            print(f"❌ Ошибка генерации Mermaid: {e}")
+            return self._generate_fallback_mermaid()
+
+    def _generate_classification_mermaid(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация Mermaid для классификации"""
+        mermaid_lines = ['flowchart TD']
+        mermaid_lines.append(f'    A["{main_concept}"]')
+        
+        for i, element in enumerate(elements[:4]):  # Максимум 4 элемента
+            node_id = chr(66 + i)  # B, C, D, E
+            element_name = element.get('name', f'Элемент {i+1}')
+            mermaid_lines.append(f'    A --> {node_id}["{element_name}"]')
+            
+            # Добавляем связи если есть
+            connections = element.get('connections', [])
+            for conn in connections[:2]:  # Максимум 2 связи на элемент
+                if conn != main_concept:
+                    mermaid_lines.append(f'    {node_id} --> F["{conn}"]')
+        
+        # Стили
+        mermaid_lines.extend([
+            '    ',
+            '    style A fill:#4263EB,color:#fff,stroke:#333,stroke-width:2px',
+            '    style B fill:#4cc9f0,color:#333,stroke:#333,stroke-width:2px',
+            '    style C fill:#3a0ca3,color:#fff,stroke:#333,stroke-width:2px',
+            '    style D fill:#f72585,color:#fff,stroke:#333,stroke-width:2px'
+        ])
+        
+        return '\n'.join(mermaid_lines)
+
+    def _generate_process_mermaid(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация Mermaid для процесса"""
+        mermaid_lines = ['flowchart LR']
+        mermaid_lines.append(f'    A["{main_concept}"]')
+        
+        prev_node = 'A'
+        for i, element in enumerate(elements[:4]):
+            node_id = chr(66 + i)
+            element_name = element.get('name', f'Этап {i+1}')
+            mermaid_lines.append(f'    {prev_node} --> {node_id}["{element_name}"]')
+            prev_node = node_id
+        
+        return '\n'.join(mermaid_lines)
+
+    def _generate_hierarchy_mermaid(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация Mermaid для иерархии"""
+        mermaid_lines = ['flowchart TD']
+        mermaid_lines.append(f'    A["{main_concept}"]')
+        
+        for i, element in enumerate(elements[:3]):
+            node_id = chr(66 + i)
+            element_name = element.get('name', f'Уровень {i+1}')
+            mermaid_lines.append(f'    A --> {node_id}["{element_name}"]')
+            
+            # Подэлементы для иерархии
+            sub_node = chr(69 + i)  # E, F, G
+            mermaid_lines.append(f'    {node_id} --> {sub_node}["Подраздел {i+1}"]')
+        
+        return '\n'.join(mermaid_lines)
+
+    def _generate_comparison_mermaid(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация Mermaid для сравнения"""
+        mermaid_lines = ['flowchart TD']
+        mermaid_lines.append(f'    A["{main_concept}"]')
+        mermaid_lines.append('    A --> B["Сходства"]')
+        mermaid_lines.append('    A --> C["Различия"]')
+        
+        for i, element in enumerate(elements[:2]):
+            node_b = chr(68 + i)  # D, E
+            node_c = chr(70 + i)  # F, G
+            element_name = element.get('name', f'Аспект {i+1}')
+            mermaid_lines.append(f'    B --> {node_b}["{element_name}"]')
+            mermaid_lines.append(f'    C --> {node_c}["{element_name}"]')
+        
+        return '\n'.join(mermaid_lines)
+
+    def _generate_fallback_mermaid(self) -> str:
+        """Fallback Mermaid диаграмма"""
+        return '''flowchart TD
+    A["Основное понятие"] --> B["Характеристика 1"]
+    A --> C["Характеристика 2"]
+    B --> D["Конкретный пример"]
+    C --> D
+    
+    style A fill:#4263EB,color:#fff,stroke:#333,stroke-width:2px
+    style B fill:#4cc9f0,color:#333,stroke:#333,stroke-width:2px
+    style C fill:#3a0ca3,color:#fff,stroke:#333,stroke-width:2px'''
+
+    def generate_svg_from_data(self, viz_data: Dict) -> str:
+        """Генерирует SVG из структурированных данных"""
+        try:
+            viz_type = viz_data.get('type', 'classification')
+            main_concept = viz_data.get('main_concept', 'Основное понятие')
+            elements = viz_data.get('elements', [])
+            
+            short_concept = main_concept[:20] + "..." if len(main_concept) > 20 else main_concept
+            
+            if viz_type == 'process':
+                return self._generate_process_svg(short_concept, elements)
+            elif viz_type == 'hierarchy':
+                return self._generate_hierarchy_svg(short_concept, elements)
+            else:  # classification and comparison
+                return self._generate_classification_svg(short_concept, elements)
+                
+        except Exception as e:
             print(f"❌ Ошибка генерации SVG: {e}")
-        
-        # Гарантированно работающий fallback
-        return self.generate_guaranteed_svg(topic)
+            return self._generate_fallback_svg()
 
-    def clean_svg_code_aggressive(self, svg_code: str) -> str:
-        """Агрессивная очистка SVG кода"""
-        if not svg_code:
-            return ""
-        
-        # Удаляем ВСЁ что не SVG
-        svg_code = re.sub(r'```[^`]*```', '', svg_code)
-        svg_code = re.sub(r'`[^`]*`', '', svg_code)
-        
-        # Исправляем распространенные ошибки LLM
-        svg_code = re.sub(r'Svg xmlnshttp', '<svg xmlns="http', svg_code)
-        svg_code = re.sub(r'viewBox0 0', 'viewBox="0 0', svg_code)
-        svg_code = re.sub(r'width100', 'width="100', svg_code)
-        svg_code = re.sub(r'height100', 'height="100', svg_code)
-        
-        # Добавляем кавычки к атрибутам
-        svg_code = re.sub(r'(\w+)=(\d+)', r'\1="\2"', svg_code)
-        svg_code = re.sub(r'(\w+)=([^"\s]+)(?=\s|>)', r'\1="\2"', svg_code)
-        
-        # Удаляем опасные конструкции
-        dangerous = [r'<script.*?</script>', r'on\w+="[^"]*"', r'<!--.*?-->']
-        for pattern in dangerous:
-            svg_code = re.sub(pattern, '', svg_code, flags=re.IGNORECASE | re.DOTALL)
-        
-        # Гарантируем правильное начало
-        if not svg_code.strip().startswith('<svg'):
-            # Ищем начало тега svg в тексте
-            match = re.search(r'<svg[^>]*>', svg_code)
-            if match:
-                svg_code = svg_code[match.start():]
-            else:
-                # Создаем новый SVG
-                svg_code = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">{svg_code}'
-        
-        # Гарантируем namespace
-        if 'xmlns=' not in svg_code:
-            svg_code = svg_code.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
-        
-        # Гарантируем viewBox
-        if 'viewBox=' not in svg_code:
-            svg_code = svg_code.replace('<svg', '<svg viewBox="0 0 400 300"')
-        
-        # Гарантируем закрывающий тег
-        if '</svg>' not in svg_code:
-            svg_code += '</svg>'
-        
-        return svg_code.strip()
-
-    def validate_mermaid_syntax(self, code: str) -> bool:
-        """Валидация синтаксиса Mermaid"""
-        if not code:
-            return False
-        
-        # Проверяем базовый синтаксис
-        checks = [
-            code.strip().startswith(('graph', 'flowchart', 'sequenceDiagram')),
-            '-->' in code or '->' in code,  # Есть связи
-            '["' in code or '[ "' in code,  # Есть подписи
-            len(code.split('\n')) >= 3,  # Не пустая
-            len(code) > 50  # Достаточно длинный
-        ]
-        
-        return all(checks)
-
-    def validate_svg_strict(self, svg_code: str) -> bool:
-        """Строгая валидация SVG"""
-        if not svg_code:
-            return False
-        
-        checks = [
-            svg_code.strip().startswith('<svg'),
-            svg_code.strip().endswith('</svg>'),
-            'xmlns="http://www.w3.org/2000/svg"' in svg_code,
-            'viewBox=' in svg_code,
-            len(svg_code) > 100,  # Не слишком короткий
-            '<text' in svg_code or '<rect' in svg_code or '<circle' in svg_code  # Есть графические элементы
-        ]
-        
-        return all(checks)
-
-    def generate_guaranteed_svg(self, topic: str) -> str:
-        """Гарантированно работающий SVG"""
-        short_topic = topic[:30] + "..." if len(topic) > 30 else topic
+    def _generate_classification_svg(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация SVG для классификации"""
+        element_names = [elem.get('name', f'Элемент {i+1}') for i, elem in enumerate(elements[:3])]
         
         return f'''
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
@@ -807,21 +779,99 @@ flowchart TD
             
             <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
             
-            <rect x="50" y="80" width="300" height="60" fill="#4263EB" opacity="0.8" rx="10"/>
-            <text x="200" y="115" text-anchor="middle" font-family="Arial" font-size="18" fill="white" font-weight="bold">
-                {short_topic}
+            <rect x="50" y="30" width="300" height="40" fill="#4263EB" rx="10"/>
+            <text x="200" y="55" text-anchor="middle" font-family="Arial" font-size="16" fill="white" font-weight="bold">
+                {main_concept}
             </text>
             
-            <circle cx="120" cy="190" r="25" fill="#4cc9f0" opacity="0.7"/>
-            <circle cx="200" cy="190" r="25" fill="#3a0ca3" opacity="0.7"/>
-            <circle cx="280" cy="190" r="25" fill="#f72585" opacity="0.7"/>
+            <rect x="150" y="100" width="100" height="40" fill="#4263EB" rx="8"/>
+            <text x="200" y="125" text-anchor="middle" font-family="Arial" font-size="12" fill="white">
+                Основное
+            </text>
             
-            <text x="120" y="230" text-anchor="middle" font-family="Arial" font-size="12" fill="#495057">Аспект 1</text>
-            <text x="200" y="230" text-anchor="middle" font-family="Arial" font-size="12" fill="#495057">Аспект 2</text>
-            <text x="280" y="230" text-anchor="middle" font-family="Arial" font-size="12" fill="#495057">Аспект 3</text>
+            <rect x="50" y="180" width="80" height="30" fill="#4cc9f0" rx="6"/>
+            <text x="90" y="198" text-anchor="middle" font-family="Arial" font-size="10" fill="#333">
+                {element_names[0] if len(element_names) > 0 else "Аспект 1"}
+            </text>
             
-            <line x1="145" y1="190" x2="175" y2="190" stroke="#333" stroke-width="2"/>
-            <line x1="225" y1="190" x2="255" y2="190" stroke="#333" stroke-width="2"/>
+            <rect x="160" y="180" width="80" height="30" fill="#3a0ca3" rx="6"/>
+            <text x="200" y="198" text-anchor="middle" font-family="Arial" font-size="10" fill="white">
+                {element_names[1] if len(element_names) > 1 else "Аспект 2"}
+            </text>
+            
+            <rect x="270" y="180" width="80" height="30" fill="#f72585" rx="6"/>
+            <text x="310" y="198" text-anchor="middle" font-family="Arial" font-size="10" fill="white">
+                {element_names[2] if len(element_names) > 2 else "Аспект 3"}
+            </text>
+            
+            <line x1="200" y1="140" x2="130" y2="180" stroke="#333" stroke-width="2"/>
+            <line x1="200" y1="140" x2="200" y2="180" stroke="#333" stroke-width="2"/>
+            <line x1="200" y1="140" x2="270" y2="180" stroke="#333" stroke-width="2"/>
+        </svg>
+        '''.strip()
+
+    def _generate_process_svg(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация SVG для процесса"""
+        element_names = [elem.get('name', f'Этап {i+1}') for i, elem in enumerate(elements[:4])]
+        
+        return f'''
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+            <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#f8f9fa"/>
+                    <stop offset="100%" stop-color="#e9ecef"/>
+                </linearGradient>
+            </defs>
+            
+            <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
+            
+            <text x="200" y="40" text-anchor="middle" font-family="Arial" font-size="16" fill="#333" font-weight="bold">
+                {main_concept}
+            </text>
+            
+            <rect x="50" y="80" width="60" height="40" fill="#4263EB" rx="8"/>
+            <text x="80" y="105" text-anchor="middle" font-family="Arial" font-size="10" fill="white">
+                {element_names[0] if len(element_names) > 0 else "Начало"}
+            </text>
+            
+            <rect x="140" y="80" width="60" height="40" fill="#4cc9f0" rx="8"/>
+            <text x="170" y="105" text-anchor="middle" font-family="Arial" font-size="10" fill="#333">
+                {element_names[1] if len(element_names) > 1 else "Развитие"}
+            </text>
+            
+            <rect x="230" y="80" width="60" height="40" fill="#3a0ca3" rx="8"/>
+            <text x="260" y="105" text-anchor="middle" font-family="Arial" font-size="10" fill="white">
+                {element_names[2] if len(element_names) > 2 else "Завершение"}
+            </text>
+            
+            <rect x="320" y="80" width="60" height="40" fill="#f72585" rx="8"/>
+            <text x="350" y="105" text-anchor="middle" font-family="Arial" font-size="10" fill="white">
+                {element_names[3] if len(element_names) > 3 else "Результат"}
+            </text>
+            
+            <line x1="110" y1="100" x2="140" y2="100" stroke="#333" stroke-width="2"/>
+            <polygon points="140,100 135,95 135,105" fill="#333"/>
+            
+            <line x1="200" y1="100" x2="230" y2="100" stroke="#333" stroke-width="2"/>
+            <polygon points="230,100 225,95 225,105" fill="#333"/>
+            
+            <line x1="290" y1="100" x2="320" y2="100" stroke="#333" stroke-width="2"/>
+            <polygon points="320,100 315,95 315,105" fill="#333"/>
+        </svg>
+        '''.strip()
+
+    def _generate_hierarchy_svg(self, main_concept: str, elements: List[Dict]) -> str:
+        """Генерация SVG для иерархии"""
+        return self._generate_classification_svg(main_concept, elements)
+
+    def _generate_fallback_svg(self) -> str:
+        """Fallback SVG"""
+        return '''
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+            <rect x="10" y="10" width="380" height="280" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2" rx="15"/>
+            <text x="200" y="150" text-anchor="middle" font-family="Arial" font-size="16" fill="#666">
+                Визуализация загружается...
+            </text>
         </svg>
         '''.strip()
 
@@ -861,27 +911,32 @@ flowchart TD
         return (has_keywords or has_structure) and is_long_enough
 
     def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация обеих типов визуализаций (Mermaid и SVG)"""
+        """Генерация визуализаций через структурированные данные от LLM"""
         try:
             print(f"🎨 Генерация визуализаций для: {topic}")
             
-            # Генерируем Mermaid диаграмму
-            mermaid_code = self.generate_mermaid_diagram(topic, context)
+            # Получаем структурированные данные от LLM
+            viz_data = self.get_visualization_data(topic, context)
+            print(f"🔧 Получены данные для визуализации: {viz_data.get('type', 'unknown')}")
             
-            # Генерируем SVG схему
-            svg_code = self.generate_svg_diagram(topic, context)
+            # Генерируем Mermaid из данных
+            mermaid_code = self.generate_mermaid_from_data(viz_data)
+            
+            # Генерируем SVG из данных
+            svg_code = self.generate_svg_from_data(viz_data)
             
             result = {
                 "mermaid_code": mermaid_code,
                 "svg_code": svg_code,
                 "topic": topic,
-                "success": bool(mermaid_code or svg_code)
+                "viz_data": viz_data,  # Возвращаем также сырые данные
+                "success": bool(mermaid_code and svg_code)
             }
             
             if result["success"]:
-                print(f"✅ Визуализации сгенерированы для: {topic}")
+                print(f"✅ Визуализации сгенерированы на основе структурированных данных")
             else:
-                print(f"❌ Не удалось сгенерировать визуализации для: {topic}")
+                print(f"❌ Не удалось сгенерировать визуализации")
                 
             return result
             
@@ -944,45 +999,21 @@ if __name__ == "__main__":
     # Тестирование модуля
     llm = LLMIntegration()
     
-    print("🔧 Тестирование LLM модуля...")
-    
-    # Тестирование подключения
-    connection_ok = llm.test_connection()
-    print(f"📡 Подключение к API: {'✅ Успешно' if connection_ok else '❌ Ошибка'}")
-    
-    # Тестирование статуса моделей
-    status = llm.get_llm_status()
-    print(f"🔧 Статус моделей: {status}")
-    
-    # Тестовый запрос
-    test_question = "Объясни, что такое фотосинтез"
-    response = llm.query(test_question, subject="биология")
-    
-    print("\n🧪 Тестовый ответ:")
-    print(response)
-    
-    # Тестирование проверки необходимости визуализации
-    needs_viz = llm.check_visualization_need(test_question)
-    print(f"\n🎨 Нужна ли визуализация для вопроса: {'✅ Да' if needs_viz else '❌ Нет'}")
+    print("🔧 Тестирование улучшенного LLM модуля...")
     
     # Тестирование генерации визуализации
-    if needs_viz:
-        print("\n🔄 Генерация визуализации...")
-        viz_result = llm.generate_visualization("Процесс фотосинтеза", "Фотосинтез - это процесс преобразования света в химическую энергию")
-        
-        if viz_result["success"]:
-            print("✅ Визуализации успешно сгенерированы!")
-            if viz_result["mermaid_code"]:
-                print(f"📊 Mermaid код (первые 100 символов): {viz_result['mermaid_code'][:100]}...")
-            if viz_result["svg_code"]:
-                print(f"🖼️ SVG код (первые 100 символов): {viz_result['svg_code'][:100]}...")
-        else:
-            print("❌ Не удалось сгенерировать визуализации")
+    test_topic = "Статистика включает описательную статистику и индуктивную статистику"
+    print(f"\n🔄 Генерация визуализации для: {test_topic}")
+    viz_result = llm.generate_visualization(test_topic)
     
-    # Тестирование статистики кэша
-    cache_stats = llm.get_cache_stats()
-    print(f"\n💾 Статистика кэша:")
-    print(f"   Всего записей: {cache_stats['total_entries']}")
-    print(f"   Предметы: {cache_stats['subjects']}")
+    if viz_result["success"]:
+        print("✅ Визуализации успешно сгенерированы!")
+        print(f"📊 Тип визуализации: {viz_result['viz_data'].get('type', 'unknown')}")
+        print(f"📊 Основное понятие: {viz_result['viz_data'].get('main_concept', 'unknown')}")
+        if viz_result["mermaid_code"]:
+            print(f"📊 Mermaid код:")
+            print(viz_result['mermaid_code'])
+    else:
+        print("❌ Не удалось сгенерировать визуализации")
     
     print("\n🎉 Тестирование завершено!")
