@@ -19,19 +19,23 @@ import re
 import tempfile
 from local_llm_manager import get_llm_manager
 from key_manager import get_key_manager
+from flask_cors import CORS
 
-# Настройка SocketIO с правильными таймаутами
+# Настройка Flask с CORS
 app = Flask(__name__, static_folder='static')
+CORS(app)  # Разрешаем CORS для всех доменов
+
+# Настройка SocketIO с правильными таймаутами и CORS
 socketio = SocketIO(
     app, 
-    cors_allowed_origins="*", 
+    cors_allowed_origins="*",  # Разрешить все источники
     async_mode='threading',
-    ping_timeout=30,           # Увеличенный таймаут ping
-    ping_interval=15,          # Более частые ping
-    max_http_buffer_size=1e8,  # Увеличенный размер буфера
-    logger=True,               # Логирование для отладки
-    engineio_logger=True,      # Логирование EngineIO
-    always_connect=True        # Всегда пытаться подключиться
+    ping_timeout=30,
+    ping_interval=15,
+    max_http_buffer_size=1e8,
+    logger=True,
+    engineio_logger=True,
+    always_connect=True
 )
 
 BASE_DIR = Path(__file__).parent
@@ -77,6 +81,16 @@ llm_manager = get_llm_manager()
 
 # Менеджер ключей API
 key_manager = get_key_manager()
+
+@app.after_request
+def after_request(response):
+    """Добавляем заголовки для работы в iframe и CORS"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('X-Frame-Options', 'SAMEORIGIN')  # Разрешаем iframe с того же origin
+    return response
 
 def setup_llm_manager():
     """Настройка менеджера LLM с улучшенным callback"""
@@ -987,7 +1001,7 @@ def handle_generate_visualization(data):
 
 # НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЛОКАЛЬНОЙ LLM
 @app.route('/api/llm/priority', methods=['POST'])
-def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
+def set_llm_priority_route():
     """Установка приоритета моделей LLM"""
     try:
         data = request.json
@@ -1016,7 +1030,7 @@ def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИ�
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['GET'])
-def get_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
+def get_llm_priority_route():
     """Получение текущего приоритета моделей LLM"""
     try:
         priority = get_llm_priority()
