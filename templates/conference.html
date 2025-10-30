@@ -44,6 +44,31 @@
             -webkit-overflow-scrolling: touch;
         }
         
+        /* Embed mode styles */
+        body.embedded {
+            height: auto;
+            background: #1a2a6c;
+        }
+        
+        body.embedded #header {
+            display: none;
+        }
+        
+        body.embedded #controls {
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.9);
+        }
+        
+        body.embedded .control-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 16px;
+        }
+        
+        body.embedded #main {
+            height: calc(100vh - 70px);
+        }
+        
         #header {
             background: rgba(0, 0, 0, 0.7);
             padding: 12px 20px;
@@ -1135,24 +1160,6 @@
                 opacity: 0; 
                 transform: translateY(-20px) scale(0.95);
             }
-        }
-        
-        body.embedded {
-            height: auto;
-        }
-        
-        body.embedded #header {
-            display: none;
-        }
-        
-        body.embedded #controls {
-            padding: 10px;
-        }
-        
-        body.embedded .control-btn {
-            width: 50px;
-                height: 50px;
-                font-size: 16px;
         }
         
         /* iOS specific fixes */
@@ -3248,7 +3255,7 @@
             const customEvent = {
                 type: 'mousemove',
                 clientX: touch.clientX,
-                clientY: touch.clientY,
+                clientY = touch.clientY,
                 target: drawingCanvas
             };
             
@@ -4019,8 +4026,16 @@
                 await enableCameraAndMicrophone();
             });
 
+            // Apply embedded mode styles if needed
             if (isEmbedded) {
                 document.body.classList.add('embedded');
+                
+                // Auto-activate AI teacher in embedded mode
+                setTimeout(() => {
+                    if (socket) {
+                        socket.emit('activate_ai_teacher', { room_id: roomId });
+                    }
+                }, 2000);
             }
 
             window.addEventListener('message', (event) => {
