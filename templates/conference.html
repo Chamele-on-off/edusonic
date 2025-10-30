@@ -1964,6 +1964,33 @@
     </script>
 
     <script>
+        // Сообщаем родительскому окну о загрузке
+        window.addEventListener('load', function() {
+            if (window.parent !== window) {
+                // Мы в iframe - сообщаем родителю
+                window.parent.postMessage({
+                    type: 'iframe_loaded',
+                    room_id: roomId
+                }, '*');
+            }
+        });
+
+        // Обработчик сообщений от родительского окна
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'activate_ai_teacher') {
+                // Активируем AI-учителя
+                if (socket) {
+                    socket.emit('activate_ai_teacher', { room_id: event.data.room_id || 'demo' });
+                    
+                    // Сообщаем родителю об активации
+                    window.parent.postMessage({
+                        type: 'ai_activated',
+                        room_id: event.data.room_id
+                    }, '*');
+                }
+            }
+        });
+
         // Конфигурация
         const FPS = 10;
         
