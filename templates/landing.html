@@ -3,17 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduSonic AI - Голосовой ИИ-репетитор нового поколения</title>
+    <title>EduSonic AI - Ваш персональный AI-репетитор</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary: #7E76F9;  /* Очень мягкий фиолетовый */
-            --secondary: #6A61E5; /* Более светлый фиолетовый */
-            --dark: #4A5568;      /* Мягкий серо-синий */
-            --light: #F8FAFC;     /* Почти белый с легким синим оттенком */
-            --accent: #FF7B9C;    /* Пастельный розовый */
-            --text: #2D3748;     /* Основной цвет текста */
-            --text-light: #718096; /* Вторичный цвет текста */
+            --primary: #7E76F9;
+            --secondary: #6A61E5;
+            --dark: #4A5568;
+            --light: #F8FAFC;
+            --accent: #FF7B9C;
+            --text: #2D3748;
+            --text-light: #718096;
+            --success: #48BB78;
+            --warning: #ED8936;
+            --web3: #F59E0B;
+            --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
         }
         
         * {
@@ -30,6 +34,82 @@
             line-height: 1.6;
         }
         
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+        }
+        
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text);
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .btn-web3 {
+            background: linear-gradient(135deg, var(--web3), #FBBF24);
+            color: white;
+            border: none;
+            padding: 0.7rem 1.2rem;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        }
+        
+        .btn-web3:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+        }
+        
         /* Floating Admin Button */
         .admin-float-btn {
             position: fixed;
@@ -37,7 +117,7 @@
             right: 30px;
             width: 60px;
             height: 60px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            background: var(--gradient);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -87,8 +167,9 @@
             text-align: center;
             position: relative;
             overflow: hidden;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            background: var(--gradient);
             color: white;
+            padding-top: 80px;
         }
         
         .particles {
@@ -201,7 +282,7 @@
             margin: 10px auto 0;
             width: 100px;
             height: 4px;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
+            background: var(--gradient);
             border-radius: 2px;
         }
         
@@ -237,7 +318,7 @@
             left: 0;
             width: 100%;
             height: 5px;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
+            background: var(--gradient);
         }
         
         .feature-icon {
@@ -262,7 +343,7 @@
         
         /* Demo Section */
         .demo-section {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            background: var(--gradient);
             color: white;
             padding: 6rem 2rem;
             text-align: center;
@@ -381,6 +462,73 @@
             margin-bottom: 1rem;
         }
         
+        /* Live Demo Section */
+        .live-demo {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+            margin: 3rem auto;
+            max-width: 1000px;
+        }
+        
+        .demo-frame-container {
+            width: 100%;
+            height: 600px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin: 2rem 0;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .demo-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #f8f9fa;
+        }
+        
+        /* Web3 Banner */
+        .web3-banner {
+            background: linear-gradient(135deg, var(--web3), #FBBF24);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin: 2rem auto;
+            border-radius: 20px;
+            max-width: 1000px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .web3-banner:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(255,255,255,0.1)" d="M0,0 L100,0 L100,100 L0,100 Z"></path></svg>');
+            background-size: cover;
+        }
+        
+        .web3-content {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .web3-banner h3 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .web3-banner p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
         /* Pricing Section */
         .pricing-tabs {
             display: flex;
@@ -454,7 +602,7 @@
         }
         
         .pricing-card.popular:before {
-            content: 'Популярный';
+            content: 'Самый популярный';
             position: absolute;
             top: 15px;
             right: -30px;
@@ -522,14 +670,83 @@
             display: grid;
         }
         
-        /* Web3 Section */
-        .web3-section {
-            background: #F8FAFC;
+        /* Testimonials */
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .testimonial-card {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
+            position: relative;
+            border: 1px solid rgba(0,0,0,0.03);
+        }
+        
+        .testimonial-text {
+            font-style: italic;
+            color: var(--text-light);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+        
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .author-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .author-info h4 {
+            color: var(--text);
+            margin-bottom: 0.2rem;
+        }
+        
+        .author-info p {
+            color: var(--text-light);
+            font-size: 0.9rem;
         }
         
         /* CTA Section */
         .cta-section {
             background: linear-gradient(135deg, var(--accent), #FF8E9E);
+            color: white;
+            text-align: center;
+            padding: 6rem 2rem;
+        }
+        
+        .cta-content {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .cta-buttons-large {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2rem;
+        }
+        
+        .btn-large {
+            padding: 1.2rem 2.5rem;
+            font-size: 1.1rem;
         }
         
         /* Footer */
@@ -629,6 +846,18 @@
         
         /* Responsive */
         @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+            }
+            
             h1 {
                 font-size: 2.5rem;
             }
@@ -686,6 +915,22 @@
                 height: 50px;
                 font-size: 20px;
             }
+            
+            .demo-frame-container {
+                height: 400px;
+            }
+            
+            .live-demo {
+                padding: 2rem 1rem;
+            }
+            
+            .web3-banner {
+                padding: 2rem 1rem;
+            }
+            
+            .web3-banner h3 {
+                font-size: 1.5rem;
+            }
         }
         
         @media (max-width: 480px) {
@@ -700,10 +945,71 @@
             .stat-item {
                 min-width: 100px;
             }
+            
+            .cta-buttons-large {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .btn-web3 {
+                padding: 0.5rem 1rem;
+                font-size: 0.8rem;
+            }
+        }
+        
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-menu-btn {
+                display: block;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- Header -->
+    <header class="header">
+        <nav class="nav">
+            <a href="#" class="logo">
+                <i class="fas fa-robot"></i>
+                EduSonic AI
+            </a>
+            
+            <div class="nav-links">
+                <a href="#features">Возможности</a>
+                <a href="#demo">Демо</a>
+                <a href="#pricing">Тарифы</a>
+                <a href="#testimonials">Отзывы</a>
+                <a href="#conference">Попробовать</a>
+            </div>
+            
+            <div class="nav-buttons">
+                <a href="/investing.html" class="btn-web3">
+                    <i class="fas fa-coins"></i>
+                    Школам/Инвесторам/Web3
+                </a>
+                <a href="/teacher" class="btn btn-secondary">Личный кабинет</a>
+                <a href="#conference" class="btn btn-primary">Начать обучение</a>
+            </div>
+            
+            <button class="mobile-menu-btn">
+                <i class="fas fa-bars"></i>
+            </button>
+        </nav>
+    </header>
+
     <!-- Floating Admin Button -->
     <a href="/teacher" class="admin-float-btn">
         <i class="fas fa-user-cog"></i>
@@ -715,243 +1021,307 @@
         <div class="particles" id="particles-js"></div>
         <div class="hero-content">
             <h1>EduSonic AI</h1>
-            <p>Интеллектуальный голосовой репетитор нового поколения</p>
+            <p>Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
             <div class="cta-buttons">
-                <a href="#conference-demo" class="btn btn-conference">
-                    <i class="fas fa-robot"></i> Попробовать AI-учителя
+                <a href="#conference" class="btn btn-conference">
+                    <i class="fas fa-robot"></i> Попробовать бесплатно
                 </a>
-                <a href="#pricing" class="btn btn-secondary">Для учебных заведений →</a>
+                <a href="#features" class="btn btn-secondary">Узнать больше →</a>
             </div>
         </div>
     </section>
 
-    <!-- Why EduSonic Section -->
+    <!-- Web3 Banner -->
+    <section class="section">
+        <div class="web3-banner">
+            <div class="web3-content">
+                <h3>🚀 Инновации в образовании</h3>
+                <p>Узнайте о возможностях для учебных заведений, инвесторов и Web3-интеграции</p>
+                <a href="/investing.html" class="btn btn-primary" style="background: white; color: var(--web3);">
+                    <i class="fas fa-chart-line"></i> Для школ и инвесторов
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
     <section class="section" id="features">
-        <h2 class="section-title">Почему EduSonic AI?</h2>
+        <h2 class="section-title">Почему ученики выбирают EduSonic AI?</h2>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon">
-                    <i class="fas fa-chart-line"></i>
+                    <i class="fas fa-comments"></i>
                 </div>
-                <h3>Для инвесторов</h3>
-                <p>Доступ к рынку EdTech $400+ млрд с уникальной технологией голосового обучения и Web3-интеграцией.</p>
+                <h3>Живое общение</h3>
+                <p>Общайтесь с AI-учителем естественным голосом, как с настоящим репетитором. Задавайте вопросы, получайте развернутые ответы и персонализированные объяснения.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <h3>Адаптивное обучение</h3>
+                <p>Система анализирует ваш прогресс и подстраивает сложность материала под ваш уровень. Никогда не будет слишком сложно или слишком скучно!</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <h3>24/7 доступность</h3>
+                <p>Занимайтесь в любое время суток. Ваш персональный репетитор всегда готов помочь - утром перед школой, вечером после занятий или даже ночью.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
                     <i class="fas fa-chalkboard-teacher"></i>
                 </div>
-                <h3>Для преподавателей</h3>
-                <p>Автоматизация рутинных задач, анализ успеваемости и эмоционального состояния учеников в реальном времени.</p>
+                <h3>Все школьные предметы</h3>
+                <p>Математика, физика, химия, история, литература, английский язык и многое другое. Один AI-репетитор вместо десятка специалистов.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
-                    <i class="fas fa-school"></i>
+                    <i class="fas fa-gamepad"></i>
                 </div>
-                <h3>Для учебных заведений</h3>
-                <p>Снижение затрат на обучение до 60% с сохранением персонализированного подхода к каждому студенту.</p>
+                <h3>Интерактивные уроки</h3>
+                <p>Визуализации, интерактивные доски, игры и квизы делают обучение увлекательным. Учиться с EduSonic AI - это весело!</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <h3>Отслеживание прогресса</h3>
+                <p>Подробная статистика ваших успехов, рекомендации по улучшению и мотивационная система достижений. Видите свой рост каждый день!</p>
             </div>
         </div>
     </section>
 
     <!-- Demo Section -->
     <section class="demo-section" id="demo">
-        <h2 class="section-title" style="color: white;">Как это работает?</h2>
+        <h2 class="section-title" style="color: white;">Учиться стало проще и интереснее</h2>
         <div class="demo-container">
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Опыт обучения, который адаптируется к каждому ученику через естественное голосовое взаимодействие и анализ эмоций.
+                Представьте: вместо скучного чтения учебника - живой диалог с умным помощником, который всегда терпеливо объяснит сложную тему и найдет именно те слова, которые вы поймете.
             </p>
             <div class="demo-visual">
-                <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8;"></i>
+                <div style="text-align: center;">
+                    <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8; margin-bottom: 1rem;"></i>
+                    <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор. Давай вместе разберем эту интересную тему!"</p>
+                </div>
             </div>
-            <a href="#conference-demo" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</a>
+            <a href="#conference" class="btn btn-primary" style="background: white; color: var(--primary);">Попробовать прямо сейчас</a>
         </div>
     </section>
 
     <!-- Conference Demo Section -->
-    <section class="section conference-section" id="conference-demo">
-        <h2 class="section-title">Попробуйте AI-учителя прямо сейчас</h2>
+    <section class="section conference-section" id="conference">
+        <h2 class="section-title">Попробуйте AI-репетитора прямо сейчас</h2>
         <div class="demo-container">
             <p style="max-width: 800px; margin-bottom: 2rem; font-size: 1.2rem; text-align: center;">
-                Интерактивная демо-версия с голосовым AI-учителем. Общайтесь, задавайте вопросы и получайте персонализированные объяснения в реальном времени.
+                Не верите, что это работает? Убедитесь сами! Запустите демо-версию и пообщайтесь с AI-репетитором. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
             </p>
             
             <div class="conference-demo">
                 <div class="conference-stats">
                     <div class="stat-item">
                         <span class="stat-number">15,000+</span>
-                        <div class="stat-label">Уроков проведено</div>
+                        <div class="stat-label">Учеников уже занимаются</div>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-number">95%</span>
-                        <div class="stat-label">Удовлетворенность</div>
+                        <span class="stat-number">94%</span>
+                        <div class="stat-label">Улучшили оценки</div>
                     </div>
                     <div class="stat-item">
                         <span class="stat-number">24/7</span>
-                        <div class="stat-label">Доступность</div>
+                        <div class="stat-label">Всегда на связи</div>
                     </div>
                 </div>
                 
                 <div class="conference-features">
                     <div class="conference-feature">
                         <i class="fas fa-microphone"></i>
-                        <h4>Голосовое общение</h4>
-                        <p>Общайтесь с AI-учителем естественным голосом</p>
+                        <h4>Говорите свободно</h4>
+                        <p>Не нужно печатать - просто говорите, как с живым учителем</p>
                     </div>
                     <div class="conference-feature">
-                        <i class="fas fa-brain"></i>
-                        <h4>Искусственный интеллект</h4>
-                        <p>Персонализированные объяснения и ответы</p>
+                        <i class="fas fa-lightbulb"></i>
+                        <h4>Понятные объяснения</h4>
+                        <p>Сложные темы становятся простыми и ясными</p>
                     </div>
                     <div class="conference-feature">
-                        <i class="fas fa-chalkboard"></i>
-                        <h4>Интерактивная доска</h4>
-                        <p>Визуализация и совместная работа</p>
+                        <i class="fas fa-heart"></i>
+                        <h4>Поддержка и мотивация</h4>
+                        <p>AI-репетитор всегда подбодрит и поможет не сдаваться</p>
                     </div>
                     <div class="conference-feature">
-                        <i class="fas fa-graduation-cap"></i>
-                        <h4>Все предметы</h4>
-                        <p>Математика, физика, история и многое другое</p>
+                        <i class="fas fa-rocket"></i>
+                        <h4>Быстрый прогресс</h4>
+                        <p>Результаты видны уже после первых занятий</p>
                     </div>
                 </div>
                 
-                <div style="margin: 2rem 0;">
-                    <button id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem;">
-                        <i class="fas fa-play"></i> Запустить AI-учителя
-                    </button>
+                <!-- Live Demo Frame -->
+                <div class="live-demo">
+                    <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Интерактивная демо-версия</h3>
+                    <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
+                        Нажмите "Активировать AI-учителя" и начните общение. Можно использовать микрофон или текстовый чат.
+                    </p>
+                    
+                    <div class="demo-frame-container">
+                        <iframe src="/conference?room=demo&embed=true" class="demo-frame" 
+                                title="EduSonic AI Demo" allow="microphone; camera">
+                        </iframe>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 2rem;">
+                        <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
+                            <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону
+                        </p>
+                        <a href="/conference?room=demo" class="btn btn-conference" target="_blank" style="padding: 1.2rem 2.5rem;">
+                            <i class="fas fa-external-link-alt"></i> Открыть в полном окне
+                        </a>
+                    </div>
                 </div>
-                
-                <p style="color: var(--text-light); font-size: 0.9rem; margin-top: 1rem;">
-                    <i class="fas fa-info-circle"></i> Для работы потребуется разрешить доступ к микрофону
-                </p>
             </div>
         </div>
     </section>
 
     <!-- Pricing Section -->
     <section class="section" id="pricing">
-        <h2 class="section-title">Наши тарифы</h2>
+        <h2 class="section-title">Выберите подходящий формат занятий</h2>
         <div class="pricing-tabs">
-            <button class="tab-btn active" data-tab="individual">Для частных лиц</button>
-            <button class="tab-btn" data-tab="corporate">Для организаций</button>
+            <button class="tab-btn active" data-tab="individual">Для учеников</button>
+            <button class="tab-btn" data-tab="family">Для семьи</button>
         </div>
         
         <!-- Individual Pricing -->
         <div id="individual-pricing" class="pricing-grid pricing-container active">
             <div class="pricing-card">
-                <h3>Стартовый</h3>
-                <div class="price">$0 <span>/месяц</span></div>
+                <h3>Пробный</h3>
+                <div class="price">Бесплатно</div>
                 <ul class="pricing-features">
-                    <li>1 предмет на выбор</li>
-                    <li>5 уроков в месяц</li>
-                    <li>Базовые функции ИИ</li>
-                    <li>Ограниченная поддержка</li>
+                    <li>3 бесплатных урока</li>
+                    <li>Доступ ко всем предметам</li>
+                    <li>Базовые функции AI-репетитора</li>
+                    <li>Ограниченная практика</li>
+                    <li>Поддержка по email</li>
                 </ul>
                 <a href="/conference?room=free" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Начать бесплатно</a>
             </div>
             <div class="pricing-card popular">
-                <h3>Премиум</h3>
-                <div class="price">$19 <span>/месяц</span></div>
+                <h3>Индивидуальный</h3>
+                <div class="price">790 ₽ <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>Все доступные предметы</li>
-                    <li>Неограниченные уроки</li>
-                    <li>NFT-сертификаты</li>
+                    <li>Неограниченные занятия</li>
+                    <li>Все школьные предметы</li>
+                    <li>Персональная программа</li>
+                    <li>Расширенная практика</li>
+                    <li>Подробная статистика</li>
                     <li>Приоритетная поддержка</li>
-                    <li>Доступ к бета-функциям</li>
                 </ul>
                 <a href="/conference?room=premium" class="btn btn-primary" style="width: 100%;" target="_blank">Выбрать тариф</a>
             </div>
             <div class="pricing-card">
-                <h3>Семейный</h3>
-                <div class="price">$35 <span>/месяц</span></div>
+                <h3>С углубленным изучением</h3>
+                <div class="price">1290 ₽ <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>До 5 пользователей</li>
-                    <li>Совместная статистика</li>
-                    <li>NFT-портфолио</li>
-                    <li>Персональный консультант</li>
+                    <li>Всё из пакета "Индивидуальный"</li>
+                    <li>Подготовка к ОГЭ/ЕГЭ</li>
+                    <li>Олимпиадные задачи</li>
+                    <li>Углубленные материалы</li>
+                    <li>Персональный куратор</li>
                 </ul>
-                <a href="/conference?room=family" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для семьи</a>
+                <a href="/conference?room=advanced" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для отличников</a>
             </div>
         </div>
         
-        <!-- Corporate Pricing -->
-        <div id="corporate-pricing" class="pricing-grid pricing-container">
+        <!-- Family Pricing -->
+        <div id="family-pricing" class="pricing-grid pricing-container">
             <div class="pricing-card">
-                <h3>Классный</h3>
-                <div class="price">$600 <span>/год</span></div>
+                <h3>Семейный</h3>
+                <div class="price">1490 ₽ <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>До 30 учеников</li>
-                    <li>Автоматическая проверка</li>
-                    <li>Аналитика успеваемости</li>
-                    <li>Поддержка 5 языков</li>
-                    <li>Отчеты для администрации</li>
+                    <li>До 3 детей в семье</li>
+                    <li>Отдельные профили для каждого</li>
+                    <li>Совместная статистика для родителей</li>
+                    <li>Семейные образовательные игры</li>
+                    <li>Родительский контроль</li>
                 </ul>
-                <a href="/conference?room=classroom" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Запросить демо</a>
+                <a href="/conference?room=family" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для семьи</a>
             </div>
             <div class="pricing-card popular">
-                <h3>Школьный</h3>
-                <div class="price">$2500 <span>/год</span></div>
+                <h3>Семейный PRO</h3>
+                <div class="price">2190 ₽ <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>До 200 учеников</li>
-                    <li>Интеграция с LMS</li>
-                    <li>Глубокая аналитика</li>
-                    <li>API доступ</li>
-                    <li>White-label интерфейс</li>
+                    <li>До 5 детей в семье</li>
+                    <li>Все преимущества семейного тарифа</li>
+                    <li>Подготовка к олимпиадам</li>
+                    <li>Профориентационное тестирование</li>
+                    <li>Персональный семейный куратор</li>
+                    <li>Скидка 15% на следующий месяц</li>
                 </ul>
-                <a href="/conference?room=school" class="btn btn-primary" style="width: 100%;" target="_blank">Запросить КП</a>
-            </div>
-            <div class="pricing-card">
-                <h3>Корпоративный</h3>
-                <div class="price">Индивидуально</div>
-                <ul class="pricing-features">
-                    <li>Неограниченные лицензии</li>
-                    <li>Кастомная интеграция</li>
-                    <li>Собственный брендинг</li>
-                    <li>Персональный менеджер</li>
-                    <li>Обучение преподавателей</li>
-                </ul>
-                <a href="/conference?room=enterprise" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Обсудить проект</a>
+                <a href="/conference?room=family-pro" class="btn btn-primary" style="width: 100%;" target="_blank">Лучший выбор</a>
             </div>
         </div>
     </section>
 
-    <!-- Web3 Section -->
-    <section class="section web3-section">
-        <h2 class="section-title">Learn-to-Earn с Web3</h2>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-coins"></i>
+    <!-- Testimonials Section -->
+    <section class="section" id="testimonials" style="background: #F8FAFC;">
+        <h2 class="section-title">Что говорят наши ученики и родители</h2>
+        <div class="testimonials-grid">
+            <div class="testimonial-card">
+                <div class="testimonial-text">
+                    "Сначала не верил, что компьютер может нормально объяснять математику. Но после первого же занятия понял - это работает! Объясняет даже лучше, чем некоторые учителя в школе."
                 </div>
-                <h3>Токены $EDU</h3>
-                <p>Студенты зарабатывают криптотокены за учебные достижения, которые можно обменять на премиум-контент или реальные деньги.</p>
+                <div class="testimonial-author">
+                    <div class="author-avatar">АС</div>
+                    <div class="author-info">
+                        <h4>Алексей Смирнов</h4>
+                        <p>Ученик 9 класса, Москва</p>
+                    </div>
+                </div>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-certificate"></i>
+            <div class="testimonial-card">
+                <div class="testimonial-text">
+                    "Моя дочь всегда стеснялась задавать вопросы учителю. С EduSonic она раскрепостилась - задает любые вопросы без стеснения. И оценки по физике улучшились с троек на твердые четверки!"
                 </div>
-                <h3>NFT-дипломы</h3>
-                <p>Все учебные достижения сохраняются как уникальные NFT-сертификаты в блокчейне с защитой от подделки.</p>
+                <div class="testimonial-author">
+                    <div class="author-avatar">МК</div>
+                    <div class="author-info">
+                        <h4>Марина Ковалева</h4>
+                        <p>Мама ученицы 8 класса</p>
+                    </div>
+                </div>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-vote-yea"></i>
+            <div class="testimonial-card">
+                <div class="testimonial-text">
+                    "Занимаюсь английским с AI-репетитором каждый вечер. Очень нравится, что можно практиковать произношение и сразу получать обратную связь. За 2 месяца подтянул язык с начального до уверенного intermediate."
                 </div>
-                <h3>DAO для образования</h3>
-                <p>Преподаватели и студенты участвуют в управлении платформой через децентрализованную автономную организацию.</p>
+                <div class="testimonial-author">
+                    <div class="author-avatar">ДИ</div>
+                    <div class="author-info">
+                        <h4>Дмитрий Иванов</h4>
+                        <p>Студент, Санкт-Петербург</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
     <!-- CTA Section -->
     <section class="demo-section cta-section">
-        <div class="demo-container">
-            <h2 class="section-title" style="color: white;">Готовы к образованию будущего?</h2>
+        <div class="cta-content">
+            <h2 class="section-title" style="color: white;">Готовы начать учиться с удовольствием?</h2>
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Первые 50 учебных заведений получат 3 месяца бесплатного тестирования всех возможностей платформы!
+                Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
             </p>
-            <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
-                <a href="/conference?room=school-demo" class="btn btn-primary" style="background: white; color: var(--accent);" target="_blank">Попробовать бесплатно</a>
-                <a href="#contact" class="btn btn-secondary" style="border-color: white; color: white;">Инвестировать в проект</a>
+            <div class="cta-buttons-large">
+                <a href="#conference" class="btn btn-primary btn-large" style="background: white; color: var(--accent);">
+                    <i class="fas fa-play"></i> Начать бесплатно
+                </a>
+                <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
+                    <i class="fas fa-user-cog"></i> Личный кабинет
+                </a>
+                <a href="/investing.html" class="btn-web3 btn-large" style="padding: 1.2rem 2.5rem;">
+                    <i class="fas fa-coins"></i> Для школ и инвесторов
+                </a>
             </div>
         </div>
     </section>
@@ -961,50 +1331,52 @@
         <div class="footer-content">
             <div class="footer-column">
                 <h3>EduSonic AI</h3>
-                <p>Инновационная платформа для голосового обучения с интеграцией ИИ и блокчейн-технологий.</p>
+                <p>Инновационная платформа для голосового обучения с искусственным интеллектом. Сделаем образование доступным и увлекательным для каждого ребенка!</p>
                 <div class="social-links">
                     <a href="https://t.me/edusonic_ai" target="_blank"><i class="fab fa-telegram"></i></a>
-                    <a href="https://twitter.com/edusonic_ai" target="_blank"><i class="fab fa-twitter"></i></a>
-                    <a href="https://linkedin.com/company/edusonic-ai" target="_blank"><i class="fab fa-linkedin"></i></a>
-                    <a href="https://github.com/edusonic-ai" target="_blank"><i class="fab fa-github"></i></a>
+                    <a href="https://vk.com/edusonic_ai" target="_blank"><i class="fab fa-vk"></i></a>
+                    <a href="https://youtube.com/edusonic_ai" target="_blank"><i class="fab fa-youtube"></i></a>
                 </div>
             </div>
             <div class="footer-column">
-                <h3>Продукт</h3>
+                <h3>Обучение</h3>
                 <ul>
-                    <li><a href="#features">Возможности</a></li>
+                    <li><a href="#features">Все предметы</a></li>
                     <li><a href="#pricing">Тарифы</a></li>
-                    <li><a href="#conference-demo">Демо</a></li>
-                    <li><a href="https://blog.edusonic.ai" target="_blank">Блог</a></li>
+                    <li><a href="#conference">Демо-версия</a></li>
+                    <li><a href="#">Подготовка к ЕГЭ</a></li>
+                    <li><a href="#">Олимпиадные задачи</a></li>
+                </ul>
+            </div>
+            <div class="footer-column">
+                <h3>Поддержка</h3>
+                <ul>
+                    <li><a href="#">Помощь ученикам</a></li>
+                    <li><a href="#">Родителям</a></li>
+                    <li><a href="#">Частые вопросы</a></li>
+                    <li><a href="#">Техподдержка</a></li>
+                    <li><a href="#">Связаться с нами</a></li>
                 </ul>
             </div>
             <div class="footer-column">
                 <h3>Компания</h3>
                 <ul>
-                    <li><a href="/about">О нас</a></li>
-                    <li><a href="/jobs">Вакансии</a></li>
-                    <li><a href="/partners">Партнёры</a></li>
-                    <li><a href="/contact">Контакты</a></li>
-                </ul>
-            </div>
-            <div class="footer-column">
-                <h3>Ресурсы</h3>
-                <ul>
-                    <li><a href="/docs">Документация</a></li>
-                    <li><a href="/api">API для разработчиков</a></li>
-                    <li><a href="/faq">Частые вопросы</a></li>
-                    <li><a href="/support">Техподдержка</a></li>
+                    <li><a href="/investing.html">Для инвесторов</a></li>
+                    <li><a href="/investing.html">Для школ</a></li>
+                    <li><a href="/investing.html">Web3 технологии</a></li>
+                    <li><a href="#">Блог</a></li>
+                    <li><a href="#">Контакты</a></li>
                 </ul>
             </div>
         </div>
         <div class="copyright">
-            © 2023 EduSonic AI. Все права защищены. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
+            © 2024 EduSonic AI. С любовью к образованию. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
         </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
-        // Инициализация частиц с более заметными параметрами
+        // Инициализация частиц
         particlesJS("particles-js", {
             "particles": {
                 "number": {
@@ -1133,50 +1505,43 @@
                 });
             });
             
-            // Запуск конференции
-            const startConferenceBtn = document.getElementById('start-conference-btn');
-            if (startConferenceBtn) {
-                startConferenceBtn.addEventListener('click', function() {
-                    // Открываем конференцию в новом окне
-                    const conferenceWindow = window.open('/conference?room=demo', 'EduSonicAI_Conference', 
-                        'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
-                    
-                    if (conferenceWindow) {
-                        // Фокусируем новое окно
-                        conferenceWindow.focus();
-                        
-                        // Показываем сообщение об успехе
-                        const originalText = startConferenceBtn.innerHTML;
-                        startConferenceBtn.innerHTML = '<i class="fas fa-check"></i> Конференция запускается...';
-                        startConferenceBtn.style.background = 'var(--primary)';
-                        
-                        setTimeout(() => {
-                            startConferenceBtn.innerHTML = originalText;
-                            startConferenceBtn.style.background = '';
-                        }, 2000);
-                    } else {
-                        // Если всплывающие окна заблокированы, открываем в новой вкладке
-                        window.open('/conference?room=demo', '_blank');
-                    }
+            // Мобильное меню
+            const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+            const navLinks = document.querySelector('.nav-links');
+            
+            if (mobileMenuBtn) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
                 });
             }
 
             // Плавная прокрутка для якорных ссылок
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
+                    if (this.getAttribute('href') === '#') return;
+                    
                     e.preventDefault();
                     const target = document.querySelector(this.getAttribute('href'));
                     if (target) {
-                        target.scrollIntoView({
+                        const headerHeight = document.querySelector('.header').offsetHeight;
+                        const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+                        
+                        window.scrollTo({
+                            top: targetPosition,
                             behavior: 'smooth'
                         });
+                        
+                        // Закрываем мобильное меню после клика
+                        if (window.innerWidth <= 768) {
+                            navLinks.style.display = 'none';
+                        }
                     }
                 });
             });
 
             // Анимация появления элементов при скролле
             const animateOnScroll = function() {
-                const elements = document.querySelectorAll('.feature-card, .pricing-card, .section-title');
+                const elements = document.querySelectorAll('.feature-card, .pricing-card, .testimonial-card, .section-title');
                 
                 elements.forEach(element => {
                     const elementPosition = element.getBoundingClientRect().top;
@@ -1191,7 +1556,7 @@
 
             // Инициализация анимации
             window.addEventListener('load', function() {
-                document.querySelectorAll('.feature-card, .pricing-card, .section-title').forEach(el => {
+                document.querySelectorAll('.feature-card, .pricing-card, .testimonial-card, .section-title').forEach(el => {
                     el.style.opacity = '0';
                     el.style.transform = 'translateY(20px)';
                     el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
@@ -1201,6 +1566,17 @@
             });
             
             window.addEventListener('scroll', animateOnScroll);
+            
+            // Обновление iframe при изменении размера окна
+            window.addEventListener('resize', function() {
+                const iframe = document.querySelector('.demo-frame');
+                if (iframe) {
+                    iframe.style.height = '600px';
+                    setTimeout(() => {
+                        iframe.style.height = '100%';
+                    }, 100);
+                }
+            });
         });
     </script>
 </body>
