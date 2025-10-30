@@ -474,12 +474,14 @@
         
         .demo-frame-container {
             width: 100%;
-            height: 600px;
+            height: 700px;
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
             margin: 2rem 0;
             border: 1px solid rgba(0,0,0,0.05);
+            position: relative;
+            background: #f8f9fa;
         }
         
         .demo-frame {
@@ -487,6 +489,39 @@
             height: 100%;
             border: none;
             background: #f8f9fa;
+        }
+        
+        .iframe-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        
+        .iframe-loading.hidden {
+            display: none;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         /* Web3 Banner */
@@ -917,7 +952,7 @@
             }
             
             .demo-frame-container {
-                height: 400px;
+                height: 500px;
             }
             
             .live-demo {
@@ -1115,7 +1150,7 @@
         <h2 class="section-title">Попробуйте AI-репетитора прямо сейчас</h2>
         <div class="demo-container">
             <p style="max-width: 800px; margin-bottom: 2rem; font-size: 1.2rem; text-align: center;">
-                Не верите, что это работает? Убедитесь сами! Запустите демо-версию и пообщайтесь с AI-репетитором. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
+                Не верите, что это работает? Убедитесь сами! Пообщайтесь с AI-репетитором прямо здесь. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
             </p>
             
             <div class="conference-demo">
@@ -1157,26 +1192,41 @@
                     </div>
                 </div>
                 
-                <!-- Live Demo Frame -->
+                <!-- Live Demo Section -->
                 <div class="live-demo">
                     <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Интерактивная демо-версия</h3>
                     <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
-                        Нажмите "Активировать AI-учителя" и начните общение. Можно использовать микрофон или текстовый чат.
+                        Полнофункциональная версия AI-учителя прямо на этой странице. Можно использовать микрофон или текстовый чат.
                     </p>
                     
                     <div class="demo-frame-container">
-                        <iframe src="/conference?room=demo&embed=true" class="demo-frame" 
-                                title="EduSonic AI Demo" allow="microphone; camera">
+                        <!-- Loading overlay -->
+                        <div class="iframe-loading" id="iframe-loading">
+                            <div class="loading-spinner"></div>
+                            <p>Загрузка AI-учителя...</p>
+                        </div>
+                        
+                        <!-- Iframe с конференцией -->
+                        <iframe src="/conference?room=demo&embed=true" class="demo-frame" id="demo-frame"
+                                title="EduSonic AI Demo" 
+                                allow="microphone; camera; autoplay"
+                                onload="document.getElementById('iframe-loading').classList.add('hidden')">
                         </iframe>
                     </div>
                     
                     <div style="text-align: center; margin-top: 2rem;">
                         <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
-                            <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону
+                            <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону. Если есть проблемы, 
+                            <a href="/conference?room=demo" target="_blank" style="color: var(--primary);">откройте в новом окне</a>.
                         </p>
-                        <a href="/conference?room=demo" class="btn btn-conference" target="_blank" style="padding: 1.2rem 2.5rem;">
-                            <i class="fas fa-external-link-alt"></i> Открыть в полном окне
-                        </a>
+                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                            <button onclick="refreshIframe()" class="btn btn-secondary" style="border-color: var(--primary); color: var(--primary);">
+                                <i class="fas fa-redo"></i> Перезагрузить
+                            </button>
+                            <a href="/conference?room=demo" class="btn btn-conference" target="_blank">
+                                <i class="fas fa-external-link-alt"></i> Открыть в новом окне
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1480,6 +1530,24 @@
             "retina_detect": true
         });
 
+        // Функция для перезагрузки iframe
+        function refreshIframe() {
+            const iframe = document.getElementById('demo-frame');
+            const loading = document.getElementById('iframe-loading');
+            
+            loading.classList.remove('hidden');
+            iframe.style.display = 'none';
+            
+            // Обновляем src с timestamp для предотвращения кэширования
+            iframe.src = '/conference?room=demo&embed=true&t=' + new Date().getTime();
+            
+            // Показываем iframe после загрузки
+            iframe.onload = function() {
+                loading.classList.add('hidden');
+                iframe.style.display = 'block';
+            };
+        }
+
         // Управление вкладками тарифов
         document.addEventListener('DOMContentLoaded', function() {
             const tabButtons = document.querySelectorAll('.tab-btn');
@@ -1566,17 +1634,6 @@
             });
             
             window.addEventListener('scroll', animateOnScroll);
-            
-            // Обновление iframe при изменении размера окна
-            window.addEventListener('resize', function() {
-                const iframe = document.querySelector('.demo-frame');
-                if (iframe) {
-                    iframe.style.height = '600px';
-                    setTimeout(() => {
-                        iframe.style.height = '100%';
-                    }, 100);
-                }
-            });
         });
     </script>
 </body>
