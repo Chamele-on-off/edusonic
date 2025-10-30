@@ -228,6 +228,11 @@ def home():
     """Основная страница - лендинг"""
     return render_template('landing.html')
 
+@app.route('/investing.html')
+def investing():
+    """Страница для инвесторов"""
+    return render_template('investing.html')
+
 @app.route('/teacher')
 def teacher():
     """Страница учителя (личный кабинет)"""
