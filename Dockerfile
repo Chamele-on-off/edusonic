@@ -1,20 +1,10 @@
-FROM python:3.9-slim-bullseye
+FROM python:3.9-bullseye
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     espeak-ng \
     libsndfile1 \
     curl \
-    pkg-config \
-    build-essential \
-    libavcodec-dev \
-    libavformat-dev \
-    libavutil-dev \
-    libswscale-dev \
-    libavdevice-dev \
-    libssl-dev \
-    libffi-dev \
-    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
