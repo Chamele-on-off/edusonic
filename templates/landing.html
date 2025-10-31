@@ -3,35 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduSonic AI - Ваш персональный AI-репетитор</title>
+    <title>EduSonic AI - Голосовой ИИ-репетитор нового поколения</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary: #7E76F9;
-            --secondary: #6A61E5;
-            --dark: #4A5568;
-            --light: #F8FAFC;
-            --accent: #FF7B9C;
-            --text: #2D3748;
-            --text-light: #718096;
-            --success: #48BB78;
-            --warning: #ED8936;
-            --web3: #F59E0B;
-            --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
-            --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
-            --shadow-md: 0 5px 25px rgba(0,0,0,0.08);
-            --shadow-lg: 0 15px 35px rgba(0,0,0,0.08);
+            --primary: #7E76F9;  /* Очень мягкий фиолетовый */
+            --secondary: #6A61E5; /* Более светлый фиолетовый */
+            --dark: #4A5568;      /* Мягкий серо-синий */
+            --light: #F8FAFC;     /* Почти белый с легким синим оттенком */
+            --accent: #FF7B9C;    /* Пастельный розовый */
+            --text: #2D3748;     /* Основной цвет текста */
+            --text-light: #718096; /* Вторичный цвет текста */
         }
         
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        
-        html {
-            scroll-behavior: smooth;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
         
         body {
@@ -39,184 +28,48 @@
             color: var(--text);
             overflow-x: hidden;
             line-height: 1.6;
-            font-size: 16px;
-        }
-        
-        /* Header */
-        .header {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            z-index: 1000;
-            padding: 1rem 1.5rem;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.3s ease;
-        }
-        
-        .header.scrolled {
-            padding: 0.8rem 1.5rem;
-            box-shadow: var(--shadow-md);
-        }
-        
-        .nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .logo {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: var(--primary);
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            z-index: 1001;
-        }
-        
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            align-items: center;
-        }
-        
-        .nav-links a {
-            text-decoration: none;
-            color: var(--text);
-            font-weight: 500;
-            transition: color 0.3s ease;
-            font-size: 0.95rem;
-        }
-        
-        .nav-links a:hover {
-            color: var(--primary);
-        }
-        
-        .nav-buttons {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-        
-        .btn {
-            padding: 0.8rem 1.5rem;
-            border-radius: 50px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
-            font-size: 0.95rem;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            justify-content: center;
-            text-align: center;
-        }
-        
-        .btn-primary {
-            background: var(--gradient);
-            color: white;
-            box-shadow: 0 4px 15px rgba(126, 118, 249, 0.3);
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(126, 118, 249, 0.4);
-        }
-        
-        .btn-secondary {
-            background-color: transparent;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-        }
-        
-        .btn-secondary:hover {
-            background-color: rgba(126, 118, 249, 0.05);
-        }
-        
-        .btn-web3 {
-            background: linear-gradient(135deg, var(--web3), #FBBF24);
-            color: white;
-            border: none;
-            padding: 0.7rem 1.2rem;
-            border-radius: 25px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
-        }
-        
-        .btn-web3:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
-        }
-        
-        /* Mobile Menu */
-        .mobile-menu-btn {
-            display: none;
-            background: none;
-            border: none;
-            color: var(--text);
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0.5rem;
-            z-index: 1001;
         }
         
         /* Floating Admin Button */
         .admin-float-btn {
             position: fixed;
-            bottom: 1.5rem;
-            right: 1.5rem;
-            width: 3.5rem;
-            height: 3.5rem;
-            background: var(--gradient);
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.3rem;
+            font-size: 24px;
             cursor: pointer;
             box-shadow: 0 8px 25px rgba(126, 118, 249, 0.3);
-            z-index: 999;
+            z-index: 1000;
             transition: all 0.3s ease;
             text-decoration: none;
         }
         
         .admin-float-btn:hover {
-            transform: translateY(-3px) scale(1.05);
+            transform: translateY(-3px);
             box-shadow: 0 12px 35px rgba(126, 118, 249, 0.4);
         }
         
         .admin-float-btn .tooltip {
             position: absolute;
-            bottom: 100%;
+            bottom: 70px;
             right: 0;
             background: var(--dark);
             color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            font-size: 0.8rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
             white-space: nowrap;
             opacity: 0;
             transform: translateY(10px);
             transition: all 0.3s ease;
             pointer-events: none;
-            margin-bottom: 0.5rem;
         }
         
         .admin-float-btn:hover .tooltip {
@@ -226,7 +79,7 @@
         
         /* Hero Section */
         .hero {
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -234,9 +87,8 @@
             text-align: center;
             position: relative;
             overflow: hidden;
-            background: var(--gradient);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
-            padding: 6rem 1.5rem 4rem;
         }
         
         .particles {
@@ -250,15 +102,15 @@
         
         .hero-content {
             max-width: 800px;
+            padding: 0 20px;
             position: relative;
             z-index: 2;
         }
         
         h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-size: 4rem;
             font-weight: 800;
-            margin-bottom: 1.5rem;
-            line-height: 1.2;
+            margin-bottom: 1rem;
             background: linear-gradient(45deg, #fff, #E1BEE7);
             -webkit-background-clip: text;
             background-clip: text;
@@ -267,12 +119,11 @@
         }
         
         .hero p {
-            font-size: clamp(1.1rem, 2.5vw, 1.5rem);
-            margin-bottom: 2.5rem;
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
             color: white;
             opacity: 0.9;
             font-weight: 300;
-            line-height: 1.5;
         }
         
         .cta-buttons {
@@ -282,10 +133,39 @@
             flex-wrap: wrap;
         }
         
-        .btn-large {
+        .btn {
             padding: 1rem 2rem;
-            font-size: 1.1rem;
-            min-width: 200px;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background-color: white;
+            color: var(--primary);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+        
+        .btn-secondary {
+            background-color: transparent;
+            color: white;
+            border: 2px solid rgba(255,255,255,0.5);
+            backdrop-filter: blur(5px);
+        }
+        
+        .btn-secondary:hover {
+            background-color: rgba(255,255,255,0.15);
+            border-color: white;
         }
         
         .btn-conference {
@@ -300,78 +180,35 @@
             box-shadow: 0 6px 20px rgba(255, 123, 156, 0.4);
         }
         
-        /* Web3 Banner */
-        .web3-banner {
-            background: linear-gradient(135deg, var(--web3), #FBBF24);
-            color: white;
-            padding: 3rem 1.5rem;
-            text-align: center;
-            margin: 2rem auto;
-            border-radius: 20px;
-            max-width: 1000px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .web3-banner:before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(255,255,255,0.1)" d="M0,0 L100,0 L100,100 L0,100 Z"></path></svg>');
-            background-size: cover;
-        }
-        
-        .web3-content {
-            position: relative;
-            z-index: 2;
-        }
-        
-        .web3-banner h3 {
-            font-size: clamp(1.5rem, 3vw, 2rem);
-            margin-bottom: 1rem;
-        }
-        
-        .web3-banner p {
-            font-size: clamp(1rem, 2vw, 1.2rem);
-            margin-bottom: 2rem;
-            opacity: 0.9;
-            line-height: 1.5;
-        }
-        
-        /* Sections */
+        /* Features Section */
         .section {
-            padding: 5rem 1.5rem;
+            padding: 8rem 2rem;
             position: relative;
         }
         
         .section-title {
             text-align: center;
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            margin-bottom: 3rem;
+            font-size: 2.5rem;
+            margin-bottom: 4rem;
             width: 100%;
             color: var(--text);
             font-weight: 700;
-            line-height: 1.3;
         }
         
         .section-title:after {
             content: '';
             display: block;
-            margin: 1rem auto 0;
-            width: 80px;
+            margin: 10px auto 0;
+            width: 100px;
             height: 4px;
-            background: var(--gradient);
+            background: linear-gradient(90deg, var(--primary), var(--accent));
             border-radius: 2px;
         }
         
-        /* Features Section */
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
             max-width: 1200px;
             margin: 0 auto;
         }
@@ -379,19 +216,18 @@
         .feature-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem 1.5rem;
-            box-shadow: var(--shadow-sm);
+            padding: 2rem;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             z-index: 1;
             border: 1px solid rgba(0,0,0,0.03);
-            height: 100%;
         }
         
         .feature-card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--shadow-lg);
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
         }
         
         .feature-card:before {
@@ -400,8 +236,8 @@
             top: 0;
             left: 0;
             width: 100%;
-            height: 4px;
-            background: var(--gradient);
+            height: 5px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
         }
         
         .feature-icon {
@@ -412,24 +248,23 @@
         }
         
         .feature-card h3 {
-            font-size: 1.3rem;
+            font-size: 1.5rem;
             margin-bottom: 1rem;
             color: var(--text);
             font-weight: 600;
-            line-height: 1.3;
         }
         
         .feature-card p {
             color: var(--text-light);
-            font-size: 1rem;
+            font-size: 1.05rem;
             line-height: 1.6;
         }
         
         /* Demo Section */
         .demo-section {
-            background: var(--gradient);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
-            padding: 5rem 1.5rem;
+            padding: 6rem 2rem;
             text-align: center;
             position: relative;
         }
@@ -458,7 +293,7 @@
         .demo-visual {
             width: 100%;
             max-width: 800px;
-            height: 300px;
+            height: 400px;
             background: rgba(255,255,255,0.1);
             border-radius: 20px;
             margin: 3rem 0;
@@ -469,7 +304,6 @@
             overflow: hidden;
             border: 2px dashed rgba(255,255,255,0.2);
             backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
         }
         
         .demo-visual:before {
@@ -498,89 +332,53 @@
         .conference-demo {
             background: white;
             border-radius: 20px;
-            padding: 2.5rem 1.5rem;
-            box-shadow: var(--shadow-md);
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
             margin-top: 2rem;
             text-align: center;
         }
         
         .conference-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
             margin: 2rem 0;
+            flex-wrap: wrap;
         }
         
         .stat-item {
             text-align: center;
-            padding: 1rem;
         }
         
         .stat-number {
-            font-size: 2.2rem;
+            font-size: 2.5rem;
             font-weight: 700;
             color: var(--primary);
             display: block;
-            line-height: 1;
         }
         
         .stat-label {
-            font-size: 0.9rem;
+            font-size: 1rem;
             color: var(--text-light);
             margin-top: 0.5rem;
-            line-height: 1.3;
         }
         
-        /* Popup Demo Styles */
-        .popup-demo-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 2rem;
-        }
-        
-        .popup-features {
+        .conference-features {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1.5rem;
-            margin: 2rem 0;
+            margin: 3rem 0;
         }
         
-        .popup-feature {
+        .conference-feature {
             text-align: center;
-            padding: 1.5rem 1rem;
-            background: rgba(126, 118, 249, 0.05);
-            border-radius: 12px;
-            border: 1px solid rgba(126, 118, 249, 0.1);
+            padding: 1.5rem;
         }
         
-        .popup-feature i {
-            font-size: 2rem;
+        .conference-feature i {
+            font-size: 2.5rem;
             color: var(--primary);
             margin-bottom: 1rem;
-        }
-        
-        .popup-feature h4 {
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-            color: var(--text);
-        }
-        
-        .popup-feature p {
-            color: var(--text-light);
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-        
-        /* Live Demo Section */
-        .live-demo {
-            background: white;
-            border-radius: 20px;
-            padding: 2.5rem 1.5rem;
-            box-shadow: var(--shadow-md);
-            margin: 2rem auto;
-            max-width: 1000px;
         }
         
         /* Pricing Section */
@@ -589,8 +387,6 @@
             justify-content: center;
             margin-bottom: 3rem;
             position: relative;
-            flex-wrap: wrap;
-            gap: 0.5rem;
         }
         
         .pricing-tabs:after {
@@ -604,21 +400,20 @@
         }
         
         .tab-btn {
-            padding: 1rem 1.5rem;
+            padding: 1rem 2rem;
             background: none;
             border: none;
-            font-size: 1rem;
+            font-size: 1.1rem;
             font-weight: 600;
             cursor: pointer;
             position: relative;
             color: var(--text-light);
             transition: all 0.3s ease;
-            border-radius: 8px;
+            margin: 0 0.5rem;
         }
         
         .tab-btn.active {
             color: var(--primary);
-            background: rgba(126, 118, 249, 0.05);
         }
         
         .tab-btn.active:after {
@@ -636,7 +431,7 @@
         .pricing-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
             max-width: 1000px;
             margin: 0 auto;
         }
@@ -644,48 +439,45 @@
         .pricing-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem 1.5rem;
-            box-shadow: var(--shadow-sm);
+            padding: 2rem;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.03);
-            display: flex;
-            flex-direction: column;
         }
         
         .pricing-card.popular {
-            border: 2px solid var(--primary);
+            border: 1px solid var(--primary);
             transform: scale(1.02);
             box-shadow: 0 10px 30px rgba(126, 118, 249, 0.1);
         }
         
         .pricing-card.popular:before {
-            content: 'Самый популярный';
+            content: 'Популярный';
             position: absolute;
             top: 15px;
-            right: -35px;
+            right: -30px;
             background: var(--primary);
             color: white;
-            padding: 0.3rem 2.5rem;
+            padding: 0.3rem 2rem;
             transform: rotate(45deg);
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             font-weight: 600;
         }
         
         .pricing-card h3 {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             margin-bottom: 1rem;
             color: var(--text);
             font-weight: 600;
         }
         
         .price {
-            font-size: 2.5rem;
+            font-size: 3rem;
             font-weight: 700;
             margin-bottom: 1.5rem;
             color: var(--primary);
-            line-height: 1;
         }
         
         .price span {
@@ -697,7 +489,6 @@
         .pricing-features {
             list-style: none;
             margin-bottom: 2rem;
-            flex-grow: 1;
         }
         
         .pricing-features li {
@@ -706,7 +497,6 @@
             padding-left: 1.5rem;
             color: var(--text-light);
             font-size: 0.95rem;
-            line-height: 1.4;
         }
         
         .pricing-features li:before {
@@ -732,88 +522,21 @@
             display: grid;
         }
         
-        /* Testimonials */
-        .testimonials-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .testimonial-card {
-            background: white;
-            border-radius: 20px;
-            padding: 2rem 1.5rem;
-            box-shadow: var(--shadow-sm);
-            position: relative;
-            border: 1px solid rgba(0,0,0,0.03);
-        }
-        
-        .testimonial-text {
-            font-style: italic;
-            color: var(--text-light);
-            margin-bottom: 1.5rem;
-            line-height: 1.6;
-            font-size: 0.95rem;
-        }
-        
-        .testimonial-author {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        
-        .author-avatar {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            background: var(--gradient);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            flex-shrink: 0;
-        }
-        
-        .author-info h4 {
-            color: var(--text);
-            margin-bottom: 0.2rem;
-            font-size: 1rem;
-        }
-        
-        .author-info p {
-            color: var(--text-light);
-            font-size: 0.9rem;
+        /* Web3 Section */
+        .web3-section {
+            background: #F8FAFC;
         }
         
         /* CTA Section */
         .cta-section {
             background: linear-gradient(135deg, var(--accent), #FF8E9E);
-            color: white;
-            text-align: center;
-            padding: 5rem 1.5rem;
-        }
-        
-        .cta-content {
-            max-width: 700px;
-            margin: 0 auto;
-        }
-        
-        .cta-buttons-large {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 2rem;
         }
         
         /* Footer */
         footer {
             background: var(--dark);
             color: white;
-            padding: 4rem 1.5rem 2rem;
+            padding: 4rem 2rem;
             text-align: center;
         }
         
@@ -856,7 +579,7 @@
             color: rgba(255,255,255,0.7);
             text-decoration: none;
             transition: color 0.3s ease;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
         
         .footer-column ul li a:hover {
@@ -904,134 +627,28 @@
             animation: float 6s ease-in-out infinite;
         }
         
-        /* Popup Overlay */
-        .popup-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-        }
-        
-        .popup-message {
-            background: white;
-            padding: 2rem;
-            border-radius: 15px;
-            text-align: center;
-            max-width: 500px;
-            margin: 1rem;
-        }
-        
-        /* Responsive Design */
-        @media (max-width: 1024px) {
-            .section {
-                padding: 4rem 1.5rem;
-            }
-            
-            .hero {
-                padding: 5rem 1.5rem 3rem;
-            }
-        }
-        
+        /* Responsive */
         @media (max-width: 768px) {
-            .header {
-                padding: 1rem;
+            h1 {
+                font-size: 2.5rem;
             }
             
-            .header.scrolled {
-                padding: 0.8rem 1rem;
-            }
-            
-            .nav-links {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100vh;
-                background: white;
-                flex-direction: column;
-                justify-content: center;
-                gap: 2rem;
-                z-index: 1000;
-            }
-            
-            .nav-links.active {
-                display: flex;
-            }
-            
-            .nav-links a {
+            .hero p {
                 font-size: 1.2rem;
-                padding: 0.5rem 0;
-            }
-            
-            .nav-buttons {
-                display: none;
-            }
-            
-            .mobile-menu-btn {
-                display: block;
-            }
-            
-            .hero {
-                padding: 4rem 1rem 2rem;
-                min-height: 90vh;
             }
             
             .cta-buttons {
                 flex-direction: column;
                 align-items: center;
-                width: 100%;
-            }
-            
-            .btn-large {
-                width: 100%;
-                max-width: 300px;
             }
             
             .section {
-                padding: 3rem 1rem;
+                padding: 5rem 1rem;
             }
             
             .section-title {
-                margin-bottom: 2rem;
-            }
-            
-            .features-grid {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-            
-            .feature-card {
-                padding: 1.5rem 1rem;
-            }
-            
-            .demo-visual {
-                height: 200px;
-                margin: 2rem 0;
-            }
-            
-            .conference-stats {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 1rem;
-            }
-            
-            .stat-number {
-                font-size: 1.8rem;
-            }
-            
-            .popup-features {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-            
-            .live-demo {
-                padding: 2rem 1rem;
+                font-size: 2rem;
+                margin-bottom: 3rem;
             }
             
             .pricing-tabs {
@@ -1040,8 +657,7 @@
             }
             
             .tab-btn {
-                width: 100%;
-                max-width: 300px;
+                margin: 0.3rem 0;
             }
             
             .tab-btn.active:after {
@@ -1050,109 +666,44 @@
                 width: 50%;
             }
             
-            .pricing-grid {
-                grid-template-columns: 1fr;
+            .demo-visual {
+                height: 300px;
+                margin: 2rem 0;
             }
             
-            .pricing-card.popular {
-                transform: none;
+            .conference-stats {
+                gap: 1.5rem;
             }
             
-            .popup-demo-buttons {
-                flex-direction: column;
-                align-items: center;
+            .stat-number {
+                font-size: 2rem;
             }
             
             .admin-float-btn {
-                bottom: 1rem;
-                right: 1rem;
-                width: 3rem;
-                height: 3rem;
-                font-size: 1.1rem;
-            }
-            
-            .footer-content {
-                grid-template-columns: 1fr;
-                text-align: center;
-            }
-            
-            .footer-column h3:after {
-                left: 50%;
-                transform: translateX(-50%);
-                width: 80px;
+                bottom: 20px;
+                right: 20px;
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
             }
         }
         
         @media (max-width: 480px) {
-            .hero {
-                padding: 3rem 1rem 2rem;
-            }
-            
-            h1 {
-                font-size: 2.2rem;
-            }
-            
-            .hero p {
-                font-size: 1.1rem;
+            .conference-demo {
+                padding: 2rem 1rem;
             }
             
             .conference-stats {
-                grid-template-columns: 1fr;
+                gap: 1rem;
             }
             
             .stat-item {
-                padding: 0.5rem;
-            }
-            
-            .web3-banner {
-                padding: 2rem 1rem;
-                margin: 1rem;
-            }
-            
-            .cta-buttons-large {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .btn-large {
-                width: 100%;
-                max-width: 280px;
+                min-width: 100px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header class="header" id="header">
-        <nav class="nav">
-            <a href="#" class="logo">
-                <i class="fas fa-robot"></i>
-                EduSonic AI
-            </a>
-            
-            <div class="nav-links" id="navLinks">
-                <a href="#features">Возможности</a>
-                <a href="#demo">Демо</a>
-                <a href="#pricing">Тарифы</a>
-                <a href="#testimonials">Отзывы</a>
-                <a href="#conference">Попробовать</a>
-            </div>
-            
-            <div class="nav-buttons">
-                <a href="/investing.html" class="btn-web3">
-                    <i class="fas fa-coins"></i>
-                    Школам/Инвесторам
-                </a>
-                <a href="/teacher" class="btn btn-secondary">Личный кабинет</a>
-                <a href="#conference" class="btn btn-primary">Начать обучение</a>
-            </div>
-            
-            <button class="mobile-menu-btn" id="mobileMenuBtn">
-                <i class="fas fa-bars"></i>
-            </button>
-        </nav>
-    </header>
-
     <!-- Floating Admin Button -->
     <a href="/teacher" class="admin-float-btn">
         <i class="fas fa-user-cog"></i>
@@ -1164,358 +715,243 @@
         <div class="particles" id="particles-js"></div>
         <div class="hero-content">
             <h1>EduSonic AI</h1>
-            <p>Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
+            <p>Интеллектуальный голосовой репетитор нового поколения</p>
             <div class="cta-buttons">
-                <a href="#conference" class="btn btn-conference btn-large">
-                    <i class="fas fa-robot"></i> Попробовать бесплатно
+                <a href="#conference-demo" class="btn btn-conference">
+                    <i class="fas fa-robot"></i> Попробовать AI-учителя
                 </a>
-                <a href="#features" class="btn btn-secondary btn-large">Узнать больше →</a>
+                <a href="#pricing" class="btn btn-secondary">Для учебных заведений →</a>
             </div>
         </div>
     </section>
 
-    <!-- Web3 Banner -->
-    <section class="section">
-        <div class="web3-banner">
-            <div class="web3-content">
-                <h3>🚀 Инновации в образовании</h3>
-                <p>Узнайте о возможностях для учебных заведений, инвесторов и Web3-интеграции</p>
-                <a href="/investing.html" class="btn btn-primary" style="background: white; color: var(--web3);">
-                    <i class="fas fa-chart-line"></i> Для школ и инвесторов
-                </a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Features Section -->
+    <!-- Why EduSonic Section -->
     <section class="section" id="features">
-        <h2 class="section-title">Почему ученики выбирают EduSonic AI?</h2>
+        <h2 class="section-title">Почему EduSonic AI?</h2>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon">
-                    <i class="fas fa-comments"></i>
+                    <i class="fas fa-chart-line"></i>
                 </div>
-                <h3>Живое общение</h3>
-                <p>Общайтесь с AI-учителем естественным голосом, как с настоящим репетитором. Задавайте вопросы, получайте развернутые ответы и персонализированные объяснения.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-brain"></i>
-                </div>
-                <h3>Адаптивное обучение</h3>
-                <p>Система анализирует ваш прогресс и подстраивает сложность материала под ваш уровень. Никогда не будет слишком сложно или слишком скучно!</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-clock"></i>
-                </div>
-                <h3>24/7 доступность</h3>
-                <p>Занимайтесь в любое время суток. Ваш персональный репетитор всегда готов помочь - утром перед школой, вечером после занятий или даже ночью.</p>
+                <h3>Для инвесторов</h3>
+                <p>Доступ к рынку EdTech $400+ млрд с уникальной технологией голосового обучения и Web3-интеграцией.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
                     <i class="fas fa-chalkboard-teacher"></i>
                 </div>
-                <h3>Все школьные предметы</h3>
-                <p>Математика, физика, химия, история, литература, английский язык и многое другое. Один AI-репетитор вместо десятка специалистов.</p>
+                <h3>Для преподавателей</h3>
+                <p>Автоматизация рутинных задач, анализ успеваемости и эмоционального состояния учеников в реальном времени.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
-                    <i class="fas fa-gamepad"></i>
+                    <i class="fas fa-school"></i>
                 </div>
-                <h3>Интерактивные уроки</h3>
-                <p>Визуализации, интерактивные доски, игры и квизы делают обучение увлекательным. Учиться с EduSonic AI - это весело!</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-chart-line"></i>
-                </div>
-                <h3>Отслеживание прогресса</h3>
-                <p>Подробная статистика ваших успехов, рекомендации по улучшению и мотивационная система достижений. Видите свой рост каждый день!</p>
+                <h3>Для учебных заведений</h3>
+                <p>Снижение затрат на обучение до 60% с сохранением персонализированного подхода к каждому студенту.</p>
             </div>
         </div>
     </section>
 
     <!-- Demo Section -->
     <section class="demo-section" id="demo">
-        <h2 class="section-title" style="color: white;">Учиться стало проще и интереснее</h2>
+        <h2 class="section-title" style="color: white;">Как это работает?</h2>
         <div class="demo-container">
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Представьте: вместо скучного чтения учебника - живой диалог с умным помощником, который всегда терпеливо объяснит сложную тему и найдет именно те слова, которые вы поймете.
+                Опыт обучения, который адаптируется к каждому ученику через естественное голосовое взаимодействие и анализ эмоций.
             </p>
             <div class="demo-visual">
-                <div style="text-align: center;">
-                    <i class="fas fa-robot floating" style="font-size: 4rem; opacity: 0.8; margin-bottom: 1rem;"></i>
-                    <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор. Давай вместе разберем эту интересную тему!"</p>
-                </div>
+                <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8;"></i>
             </div>
-            <a href="#conference" class="btn btn-primary" style="background: white; color: var(--primary);">Попробовать прямо сейчас</a>
+            <a href="#conference-demo" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</a>
         </div>
     </section>
 
     <!-- Conference Demo Section -->
-    <section class="section conference-section" id="conference">
-        <h2 class="section-title">Попробуйте AI-репетитора прямо сейчас</h2>
+    <section class="section conference-section" id="conference-demo">
+        <h2 class="section-title">Попробуйте AI-учителя прямо сейчас</h2>
         <div class="demo-container">
             <p style="max-width: 800px; margin-bottom: 2rem; font-size: 1.2rem; text-align: center;">
-                Не верите, что это работает? Убедитесь сами! Пообщайтесь с AI-репетитором в отдельном окне. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
+                Интерактивная демо-версия с голосовым AI-учителем. Общайтесь, задавайте вопросы и получайте персонализированные объяснения в реальном времени.
             </p>
             
             <div class="conference-demo">
                 <div class="conference-stats">
                     <div class="stat-item">
                         <span class="stat-number">15,000+</span>
-                        <div class="stat-label">Учеников уже занимаются</div>
+                        <div class="stat-label">Уроков проведено</div>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-number">94%</span>
-                        <div class="stat-label">Улучшили оценки</div>
+                        <span class="stat-number">95%</span>
+                        <div class="stat-label">Удовлетворенность</div>
                     </div>
                     <div class="stat-item">
                         <span class="stat-number">24/7</span>
-                        <div class="stat-label">Всегда на связи</div>
+                        <div class="stat-label">Доступность</div>
                     </div>
                 </div>
                 
-                <div class="popup-features">
-                    <div class="popup-feature">
-                        <i class="fas fa-window-restore"></i>
-                        <h4>Отдельное окно</h4>
-                        <p>Полнофункциональная конференция открывается в удобном popup-окне</p>
-                    </div>
-                    <div class="popup-feature">
+                <div class="conference-features">
+                    <div class="conference-feature">
                         <i class="fas fa-microphone"></i>
                         <h4>Голосовое общение</h4>
-                        <p>Говорите с AI-учителем естественным голосом</p>
+                        <p>Общайтесь с AI-учителем естественным голосом</p>
                     </div>
-                    <div class="popup-feature">
-                        <i class="fas fa-video"></i>
-                        <h4>Анимированный аватар</h4>
-                        <p>Визуализация учителя с живой мимикой и анимацией</p>
+                    <div class="conference-feature">
+                        <i class="fas fa-brain"></i>
+                        <h4>Искусственный интеллект</h4>
+                        <p>Персонализированные объяснения и ответы</p>
                     </div>
-                    <div class="popup-feature">
-                        <i class="fas fa-rocket"></i>
-                        <h4>Мгновенный запуск</h4>
-                        <p>Начните обучение в один клик без регистрации</p>
+                    <div class="conference-feature">
+                        <i class="fas fa-chalkboard"></i>
+                        <h4>Интерактивная доска</h4>
+                        <p>Визуализация и совместная работа</p>
+                    </div>
+                    <div class="conference-feature">
+                        <i class="fas fa-graduation-cap"></i>
+                        <h4>Все предметы</h4>
+                        <p>Математика, физика, история и многое другое</p>
                     </div>
                 </div>
                 
-                <!-- Popup Demo Section - БЕЗ IFRAME -->
-                <div class="live-demo">
-                    <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Запустите демо-версию</h3>
-                    <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
-                        Нажмите кнопку ниже, чтобы открыть полнофункциональную версию AI-учителя в отдельном окне. Можно использовать микрофон или текстовый чат.
-                    </p>
-                    
-                    <!-- Основные кнопки запуска -->
-                    <div class="popup-demo-buttons">
-                        <button onclick="openConferencePopup('demo')" class="btn btn-conference btn-large">
-                            <i class="fas fa-robot"></i> Запустить AI-учителя
-                        </button>
-                        <button onclick="openConferencePopup('math')" class="btn btn-primary btn-large">
-                            <i class="fas fa-calculator"></i> Урок математики
-                        </button>
-                        <button onclick="openConferencePopup('english')" class="btn btn-primary btn-large">
-                            <i class="fas fa-language"></i> Урок английского
-                        </button>
-                    </div>
-
-                    <!-- Дополнительные предметы -->
-                    <div style="text-align: center; margin: 2rem 0;">
-                        <p style="color: var(--text-light); margin-bottom: 1rem;">Или выберите другой предмет:</p>
-                        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                            <button onclick="openConferencePopup('physics')" class="btn btn-secondary">
-                                <i class="fas fa-atom"></i> Физика
-                            </button>
-                            <button onclick="openConferencePopup('chemistry')" class="btn btn-secondary">
-                                <i class="fas fa-flask"></i> Химия
-                            </button>
-                            <button onclick="openConferencePopup('history')" class="btn btn-secondary">
-                                <i class="fas fa-monument"></i> История
-                            </button>
-                            <button onclick="openConferencePopup('biology')" class="btn btn-secondary">
-                                <i class="fas fa-dna"></i> Биология
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Информация о popup -->
-                    <div style="background: rgba(126, 118, 249, 0.05); padding: 1.5rem; border-radius: 12px; margin-top: 2rem; text-align: center;">
-                        <h4 style="color: var(--primary); margin-bottom: 0.5rem;">
-                            <i class="fas fa-info-circle"></i> Как это работает?
-                        </h4>
-                        <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 0;">
-                            После нажатия кнопки откроется отдельное окно с виртуальным классом. Разрешите доступ к микрофону для голосового общения с AI-учителем.
-                        </p>
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 2rem;">
-                        <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
-                            <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону. Демо работает без регистрации.
-                        </p>
-                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                            <a href="/conference?room=full" class="btn btn-secondary" target="_blank">
-                                <i class="fas fa-external-link-alt"></i> Полная версия
-                            </a>
-                            <a href="/teacher" class="btn btn-secondary">
-                                <i class="fas fa-user-cog"></i> Личный кабинет
-                            </a>
-                        </div>
-                    </div>
+                <div style="margin: 2rem 0;">
+                    <button id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem;">
+                        <i class="fas fa-play"></i> Запустить AI-учителя
+                    </button>
                 </div>
+                
+                <p style="color: var(--text-light); font-size: 0.9rem; margin-top: 1rem;">
+                    <i class="fas fa-info-circle"></i> Для работы потребуется разрешить доступ к микрофону
+                </p>
             </div>
         </div>
     </section>
 
     <!-- Pricing Section -->
     <section class="section" id="pricing">
-        <h2 class="section-title">Выберите подходящий формат занятий</h2>
+        <h2 class="section-title">Наши тарифы</h2>
         <div class="pricing-tabs">
-            <button class="tab-btn active" data-tab="individual">Для учеников</button>
-            <button class="tab-btn" data-tab="family">Для семьи</button>
+            <button class="tab-btn active" data-tab="individual">Для частных лиц</button>
+            <button class="tab-btn" data-tab="corporate">Для организаций</button>
         </div>
         
         <!-- Individual Pricing -->
         <div id="individual-pricing" class="pricing-grid pricing-container active">
             <div class="pricing-card">
-                <h3>Пробный</h3>
-                <div class="price">Бесплатно</div>
+                <h3>Стартовый</h3>
+                <div class="price">$0 <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>3 бесплатных урока</li>
-                    <li>Доступ ко всем предметам</li>
-                    <li>Базовые функции AI-репетитора</li>
-                    <li>Ограниченная практика</li>
-                    <li>Поддержка по email</li>
+                    <li>1 предмет на выбор</li>
+                    <li>5 уроков в месяц</li>
+                    <li>Базовые функции ИИ</li>
+                    <li>Ограниченная поддержка</li>
                 </ul>
-                <button onclick="openConferencePopup('free')" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); margin-top: auto;">
-                    Начать бесплатно
-                </button>
+                <a href="/conference?room=free" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Начать бесплатно</a>
             </div>
             <div class="pricing-card popular">
-                <h3>Индивидуальный</h3>
-                <div class="price">790 ₽ <span>/месяц</span></div>
+                <h3>Премиум</h3>
+                <div class="price">$19 <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>Неограниченные занятия</li>
-                    <li>Все школьные предметы</li>
-                    <li>Персональная программа</li>
-                    <li>Расширенная практика</li>
-                    <li>Подробная статистика</li>
+                    <li>Все доступные предметы</li>
+                    <li>Неограниченные уроки</li>
+                    <li>NFT-сертификаты</li>
                     <li>Приоритетная поддержка</li>
+                    <li>Доступ к бета-функциям</li>
                 </ul>
-                <button onclick="openConferencePopup('premium')" class="btn btn-primary" style="width: 100%; margin-top: auto;">
-                    Выбрать тариф
-                </button>
+                <a href="/conference?room=premium" class="btn btn-primary" style="width: 100%;" target="_blank">Выбрать тариф</a>
             </div>
             <div class="pricing-card">
-                <h3>С углубленным изучением</h3>
-                <div class="price">1290 ₽ <span>/месяц</span></div>
+                <h3>Семейный</h3>
+                <div class="price">$35 <span>/месяц</span></div>
                 <ul class="pricing-features">
-                    <li>Всё из пакета "Индивидуальный"</li>
-                    <li>Подготовка к ОГЭ/ЕГЭ</li>
-                    <li>Олимпиадные задачи</li>
-                    <li>Углубленные материалы</li>
-                    <li>Персональный куратор</li>
+                    <li>До 5 пользователей</li>
+                    <li>Совместная статистика</li>
+                    <li>NFT-портфолио</li>
+                    <li>Персональный консультант</li>
                 </ul>
-                <button onclick="openConferencePopup('advanced')" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); margin-top: auto;">
-                    Для отличников
-                </button>
+                <a href="/conference?room=family" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для семьи</a>
             </div>
         </div>
         
-        <!-- Family Pricing -->
-        <div id="family-pricing" class="pricing-grid pricing-container">
+        <!-- Corporate Pricing -->
+        <div id="corporate-pricing" class="pricing-grid pricing-container">
             <div class="pricing-card">
-                <h3>Семейный</h3>
-                <div class="price">1490 ₽ <span>/месяц</span></div>
+                <h3>Классный</h3>
+                <div class="price">$600 <span>/год</span></div>
                 <ul class="pricing-features">
-                    <li>До 3 детей в семье</li>
-                    <li>Отдельные профили для каждого</li>
-                    <li>Совместная статистика для родителей</li>
-                    <li>Семейные образовательные игры</li>
-                    <li>Родительский контроль</li>
+                    <li>До 30 учеников</li>
+                    <li>Автоматическая проверка</li>
+                    <li>Аналитика успеваемости</li>
+                    <li>Поддержка 5 языков</li>
+                    <li>Отчеты для администрации</li>
                 </ul>
-                <button onclick="openConferencePopup('family')" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); margin-top: auto;">
-                    Для семьи
-                </button>
+                <a href="/conference?room=classroom" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Запросить демо</a>
             </div>
             <div class="pricing-card popular">
-                <h3>Семейный PRO</h3>
-                <div class="price">2190 ₽ <span>/месяц</span></div>
+                <h3>Школьный</h3>
+                <div class="price">$2500 <span>/год</span></div>
                 <ul class="pricing-features">
-                    <li>До 5 детей в семье</li>
-                    <li>Все преимущества семейного тарифа</li>
-                    <li>Подготовка к олимпиадам</li>
-                    <li>Профориентационное тестирование</li>
-                    <li>Персональный семейный куратор</li>
-                    <li>Скидка 15% на следующий месяц</li>
+                    <li>До 200 учеников</li>
+                    <li>Интеграция с LMS</li>
+                    <li>Глубокая аналитика</li>
+                    <li>API доступ</li>
+                    <li>White-label интерфейс</li>
                 </ul>
-                <button onclick="openConferencePopup('family-pro')" class="btn btn-primary" style="width: 100%; margin-top: auto;">
-                    Лучший выбор
-                </button>
+                <a href="/conference?room=school" class="btn btn-primary" style="width: 100%;" target="_blank">Запросить КП</a>
+            </div>
+            <div class="pricing-card">
+                <h3>Корпоративный</h3>
+                <div class="price">Индивидуально</div>
+                <ul class="pricing-features">
+                    <li>Неограниченные лицензии</li>
+                    <li>Кастомная интеграция</li>
+                    <li>Собственный брендинг</li>
+                    <li>Персональный менеджер</li>
+                    <li>Обучение преподавателей</li>
+                </ul>
+                <a href="/conference?room=enterprise" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Обсудить проект</a>
             </div>
         </div>
     </section>
 
-    <!-- Testimonials Section -->
-    <section class="section" id="testimonials" style="background: #F8FAFC;">
-        <h2 class="section-title">Что говорят наши ученики и родители</h2>
-        <div class="testimonials-grid">
-            <div class="testimonial-card">
-                <div class="testimonial-text">
-                    "Сначала не верил, что компьютер может нормально объяснять математику. Но после первого же занятия понял - это работает! Объясняет даже лучше, чем некоторые учителя в школе."
+    <!-- Web3 Section -->
+    <section class="section web3-section">
+        <h2 class="section-title">Learn-to-Earn с Web3</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-coins"></i>
                 </div>
-                <div class="testimonial-author">
-                    <div class="author-avatar">АС</div>
-                    <div class="author-info">
-                        <h4>Алексей Смирнов</h4>
-                        <p>Ученик 9 класса, Москва</p>
-                    </div>
-                </div>
+                <h3>Токены $EDU</h3>
+                <p>Студенты зарабатывают криптотокены за учебные достижения, которые можно обменять на премиум-контент или реальные деньги.</p>
             </div>
-            <div class="testimonial-card">
-                <div class="testimonial-text">
-                    "Моя дочь всегда стеснялась задавать вопросы учителю. С EduSonic она раскрепостилась - задает любые вопросы без стеснения. И оценки по физике улучшились с троек на твердые четверки!"
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-certificate"></i>
                 </div>
-                <div class="testimonial-author">
-                    <div class="author-avatar">МК</div>
-                    <div class="author-info">
-                        <h4>Марина Ковалева</h4>
-                        <p>Мама ученицы 8 класса</p>
-                    </div>
-                </div>
+                <h3>NFT-дипломы</h3>
+                <p>Все учебные достижения сохраняются как уникальные NFT-сертификаты в блокчейне с защитой от подделки.</p>
             </div>
-            <div class="testimonial-card">
-                <div class="testimonial-text">
-                    "Занимаюсь английским с AI-репетитором каждый вечер. Очень нравится, что можно практиковать произношение и сразу получать обратную связь. За 2 месяца подтянул язык с начального до уверенного intermediate."
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-vote-yea"></i>
                 </div>
-                <div class="testimonial-author">
-                    <div class="author-avatar">ДИ</div>
-                    <div class="author-info">
-                        <h4>Дмитрий Иванов</h4>
-                        <p>Студент, Санкт-Петербург</p>
-                    </div>
-                </div>
+                <h3>DAO для образования</h3>
+                <p>Преподаватели и студенты участвуют в управлении платформой через децентрализованную автономную организацию.</p>
             </div>
         </div>
     </section>
 
     <!-- CTA Section -->
     <section class="demo-section cta-section">
-        <div class="cta-content">
-            <h2 class="section-title" style="color: white;">Готовы начать учиться с удовольствием?</h2>
+        <div class="demo-container">
+            <h2 class="section-title" style="color: white;">Готовы к образованию будущего?</h2>
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
+                Первые 50 учебных заведений получат 3 месяца бесплатного тестирования всех возможностей платформы!
             </p>
-            <div class="cta-buttons-large">
-                <button onclick="openConferencePopup('demo')" class="btn btn-primary btn-large" style="background: white; color: var(--accent);">
-                    <i class="fas fa-play"></i> Начать бесплатно
-                </button>
-                <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
-                    <i class="fas fa-user-cog"></i> Личный кабинет
-                </a>
-                <a href="/investing.html" class="btn-web3 btn-large" style="padding: 1.2rem 2.5rem;">
-                    <i class="fas fa-coins"></i> Для школ и инвесторов
-                </a>
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
+                <a href="/conference?room=school-demo" class="btn btn-primary" style="background: white; color: var(--accent);" target="_blank">Попробовать бесплатно</a>
+                <a href="#contact" class="btn btn-secondary" style="border-color: white; color: white;">Инвестировать в проект</a>
             </div>
         </div>
     </section>
@@ -1525,271 +961,155 @@
         <div class="footer-content">
             <div class="footer-column">
                 <h3>EduSonic AI</h3>
-                <p>Инновационная платформа для голосового обучения с искусственным интеллектом. Сделаем образование доступным и увлекательным для каждого ребенка!</p>
+                <p>Инновационная платформа для голосового обучения с интеграцией ИИ и блокчейн-технологий.</p>
                 <div class="social-links">
-                    <a href="https://t.me/edusonic_ai" target="_blank" aria-label="Telegram"><i class="fab fa-telegram"></i></a>
-                    <a href="https://vk.com/edusonic_ai" target="_blank" aria-label="VKontakte"><i class="fab fa-vk"></i></a>
-                    <a href="https://youtube.com/edusonic_ai" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+                    <a href="https://t.me/edusonic_ai" target="_blank"><i class="fab fa-telegram"></i></a>
+                    <a href="https://twitter.com/edusonic_ai" target="_blank"><i class="fab fa-twitter"></i></a>
+                    <a href="https://linkedin.com/company/edusonic-ai" target="_blank"><i class="fab fa-linkedin"></i></a>
+                    <a href="https://github.com/edusonic-ai" target="_blank"><i class="fab fa-github"></i></a>
                 </div>
             </div>
             <div class="footer-column">
-                <h3>Обучение</h3>
+                <h3>Продукт</h3>
                 <ul>
-                    <li><a href="#features">Все предметы</a></li>
+                    <li><a href="#features">Возможности</a></li>
                     <li><a href="#pricing">Тарифы</a></li>
-                    <li><a href="#conference">Демо-версия</a></li>
-                    <li><a href="#">Подготовка к ЕГЭ</a></li>
-                    <li><a href="#">Олимпиадные задачи</a></li>
-                </ul>
-            </div>
-            <div class="footer-column">
-                <h3>Поддержка</h3>
-                <ul>
-                    <li><a href="#">Помощь ученикам</a></li>
-                    <li><a href="#">Родителям</a></li>
-                    <li><a href="#">Частые вопросы</a></li>
-                    <li><a href="#">Техподдержка</a></li>
-                    <li><a href="#">Связаться с нами</a></li>
+                    <li><a href="#conference-demo">Демо</a></li>
+                    <li><a href="https://blog.edusonic.ai" target="_blank">Блог</a></li>
                 </ul>
             </div>
             <div class="footer-column">
                 <h3>Компания</h3>
                 <ul>
-                    <li><a href="/investing.html">Для инвесторов</a></li>
-                    <li><a href="/investing.html">Для школ</a></li>
-                    <li><a href="/investing.html">Web3 технологии</a></li>
-                    <li><a href="#">Блог</a></li>
-                    <li><a href="#">Контакты</a></li>
+                    <li><a href="/about">О нас</a></li>
+                    <li><a href="/jobs">Вакансии</a></li>
+                    <li><a href="/partners">Партнёры</a></li>
+                    <li><a href="/contact">Контакты</a></li>
+                </ul>
+            </div>
+            <div class="footer-column">
+                <h3>Ресурсы</h3>
+                <ul>
+                    <li><a href="/docs">Документация</a></li>
+                    <li><a href="/api">API для разработчиков</a></li>
+                    <li><a href="/faq">Частые вопросы</a></li>
+                    <li><a href="/support">Техподдержка</a></li>
                 </ul>
             </div>
         </div>
         <div class="copyright">
-            © 2024 EduSonic AI. С любовью к образованию. 
-            <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | 
-            <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
+            © 2023 EduSonic AI. Все права защищены. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
         </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
-        // Popup Conference Function
-        function openConferencePopup(roomType) {
-            const roomMap = {
-                'demo': 'demo',
-                'math': 'math-lesson',
-                'english': 'english-lesson', 
-                'physics': 'physics-lesson',
-                'chemistry': 'chemistry-lesson',
-                'history': 'history-lesson',
-                'biology': 'biology-lesson',
-                'free': 'free-trial',
-                'premium': 'premium',
-                'advanced': 'advanced',
-                'family': 'family',
-                'family-pro': 'family-pro'
-            };
-            
-            const roomId = roomMap[roomType] || 'demo';
-            const width = 1200;
-            const height = 800;
-            const left = (screen.width - width) / 2;
-            const top = (screen.height - height) / 2;
-            
-            // Параметры для popup окна
-            const popupFeatures = [
-                `width=${width}`,
-                `height=${height}`,
-                `left=${left}`,
-                `top=${top}`,
-                'resizable=yes',
-                'scrollbars=yes',
-                'location=no',
-                'toolbar=no',
-                'menubar=no',
-                'status=no'
-            ].join(',');
-            
-            const popupUrl = `/conference?room=${roomId}&source=landing&type=${roomType}`;
-            
-            console.log(`🪟 Открытие popup: ${roomType} -> ${roomId}`);
-            
-            const popup = window.open(popupUrl, 'EduSonicAI_Conference', popupFeatures);
-            
-            if (popup) {
-                // Фокусируем popup
-                popup.focus();
-                
-                // Проверяем, не заблокирован ли popup
-                setTimeout(() => {
-                    if (popup.closed || typeof popup.closed == 'undefined') {
-                        // Popup заблокирован - показываем альтернативу
-                        showPopupBlockedMessage(roomId);
+        // Инициализация частиц с более заметными параметрами
+        particlesJS("particles-js", {
+            "particles": {
+                "number": {
+                    "value": 80,
+                    "density": {
+                        "enable": true,
+                        "value_area": 800
                     }
-                }, 500);
-                
-                // Трекинг открытия
-                trackPopupOpening(roomType);
-                
-            } else {
-                // Popup заблокирован браузером
-                showPopupBlockedMessage(roomId);
-            }
-            
-            return popup;
-        }
-
-        function showPopupBlockedMessage(roomId) {
-            // Создаем красивое сообщение о блокировке popup
-            const message = `
-                <div class="popup-overlay" id="popup-overlay">
-                    <div class="popup-message">
-                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
-                            <i class="fas fa-exclamation-triangle"></i> Popup заблокирован
-                        </h3>
-                        <p style="margin-bottom: 1.5rem; color: var(--text-light);">
-                            Ваш браузер заблокировал всплывающее окно. Пожалуйста, разрешите popup для этого сайта или используйте альтернативный вариант.
-                        </p>
-                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                            <a href="/conference?room=${roomId}" class="btn btn-primary" target="_blank" 
-                               onclick="document.getElementById('popup-overlay')?.remove()">
-                                <i class="fas fa-external-link-alt"></i> Открыть в новой вкладке
-                            </a>
-                            <button onclick="document.getElementById('popup-overlay').remove()" class="btn btn-secondary">
-                                Закрыть
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            const overlay = document.createElement('div');
-            overlay.innerHTML = message;
-            document.body.appendChild(overlay);
-        }
-
-        function trackPopupOpening(roomType) {
-            // Отправляем аналитику об открытии popup
-            fetch('/api/track/popup_opened', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    room_type: roomType,
-                    timestamp: new Date().toISOString(),
-                    user_agent: navigator.userAgent
-                })
-            }).catch(err => console.log('Analytics error:', err));
-        }
-
-        // Инициализация частиц
-        document.addEventListener('DOMContentLoaded', function() {
-            if (typeof particlesJS !== 'undefined') {
-                particlesJS("particles-js", {
-                    "particles": {
-                        "number": {
-                            "value": 60,
-                            "density": {
-                                "enable": true,
-                                "value_area": 800
-                            }
-                        },
-                        "color": {
-                            "value": "#ffffff"
-                        },
-                        "shape": {
-                            "type": "circle",
-                            "stroke": {
-                                "width": 0,
-                                "color": "#000000"
-                            }
-                        },
-                        "opacity": {
-                            "value": 0.7,
-                            "random": true,
-                            "anim": {
-                                "enable": false,
-                                "speed": 1,
-                                "opacity_min": 0.3,
-                                "sync": false
-                            }
-                        },
-                        "size": {
-                            "value": 3,
-                            "random": true,
-                            "anim": {
-                                "enable": false,
-                                "speed": 40,
-                                "size_min": 1,
-                                "sync": false
-                            }
-                        },
+                "color": {
+                    "value": "#ffffff"
+                },
+                "shape": {
+                    "type": "circle",
+                    "stroke": {
+                        "width": 0,
+                        "color": "#000000"
+                    }
+                },
+                "opacity": {
+                    "value": 0.7,
+                    "random": true,
+                    "anim": {
+                        "enable": false,
+                        "speed": 1,
+                        "opacity_min": 0.3,
+                        "sync": false
+                    }
+                },
+                "size": {
+                    "value": 3,
+                    "random": true,
+                    "anim": {
+                        "enable": false,
+                        "speed": 40,
+                        "size_min": 1,
+                        "sync": false
+                    }
+                },
+                "line_linked": {
+                    "enable": true,
+                    "distance": 150,
+                    "color": "#ffffff",
+                    "opacity": 0.4,
+                    "width": 1
+                },
+                "move": {
+                    "enable": true,
+                    "speed": 2,
+                    "direction": "none",
+                    "random": false,
+                    "straight": false,
+                    "out_mode": "out",
+                    "bounce": false,
+                    "attract": {
+                        "enable": false,
+                        "rotateX": 600,
+                        "rotateY": 1200
+                    }
+                }
+            },
+            "interactivity": {
+                "detect_on": "canvas",
+                "events": {
+                    "onhover": {
+                        "enable": true,
+                        "mode": "grab"
+                    },
+                    "onclick": {
+                        "enable": true,
+                        "mode": "push"
+                    },
+                    "resize": true
+                },
+                "modes": {
+                    "grab": {
+                        "distance": 140,
                         "line_linked": {
-                            "enable": true,
-                            "distance": 150,
-                            "color": "#ffffff",
-                            "opacity": 0.4,
-                            "width": 1
-                        },
-                        "move": {
-                            "enable": true,
-                            "speed": 2,
-                            "direction": "none",
-                            "random": false,
-                            "straight": false,
-                            "out_mode": "out",
-                            "bounce": false,
-                            "attract": {
-                                "enable": false,
-                                "rotateX": 600,
-                                "rotateY": 1200
-                            }
+                            "opacity": 0.8
                         }
                     },
-                    "interactivity": {
-                        "detect_on": "canvas",
-                        "events": {
-                            "onhover": {
-                                "enable": true,
-                                "mode": "grab"
-                            },
-                            "onclick": {
-                                "enable": true,
-                                "mode": "push"
-                            },
-                            "resize": true
-                        },
-                        "modes": {
-                            "grab": {
-                                "distance": 140,
-                                "line_linked": {
-                                    "opacity": 0.8
-                                }
-                            },
-                            "bubble": {
-                                "distance": 400,
-                                "size": 40,
-                                "duration": 2,
-                                "opacity": 8,
-                                "speed": 3
-                            },
-                            "repulse": {
-                                "distance": 200,
-                                "duration": 0.4
-                            },
-                            "push": {
-                                "particles_nb": 4
-                            },
-                            "remove": {
-                                "particles_nb": 2
-                            }
-                        }
+                    "bubble": {
+                        "distance": 400,
+                        "size": 40,
+                        "duration": 2,
+                        "opacity": 8,
+                        "speed": 3
                     },
-                    "retina_detect": true
-                });
-            }
+                    "repulse": {
+                        "distance": 200,
+                        "duration": 0.4
+                    },
+                    "push": {
+                        "particles_nb": 4
+                    },
+                    "remove": {
+                        "particles_nb": 2
+                    }
+                }
+            },
+            "retina_detect": true
+        });
 
-            // Управление вкладками тарифов
+        // Управление вкладками тарифов
+        document.addEventListener('DOMContentLoaded', function() {
             const tabButtons = document.querySelectorAll('.tab-btn');
             
             tabButtons.forEach(btn => {
@@ -1813,59 +1133,50 @@
                 });
             });
             
-            // Мобильное меню
-            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            const navLinks = document.getElementById('navLinks');
-            
-            if (mobileMenuBtn && navLinks) {
-                mobileMenuBtn.addEventListener('click', function() {
-                    navLinks.classList.toggle('active');
-                    mobileMenuBtn.innerHTML = navLinks.classList.contains('active') ? 
-                        '<i class="fas fa-times"></i>' : 
-                        '<i class="fas fa-bars"></i>';
+            // Запуск конференции
+            const startConferenceBtn = document.getElementById('start-conference-btn');
+            if (startConferenceBtn) {
+                startConferenceBtn.addEventListener('click', function() {
+                    // Открываем конференцию в новом окне
+                    const conferenceWindow = window.open('/conference?room=demo', 'EduSonicAI_Conference', 
+                        'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
+                    
+                    if (conferenceWindow) {
+                        // Фокусируем новое окно
+                        conferenceWindow.focus();
+                        
+                        // Показываем сообщение об успехе
+                        const originalText = startConferenceBtn.innerHTML;
+                        startConferenceBtn.innerHTML = '<i class="fas fa-check"></i> Конференция запускается...';
+                        startConferenceBtn.style.background = 'var(--primary)';
+                        
+                        setTimeout(() => {
+                            startConferenceBtn.innerHTML = originalText;
+                            startConferenceBtn.style.background = '';
+                        }, 2000);
+                    } else {
+                        // Если всплывающие окна заблокированы, открываем в новой вкладке
+                        window.open('/conference?room=demo', '_blank');
+                    }
                 });
             }
 
             // Плавная прокрутка для якорных ссылок
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
-                    if (this.getAttribute('href') === '#') return;
-                    
                     e.preventDefault();
                     const target = document.querySelector(this.getAttribute('href'));
                     if (target) {
-                        const headerHeight = document.querySelector('.header').offsetHeight;
-                        const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - headerHeight;
-                        
-                        window.scrollTo({
-                            top: targetPosition,
+                        target.scrollIntoView({
                             behavior: 'smooth'
                         });
-                        
-                        // Закрываем мобильное меню после клика
-                        if (window.innerWidth <= 768 && navLinks) {
-                            navLinks.classList.remove('active');
-                            mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
-                        }
                     }
                 });
             });
 
-            // Scroll header effect
-            const header = document.getElementById('header');
-            if (header) {
-                window.addEventListener('scroll', function() {
-                    if (window.scrollY > 100) {
-                        header.classList.add('scrolled');
-                    } else {
-                        header.classList.remove('scrolled');
-                    }
-                });
-            }
-
             // Анимация появления элементов при скролле
             const animateOnScroll = function() {
-                const elements = document.querySelectorAll('.feature-card, .pricing-card, .testimonial-card, .section-title');
+                const elements = document.querySelectorAll('.feature-card, .pricing-card, .section-title');
                 
                 elements.forEach(element => {
                     const elementPosition = element.getBoundingClientRect().top;
@@ -1880,7 +1191,7 @@
 
             // Инициализация анимации
             window.addEventListener('load', function() {
-                document.querySelectorAll('.feature-card, .pricing-card, .testimonial-card, .section-title').forEach(el => {
+                document.querySelectorAll('.feature-card, .pricing-card, .section-title').forEach(el => {
                     el.style.opacity = '0';
                     el.style.transform = 'translateY(20px)';
                     el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
@@ -1890,28 +1201,6 @@
             });
             
             window.addEventListener('scroll', animateOnScroll);
-
-            // Закрытие мобильного меню при клике вне его
-            document.addEventListener('click', function(e) {
-                if (window.innerWidth <= 768 && navLinks && mobileMenuBtn) {
-                    if (!navLinks.contains(e.target) && !mobileMenuBtn.contains(e.target) && navLinks.classList.contains('active')) {
-                        navLinks.classList.remove('active');
-                        mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
-                    }
-                }
-            });
-
-            // Добавляем визуальную обратную связь для кнопок popup
-            const popupButtons = document.querySelectorAll('button[onclick*="openConferencePopup"]');
-            popupButtons.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    // Добавляем анимацию нажатия
-                    this.style.transform = 'scale(0.95)';
-                    setTimeout(() => {
-                        this.style.transform = 'scale(1)';
-                    }, 150);
-                });
-            });
         });
     </script>
 </body>
