@@ -18,20 +18,13 @@
             --warning: #ED8936;
             --web3: #F59E0B;
             --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
-            --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
-            --shadow-md: 0 5px 25px rgba(0,0,0,0.08);
-            --shadow-lg: 0 15px 35px rgba(0,0,0,0.08);
         }
         
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        
-        html {
-            scroll-behavior: smooth;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
         
         body {
@@ -39,7 +32,6 @@
             color: var(--text);
             overflow-x: hidden;
             line-height: 1.6;
-            font-size: 16px;
         }
         
         /* Header */
@@ -48,18 +40,11 @@
             top: 0;
             left: 0;
             width: 100%;
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
             z-index: 1000;
-            padding: 1rem 1.5rem;
-            box-shadow: var(--shadow-sm);
-            transition: all 0.3s ease;
-        }
-        
-        .header.scrolled {
-            padding: 0.8rem 1.5rem;
-            box-shadow: var(--shadow-md);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
         }
         
         .nav {
@@ -71,14 +56,13 @@
         }
         
         .logo {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: var(--primary);
             text-decoration: none;
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            z-index: 1001;
         }
         
         .nav-links {
@@ -92,7 +76,6 @@
             color: var(--text);
             font-weight: 500;
             transition: color 0.3s ease;
-            font-size: 0.95rem;
         }
         
         .nav-links a:hover {
@@ -103,43 +86,6 @@
             display: flex;
             gap: 1rem;
             align-items: center;
-        }
-        
-        .btn {
-            padding: 0.8rem 1.5rem;
-            border-radius: 50px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
-            font-size: 0.95rem;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            justify-content: center;
-            text-align: center;
-        }
-        
-        .btn-primary {
-            background: var(--gradient);
-            color: white;
-            box-shadow: 0 4px 15px rgba(126, 118, 249, 0.3);
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(126, 118, 249, 0.4);
-        }
-        
-        .btn-secondary {
-            background-color: transparent;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-        }
-        
-        .btn-secondary:hover {
-            background-color: rgba(126, 118, 249, 0.05);
         }
         
         .btn-web3 {
@@ -164,59 +110,46 @@
             box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
         }
         
-        /* Mobile Menu */
-        .mobile-menu-btn {
-            display: none;
-            background: none;
-            border: none;
-            color: var(--text);
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0.5rem;
-            z-index: 1001;
-        }
-        
         /* Floating Admin Button */
         .admin-float-btn {
             position: fixed;
-            bottom: 1.5rem;
-            right: 1.5rem;
-            width: 3.5rem;
-            height: 3.5rem;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
             background: var(--gradient);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.3rem;
+            font-size: 24px;
             cursor: pointer;
             box-shadow: 0 8px 25px rgba(126, 118, 249, 0.3);
-            z-index: 999;
+            z-index: 1000;
             transition: all 0.3s ease;
             text-decoration: none;
         }
         
         .admin-float-btn:hover {
-            transform: translateY(-3px) scale(1.05);
+            transform: translateY(-3px);
             box-shadow: 0 12px 35px rgba(126, 118, 249, 0.4);
         }
         
         .admin-float-btn .tooltip {
             position: absolute;
-            bottom: 100%;
+            bottom: 70px;
             right: 0;
             background: var(--dark);
             color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            font-size: 0.8rem;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
             white-space: nowrap;
             opacity: 0;
             transform: translateY(10px);
             transition: all 0.3s ease;
             pointer-events: none;
-            margin-bottom: 0.5rem;
         }
         
         .admin-float-btn:hover .tooltip {
@@ -226,7 +159,7 @@
         
         /* Hero Section */
         .hero {
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -236,7 +169,7 @@
             overflow: hidden;
             background: var(--gradient);
             color: white;
-            padding: 6rem 1.5rem 4rem;
+            padding-top: 80px;
         }
         
         .particles {
@@ -250,15 +183,15 @@
         
         .hero-content {
             max-width: 800px;
+            padding: 0 20px;
             position: relative;
             z-index: 2;
         }
         
         h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-size: 4rem;
             font-weight: 800;
-            margin-bottom: 1.5rem;
-            line-height: 1.2;
+            margin-bottom: 1rem;
             background: linear-gradient(45deg, #fff, #E1BEE7);
             -webkit-background-clip: text;
             background-clip: text;
@@ -267,12 +200,11 @@
         }
         
         .hero p {
-            font-size: clamp(1.1rem, 2.5vw, 1.5rem);
-            margin-bottom: 2.5rem;
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
             color: white;
             opacity: 0.9;
             font-weight: 300;
-            line-height: 1.5;
         }
         
         .cta-buttons {
@@ -282,10 +214,39 @@
             flex-wrap: wrap;
         }
         
-        .btn-large {
+        .btn {
             padding: 1rem 2rem;
-            font-size: 1.1rem;
-            min-width: 200px;
+            border-radius: 50px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            font-size: 1rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background-color: white;
+            color: var(--primary);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+        
+        .btn-secondary {
+            background-color: transparent;
+            color: white;
+            border: 2px solid rgba(255,255,255,0.5);
+            backdrop-filter: blur(5px);
+        }
+        
+        .btn-secondary:hover {
+            background-color: rgba(255,255,255,0.15);
+            border-color: white;
         }
         
         .btn-conference {
@@ -300,78 +261,35 @@
             box-shadow: 0 6px 20px rgba(255, 123, 156, 0.4);
         }
         
-        /* Web3 Banner */
-        .web3-banner {
-            background: linear-gradient(135deg, var(--web3), #FBBF24);
-            color: white;
-            padding: 3rem 1.5rem;
-            text-align: center;
-            margin: 2rem auto;
-            border-radius: 20px;
-            max-width: 1000px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .web3-banner:before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(255,255,255,0.1)" d="M0,0 L100,0 L100,100 L0,100 Z"></path></svg>');
-            background-size: cover;
-        }
-        
-        .web3-content {
-            position: relative;
-            z-index: 2;
-        }
-        
-        .web3-banner h3 {
-            font-size: clamp(1.5rem, 3vw, 2rem);
-            margin-bottom: 1rem;
-        }
-        
-        .web3-banner p {
-            font-size: clamp(1rem, 2vw, 1.2rem);
-            margin-bottom: 2rem;
-            opacity: 0.9;
-            line-height: 1.5;
-        }
-        
-        /* Sections */
+        /* Features Section */
         .section {
-            padding: 5rem 1.5rem;
+            padding: 8rem 2rem;
             position: relative;
         }
         
         .section-title {
             text-align: center;
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            margin-bottom: 3rem;
+            font-size: 2.5rem;
+            margin-bottom: 4rem;
             width: 100%;
             color: var(--text);
             font-weight: 700;
-            line-height: 1.3;
         }
         
         .section-title:after {
             content: '';
             display: block;
-            margin: 1rem auto 0;
-            width: 80px;
+            margin: 10px auto 0;
+            width: 100px;
             height: 4px;
             background: var(--gradient);
             border-radius: 2px;
         }
         
-        /* Features Section */
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
             max-width: 1200px;
             margin: 0 auto;
         }
@@ -379,19 +297,18 @@
         .feature-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem 1.5rem;
-            box-shadow: var(--shadow-sm);
+            padding: 2rem;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             z-index: 1;
             border: 1px solid rgba(0,0,0,0.03);
-            height: 100%;
         }
         
         .feature-card:hover {
-            transform: translateY(-8px);
-            box-shadow: var(--shadow-lg);
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
         }
         
         .feature-card:before {
@@ -400,7 +317,7 @@
             top: 0;
             left: 0;
             width: 100%;
-            height: 4px;
+            height: 5px;
             background: var(--gradient);
         }
         
@@ -412,16 +329,15 @@
         }
         
         .feature-card h3 {
-            font-size: 1.3rem;
+            font-size: 1.5rem;
             margin-bottom: 1rem;
             color: var(--text);
             font-weight: 600;
-            line-height: 1.3;
         }
         
         .feature-card p {
             color: var(--text-light);
-            font-size: 1rem;
+            font-size: 1.05rem;
             line-height: 1.6;
         }
         
@@ -429,7 +345,7 @@
         .demo-section {
             background: var(--gradient);
             color: white;
-            padding: 5rem 1.5rem;
+            padding: 6rem 2rem;
             text-align: center;
             position: relative;
         }
@@ -458,7 +374,7 @@
         .demo-visual {
             width: 100%;
             max-width: 800px;
-            height: 300px;
+            height: 400px;
             background: rgba(255,255,255,0.1);
             border-radius: 20px;
             margin: 3rem 0;
@@ -469,7 +385,6 @@
             overflow: hidden;
             border: 2px dashed rgba(255,255,255,0.2);
             backdrop-filter: blur(5px);
-            -webkit-backdrop-filter: blur(5px);
         }
         
         .demo-visual:before {
@@ -498,89 +413,120 @@
         .conference-demo {
             background: white;
             border-radius: 20px;
-            padding: 2.5rem 1.5rem;
-            box-shadow: var(--shadow-md);
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
             margin-top: 2rem;
             text-align: center;
         }
         
         .conference-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 2rem;
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
             margin: 2rem 0;
+            flex-wrap: wrap;
         }
         
         .stat-item {
             text-align: center;
-            padding: 1rem;
         }
         
         .stat-number {
-            font-size: 2.2rem;
+            font-size: 2.5rem;
             font-weight: 700;
             color: var(--primary);
             display: block;
-            line-height: 1;
         }
         
         .stat-label {
-            font-size: 0.9rem;
+            font-size: 1rem;
             color: var(--text-light);
             margin-top: 0.5rem;
-            line-height: 1.3;
         }
         
-        /* Popup Demo Styles */
-        .popup-demo-buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 2rem;
-        }
-        
-        .popup-features {
+        .conference-features {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1.5rem;
-            margin: 2rem 0;
+            margin: 3rem 0;
         }
         
-        .popup-feature {
+        .conference-feature {
             text-align: center;
-            padding: 1.5rem 1rem;
-            background: rgba(126, 118, 249, 0.05);
-            border-radius: 12px;
-            border: 1px solid rgba(126, 118, 249, 0.1);
+            padding: 1.5rem;
         }
         
-        .popup-feature i {
-            font-size: 2rem;
+        .conference-feature i {
+            font-size: 2.5rem;
             color: var(--primary);
             margin-bottom: 1rem;
-        }
-        
-        .popup-feature h4 {
-            font-size: 1.1rem;
-            margin-bottom: 0.5rem;
-            color: var(--text);
-        }
-        
-        .popup-feature p {
-            color: var(--text-light);
-            font-size: 0.9rem;
-            line-height: 1.4;
         }
         
         /* Live Demo Section */
         .live-demo {
             background: white;
             border-radius: 20px;
-            padding: 2.5rem 1.5rem;
-            box-shadow: var(--shadow-md);
-            margin: 2rem auto;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
+            margin: 3rem auto;
             max-width: 1000px;
+        }
+        
+        .demo-frame-container {
+            width: 100%;
+            height: 600px;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin: 2rem 0;
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .demo-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #f8f9fa;
+        }
+        
+        /* Web3 Banner */
+        .web3-banner {
+            background: linear-gradient(135deg, var(--web3), #FBBF24);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin: 2rem auto;
+            border-radius: 20px;
+            max-width: 1000px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .web3-banner:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(255,255,255,0.1)" d="M0,0 L100,0 L100,100 L0,100 Z"></path></svg>');
+            background-size: cover;
+        }
+        
+        .web3-content {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .web3-banner h3 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .web3-banner p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
         }
         
         /* Pricing Section */
@@ -589,8 +535,6 @@
             justify-content: center;
             margin-bottom: 3rem;
             position: relative;
-            flex-wrap: wrap;
-            gap: 0.5rem;
         }
         
         .pricing-tabs:after {
@@ -604,21 +548,20 @@
         }
         
         .tab-btn {
-            padding: 1rem 1.5rem;
+            padding: 1rem 2rem;
             background: none;
             border: none;
-            font-size: 1rem;
+            font-size: 1.1rem;
             font-weight: 600;
             cursor: pointer;
             position: relative;
             color: var(--text-light);
             transition: all 0.3s ease;
-            border-radius: 8px;
+            margin: 0 0.5rem;
         }
         
         .tab-btn.active {
             color: var(--primary);
-            background: rgba(126, 118, 249, 0.05);
         }
         
         .tab-btn.active:after {
@@ -636,7 +579,7 @@
         .pricing-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
+            gap: 2rem;
             max-width: 1000px;
             margin: 0 auto;
         }
@@ -644,18 +587,16 @@
         .pricing-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem 1.5rem;
-            box-shadow: var(--shadow-sm);
+            padding: 2rem;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.03);
-            display: flex;
-            flex-direction: column;
         }
         
         .pricing-card.popular {
-            border: 2px solid var(--primary);
+            border: 1px solid var(--primary);
             transform: scale(1.02);
             box-shadow: 0 10px 30px rgba(126, 118, 249, 0.1);
         }
@@ -664,28 +605,27 @@
             content: 'Самый популярный';
             position: absolute;
             top: 15px;
-            right: -35px;
+            right: -30px;
             background: var(--primary);
             color: white;
-            padding: 0.3rem 2.5rem;
+            padding: 0.3rem 2rem;
             transform: rotate(45deg);
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             font-weight: 600;
         }
         
         .pricing-card h3 {
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             margin-bottom: 1rem;
             color: var(--text);
             font-weight: 600;
         }
         
         .price {
-            font-size: 2.5rem;
+            font-size: 3rem;
             font-weight: 700;
             margin-bottom: 1.5rem;
             color: var(--primary);
-            line-height: 1;
         }
         
         .price span {
@@ -697,7 +637,6 @@
         .pricing-features {
             list-style: none;
             margin-bottom: 2rem;
-            flex-grow: 1;
         }
         
         .pricing-features li {
@@ -706,7 +645,6 @@
             padding-left: 1.5rem;
             color: var(--text-light);
             font-size: 0.95rem;
-            line-height: 1.4;
         }
         
         .pricing-features li:before {
@@ -735,8 +673,8 @@
         /* Testimonials */
         .testimonials-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
             max-width: 1200px;
             margin: 0 auto;
         }
@@ -744,8 +682,8 @@
         .testimonial-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem 1.5rem;
-            box-shadow: var(--shadow-sm);
+            padding: 2rem;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             position: relative;
             border: 1px solid rgba(0,0,0,0.03);
         }
@@ -755,7 +693,6 @@
             color: var(--text-light);
             margin-bottom: 1.5rem;
             line-height: 1.6;
-            font-size: 0.95rem;
         }
         
         .testimonial-author {
@@ -774,13 +711,11 @@
             justify-content: center;
             color: white;
             font-weight: bold;
-            flex-shrink: 0;
         }
         
         .author-info h4 {
             color: var(--text);
             margin-bottom: 0.2rem;
-            font-size: 1rem;
         }
         
         .author-info p {
@@ -793,7 +728,7 @@
             background: linear-gradient(135deg, var(--accent), #FF8E9E);
             color: white;
             text-align: center;
-            padding: 5rem 1.5rem;
+            padding: 6rem 2rem;
         }
         
         .cta-content {
@@ -809,11 +744,16 @@
             margin-top: 2rem;
         }
         
+        .btn-large {
+            padding: 1.2rem 2.5rem;
+            font-size: 1.1rem;
+        }
+        
         /* Footer */
         footer {
             background: var(--dark);
             color: white;
-            padding: 4rem 1.5rem 2rem;
+            padding: 4rem 2rem;
             text-align: center;
         }
         
@@ -856,7 +796,7 @@
             color: rgba(255,255,255,0.7);
             text-decoration: none;
             transition: color 0.3s ease;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
         
         .footer-column ul li a:hover {
@@ -904,73 +844,13 @@
             animation: float 6s ease-in-out infinite;
         }
         
-        /* Popup Overlay */
-        .popup-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-        }
-        
-        .popup-message {
-            background: white;
-            padding: 2rem;
-            border-radius: 15px;
-            text-align: center;
-            max-width: 500px;
-            margin: 1rem;
-        }
-        
-        /* Responsive Design */
-        @media (max-width: 1024px) {
-            .section {
-                padding: 4rem 1.5rem;
-            }
-            
-            .hero {
-                padding: 5rem 1.5rem 3rem;
-            }
-        }
-        
+        /* Responsive */
         @media (max-width: 768px) {
             .header {
                 padding: 1rem;
             }
             
-            .header.scrolled {
-                padding: 0.8rem 1rem;
-            }
-            
             .nav-links {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100vh;
-                background: white;
-                flex-direction: column;
-                justify-content: center;
-                gap: 2rem;
-                z-index: 1000;
-            }
-            
-            .nav-links.active {
-                display: flex;
-            }
-            
-            .nav-links a {
-                font-size: 1.2rem;
-                padding: 0.5rem 0;
-            }
-            
-            .nav-buttons {
                 display: none;
             }
             
@@ -978,60 +858,26 @@
                 display: block;
             }
             
-            .hero {
-                padding: 4rem 1rem 2rem;
-                min-height: 90vh;
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .hero p {
+                font-size: 1.2rem;
             }
             
             .cta-buttons {
                 flex-direction: column;
                 align-items: center;
-                width: 100%;
-            }
-            
-            .btn-large {
-                width: 100%;
-                max-width: 300px;
             }
             
             .section {
-                padding: 3rem 1rem;
+                padding: 5rem 1rem;
             }
             
             .section-title {
-                margin-bottom: 2rem;
-            }
-            
-            .features-grid {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-            
-            .feature-card {
-                padding: 1.5rem 1rem;
-            }
-            
-            .demo-visual {
-                height: 200px;
-                margin: 2rem 0;
-            }
-            
-            .conference-stats {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 1rem;
-            }
-            
-            .stat-number {
-                font-size: 1.8rem;
-            }
-            
-            .popup-features {
-                grid-template-columns: 1fr;
-                gap: 1rem;
-            }
-            
-            .live-demo {
-                padding: 2rem 1rem;
+                font-size: 2rem;
+                margin-bottom: 3rem;
             }
             
             .pricing-tabs {
@@ -1040,8 +886,7 @@
             }
             
             .tab-btn {
-                width: 100%;
-                max-width: 300px;
+                margin: 0.3rem 0;
             }
             
             .tab-btn.active:after {
@@ -1050,63 +895,55 @@
                 width: 50%;
             }
             
-            .pricing-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .pricing-card.popular {
-                transform: none;
-            }
-            
-            .popup-demo-buttons {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .admin-float-btn {
-                bottom: 1rem;
-                right: 1rem;
-                width: 3rem;
-                height: 3rem;
-                font-size: 1.1rem;
-            }
-            
-            .footer-content {
-                grid-template-columns: 1fr;
-                text-align: center;
-            }
-            
-            .footer-column h3:after {
-                left: 50%;
-                transform: translateX(-50%);
-                width: 80px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .hero {
-                padding: 3rem 1rem 2rem;
-            }
-            
-            h1 {
-                font-size: 2.2rem;
-            }
-            
-            .hero p {
-                font-size: 1.1rem;
+            .demo-visual {
+                height: 300px;
+                margin: 2rem 0;
             }
             
             .conference-stats {
-                grid-template-columns: 1fr;
+                gap: 1.5rem;
             }
             
-            .stat-item {
-                padding: 0.5rem;
+            .stat-number {
+                font-size: 2rem;
+            }
+            
+            .admin-float-btn {
+                bottom: 20px;
+                right: 20px;
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+            
+            .demo-frame-container {
+                height: 400px;
+            }
+            
+            .live-demo {
+                padding: 2rem 1rem;
             }
             
             .web3-banner {
                 padding: 2rem 1rem;
-                margin: 1rem;
+            }
+            
+            .web3-banner h3 {
+                font-size: 1.5rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .conference-demo {
+                padding: 2rem 1rem;
+            }
+            
+            .conference-stats {
+                gap: 1rem;
+            }
+            
+            .stat-item {
+                min-width: 100px;
             }
             
             .cta-buttons-large {
@@ -1114,23 +951,43 @@
                 align-items: center;
             }
             
-            .btn-large {
-                width: 100%;
-                max-width: 280px;
+            .nav-buttons {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .btn-web3 {
+                padding: 0.5rem 1rem;
+                font-size: 0.8rem;
+            }
+        }
+        
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-menu-btn {
+                display: block;
             }
         }
     </style>
 </head>
 <body>
     <!-- Header -->
-    <header class="header" id="header">
+    <header class="header">
         <nav class="nav">
             <a href="#" class="logo">
                 <i class="fas fa-robot"></i>
                 EduSonic AI
             </a>
             
-            <div class="nav-links" id="navLinks">
+            <div class="nav-links">
                 <a href="#features">Возможности</a>
                 <a href="#demo">Демо</a>
                 <a href="#pricing">Тарифы</a>
@@ -1141,13 +998,13 @@
             <div class="nav-buttons">
                 <a href="/investing.html" class="btn-web3">
                     <i class="fas fa-coins"></i>
-                    Школам/Инвесторам
+                    Школам/Инвесторам/Web3
                 </a>
                 <a href="/teacher" class="btn btn-secondary">Личный кабинет</a>
                 <a href="#conference" class="btn btn-primary">Начать обучение</a>
             </div>
             
-            <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <button class="mobile-menu-btn">
                 <i class="fas fa-bars"></i>
             </button>
         </nav>
@@ -1166,10 +1023,10 @@
             <h1>EduSonic AI</h1>
             <p>Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
             <div class="cta-buttons">
-                <a href="#conference" class="btn btn-conference btn-large">
+                <a href="#conference" class="btn btn-conference">
                     <i class="fas fa-robot"></i> Попробовать бесплатно
                 </a>
-                <a href="#features" class="btn btn-secondary btn-large">Узнать больше →</a>
+                <a href="#features" class="btn btn-secondary">Узнать больше →</a>
             </div>
         </div>
     </section>
@@ -1245,7 +1102,7 @@
             </p>
             <div class="demo-visual">
                 <div style="text-align: center;">
-                    <i class="fas fa-robot floating" style="font-size: 4rem; opacity: 0.8; margin-bottom: 1rem;"></i>
+                    <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8; margin-bottom: 1rem;"></i>
                     <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор. Давай вместе разберем эту интересную тему!"</p>
                 </div>
             </div>
@@ -1258,7 +1115,7 @@
         <h2 class="section-title">Попробуйте AI-репетитора прямо сейчас</h2>
         <div class="demo-container">
             <p style="max-width: 800px; margin-bottom: 2rem; font-size: 1.2rem; text-align: center;">
-                Не верите, что это работает? Убедитесь сами! Пообщайтесь с AI-репетитором в отдельном окне. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
+                Не верите, что это работает? Убедитесь сами! Запустите демо-версию и пообщайтесь с AI-репетитором. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
             </p>
             
             <div class="conference-demo">
@@ -1277,90 +1134,49 @@
                     </div>
                 </div>
                 
-                <div class="popup-features">
-                    <div class="popup-feature">
-                        <i class="fas fa-window-restore"></i>
-                        <h4>Отдельное окно</h4>
-                        <p>Полнофункциональная конференция открывается в удобном popup-окне</p>
-                    </div>
-                    <div class="popup-feature">
+                <div class="conference-features">
+                    <div class="conference-feature">
                         <i class="fas fa-microphone"></i>
-                        <h4>Голосовое общение</h4>
-                        <p>Говорите с AI-учителем естественным голосом</p>
+                        <h4>Говорите свободно</h4>
+                        <p>Не нужно печатать - просто говорите, как с живым учителем</p>
                     </div>
-                    <div class="popup-feature">
-                        <i class="fas fa-video"></i>
-                        <h4>Анимированный аватар</h4>
-                        <p>Визуализация учителя с живой мимикой и анимацией</p>
+                    <div class="conference-feature">
+                        <i class="fas fa-lightbulb"></i>
+                        <h4>Понятные объяснения</h4>
+                        <p>Сложные темы становятся простыми и ясными</p>
                     </div>
-                    <div class="popup-feature">
+                    <div class="conference-feature">
+                        <i class="fas fa-heart"></i>
+                        <h4>Поддержка и мотивация</h4>
+                        <p>AI-репетитор всегда подбодрит и поможет не сдаваться</p>
+                    </div>
+                    <div class="conference-feature">
                         <i class="fas fa-rocket"></i>
-                        <h4>Мгновенный запуск</h4>
-                        <p>Начните обучение в один клик без регистрации</p>
+                        <h4>Быстрый прогресс</h4>
+                        <p>Результаты видны уже после первых занятий</p>
                     </div>
                 </div>
                 
-                <!-- Popup Demo Section - БЕЗ IFRAME -->
+                <!-- Live Demo Frame -->
                 <div class="live-demo">
-                    <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Запустите демо-версию</h3>
+                    <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Интерактивная демо-версия</h3>
                     <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
-                        Нажмите кнопку ниже, чтобы открыть полнофункциональную версию AI-учителя в отдельном окне. Можно использовать микрофон или текстовый чат.
+                        Нажмите "Активировать AI-учителя" и начните общение. Можно использовать микрофон или текстовый чат.
                     </p>
                     
-                    <!-- Основные кнопки запуска -->
-                    <div class="popup-demo-buttons">
-                        <button onclick="openConferencePopup('demo')" class="btn btn-conference btn-large">
-                            <i class="fas fa-robot"></i> Запустить AI-учителя
-                        </button>
-                        <button onclick="openConferencePopup('math')" class="btn btn-primary btn-large">
-                            <i class="fas fa-calculator"></i> Урок математики
-                        </button>
-                        <button onclick="openConferencePopup('english')" class="btn btn-primary btn-large">
-                            <i class="fas fa-language"></i> Урок английского
-                        </button>
-                    </div>
-
-                    <!-- Дополнительные предметы -->
-                    <div style="text-align: center; margin: 2rem 0;">
-                        <p style="color: var(--text-light); margin-bottom: 1rem;">Или выберите другой предмет:</p>
-                        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                            <button onclick="openConferencePopup('physics')" class="btn btn-secondary">
-                                <i class="fas fa-atom"></i> Физика
-                            </button>
-                            <button onclick="openConferencePopup('chemistry')" class="btn btn-secondary">
-                                <i class="fas fa-flask"></i> Химия
-                            </button>
-                            <button onclick="openConferencePopup('history')" class="btn btn-secondary">
-                                <i class="fas fa-monument"></i> История
-                            </button>
-                            <button onclick="openConferencePopup('biology')" class="btn btn-secondary">
-                                <i class="fas fa-dna"></i> Биология
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Информация о popup -->
-                    <div style="background: rgba(126, 118, 249, 0.05); padding: 1.5rem; border-radius: 12px; margin-top: 2rem; text-align: center;">
-                        <h4 style="color: var(--primary); margin-bottom: 0.5rem;">
-                            <i class="fas fa-info-circle"></i> Как это работает?
-                        </h4>
-                        <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 0;">
-                            После нажатия кнопки откроется отдельное окно с виртуальным классом. Разрешите доступ к микрофону для голосового общения с AI-учителем.
-                        </p>
+                    <div class="demo-frame-container">
+                        <iframe src="/conference?room=demo&embed=true" class="demo-frame" 
+                                title="EduSonic AI Demo" allow="microphone; camera">
+                        </iframe>
                     </div>
                     
                     <div style="text-align: center; margin-top: 2rem;">
                         <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
-                            <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону. Демо работает без регистрации.
+                            <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону
                         </p>
-                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                            <a href="/conference?room=full" class="btn btn-secondary" target="_blank">
-                                <i class="fas fa-external-link-alt"></i> Полная версия
-                            </a>
-                            <a href="/teacher" class="btn btn-secondary">
-                                <i class="fas fa-user-cog"></i> Личный кабинет
-                            </a>
-                        </div>
+                        <a href="/conference?room=demo" class="btn btn-conference" target="_blank" style="padding: 1.2rem 2.5rem;">
+                            <i class="fas fa-external-link-alt"></i> Открыть в полном окне
+                        </a>
                     </div>
                 </div>
             </div>
@@ -1387,9 +1203,7 @@
                     <li>Ограниченная практика</li>
                     <li>Поддержка по email</li>
                 </ul>
-                <button onclick="openConferencePopup('free')" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); margin-top: auto;">
-                    Начать бесплатно
-                </button>
+                <a href="/conference?room=free" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Начать бесплатно</a>
             </div>
             <div class="pricing-card popular">
                 <h3>Индивидуальный</h3>
@@ -1402,9 +1216,7 @@
                     <li>Подробная статистика</li>
                     <li>Приоритетная поддержка</li>
                 </ul>
-                <button onclick="openConferencePopup('premium')" class="btn btn-primary" style="width: 100%; margin-top: auto;">
-                    Выбрать тариф
-                </button>
+                <a href="/conference?room=premium" class="btn btn-primary" style="width: 100%;" target="_blank">Выбрать тариф</a>
             </div>
             <div class="pricing-card">
                 <h3>С углубленным изучением</h3>
@@ -1416,9 +1228,7 @@
                     <li>Углубленные материалы</li>
                     <li>Персональный куратор</li>
                 </ul>
-                <button onclick="openConferencePopup('advanced')" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); margin-top: auto;">
-                    Для отличников
-                </button>
+                <a href="/conference?room=advanced" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для отличников</a>
             </div>
         </div>
         
@@ -1434,9 +1244,7 @@
                     <li>Семейные образовательные игры</li>
                     <li>Родительский контроль</li>
                 </ul>
-                <button onclick="openConferencePopup('family')" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); margin-top: auto;">
-                    Для семьи
-                </button>
+                <a href="/conference?room=family" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для семьи</a>
             </div>
             <div class="pricing-card popular">
                 <h3>Семейный PRO</h3>
@@ -1449,9 +1257,7 @@
                     <li>Персональный семейный куратор</li>
                     <li>Скидка 15% на следующий месяц</li>
                 </ul>
-                <button onclick="openConferencePopup('family-pro')" class="btn btn-primary" style="width: 100%; margin-top: auto;">
-                    Лучший выбор
-                </button>
+                <a href="/conference?room=family-pro" class="btn btn-primary" style="width: 100%;" target="_blank">Лучший выбор</a>
             </div>
         </div>
     </section>
@@ -1507,9 +1313,9 @@
                 Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
             </p>
             <div class="cta-buttons-large">
-                <button onclick="openConferencePopup('demo')" class="btn btn-primary btn-large" style="background: white; color: var(--accent);">
+                <a href="#conference" class="btn btn-primary btn-large" style="background: white; color: var(--accent);">
                     <i class="fas fa-play"></i> Начать бесплатно
-                </button>
+                </a>
                 <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
                     <i class="fas fa-user-cog"></i> Личный кабинет
                 </a>
@@ -1527,9 +1333,9 @@
                 <h3>EduSonic AI</h3>
                 <p>Инновационная платформа для голосового обучения с искусственным интеллектом. Сделаем образование доступным и увлекательным для каждого ребенка!</p>
                 <div class="social-links">
-                    <a href="https://t.me/edusonic_ai" target="_blank" aria-label="Telegram"><i class="fab fa-telegram"></i></a>
-                    <a href="https://vk.com/edusonic_ai" target="_blank" aria-label="VKontakte"><i class="fab fa-vk"></i></a>
-                    <a href="https://youtube.com/edusonic_ai" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+                    <a href="https://t.me/edusonic_ai" target="_blank"><i class="fab fa-telegram"></i></a>
+                    <a href="https://vk.com/edusonic_ai" target="_blank"><i class="fab fa-vk"></i></a>
+                    <a href="https://youtube.com/edusonic_ai" target="_blank"><i class="fab fa-youtube"></i></a>
                 </div>
             </div>
             <div class="footer-column">
@@ -1564,232 +1370,118 @@
             </div>
         </div>
         <div class="copyright">
-            © 2024 EduSonic AI. С любовью к образованию. 
-            <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | 
-            <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
+            © 2024 EduSonic AI. С любовью к образованию. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
         </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
-        // Popup Conference Function
-        function openConferencePopup(roomType) {
-            const roomMap = {
-                'demo': 'demo',
-                'math': 'math-lesson',
-                'english': 'english-lesson', 
-                'physics': 'physics-lesson',
-                'chemistry': 'chemistry-lesson',
-                'history': 'history-lesson',
-                'biology': 'biology-lesson',
-                'free': 'free-trial',
-                'premium': 'premium',
-                'advanced': 'advanced',
-                'family': 'family',
-                'family-pro': 'family-pro'
-            };
-            
-            const roomId = roomMap[roomType] || 'demo';
-            const width = 1200;
-            const height = 800;
-            const left = (screen.width - width) / 2;
-            const top = (screen.height - height) / 2;
-            
-            // Параметры для popup окна
-            const popupFeatures = [
-                `width=${width}`,
-                `height=${height}`,
-                `left=${left}`,
-                `top=${top}`,
-                'resizable=yes',
-                'scrollbars=yes',
-                'location=no',
-                'toolbar=no',
-                'menubar=no',
-                'status=no'
-            ].join(',');
-            
-            const popupUrl = `/conference?room=${roomId}&source=landing&type=${roomType}`;
-            
-            console.log(`🪟 Открытие popup: ${roomType} -> ${roomId}`);
-            
-            const popup = window.open(popupUrl, 'EduSonicAI_Conference', popupFeatures);
-            
-            if (popup) {
-                // Фокусируем popup
-                popup.focus();
-                
-                // Проверяем, не заблокирован ли popup
-                setTimeout(() => {
-                    if (popup.closed || typeof popup.closed == 'undefined') {
-                        // Popup заблокирован - показываем альтернативу
-                        showPopupBlockedMessage(roomId);
-                    }
-                }, 500);
-                
-                // Трекинг открытия
-                trackPopupOpening(roomType);
-                
-            } else {
-                // Popup заблокирован браузером
-                showPopupBlockedMessage(roomId);
-            }
-            
-            return popup;
-        }
-
-        function showPopupBlockedMessage(roomId) {
-            // Создаем красивое сообщение о блокировке popup
-            const message = `
-                <div class="popup-overlay" id="popup-overlay">
-                    <div class="popup-message">
-                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
-                            <i class="fas fa-exclamation-triangle"></i> Popup заблокирован
-                        </h3>
-                        <p style="margin-bottom: 1.5rem; color: var(--text-light);">
-                            Ваш браузер заблокировал всплывающее окно. Пожалуйста, разрешите popup для этого сайта или используйте альтернативный вариант.
-                        </p>
-                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                            <a href="/conference?room=${roomId}" class="btn btn-primary" target="_blank" 
-                               onclick="document.getElementById('popup-overlay')?.remove()">
-                                <i class="fas fa-external-link-alt"></i> Открыть в новой вкладке
-                            </a>
-                            <button onclick="document.getElementById('popup-overlay').remove()" class="btn btn-secondary">
-                                Закрыть
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            const overlay = document.createElement('div');
-            overlay.innerHTML = message;
-            document.body.appendChild(overlay);
-        }
-
-        function trackPopupOpening(roomType) {
-            // Отправляем аналитику об открытии popup
-            fetch('/api/track/popup_opened', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    room_type: roomType,
-                    timestamp: new Date().toISOString(),
-                    user_agent: navigator.userAgent
-                })
-            }).catch(err => console.log('Analytics error:', err));
-        }
-
         // Инициализация частиц
-        document.addEventListener('DOMContentLoaded', function() {
-            if (typeof particlesJS !== 'undefined') {
-                particlesJS("particles-js", {
-                    "particles": {
-                        "number": {
-                            "value": 60,
-                            "density": {
-                                "enable": true,
-                                "value_area": 800
-                            }
-                        },
-                        "color": {
-                            "value": "#ffffff"
-                        },
-                        "shape": {
-                            "type": "circle",
-                            "stroke": {
-                                "width": 0,
-                                "color": "#000000"
-                            }
-                        },
-                        "opacity": {
-                            "value": 0.7,
-                            "random": true,
-                            "anim": {
-                                "enable": false,
-                                "speed": 1,
-                                "opacity_min": 0.3,
-                                "sync": false
-                            }
-                        },
-                        "size": {
-                            "value": 3,
-                            "random": true,
-                            "anim": {
-                                "enable": false,
-                                "speed": 40,
-                                "size_min": 1,
-                                "sync": false
-                            }
-                        },
+        particlesJS("particles-js", {
+            "particles": {
+                "number": {
+                    "value": 80,
+                    "density": {
+                        "enable": true,
+                        "value_area": 800
+                    }
+                },
+                "color": {
+                    "value": "#ffffff"
+                },
+                "shape": {
+                    "type": "circle",
+                    "stroke": {
+                        "width": 0,
+                        "color": "#000000"
+                    }
+                },
+                "opacity": {
+                    "value": 0.7,
+                    "random": true,
+                    "anim": {
+                        "enable": false,
+                        "speed": 1,
+                        "opacity_min": 0.3,
+                        "sync": false
+                    }
+                },
+                "size": {
+                    "value": 3,
+                    "random": true,
+                    "anim": {
+                        "enable": false,
+                        "speed": 40,
+                        "size_min": 1,
+                        "sync": false
+                    }
+                },
+                "line_linked": {
+                    "enable": true,
+                    "distance": 150,
+                    "color": "#ffffff",
+                    "opacity": 0.4,
+                    "width": 1
+                },
+                "move": {
+                    "enable": true,
+                    "speed": 2,
+                    "direction": "none",
+                    "random": false,
+                    "straight": false,
+                    "out_mode": "out",
+                    "bounce": false,
+                    "attract": {
+                        "enable": false,
+                        "rotateX": 600,
+                        "rotateY": 1200
+                    }
+                }
+            },
+            "interactivity": {
+                "detect_on": "canvas",
+                "events": {
+                    "onhover": {
+                        "enable": true,
+                        "mode": "grab"
+                    },
+                    "onclick": {
+                        "enable": true,
+                        "mode": "push"
+                    },
+                    "resize": true
+                },
+                "modes": {
+                    "grab": {
+                        "distance": 140,
                         "line_linked": {
-                            "enable": true,
-                            "distance": 150,
-                            "color": "#ffffff",
-                            "opacity": 0.4,
-                            "width": 1
-                        },
-                        "move": {
-                            "enable": true,
-                            "speed": 2,
-                            "direction": "none",
-                            "random": false,
-                            "straight": false,
-                            "out_mode": "out",
-                            "bounce": false,
-                            "attract": {
-                                "enable": false,
-                                "rotateX": 600,
-                                "rotateY": 1200
-                            }
+                            "opacity": 0.8
                         }
                     },
-                    "interactivity": {
-                        "detect_on": "canvas",
-                        "events": {
-                            "onhover": {
-                                "enable": true,
-                                "mode": "grab"
-                            },
-                            "onclick": {
-                                "enable": true,
-                                "mode": "push"
-                            },
-                            "resize": true
-                        },
-                        "modes": {
-                            "grab": {
-                                "distance": 140,
-                                "line_linked": {
-                                    "opacity": 0.8
-                                }
-                            },
-                            "bubble": {
-                                "distance": 400,
-                                "size": 40,
-                                "duration": 2,
-                                "opacity": 8,
-                                "speed": 3
-                            },
-                            "repulse": {
-                                "distance": 200,
-                                "duration": 0.4
-                            },
-                            "push": {
-                                "particles_nb": 4
-                            },
-                            "remove": {
-                                "particles_nb": 2
-                            }
-                        }
+                    "bubble": {
+                        "distance": 400,
+                        "size": 40,
+                        "duration": 2,
+                        "opacity": 8,
+                        "speed": 3
                     },
-                    "retina_detect": true
-                });
-            }
+                    "repulse": {
+                        "distance": 200,
+                        "duration": 0.4
+                    },
+                    "push": {
+                        "particles_nb": 4
+                    },
+                    "remove": {
+                        "particles_nb": 2
+                    }
+                }
+            },
+            "retina_detect": true
+        });
 
-            // Управление вкладками тарифов
+        // Управление вкладками тарифов
+        document.addEventListener('DOMContentLoaded', function() {
             const tabButtons = document.querySelectorAll('.tab-btn');
             
             tabButtons.forEach(btn => {
@@ -1814,15 +1506,12 @@
             });
             
             // Мобильное меню
-            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-            const navLinks = document.getElementById('navLinks');
+            const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+            const navLinks = document.querySelector('.nav-links');
             
-            if (mobileMenuBtn && navLinks) {
+            if (mobileMenuBtn) {
                 mobileMenuBtn.addEventListener('click', function() {
-                    navLinks.classList.toggle('active');
-                    mobileMenuBtn.innerHTML = navLinks.classList.contains('active') ? 
-                        '<i class="fas fa-times"></i>' : 
-                        '<i class="fas fa-bars"></i>';
+                    navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
                 });
             }
 
@@ -1843,25 +1532,12 @@
                         });
                         
                         // Закрываем мобильное меню после клика
-                        if (window.innerWidth <= 768 && navLinks) {
-                            navLinks.classList.remove('active');
-                            mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+                        if (window.innerWidth <= 768) {
+                            navLinks.style.display = 'none';
                         }
                     }
                 });
             });
-
-            // Scroll header effect
-            const header = document.getElementById('header');
-            if (header) {
-                window.addEventListener('scroll', function() {
-                    if (window.scrollY > 100) {
-                        header.classList.add('scrolled');
-                    } else {
-                        header.classList.remove('scrolled');
-                    }
-                });
-            }
 
             // Анимация появления элементов при скролле
             const animateOnScroll = function() {
@@ -1890,27 +1566,16 @@
             });
             
             window.addEventListener('scroll', animateOnScroll);
-
-            // Закрытие мобильного меню при клике вне его
-            document.addEventListener('click', function(e) {
-                if (window.innerWidth <= 768 && navLinks && mobileMenuBtn) {
-                    if (!navLinks.contains(e.target) && !mobileMenuBtn.contains(e.target) && navLinks.classList.contains('active')) {
-                        navLinks.classList.remove('active');
-                        mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
-                    }
-                }
-            });
-
-            // Добавляем визуальную обратную связь для кнопок popup
-            const popupButtons = document.querySelectorAll('button[onclick*="openConferencePopup"]');
-            popupButtons.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    // Добавляем анимацию нажатия
-                    this.style.transform = 'scale(0.95)';
+            
+            // Обновление iframe при изменении размера окна
+            window.addEventListener('resize', function() {
+                const iframe = document.querySelector('.demo-frame');
+                if (iframe) {
+                    iframe.style.height = '600px';
                     setTimeout(() => {
-                        this.style.transform = 'scale(1)';
-                    }, 150);
-                });
+                        iframe.style.height = '100%';
+                    }, 100);
+                }
             });
         });
     </script>
