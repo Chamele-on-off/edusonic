@@ -796,15 +796,15 @@
             color: var(--primary);
         }
         
-        /* Удаленные видео участников */
+        /* Контейнер для удаленных видео */
         #remote-videos-container {
             position: absolute;
-            top: 20px;
-            right: 20px;
+            bottom: 100px;
+            right: 230px;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            z-index: 5;
+            z-index: 9;
         }
         
         .remote-video-container {
@@ -823,16 +823,16 @@
             object-fit: cover;
         }
         
-        .peer-label {
+        .remote-peer-label {
             position: absolute;
-            bottom: 0;
+            bottom: -20px;
             left: 0;
             right: 0;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 2px 5px;
-            font-size: 10px;
             text-align: center;
+            font-size: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 2px;
         }
         
         /* SVG специфичные стили */
@@ -1036,6 +1036,11 @@
                 left: 15px;
             }
             
+            #remote-videos-container {
+                bottom: 90px;
+                right: 175px;
+            }
+            
             .remote-video-container {
                 width: 120px;
                 height: 90px;
@@ -1115,6 +1120,11 @@
                 height: 90px;
                 bottom: 80px;
                 left: 10px;
+            }
+            
+            #remote-videos-container {
+                bottom: 80px;
+                right: 140px;
             }
             
             .remote-video-container {
@@ -1573,7 +1583,7 @@
             <i class="fas fa-video"></i>
             <span>Вкл</span>
         </button>
-        <button class="control-btn" id="screen-btn" title="Демонстрация экрана" disabled>
+        <button class="control-btn" id="screen-btn" title="Демонстрация экрана">
             <i class="fas fa-desktop"></i>
             <span>Экран</span>
         </button>
@@ -2060,9 +2070,16 @@
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
+        // PeerJS переменные
+        let peer = null;
+        let peerId = null;
+        let localStream = null;
+        const remoteStreams = new Map(); // peerId -> {stream, videoElement, container}
+        
         // Элементы DOM
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
+        const remoteVideosContainer = document.getElementById('remote-videos-container');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
         const screenBtn = document.getElementById('screen-btn');
@@ -2111,7 +2128,6 @@
         const llmStatusText = document.getElementById('llm-status-text');
         const llmPriorityStatus = document.getElementById('llm-priority-status');
         const llmPriorityText = document.getElementById('llm-priority-text');
-        const remoteVideosContainer = document.getElementById('remote-videos-container');
 
         // Глобальные переменные
         let userStream = null;
@@ -2131,11 +2147,6 @@
         let currentAvatarAspectRatio = 1;
         let isLessonActive = false;
         let audioContext = null;
-        
-        // PeerJS переменные
-        let peer = null;
-        let localStream = null;
-        let peerConnections = {};
         
         // Анимация аватара - переменные
         let currentAvatar = 'teacher';
@@ -2197,148 +2208,153 @@
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
 
-        // PeerJS функции
+        // Инициализация PeerJS
         function initPeerJS() {
-            if (!localStream) {
-                console.log('Ожидание локального потока для инициализации PeerJS');
-                return;
-            }
-
-            // Создаем Peer с уникальным ID
+            // Создаем Peer с публичным сервером
             peer = new Peer({
-                host: window.location.hostname,
-                port: 9000,
-                path: '/peerjs',
-                debug: 3
+                host: '0.peerjs.com',
+                port: 443,
+                path: '/',
+                secure: true,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
             });
 
             peer.on('open', (id) => {
                 console.log('PeerJS подключен с ID:', id);
+                peerId = id;
+                statusDiv.textContent = 'Подключение к конференции...';
                 
-                // Присоединяемся к комнате
-                socket.emit('join_peer', {
-                    room_id: roomId,
-                    peer_id: id
-                });
-                
-                // Запрашиваем список пиров
-                socket.emit('get_peers', { room_id: roomId });
+                // Сообщаем серверу о нашем peerId
+                if (socket) {
+                    socket.emit('join_room', { 
+                        room_id: roomId,
+                        peer_id: id 
+                    });
+                }
             });
 
-            peer.on('connection', (conn) => {
-                console.log('Новое Peer соединение:', conn.peer);
-            });
-
-            // Принимаем входящие видеопотоки
             peer.on('call', (call) => {
-                console.log('Входящий видеозвонок от:', call.peer);
+                console.log('Получен входящий вызов от:', call.peer);
                 
-                // Отвечаем на звонок нашим потоком
+                // Отвечаем на вызов с нашим потоком
                 call.answer(localStream);
                 
                 call.on('stream', (remoteStream) => {
-                    console.log('Получен удаленный видеопоток от:', call.peer);
-                    addRemoteVideo(remoteStream, call.peer);
+                    console.log('Получен удаленный поток от:', call.peer);
+                    addRemoteVideo(call.peer, remoteStream);
                 });
-
+                
                 call.on('close', () => {
-                    console.log('Соединение закрыто с:', call.peer);
+                    console.log('Вызов завершен от:', call.peer);
                     removeRemoteVideo(call.peer);
-                    delete peerConnections[call.peer];
                 });
-
-                peerConnections[call.peer] = call;
+                
+                call.on('error', (err) => {
+                    console.error('Ошибка вызова:', err);
+                    removeRemoteVideo(call.peer);
+                });
             });
 
-            // Обработка ошибок PeerJS
+            peer.on('connection', (conn) => {
+                console.log('Получено соединение данных от:', conn.peer);
+            });
+
+            peer.on('disconnected', () => {
+                console.log('PeerJS отключен');
+                statusDiv.textContent = 'Переподключение...';
+                peer.reconnect();
+            });
+
+            peer.on('close', () => {
+                console.log('PeerJS закрыт');
+                statusDiv.textContent = 'Соединение закрыто';
+            });
+
             peer.on('error', (err) => {
                 console.error('PeerJS ошибка:', err);
-                if (err.type === 'peer-unavailable') {
-                    console.log('Пир недоступен:', err.peer);
-                }
+                statusDiv.textContent = 'Ошибка соединения: ' + err.type;
             });
         }
 
-        function connectToPeer(peerId) {
-            if (peerConnections[peerId]) {
-                console.log('Уже подключен к пиру:', peerId);
+        // Добавление удаленного видео
+        function addRemoteVideo(peerId, stream) {
+            if (remoteStreams.has(peerId)) {
+                return; // Уже добавлено
+            }
+
+            const videoContainer = document.createElement('div');
+            videoContainer.className = 'remote-video-container';
+            videoContainer.id = `remote-${peerId}`;
+
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.autoplay = true;
+            video.playsinline = true;
+
+            const peerLabel = document.createElement('div');
+            peerLabel.className = 'remote-peer-label';
+            peerLabel.textContent = `Участник ${peerId.substring(0, 6)}`;
+
+            videoContainer.appendChild(video);
+            videoContainer.appendChild(peerLabel);
+            remoteVideosContainer.appendChild(videoContainer);
+
+            remoteStreams.set(peerId, {
+                stream: stream,
+                videoElement: video,
+                container: videoContainer
+            });
+
+            updateParticipantsCount();
+        }
+
+        // Удаление удаленного видео
+        function removeRemoteVideo(peerId) {
+            const remote = remoteStreams.get(peerId);
+            if (remote) {
+                if (remote.container && remote.container.parentNode) {
+                    remote.container.parentNode.removeChild(remote.container);
+                }
+                remoteStreams.delete(peerId);
+                updateParticipantsCount();
+            }
+        }
+
+        // Обновление счетчика участников
+        function updateParticipantsCount() {
+            const totalParticipants = remoteStreams.size + 1; // +1 для текущего пользователя
+            participantsCount.textContent = totalParticipants;
+        }
+
+        // Подключение к другим участникам
+        function connectToPeer(remotePeerId) {
+            if (!localStream || peerId === remotePeerId) {
                 return;
             }
 
-            console.log('Подключаемся к пиру:', peerId);
+            console.log('Подключение к участнику:', remotePeerId);
             
-            // Создаем видеозвонок
-            const call = peer.call(peerId, localStream);
+            const call = peer.call(remotePeerId, localStream);
             
             call.on('stream', (remoteStream) => {
-                console.log('Получен поток от:', peerId);
-                addRemoteVideo(remoteStream, peerId);
+                console.log('Получен поток от:', remotePeerId);
+                addRemoteVideo(remotePeerId, remoteStream);
             });
             
             call.on('close', () => {
-                console.log('Соединение закрыто с:', peerId);
-                removeRemoteVideo(peerId);
-                delete peerConnections[peerId];
+                console.log('Соединение закрыто с:', remotePeerId);
+                removeRemoteVideo(remotePeerId);
             });
             
             call.on('error', (err) => {
-                console.error('Ошибка соединения с пиром:', peerId, err);
-                removeRemoteVideo(peerId);
-                delete peerConnections[peerId];
+                console.error('Ошибка соединения с', remotePeerId, ':', err);
+                removeRemoteVideo(remotePeerId);
             });
-            
-            peerConnections[peerId] = call;
-        }
-
-        function addRemoteVideo(stream, peerId) {
-            // Проверяем, не существует ли уже видео для этого пира
-            if (document.getElementById(`remote-${peerId}`)) {
-                console.log('Видео для пира уже существует:', peerId);
-                return;
-            }
-
-            const remoteVideoContainer = document.createElement('div');
-            remoteVideoContainer.className = 'remote-video-container';
-            remoteVideoContainer.id = `remote-${peerId}`;
-            
-            const remoteVideo = document.createElement('video');
-            remoteVideo.autoplay = true;
-            remoteVideo.playsinline = true;
-            remoteVideo.srcObject = stream;
-            
-            const peerLabel = document.createElement('div');
-            peerLabel.className = 'peer-label';
-            peerLabel.textContent = `Участник ${peerId.substring(0, 8)}`;
-            
-            remoteVideoContainer.appendChild(remoteVideo);
-            remoteVideoContainer.appendChild(peerLabel);
-            
-            remoteVideosContainer.appendChild(remoteVideoContainer);
-            
-            console.log('Добавлено удаленное видео для пира:', peerId);
-        }
-
-        function removeRemoteVideo(peerId) {
-            const videoElement = document.getElementById(`remote-${peerId}`);
-            if (videoElement) {
-                videoElement.remove();
-                console.log('Удалено видео пира:', peerId);
-            }
-        }
-
-        function cleanupPeerConnections() {
-            if (peer) {
-                peer.destroy();
-                peer = null;
-            }
-            
-            Object.values(peerConnections).forEach(call => {
-                call.close();
-            });
-            peerConnections = {};
-            
-            // Очищаем все удаленные видео
-            remoteVideosContainer.innerHTML = '';
         }
 
         // Функции автоматического продолжения
@@ -3677,26 +3693,243 @@
             }
         }
 
+        // Демонстрация экрана
+        async function shareScreen() {
+            try {
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: true
+                });
+                
+                // Заменяем локальный поток на экран
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
+                localStream = screenStream;
+                selfVideo.srcObject = screenStream;
+                
+                // Обновляем поток для всех подключенных участников
+                remoteStreams.forEach((remote, peerId) => {
+                    // Здесь нужно обновить соединение с новым потоком
+                    // В реальном приложении это требует более сложной логики
+                });
+                
+                screenBtn.classList.add('active');
+                screenBtn.querySelector('span').textContent = 'Остановить';
+                
+                // Обработчик завершения демонстрации экрана
+                screenStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+                
+            } catch (error) {
+                console.error('Ошибка демонстрации экрана:', error);
+            }
+        }
+
+        function stopScreenShare() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Возвращаем камеру
+            enableCameraAndMicrophone();
+            
+            screenBtn.classList.remove('active');
+            screenBtn.querySelector('span').textContent = 'Экран';
+        }
+
+        // Обновленные функции управления медиа
+        async function toggleMicrophone() {
+            if (!localStream) return;
+            
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const newState = !audioTracks[0].enabled;
+                audioTracks[0].enabled = newState;
+                
+                isMicOn = newState;
+                if (newState) {
+                    micBtn.classList.add('active');
+                    micBtn.querySelector('span').textContent = 'Выкл';
+                    statusDiv.textContent = 'Микрофон включен';
+                } else {
+                    micBtn.classList.remove('active');
+                    micBtn.querySelector('span').textContent = 'Вкл';
+                    statusDiv.textContent = 'Микрофон выключен';
+                }
+            }
+        }
+
+        async function toggleCamera() {
+            if (!localStream) return;
+            
+            const videoTracks = localStream.getVideoTracks();
+            if (videoTracks.length > 0) {
+                const newState = !videoTracks[0].enabled;
+                videoTracks[0].enabled = newState;
+                
+                isCamOn = newState;
+                if (newState) {
+                    camBtn.classList.add('active');
+                    camBtn.querySelector('span').textContent = 'Выкл';
+                    statusDiv.textContent = 'Камера включена';
+                    document.getElementById('self-video-container').style.display = 'block';
+                } else {
+                    camBtn.classList.remove('active');
+                    camBtn.querySelector('span').textContent = 'Вкл';
+                    statusDiv.textContent = 'Камера выключена';
+                    document.getElementById('self-video-container').style.display = 'none';
+                }
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!isFullscreen) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) {
+                    document.documentElement.msRequestFullscreen();
+                }
+                isFullscreen = true;
+                fullscreenBtn.querySelector('span').textContent = 'Обычный';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                isFullscreen = false;
+                fullscreenBtn.querySelector('span').textContent = 'Полный';
+            }
+        }
+
+        function endCall() {
+            // Закрываем все медиа потоки
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Закрываем все удаленные соединения
+            remoteStreams.forEach((remote, peerId) => {
+                removeRemoteVideo(peerId);
+            });
+            
+            // Закрываем Peer соединение
+            if (peer) {
+                peer.destroy();
+            }
+            
+            if (recognition) {
+                recognition.stop();
+            }
+            
+            stopAnimation();
+            setAutoContinueEnabled(false);
+            
+            if (socket) {
+                socket.emit('leave_room', { room_id: roomId });
+                socket.disconnect();
+            }
+            
+            if (isEmbedded) {
+                window.parent.postMessage('conference_ended', '*');
+            } else {
+                window.location.href = '/';
+            }
+        }
+
+        // Инициализация медиа устройств
+        async function enableCameraAndMicrophone() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        sampleRate: 44100
+                    }
+                });
+                
+                selfVideo.srcObject = localStream;
+                isCamOn = true;
+                camBtn.classList.add('active');
+                camBtn.querySelector('span').textContent = 'Выкл';
+                document.getElementById('self-video-container').style.display = 'block';
+                
+                isMicOn = true;
+                micBtn.classList.add('active');
+                micBtn.querySelector('span').textContent = 'Выкл';
+                
+                statusDiv.textContent = 'Камера и микрофон включены';
+                cameraPermission.style.display = 'none';
+                devicesEnabled = true;
+                activateAiBtn.style.display = 'block';
+                
+                // После получения потока инициализируем PeerJS
+                initPeerJS();
+                
+            } catch (error) {
+                console.error('Ошибка доступа к камере/микрофону:', error);
+                cameraPermission.style.display = 'block';
+                
+                if (error.name === 'NotAllowedError') {
+                    statusDiv.textContent = 'Доступ к камере/микрофону запрещен';
+                } else {
+                    statusDiv.textContent = 'Ошибка доступа к устройствам';
+                }
+            }
+        }
+
+        // Обновленная Socket.io инициализация
         function initSocket() {
             socket = io();
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                socket.emit('join_room', { room_id: roomId });
+                
+                // Ждем инициализации PeerJS перед отправкой room_id
+                setTimeout(() => {
+                    if (peerId) {
+                        socket.emit('join_room', { 
+                            room_id: roomId,
+                            peer_id: peerId 
+                        });
+                    }
+                }, 1000);
                 
                 setTimeout(() => {
                     if (socket) {
                         socket.emit('get_current_avatar', { room_id: roomId });
                     }
                 }, 500);
-                
-                setTimeout(() => {
-                    enableCameraAndMicrophone();
-                }, 1500);
 
                 initLlmSystem();
             });
             
+            // Новый обработчик для участников
+            socket.on('participant_joined', (data) => {
+                console.log('Новый участник:', data.peer_id);
+                if (data.peer_id !== peerId) {
+                    connectToPeer(data.peer_id);
+                }
+            });
+            
+            socket.on('participant_left', (data) => {
+                console.log('Участник вышел:', data.peer_id);
+                removeRemoteVideo(data.peer_id);
+            });
+            
+            // Остальные обработчики без изменений
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
                 setAutoContinueEnabled(false);
@@ -3856,30 +4089,6 @@
                 updateLlmPriorityDisplay();
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
             });
-
-            // PeerJS сигналы через SocketIO
-            socket.on('peerjs_signal', (data) => {
-                console.log('Получен PeerJS сигнал от:', data.from_peer);
-                // PeerJS автоматически обработает сигнал
-            });
-
-            socket.on('peer_joined', (data) => {
-                console.log('Новый пир присоединился:', data.peer_id);
-                // Инициируем соединение с новым пиром
-                if (peer && localStream) {
-                    connectToPeer(data.peer_id);
-                }
-            });
-
-            socket.on('peers_list', (data) => {
-                console.log('Список пиров:', data.peers);
-                // Подключаемся ко всем существующим пирам
-                if (peer && localStream) {
-                    data.peers.forEach(peerId => {
-                        connectToPeer(peerId);
-                    });
-                }
-            });
         }
 
         function getPriorityName(priority) {
@@ -3890,64 +4099,6 @@
                 'openrouter_only': 'Только OpenRouter'
             };
             return names[priority] || priority;
-        }
-
-        async function enableCameraAndMicrophone() {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: {
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
-                        facingMode: 'user'
-                    },
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        sampleRate: 44100
-                    }
-                });
-                
-                userStream = localStream;
-                selfVideo.srcObject = userStream;
-                isCamOn = true;
-                camBtn.classList.add('active');
-                camBtn.querySelector('span').textContent = 'Выкл';
-                document.getElementById('self-video-container').style.display = 'block';
-                
-                isMicOn = true;
-                micBtn.classList.add('active');
-                micBtn.querySelector('span').textContent = 'Выкл';
-                
-                // Инициализируем PeerJS после получения потока
-                initPeerJS();
-                
-                if (recognition) {
-                    if (isIOS) {
-                        setTimeout(() => {
-                            if (isMicOn) {
-                                recognition.start();
-                            }
-                        }, 1000);
-                    } else {
-                        recognition.start();
-                    }
-                }
-                
-                statusDiv.textContent = 'Камера и микрофон включены';
-                cameraPermission.style.display = 'none';
-                devicesEnabled = true;
-                activateAiBtn.style.display = 'block';
-                
-            } catch (error) {
-                console.error('Ошибка доступа к камере/микрофону:', error);
-                cameraPermission.style.display = 'block';
-                
-                if (error.name === 'NotAllowedError') {
-                    statusDiv.textContent = 'Доступ к камере/микрофону запрещен';
-                } else {
-                    statusDiv.textContent = 'Ошибка доступа к устройствам';
-                }
-            }
         }
 
         function loadLessonContent(lessonId) {
@@ -4041,160 +4192,6 @@
             }, 5000);
         }
 
-        async function toggleMicrophone() {
-            try {
-                if (!isMicOn) {
-                    const audioStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: {
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            sampleRate: 44100
-                        }
-                    });
-                    if (userStream) {
-                        userStream.getAudioTracks().forEach(track => userStream.addTrack(track));
-                    } else {
-                        userStream = audioStream;
-                        localStream = audioStream;
-                    }
-                    isMicOn = true;
-                    micBtn.classList.add('active');
-                    micBtn.querySelector('span').textContent = 'Выкл';
-                    statusDiv.textContent = 'Микрофон включен';
-                    
-                    if (recognition) {
-                        if (isIOS) {
-                            setTimeout(() => {
-                                recognition.start();
-                            }, 500);
-                        } else {
-                            recognition.start();
-                        }
-                    }
-
-                    // Обновляем PeerJS поток
-                    if (peer) {
-                        Object.values(peerConnections).forEach(call => {
-                            // Здесь должна быть логика обновления аудиопотока в существующих соединениях
-                        });
-                    }
-                } else {
-                    if (userStream) {
-                        userStream.getAudioTracks().forEach(track => track.stop());
-                    }
-                    isMicOn = false;
-                    micBtn.classList.remove('active');
-                    micBtn.querySelector('span').textContent = 'Вкл';
-                    statusDiv.textContent = 'Микрофон выключен';
-                    
-                    if (recognition) {
-                        recognition.stop();
-                    }
-                }
-            } catch (error) {
-                statusDiv.textContent = 'Ошибка доступа к микрофону';
-                console.error('Ошибка доступа к микрофону:', error);
-            }
-        }
-
-        async function toggleCamera() {
-            try {
-                if (!isCamOn) {
-                    const videoStream = await navigator.mediaDevices.getUserMedia({ 
-                        video: {
-                            width: { ideal: 640 },
-                            height: { ideal: 480 },
-                            facingMode: 'user'
-                        }
-                    });
-                    
-                    if (userStream) {
-                        userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
-                    } else {
-                        userStream = videoStream;
-                        localStream = videoStream;
-                    }
-                    
-                    selfVideo.srcObject = userStream;
-                    isCamOn = true;
-                    camBtn.classList.add('active');
-                    camBtn.querySelector('span').textContent = 'Выкл';
-                    statusDiv.textContent = 'Камера включена';
-                    document.getElementById('self-video-container').style.display = 'block';
-                    cameraPermission.style.display = 'none';
-
-                    // Инициализируем PeerJS если еще не инициализирован
-                    if (!peer) {
-                        initPeerJS();
-                    }
-                } else {
-                    if (userStream) {
-                        userStream.getVideoTracks().forEach(track => track.stop());
-                        selfVideo.srcObject = null;
-                    }
-                    isCamOn = false;
-                    camBtn.classList.remove('active');
-                    camBtn.querySelector('span').textContent = 'Вкл';
-                    statusDiv.textContent = 'Камера выключена';
-                    document.getElementById('self-video-container').style.display = 'none';
-                }
-            } catch (error) {
-                statusDiv.textContent = 'Ошибка доступа к камере';
-                console.error('Ошибка доступа к камере:', error);
-                
-                if (error.name === 'NotAllowedError') {
-                    cameraPermission.style.display = 'block';
-                }
-            }
-        }
-
-        function toggleFullscreen() {
-            if (!isFullscreen) {
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
-                } else if (document.documentElement.webkitRequestFullscreen) {
-                    document.documentElement.webkitRequestFullscreen();
-                } else if (document.documentElement.msRequestFullscreen) {
-                    document.documentElement.msRequestFullscreen();
-                }
-                isFullscreen = true;
-                fullscreenBtn.querySelector('span').textContent = 'Обычный';
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
-                }
-                isFullscreen = false;
-                fullscreenBtn.querySelector('span').textContent = 'Полный';
-            }
-        }
-
-        function endCall() {
-            if (userStream) {
-                userStream.getTracks().forEach(track => track.stop());
-            }
-            if (recognition) {
-                recognition.stop();
-            }
-            stopAnimation();
-            setAutoContinueEnabled(false);
-            cleanupPeerConnections();
-            
-            if (socket) {
-                socket.emit('leave_room', { room_id: roomId });
-                socket.disconnect();
-            }
-            
-            if (isEmbedded) {
-                window.parent.postMessage('conference_ended', '*');
-            } else {
-                window.location.href = '/';
-            }
-        }
-
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
@@ -4260,6 +4257,13 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
+            screenBtn.addEventListener('click', () => {
+                if (screenBtn.classList.contains('active')) {
+                    stopScreenShare();
+                } else {
+                    shareScreen();
+                }
+            });
             fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
@@ -4305,6 +4309,9 @@
             
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
+            
+            // Запускаем медиа устройства
+            enableCameraAndMicrophone();
         });
 
         document.addEventListener('fullscreenchange', () => {
