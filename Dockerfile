@@ -5,14 +5,6 @@ RUN apt-get update && apt-get install -y \
     espeak-ng \
     libsndfile1 \
     curl \
-    pkg-config \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
