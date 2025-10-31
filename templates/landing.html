@@ -531,36 +531,6 @@
             line-height: 1.3;
         }
         
-        .conference-features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin: 3rem 0;
-        }
-        
-        .conference-feature {
-            text-align: center;
-            padding: 1.5rem 1rem;
-        }
-        
-        .conference-feature i {
-            font-size: 2.5rem;
-            color: var(--primary);
-            margin-bottom: 1rem;
-        }
-        
-        .conference-feature h4 {
-            font-size: 1.2rem;
-            margin-bottom: 0.8rem;
-            color: var(--text);
-        }
-        
-        .conference-feature p {
-            color: var(--text-light);
-            font-size: 0.95rem;
-            line-height: 1.5;
-        }
-        
         /* Popup Demo Styles */
         .popup-demo-buttons {
             display: flex;
@@ -1055,7 +1025,7 @@
                 font-size: 1.8rem;
             }
             
-            .conference-features {
+            .popup-features {
                 grid-template-columns: 1fr;
                 gap: 1rem;
             }
@@ -1091,10 +1061,6 @@
             .popup-demo-buttons {
                 flex-direction: column;
                 align-items: center;
-            }
-            
-            .popup-features {
-                grid-template-columns: 1fr;
             }
             
             .admin-float-btn {
@@ -1152,19 +1118,6 @@
                 width: 100%;
                 max-width: 280px;
             }
-        }
-        
-        /* Utility Classes */
-        .text-center {
-            text-align: center;
-        }
-        
-        .mb-1 { margin-bottom: 1rem; }
-        .mb-2 { margin-bottom: 2rem; }
-        .mb-3 { margin-bottom: 3rem; }
-        
-        .hidden {
-            display: none !important;
         }
     </style>
 </head>
@@ -1347,7 +1300,7 @@
                     </div>
                 </div>
                 
-                <!-- Popup Demo Section -->
+                <!-- Popup Demo Section - БЕЗ IFRAME -->
                 <div class="live-demo">
                     <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Запустите демо-версию</h3>
                     <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
