@@ -561,69 +561,7 @@
             line-height: 1.5;
         }
         
-        /* Live Demo Section */
-        .live-demo {
-            background: white;
-            border-radius: 20px;
-            padding: 2.5rem 1.5rem;
-            box-shadow: var(--shadow-md);
-            margin: 2rem auto;
-            max-width: 1000px;
-        }
-        
-        .demo-frame-container {
-            width: 100%;
-            height: 500px;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            margin: 2rem 0;
-            border: 1px solid rgba(0,0,0,0.05);
-            position: relative;
-            background: #f8f9fa;
-        }
-        
-        .demo-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: #f8f9fa;
-        }
-        
-        .iframe-loading {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f8f9fa;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 10;
-        }
-        
-        .iframe-loading.hidden {
-            display: none;
-        }
-        
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid var(--primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 1rem;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Popup Conference Styles */
+        /* Popup Demo Styles */
         .popup-demo-buttons {
             display: flex;
             gap: 1rem;
@@ -663,6 +601,16 @@
             color: var(--text-light);
             font-size: 0.9rem;
             line-height: 1.4;
+        }
+        
+        /* Live Demo Section */
+        .live-demo {
+            background: white;
+            border-radius: 20px;
+            padding: 2.5rem 1.5rem;
+            box-shadow: var(--shadow-md);
+            margin: 2rem auto;
+            max-width: 1000px;
         }
         
         /* Pricing Section */
@@ -986,6 +934,29 @@
             animation: float 6s ease-in-out infinite;
         }
         
+        /* Popup Overlay */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        
+        .popup-message {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 500px;
+            margin: 1rem;
+        }
+        
         /* Responsive Design */
         @media (max-width: 1024px) {
             .section {
@@ -1089,10 +1060,6 @@
                 gap: 1rem;
             }
             
-            .demo-frame-container {
-                height: 400px;
-            }
-            
             .live-demo {
                 padding: 2rem 1rem;
             }
@@ -1174,10 +1141,6 @@
             .web3-banner {
                 padding: 2rem 1rem;
                 margin: 1rem;
-            }
-            
-            .demo-frame-container {
-                height: 350px;
             }
             
             .cta-buttons-large {
@@ -1391,9 +1354,10 @@
                         Нажмите кнопку ниже, чтобы открыть полнофункциональную версию AI-учителя в отдельном окне. Можно использовать микрофон или текстовый чат.
                     </p>
                     
+                    <!-- Основные кнопки запуска -->
                     <div class="popup-demo-buttons">
                         <button onclick="openConferencePopup('demo')" class="btn btn-conference btn-large">
-                            <i class="fas fa-play"></i> Запустить демо
+                            <i class="fas fa-robot"></i> Запустить AI-учителя
                         </button>
                         <button onclick="openConferencePopup('math')" class="btn btn-primary btn-large">
                             <i class="fas fa-calculator"></i> Урок математики
@@ -1401,6 +1365,35 @@
                         <button onclick="openConferencePopup('english')" class="btn btn-primary btn-large">
                             <i class="fas fa-language"></i> Урок английского
                         </button>
+                    </div>
+
+                    <!-- Дополнительные предметы -->
+                    <div style="text-align: center; margin: 2rem 0;">
+                        <p style="color: var(--text-light); margin-bottom: 1rem;">Или выберите другой предмет:</p>
+                        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+                            <button onclick="openConferencePopup('physics')" class="btn btn-secondary">
+                                <i class="fas fa-atom"></i> Физика
+                            </button>
+                            <button onclick="openConferencePopup('chemistry')" class="btn btn-secondary">
+                                <i class="fas fa-flask"></i> Химия
+                            </button>
+                            <button onclick="openConferencePopup('history')" class="btn btn-secondary">
+                                <i class="fas fa-monument"></i> История
+                            </button>
+                            <button onclick="openConferencePopup('biology')" class="btn btn-secondary">
+                                <i class="fas fa-dna"></i> Биология
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Информация о popup -->
+                    <div style="background: rgba(126, 118, 249, 0.05); padding: 1.5rem; border-radius: 12px; margin-top: 2rem; text-align: center;">
+                        <h4 style="color: var(--primary); margin-bottom: 0.5rem;">
+                            <i class="fas fa-info-circle"></i> Как это работает?
+                        </h4>
+                        <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 0;">
+                            После нажатия кнопки откроется отдельное окно с виртуальным классом. Разрешите доступ к микрофону для голосового общения с AI-учителем.
+                        </p>
                     </div>
                     
                     <div style="text-align: center; margin-top: 2rem;">
@@ -1630,9 +1623,13 @@
         function openConferencePopup(roomType) {
             const roomMap = {
                 'demo': 'demo',
-                'free': 'free-trial',
                 'math': 'math-lesson',
-                'english': 'english-lesson',
+                'english': 'english-lesson', 
+                'physics': 'physics-lesson',
+                'chemistry': 'chemistry-lesson',
+                'history': 'history-lesson',
+                'biology': 'biology-lesson',
+                'free': 'free-trial',
                 'premium': 'premium',
                 'advanced': 'advanced',
                 'family': 'family',
@@ -1645,22 +1642,91 @@
             const left = (screen.width - width) / 2;
             const top = (screen.height - height) / 2;
             
-            const popup = window.open(
-                `/conference?room=${roomId}&source=landing`,
-                'EduSonicAI_Conference',
-                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,location=no,toolbar=no,menubar=no`
-            );
+            // Параметры для popup окна
+            const popupFeatures = [
+                `width=${width}`,
+                `height=${height}`,
+                `left=${left}`,
+                `top=${top}`,
+                'resizable=yes',
+                'scrollbars=yes',
+                'location=no',
+                'toolbar=no',
+                'menubar=no',
+                'status=no'
+            ].join(',');
+            
+            const popupUrl = `/conference?room=${roomId}&source=landing&type=${roomType}`;
+            
+            console.log(`🪟 Открытие popup: ${roomType} -> ${roomId}`);
+            
+            const popup = window.open(popupUrl, 'EduSonicAI_Conference', popupFeatures);
             
             if (popup) {
                 // Фокусируем popup
                 popup.focus();
                 
+                // Проверяем, не заблокирован ли popup
+                setTimeout(() => {
+                    if (popup.closed || typeof popup.closed == 'undefined') {
+                        // Popup заблокирован - показываем альтернативу
+                        showPopupBlockedMessage(roomId);
+                    }
+                }, 500);
+                
                 // Трекинг открытия
-                console.log(`Conference popup opened: ${roomType}`);
+                trackPopupOpening(roomType);
+                
             } else {
-                // Fallback - открываем в новой вкладке
-                window.open(`/conference?room=${roomId}`, '_blank');
+                // Popup заблокирован браузером
+                showPopupBlockedMessage(roomId);
             }
+            
+            return popup;
+        }
+
+        function showPopupBlockedMessage(roomId) {
+            // Создаем красивое сообщение о блокировке popup
+            const message = `
+                <div class="popup-overlay" id="popup-overlay">
+                    <div class="popup-message">
+                        <h3 style="color: var(--primary); margin-bottom: 1rem;">
+                            <i class="fas fa-exclamation-triangle"></i> Popup заблокирован
+                        </h3>
+                        <p style="margin-bottom: 1.5rem; color: var(--text-light);">
+                            Ваш браузер заблокировал всплывающее окно. Пожалуйста, разрешите popup для этого сайта или используйте альтернативный вариант.
+                        </p>
+                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                            <a href="/conference?room=${roomId}" class="btn btn-primary" target="_blank" 
+                               onclick="document.getElementById('popup-overlay')?.remove()">
+                                <i class="fas fa-external-link-alt"></i> Открыть в новой вкладке
+                            </a>
+                            <button onclick="document.getElementById('popup-overlay').remove()" class="btn btn-secondary">
+                                Закрыть
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const overlay = document.createElement('div');
+            overlay.innerHTML = message;
+            document.body.appendChild(overlay);
+        }
+
+        function trackPopupOpening(roomType) {
+            // Отправляем аналитику об открытии popup
+            fetch('/api/track/popup_opened', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    room_type: roomType,
+                    timestamp: new Date().toISOString(),
+                    user_agent: navigator.userAgent
+                })
+            }).catch(err => console.log('Analytics error:', err));
         }
 
         // Инициализация частиц
@@ -1880,6 +1946,18 @@
                         mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
                     }
                 }
+            });
+
+            // Добавляем визуальную обратную связь для кнопок popup
+            const popupButtons = document.querySelectorAll('button[onclick*="openConferencePopup"]');
+            popupButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // Добавляем анимацию нажатия
+                    this.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        this.style.transform = 'scale(1)';
+                    }, 150);
+                });
             });
         });
     </script>
