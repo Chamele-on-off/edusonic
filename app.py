@@ -89,8 +89,7 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
     response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('X-Frame-Options', 'ALLOWALL')  # Разрешаем iframe
-    response.headers.add('Content-Security-Policy', "frame-ancestors 'self' *")
+    response.headers.add('X-Frame-Options', 'SAMEORIGIN')  # Разрешаем iframe с того же origin
     return response
 
 def setup_llm_manager():
