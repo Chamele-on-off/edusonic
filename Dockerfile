@@ -5,6 +5,16 @@ RUN apt-get update && apt-get install -y \
     espeak-ng \
     libsndfile1 \
     curl \
+    pkg-config \
+    build-essential \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libavdevice-dev \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
