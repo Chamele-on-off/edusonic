@@ -714,7 +714,7 @@
         }
         
         #activate-ai-btn {
-            position: absolute;
+            position: fixed;
             bottom: 270px;
             left: 50%;
             transform: translateX(-50%);
@@ -725,12 +725,13 @@
             border-radius: 50px;
             font-size: 18px;
             cursor: pointer;
-            z-index: 10;
+            z-index: 1000;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             transition: all 0.3s ease;
             display: none;
             -webkit-user-select: none;
             user-select: none;
+            pointer-events: auto;
         }
         
         #activate-ai-btn:active {
@@ -989,6 +990,32 @@
             flex-wrap: wrap;
         }
 
+        /* Дисплей распознанной речи */
+        #speech-display {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            z-index: 999;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: none;
+            max-width: 80%;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+            border: 2px solid var(--student-color);
+        }
+
+        #speech-text {
+            margin: 0;
+            font-weight: 500;
+        }
+
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -1090,6 +1117,12 @@
             
             .visualization-tabs {
                 flex-wrap: wrap;
+            }
+
+            #speech-display {
+                top: 80px;
+                font-size: 14px;
+                padding: 12px 20px;
             }
         }
         
@@ -1195,6 +1228,12 @@
             .visualization-tab {
                 padding: 6px 12px;
                 font-size: 12px;
+            }
+
+            #speech-display {
+                top: 70px;
+                font-size: 12px;
+                padding: 10px 16px;
             }
         }
         
@@ -1379,6 +1418,11 @@
     <div id="main">
         <div id="video-container">
             <div id="background-animation"></div>
+            
+            <!-- Дисплей распознанной речи -->
+            <div id="speech-display">
+                <p id="speech-text"></p>
+            </div>
             
             <!-- Контейнер для удаленных видео -->
             <div id="remote-videos-container"></div>
@@ -2128,6 +2172,8 @@
         const llmStatusText = document.getElementById('llm-status-text');
         const llmPriorityStatus = document.getElementById('llm-priority-status');
         const llmPriorityText = document.getElementById('llm-priority-text');
+        const speechDisplay = document.getElementById('speech-display');
+        const speechText = document.getElementById('speech-text');
 
         // Глобальные переменные
         let userStream = null;
@@ -2207,6 +2253,21 @@
         let autoContinueEnabled = false;
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
+
+        // Функции для отображения распознанной речи
+        function showSpeechDisplay(text) {
+            speechText.textContent = text;
+            speechDisplay.style.display = 'block';
+            
+            // Автоматическое скрытие через 5 секунд
+            setTimeout(() => {
+                speechDisplay.style.display = 'none';
+            }, 5000);
+        }
+
+        function hideSpeechDisplay() {
+            speechDisplay.style.display = 'none';
+        }
 
         // Инициализация PeerJS
         function initPeerJS() {
@@ -2804,7 +2865,7 @@
             }, 3000);
         }
 
-        // Функции распознавания речи
+        // Улучшенные функции распознавания речи
         function initSpeechRecognition() {
             if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
                 recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
@@ -2813,7 +2874,7 @@
                 recognition.lang = 'ru-RU';
                 
                 recognition.continuous = true;
-                recognition.interimResults = false;
+                recognition.interimResults = true;
                 recognition.maxAlternatives = 1;
                 
                 let silenceTimer = null;
@@ -2834,11 +2895,17 @@
                         }
                     }
 
+                    // Показываем промежуточные результаты
+                    if (interimTranscript) {
+                        showSpeechDisplay(interimTranscript + '...');
+                    }
+
                     if (finalTranscript) {
                         const cleanText = finalTranscript.trim();
                         
                         if (cleanText.length < 3) {
                             console.log('Отфильтрована короткая фраза:', cleanText);
+                            hideSpeechDisplay();
                             return;
                         }
                         
@@ -2857,21 +2924,20 @@
                         const isNoise = noisePatterns.some(pattern => pattern.test(cleanText));
                         if (isNoise) {
                             console.log('Отфильтрован шум:', cleanText);
+                            hideSpeechDisplay();
                             return;
                         }
                         
                         console.log('Распознана речь:', cleanText);
                         lastFinalResult = cleanText;
                         
+                        // Показываем финальный результат
+                        showSpeechDisplay(cleanText);
+                        
                         handleStudentActivity();
                         
-                        if (socket) {
-                            socket.emit('recognized_speech', {
-                                room_id: roomId,
-                                text: cleanText
-                            });
-                            showStudentSpeech(cleanText, 'me');
-                        }
+                        // Отправляем на сервер
+                        handleRecognizedSpeech(cleanText);
                     }
                     
                     updateSpeechStatus(!!interimTranscript);
@@ -2879,6 +2945,7 @@
                     silenceTimer = setTimeout(() => {
                         console.log('Автоостановка из-за молчания');
                         updateSpeechStatus(false);
+                        hideSpeechDisplay();
                         if (recognition && isMicOn) {
                             recognition.stop();
                         }
@@ -2888,6 +2955,7 @@
                 recognition.onerror = (event) => {
                     console.error('Ошибка распознавания речи:', event.error);
                     updateSpeechStatus(false);
+                    hideSpeechDisplay();
                     
                     if (event.error === 'no-speech' || event.error === 'audio-capture') {
                         setTimeout(() => {
@@ -2905,6 +2973,7 @@
 
                 recognition.onend = () => {
                     updateSpeechStatus(false);
+                    hideSpeechDisplay();
                     if (silenceTimer) clearTimeout(silenceTimer);
                     
                     if (isMicOn) {
@@ -2945,6 +3014,45 @@
                     speechStatus.style.color = '#95a5a6';
                 }
             }
+        }
+
+        // Улучшенная функция обработки распознанной речи
+        function handleRecognizedSpeech(text) {
+            console.log('Обработка распознанной речи:', text);
+            
+            // Проверяем подключение
+            if (!socket || !socket.connected) {
+                console.error('WebSocket не подключен, переподключаемся...');
+                initSocket();
+                setTimeout(() => {
+                    if (socket && socket.connected) {
+                        socket.emit('recognized_speech', {
+                            room_id: roomId,
+                            text: text
+                        });
+                    } else {
+                        console.error('Не удалось переподключиться');
+                    }
+                }, 1000);
+                return;
+            }
+            
+            // Проверяем, активирован ли AI-учитель
+            if (!aiTeacherActivated) {
+                console.log('AI-учитель не активирован, игнорируем речь:', text);
+                return;
+            }
+            
+            console.log('Отправка речи на сервер:', text);
+            
+            // Отправляем на сервер
+            socket.emit('recognized_speech', {
+                room_id: roomId,
+                text: text
+            });
+            
+            showStudentSpeech(text, 'me');
+            handleStudentActivity();
         }
 
         // iOS Audio Fix
@@ -3754,10 +3862,25 @@
                     micBtn.classList.add('active');
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
+                    
+                    // Запускаем распознавание речи при включении микрофона
+                    if (recognition) {
+                        setTimeout(() => {
+                            recognition.start();
+                            updateSpeechStatus(true);
+                        }, 500);
+                    }
                 } else {
                     micBtn.classList.remove('active');
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
+                    
+                    // Останавливаем распознавание речи при выключении микрофона
+                    if (recognition) {
+                        recognition.stop();
+                        updateSpeechStatus(false);
+                        hideSpeechDisplay();
+                    }
                 }
             }
         }
@@ -3831,6 +3954,7 @@
             
             stopAnimation();
             setAutoContinueEnabled(false);
+            hideSpeechDisplay();
             
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
@@ -3847,6 +3971,8 @@
         // Инициализация медиа устройств
         async function enableCameraAndMicrophone() {
             try {
+                console.log('Запрос доступа к камере и микрофону...');
+                
                 localStream = await navigator.mediaDevices.getUserMedia({ 
                     video: {
                         width: { ideal: 640 },
@@ -3860,7 +3986,9 @@
                     }
                 });
                 
+                console.log('Медиапоток получен успешно');
                 selfVideo.srcObject = localStream;
+                
                 isCamOn = true;
                 camBtn.classList.add('active');
                 camBtn.querySelector('span').textContent = 'Выкл';
@@ -3873,10 +4001,16 @@
                 statusDiv.textContent = 'Камера и микрофон включены';
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
-                activateAiBtn.style.display = 'block';
                 
-                // После получения потока инициализируем PeerJS
+                // ВАЖНО: Показываем кнопку сразу после получения медиапотока
+                activateAiBtn.style.display = 'block';
+                console.log('Кнопка активации учителя показана');
+                
+                // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
+                
+                // Инициализируем распознавание речи
+                initSpeechRecognition();
                 
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
@@ -3887,15 +4021,26 @@
                 } else {
                     statusDiv.textContent = 'Ошибка доступа к устройствам';
                 }
+                
+                // Даже при ошибке показываем кнопку для демо-режима
+                activateAiBtn.style.display = 'block';
             }
         }
 
-        // Обновленная Socket.io инициализация
+        // Улучшенная Socket.io инициализация
         function initSocket() {
             socket = io();
             
+            // Мониторинг событий WebSocket
+            const originalEmit = socket.emit;
+            socket.emit = function(event, data) {
+                console.log('📤 WebSocket emit:', event, data);
+                return originalEmit.call(this, event, data);
+            };
+            
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
+                console.log('✅ WebSocket подключен');
                 
                 // Ждем инициализации PeerJS перед отправкой room_id
                 setTimeout(() => {
@@ -3929,10 +4074,16 @@
                 removeRemoteVideo(data.peer_id);
             });
             
-            // Остальные обработчики без изменений
+            // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
                 setAutoContinueEnabled(false);
+                console.log('❌ WebSocket отключен');
+            });
+            
+            socket.on('connect_error', (error) => {
+                console.error('❌ WebSocket ошибка подключения:', error);
+                statusDiv.textContent = 'Ошибка подключения: ' + error.message;
             });
             
             socket.on('avatar_changed', (data) => {
@@ -4001,6 +4152,7 @@
                 aiTeacherActivated = true;
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
+                console.log('✅ AI-учитель активирован');
                 
                 if (isIOS) {
                     setTimeout(() => {
@@ -4009,6 +4161,12 @@
                         }
                     }, 2000);
                 }
+            });
+
+            socket.on('activate_ai_error', (data) => {
+                console.error('Ошибка активации AI-учителя:', data.error);
+                statusDiv.textContent = 'Ошибка активации: ' + data.error;
+                activateAiBtn.style.display = 'block';
             });
             
             socket.on('lesson_started', (data) => {
@@ -4088,6 +4246,11 @@
                 currentLlmPriority = data.priority;
                 updateLlmPriorityDisplay();
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
+            });
+
+            // Логируем все входящие события
+            socket.onAny((event, data) => {
+                console.log('📥 WebSocket on:', event, data);
             });
         }
 
@@ -4192,15 +4355,87 @@
             }, 5000);
         }
 
+        // Улучшенная инициализация кнопки активации
+        function initActivateButton() {
+            const button = document.getElementById('activate-ai-btn');
+            
+            // Убедимся, что кнопка кликабельна
+            button.style.zIndex = '1000';
+            button.style.pointerEvents = 'auto';
+            button.style.position = 'fixed';
+            
+            // Удаляем старые обработчики
+            button.replaceWith(button.cloneNode(true));
+            const newButton = document.getElementById('activate-ai-btn');
+            
+            newButton.addEventListener('click', function(event) {
+                console.log('=== КЛИК ПО КНОПКЕ АКТИВАЦИИ ===');
+                console.log('Event:', event);
+                console.log('Socket connected:', socket?.connected);
+                console.log('Room ID:', roomId);
+                
+                event.preventDefault();
+                event.stopPropagation();
+                
+                if (socket && socket.connected) {
+                    console.log('Отправка запроса активации через WebSocket...');
+                    socket.emit('activate_ai_teacher', { room_id: roomId });
+                    
+                    // Немедленная обратная связь
+                    newButton.style.display = 'none';
+                    statusDiv.textContent = 'Активация AI-учителя...';
+                    
+                    // Резервный таймаут
+                    setTimeout(() => {
+                        if (newButton.style.display !== 'none') {
+                            console.log('Резервная активация по таймауту');
+                            backupActivateAI();
+                        }
+                    }, 3000);
+                    
+                } else {
+                    console.error('Socket не подключен, пробуем резервный метод');
+                    backupActivateAI();
+                }
+            });
+        }
+
+        // Резервный метод активации
+        function backupActivateAI() {
+            console.log('Использование резервного метода активации');
+            
+            // Помечаем как активированного
+            aiTeacherActivated = true;
+            activateAiBtn.style.display = 'none';
+            statusDiv.textContent = 'AI-Teacher активирован (локальный режим)';
+            
+            // Загружаем аватар
+            loadAvatarFrames('teacher');
+        }
+
+        // Принудительное отображение кнопки
+        function forceShowActivateButton() {
+            console.log('Принудительное отображение кнопки активации');
+            const button = document.getElementById('activate-ai-btn');
+            
+            button.style.display = 'block';
+            button.style.zIndex = '1000';
+            button.style.pointerEvents = 'auto';
+            button.style.position = 'fixed';
+            
+            // Переинициализируем обработчики
+            initActivateButton();
+        }
+
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             initSocket();
             createBackgroundAnimation();
-            initSpeechRecognition();
             initWindowManagement();
             initZoom();
             initDrawingCanvas();
             initVisualization();
+            initActivateButton();
             
             textToolBtn.addEventListener('click', () => setTool('text'));
             drawToolBtn.addEventListener('click', () => setTool('draw'));
@@ -4267,10 +4502,6 @@
             fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
-            activateAiBtn.addEventListener('click', () => {
-                socket.emit('activate_ai_teacher', { room_id: roomId });
-            });
-
             enableCameraBtn.addEventListener('click', async () => {
                 await enableCameraAndMicrophone();
             });
@@ -4309,6 +4540,9 @@
             
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
+            
+            // Принудительно показываем кнопку через 3 секунды
+            setTimeout(forceShowActivateButton, 3000);
             
             // Запускаем медиа устройства
             enableCameraAndMicrophone();
