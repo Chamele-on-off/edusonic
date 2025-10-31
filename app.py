@@ -9,16 +9,112 @@ import time
 import threading
 from collections import defaultdict
 import random
-from dialogue import DialogueManager
-from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_llm_priority, set_llm_priority
 import requests
 import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import re
 import tempfile
-from local_llm_manager import get_llm_manager
-from key_manager import get_key_manager
+import subprocess
+import sys
+
+# Импорты из ваших модулей
+try:
+    from dialogue import DialogueManager
+    from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_llm_priority, set_llm_priority
+    from local_llm_manager import get_llm_manager
+    from key_manager import get_key_manager
+    from llm import LLMIntegration
+except ImportError:
+    # Заглушки для случаев, когда модули не найдены
+    class DialogueManager:
+        def __init__(self, socketio):
+            self.socketio = socketio
+            self.room_id = None
+            self.waiting_for_answer = False
+            self.practice_active = False
+            
+        def set_llm_mode(self, mode):
+            pass
+            
+        def is_lesson_started(self):
+            return False
+            
+        def process_input(self, text):
+            return "Диалог менеджер не доступен"
+            
+        def get_selected_lesson(self):
+            return None
+            
+        def get_current_subject(self):
+            return "общее"
+            
+        def _get_next_paragraph(self):
+            return None
+            
+        def handle_question_during_lesson(self, text):
+            return None
+            
+        def _evaluate_and_generate_next(self, answer):
+            return "Практика не доступна"
+            
+        def get_knowledge_stats(self):
+            return {}
+    
+    def update_api_key(provider, api_key):
+        return True
+        
+    def get_api_key(provider):
+        return ""
+        
+    def load_config():
+        return {}
+        
+    def get_model_config():
+        return {}
+        
+    def get_llm_mode():
+        return "traditional"
+        
+    def set_llm_mode(mode):
+        return True
+        
+    def get_llm_priority():
+        return "local_first"
+        
+    def set_llm_priority(priority):
+        return True
+        
+    class LLMIntegration:
+        def _query_llm_api(self, prompt, context, subject, system_prompt, max_tokens):
+            return "LLM не доступен"
+    
+    class LocalLLMManager:
+        def start(self):
+            pass
+            
+        def register_room_callback(self, room_id, callback):
+            pass
+            
+        def submit_request(self, prompt, system_prompt, max_tokens, room_id, request_id):
+            return f"request_{int(time.time())}"
+            
+        def get_queue_size(self):
+            return 0
+            
+        def get_status(self):
+            return {"status": "not_available"}
+    
+    def get_llm_manager():
+        return LocalLLMManager()
+        
+    def get_key_manager():
+        class KeyManager:
+            def get_usage_stats(self):
+                return {}
+            def add_key(self, api_key, name):
+                pass
+        return KeyManager()
 
 # Настройка SocketIO с правильными таймаутами
 app = Flask(__name__, static_folder='static')
@@ -56,6 +152,9 @@ room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
 room_current_avatar = defaultdict(lambda: 'teacher')
+
+# PeerJS соединения
+peer_connections = defaultdict(dict)
 
 # Кэш для визуализаций
 diagram_cache = {}
@@ -285,6 +384,48 @@ def text_to_speech(text, lang='ru'):
     except Exception as e:
         print(f"Error in text_to_speech: {e}")
         return None
+
+# PeerJS обработчики
+@socketio.on('peerjs_signal')
+def handle_peerjs_signal(data):
+    """Пересылка сигналов PeerJS между клиентами"""
+    room_id = data['room_id']
+    signal = data['signal']
+    target_peer = data['target_peer']
+    
+    # Пересылаем сигнал целевому пиру
+    emit('peerjs_signal', {
+        'signal': signal,
+        'from_peer': data['from_peer']
+    }, room=target_peer)
+
+@socketio.on('join_peer')
+def handle_join_peer(data):
+    """Клиент присоединяется к PeerJS комнате"""
+    room_id = data['room_id']
+    peer_id = data['peer_id']
+    
+    join_room(peer_id)  # Каждый пир в своей комнате
+    
+    # Сообщаем другим участникам о новом пире
+    emit('peer_joined', {
+        'peer_id': peer_id,
+        'room_id': room_id
+    }, room=room_id, include_self=False)
+
+@socketio.on('get_peers')
+def handle_get_peers(data):
+    """Получение списка активных пиров в комнате"""
+    room_id = data['room_id']
+    
+    # Получаем всех участников комнаты кроме себя
+    room = socketio.server.manager.rooms.get('/').get(room_id, {})
+    peers = [sid for sid in room.keys() if sid != request.sid]
+    
+    emit('peers_list', {
+        'peers': peers,
+        'room_id': room_id
+    })
 
 @socketio.on('connect')
 def handle_connect():
@@ -842,7 +983,6 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     
     try:
         # Используем существующий LLM
-        from llm import LLMIntegration
         llm = LLMIntegration()
         
         response = llm._query_llm_api(
@@ -900,7 +1040,6 @@ def generate_svg_code(topic: str, context: str = "") -> str:
     """
     
     try:
-        from llm import LLMIntegration
         llm = LLMIntegration()
         
         svg_code = llm._query_llm_api(
@@ -1784,7 +1923,6 @@ def download_knowledge():
         return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
     
     # Создаем временный файл для скачивания
-    import tempfile
     import zipfile
     
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -1811,7 +1949,6 @@ def download_lessons():
         return jsonify({"success": False, "error": "Уроки не найдены"})
     
     # Создаем временный zip-файл
-    import tempfile
     import zipfile
     
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -1836,7 +1973,6 @@ def download_practice():
         return jsonify({"success": False, "error": "Практические задания не найдены"})
     
     # Создаем временный zip-файл
-    import tempfile
     import zipfile
     
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -1865,7 +2001,6 @@ def download_practice_txt():
             return jsonify({"success": False, "error": "TXT файлы практики не найдены"})
         
         # Создаем временный zip-файл
-        import tempfile
         import zipfile
     
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
@@ -2050,7 +2185,6 @@ def health_check():
 def debug_openrouter():
     """Диагностика проблем с OpenRouter"""
     try:
-        from llm import LLMIntegration
         llm = LLMIntegration()
         
         # Проверяем базовые настройки
@@ -2111,8 +2245,24 @@ def add_api_key_route():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+def run_peer_server():
+    """Запуск PeerJS сервера в отдельном потоке"""
+    try:
+        # Запускаем PeerJS сервер
+        peer_process = subprocess.Popen([
+            sys.executable, '-m', 'peerjs', '--port', '9000', '--path', '/peerjs'
+        ])
+        print("✅ PeerJS сервер запущен на порту 9000")
+        return peer_process
+    except Exception as e:
+        print(f"❌ Ошибка запуска PeerJS сервера: {e}")
+        return None
+
 if __name__ == '__main__':
     print("🚀 Запуск AI Teacher системы...")
+    
+    # Запускаем PeerJS сервер
+    peer_process = run_peer_server()
     
     # Настраиваем менеджер LLM
     setup_llm_manager()
@@ -2131,4 +2281,12 @@ if __name__ == '__main__':
     lessons_count = len(list(LESSONS_DIR.glob("*.txt")))
     print(f"📚 Доступно уроков: {lessons_count}")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    try:
+        socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    except KeyboardInterrupt:
+        print("🛑 Остановка сервера...")
+    finally:
+        # Завершаем PeerJS процесс при остановке
+        if peer_process:
+            peer_process.terminate()
+            print("✅ PeerJS сервер остановлен")
