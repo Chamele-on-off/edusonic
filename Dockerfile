@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     espeak-ng \
     libsndfile1 \
     curl \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
