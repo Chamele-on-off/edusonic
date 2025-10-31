@@ -8,6 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
         :root {
             --primary: #4263EB;
@@ -795,6 +796,45 @@
             color: var(--primary);
         }
         
+        /* Удаленные видео участников */
+        #remote-videos-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 5;
+        }
+        
+        .remote-video-container {
+            width: 150px;
+            height: 112px;
+            border: 2px solid var(--student-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background: black;
+            position: relative;
+        }
+        
+        .remote-video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .peer-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 5px;
+            font-size: 10px;
+            text-align: center;
+        }
+        
         /* SVG специфичные стили */
         .svg-diagram-container {
             width: 100%;
@@ -996,6 +1036,11 @@
                 left: 15px;
             }
             
+            .remote-video-container {
+                width: 120px;
+                height: 90px;
+            }
+            
             #teacher-speech,
             #student-speech {
                 max-width: 200px;
@@ -1070,6 +1115,11 @@
                 height: 90px;
                 bottom: 80px;
                 left: 10px;
+            }
+            
+            .remote-video-container {
+                width: 100px;
+                height: 75px;
             }
             
             #teacher-speech,
@@ -1319,6 +1369,9 @@
     <div id="main">
         <div id="video-container">
             <div id="background-animation"></div>
+            
+            <!-- Контейнер для удаленных видео -->
+            <div id="remote-videos-container"></div>
             
             <!-- Индикатор статуса LLM -->
             <div id="llm-status" class="llm-status-indicator">
@@ -2058,6 +2111,7 @@
         const llmStatusText = document.getElementById('llm-status-text');
         const llmPriorityStatus = document.getElementById('llm-priority-status');
         const llmPriorityText = document.getElementById('llm-priority-text');
+        const remoteVideosContainer = document.getElementById('remote-videos-container');
 
         // Глобальные переменные
         let userStream = null;
@@ -2077,6 +2131,11 @@
         let currentAvatarAspectRatio = 1;
         let isLessonActive = false;
         let audioContext = null;
+        
+        // PeerJS переменные
+        let peer = null;
+        let localStream = null;
+        let peerConnections = {};
         
         // Анимация аватара - переменные
         let currentAvatar = 'teacher';
@@ -2137,6 +2196,150 @@
         let autoContinueEnabled = false;
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
+
+        // PeerJS функции
+        function initPeerJS() {
+            if (!localStream) {
+                console.log('Ожидание локального потока для инициализации PeerJS');
+                return;
+            }
+
+            // Создаем Peer с уникальным ID
+            peer = new Peer({
+                host: window.location.hostname,
+                port: 9000,
+                path: '/peerjs',
+                debug: 3
+            });
+
+            peer.on('open', (id) => {
+                console.log('PeerJS подключен с ID:', id);
+                
+                // Присоединяемся к комнате
+                socket.emit('join_peer', {
+                    room_id: roomId,
+                    peer_id: id
+                });
+                
+                // Запрашиваем список пиров
+                socket.emit('get_peers', { room_id: roomId });
+            });
+
+            peer.on('connection', (conn) => {
+                console.log('Новое Peer соединение:', conn.peer);
+            });
+
+            // Принимаем входящие видеопотоки
+            peer.on('call', (call) => {
+                console.log('Входящий видеозвонок от:', call.peer);
+                
+                // Отвечаем на звонок нашим потоком
+                call.answer(localStream);
+                
+                call.on('stream', (remoteStream) => {
+                    console.log('Получен удаленный видеопоток от:', call.peer);
+                    addRemoteVideo(remoteStream, call.peer);
+                });
+
+                call.on('close', () => {
+                    console.log('Соединение закрыто с:', call.peer);
+                    removeRemoteVideo(call.peer);
+                    delete peerConnections[call.peer];
+                });
+
+                peerConnections[call.peer] = call;
+            });
+
+            // Обработка ошибок PeerJS
+            peer.on('error', (err) => {
+                console.error('PeerJS ошибка:', err);
+                if (err.type === 'peer-unavailable') {
+                    console.log('Пир недоступен:', err.peer);
+                }
+            });
+        }
+
+        function connectToPeer(peerId) {
+            if (peerConnections[peerId]) {
+                console.log('Уже подключен к пиру:', peerId);
+                return;
+            }
+
+            console.log('Подключаемся к пиру:', peerId);
+            
+            // Создаем видеозвонок
+            const call = peer.call(peerId, localStream);
+            
+            call.on('stream', (remoteStream) => {
+                console.log('Получен поток от:', peerId);
+                addRemoteVideo(remoteStream, peerId);
+            });
+            
+            call.on('close', () => {
+                console.log('Соединение закрыто с:', peerId);
+                removeRemoteVideo(peerId);
+                delete peerConnections[peerId];
+            });
+            
+            call.on('error', (err) => {
+                console.error('Ошибка соединения с пиром:', peerId, err);
+                removeRemoteVideo(peerId);
+                delete peerConnections[peerId];
+            });
+            
+            peerConnections[peerId] = call;
+        }
+
+        function addRemoteVideo(stream, peerId) {
+            // Проверяем, не существует ли уже видео для этого пира
+            if (document.getElementById(`remote-${peerId}`)) {
+                console.log('Видео для пира уже существует:', peerId);
+                return;
+            }
+
+            const remoteVideoContainer = document.createElement('div');
+            remoteVideoContainer.className = 'remote-video-container';
+            remoteVideoContainer.id = `remote-${peerId}`;
+            
+            const remoteVideo = document.createElement('video');
+            remoteVideo.autoplay = true;
+            remoteVideo.playsinline = true;
+            remoteVideo.srcObject = stream;
+            
+            const peerLabel = document.createElement('div');
+            peerLabel.className = 'peer-label';
+            peerLabel.textContent = `Участник ${peerId.substring(0, 8)}`;
+            
+            remoteVideoContainer.appendChild(remoteVideo);
+            remoteVideoContainer.appendChild(peerLabel);
+            
+            remoteVideosContainer.appendChild(remoteVideoContainer);
+            
+            console.log('Добавлено удаленное видео для пира:', peerId);
+        }
+
+        function removeRemoteVideo(peerId) {
+            const videoElement = document.getElementById(`remote-${peerId}`);
+            if (videoElement) {
+                videoElement.remove();
+                console.log('Удалено видео пира:', peerId);
+            }
+        }
+
+        function cleanupPeerConnections() {
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            
+            Object.values(peerConnections).forEach(call => {
+                call.close();
+            });
+            peerConnections = {};
+            
+            // Очищаем все удаленные видео
+            remoteVideosContainer.innerHTML = '';
+        }
 
         // Функции автоматического продолжения
         function resetAutoContinueTimer() {
@@ -3255,7 +3458,7 @@
             const customEvent = {
                 type: 'mousemove',
                 clientX: touch.clientX,
-                clientY = touch.clientY,
+                clientY: touch.clientY,
                 target: drawingCanvas
             };
             
@@ -3653,6 +3856,30 @@
                 updateLlmPriorityDisplay();
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
             });
+
+            // PeerJS сигналы через SocketIO
+            socket.on('peerjs_signal', (data) => {
+                console.log('Получен PeerJS сигнал от:', data.from_peer);
+                // PeerJS автоматически обработает сигнал
+            });
+
+            socket.on('peer_joined', (data) => {
+                console.log('Новый пир присоединился:', data.peer_id);
+                // Инициируем соединение с новым пиром
+                if (peer && localStream) {
+                    connectToPeer(data.peer_id);
+                }
+            });
+
+            socket.on('peers_list', (data) => {
+                console.log('Список пиров:', data.peers);
+                // Подключаемся ко всем существующим пирам
+                if (peer && localStream) {
+                    data.peers.forEach(peerId => {
+                        connectToPeer(peerId);
+                    });
+                }
+            });
         }
 
         function getPriorityName(priority) {
@@ -3667,7 +3894,7 @@
 
         async function enableCameraAndMicrophone() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
+                localStream = await navigator.mediaDevices.getUserMedia({ 
                     video: {
                         width: { ideal: 640 },
                         height: { ideal: 480 },
@@ -3680,7 +3907,7 @@
                     }
                 });
                 
-                userStream = stream;
+                userStream = localStream;
                 selfVideo.srcObject = userStream;
                 isCamOn = true;
                 camBtn.classList.add('active');
@@ -3690,6 +3917,9 @@
                 isMicOn = true;
                 micBtn.classList.add('active');
                 micBtn.querySelector('span').textContent = 'Выкл';
+                
+                // Инициализируем PeerJS после получения потока
+                initPeerJS();
                 
                 if (recognition) {
                     if (isIOS) {
@@ -3825,6 +4055,7 @@
                         userStream.getAudioTracks().forEach(track => userStream.addTrack(track));
                     } else {
                         userStream = audioStream;
+                        localStream = audioStream;
                     }
                     isMicOn = true;
                     micBtn.classList.add('active');
@@ -3839,6 +4070,13 @@
                         } else {
                             recognition.start();
                         }
+                    }
+
+                    // Обновляем PeerJS поток
+                    if (peer) {
+                        Object.values(peerConnections).forEach(call => {
+                            // Здесь должна быть логика обновления аудиопотока в существующих соединениях
+                        });
                     }
                 } else {
                     if (userStream) {
@@ -3874,6 +4112,7 @@
                         userStream.getVideoTracks().forEach(track => userStream.addTrack(track));
                     } else {
                         userStream = videoStream;
+                        localStream = videoStream;
                     }
                     
                     selfVideo.srcObject = userStream;
@@ -3883,6 +4122,11 @@
                     statusDiv.textContent = 'Камера включена';
                     document.getElementById('self-video-container').style.display = 'block';
                     cameraPermission.style.display = 'none';
+
+                    // Инициализируем PeerJS если еще не инициализирован
+                    if (!peer) {
+                        initPeerJS();
+                    }
                 } else {
                     if (userStream) {
                         userStream.getVideoTracks().forEach(track => track.stop());
@@ -3937,6 +4181,7 @@
             }
             stopAnimation();
             setAutoContinueEnabled(false);
+            cleanupPeerConnections();
             
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
