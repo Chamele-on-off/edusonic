@@ -2254,6 +2254,42 @@
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
 
+        // Улучшенная система активации AI-учителя
+        let roomActivationState = {
+            peerReady: false,
+            mediaReady: false, 
+            socketReady: false,
+            roomJoined: false
+        };
+
+        function checkRoomActivationReady() {
+            return roomActivationState.peerReady && 
+                   roomActivationState.mediaReady && 
+                   roomActivationState.socketReady && 
+                   roomActivationState.roomJoined;
+        }
+
+        function updateActivationButton() {
+            const button = document.getElementById('activate-ai-btn');
+            if (!button) return;
+            
+            if (checkRoomActivationReady()) {
+                button.style.display = 'block';
+                button.disabled = false;
+                button.innerHTML = 'Activate AI-Teacher';
+                console.log('✅ Кнопка активации готова для комнаты:', roomId);
+            } else {
+                button.style.display = 'none';
+                console.log('⏳ Ожидание готовности комнаты:', roomActivationState);
+            }
+        }
+
+        function setActivationState(key, value) {
+            roomActivationState[key] = value;
+            console.log(`🔧 Состояние активации: ${key} = ${value}`);
+            updateActivationButton();
+        }
+
         // Функции для отображения распознанной речи
         function showSpeechDisplay(text) {
             speechText.textContent = text;
@@ -2271,6 +2307,8 @@
 
         // Инициализация PeerJS
         function initPeerJS() {
+            console.log('Инициализация PeerJS для комнаты:', roomId);
+            
             // Создаем Peer с публичным сервером
             peer = new Peer({
                 host: '0.peerjs.com',
@@ -2286,16 +2324,21 @@
             });
 
             peer.on('open', (id) => {
-                console.log('PeerJS подключен с ID:', id);
+                console.log('✅ PeerJS подключен с ID:', id, 'для комнаты:', roomId);
                 peerId = id;
                 statusDiv.textContent = 'Подключение к конференции...';
                 
+                // ОБНОВЛЕНО: Устанавливаем состояние Peer готовности
+                setActivationState('peerReady', true);
+                
                 // Сообщаем серверу о нашем peerId
-                if (socket) {
+                if (socket && socket.connected) {
                     socket.emit('join_room', { 
                         room_id: roomId,
                         peer_id: id 
                     });
+                } else {
+                    console.warn('WebSocket не готов для отправки join_room');
                 }
             });
 
@@ -2328,17 +2371,20 @@
             peer.on('disconnected', () => {
                 console.log('PeerJS отключен');
                 statusDiv.textContent = 'Переподключение...';
+                setActivationState('peerReady', false);
                 peer.reconnect();
             });
 
             peer.on('close', () => {
                 console.log('PeerJS закрыт');
                 statusDiv.textContent = 'Соединение закрыто';
+                setActivationState('peerReady', false);
             });
 
             peer.on('error', (err) => {
                 console.error('PeerJS ошибка:', err);
                 statusDiv.textContent = 'Ошибка соединения: ' + err.type;
+                setActivationState('peerReady', false);
             });
         }
 
@@ -4002,9 +4048,8 @@
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
-                // ВАЖНО: Показываем кнопку сразу после получения медиапотока
-                activateAiBtn.style.display = 'block';
-                console.log('Кнопка активации учителя показана');
+                // ОБНОВЛЕНО: Устанавливаем состояние медиа готовности
+                setActivationState('mediaReady', true);
                 
                 // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
@@ -4015,15 +4060,13 @@
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
                 cameraPermission.style.display = 'block';
+                setActivationState('mediaReady', false);
                 
                 if (error.name === 'NotAllowedError') {
                     statusDiv.textContent = 'Доступ к камере/микрофону запрещен';
                 } else {
                     statusDiv.textContent = 'Ошибка доступа к устройствам';
                 }
-                
-                // Даже при ошибке показываем кнопку для демо-режима
-                activateAiBtn.style.display = 'block';
             }
         }
 
@@ -4040,17 +4083,18 @@
             
             socket.on('connect', () => {
                 statusDiv.textContent = 'Подключено к серверу';
-                console.log('✅ WebSocket подключен');
+                console.log('✅ WebSocket подключен для комнаты:', roomId);
+                
+                // ОБНОВЛЕНО: Устанавливаем состояние socket готовности
+                setActivationState('socketReady', true);
                 
                 // Ждем инициализации PeerJS перед отправкой room_id
-                setTimeout(() => {
-                    if (peerId) {
-                        socket.emit('join_room', { 
-                            room_id: roomId,
-                            peer_id: peerId 
-                        });
-                    }
-                }, 1000);
+                if (peerId) {
+                    socket.emit('join_room', { 
+                        room_id: roomId,
+                        peer_id: peerId 
+                    });
+                }
                 
                 setTimeout(() => {
                     if (socket) {
@@ -4059,6 +4103,13 @@
                 }, 500);
 
                 initLlmSystem();
+            });
+            
+            // ОБНОВЛЕНО: Добавляем обработчик успешного присоединения к комнате
+            socket.on('participants_update', (data) => {
+                console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
+                setActivationState('roomJoined', true);
+                participantsCount.textContent = data.count;
             });
             
             // Новый обработчик для участников
@@ -4077,6 +4128,7 @@
             // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
+                setActivationState('socketReady', false);
                 setAutoContinueEnabled(false);
                 console.log('❌ WebSocket отключен');
             });
@@ -4084,6 +4136,7 @@
             socket.on('connect_error', (error) => {
                 console.error('❌ WebSocket ошибка подключения:', error);
                 statusDiv.textContent = 'Ошибка подключения: ' + error.message;
+                setActivationState('socketReady', false);
             });
             
             socket.on('avatar_changed', (data) => {
@@ -4138,13 +4191,9 @@
                 }
             });
             
-            socket.on('participants_update', (data) => {
-                participantsCount.textContent = data.count;
-            });
-            
             socket.on('ai_teacher_available', () => {
                 if (devicesEnabled) {
-                    activateAiBtn.style.display = 'block';
+                    updateActivationButton();
                 }
             });
             
@@ -4152,7 +4201,7 @@
                 aiTeacherActivated = true;
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
-                console.log('✅ AI-учитель активирован');
+                console.log('✅ AI-учитель активирован для комнаты:', roomId);
                 
                 if (isIOS) {
                     setTimeout(() => {
@@ -4164,9 +4213,18 @@
             });
 
             socket.on('activate_ai_error', (data) => {
-                console.error('Ошибка активации AI-учителя:', data.error);
+                console.error('❌ Ошибка активации AI-учителя для комнаты', roomId, ':', data.error);
                 statusDiv.textContent = 'Ошибка активации: ' + data.error;
-                activateAiBtn.style.display = 'block';
+                
+                // Показываем кнопку снова для повторной попытки
+                const button = document.getElementById('activate-ai-btn');
+                if (button) {
+                    button.style.display = 'block';
+                    button.innerHTML = 'Повторить активацию';
+                }
+                
+                // Сбрасываем состояние активации
+                aiTeacherActivated = false;
             });
             
             socket.on('lesson_started', (data) => {
@@ -4370,31 +4428,47 @@
             
             newButton.addEventListener('click', function(event) {
                 console.log('=== КЛИК ПО КНОПКЕ АКТИВАЦИИ ===');
-                console.log('Event:', event);
-                console.log('Socket connected:', socket?.connected);
                 console.log('Room ID:', roomId);
+                console.log('Activation State:', roomActivationState);
                 
                 event.preventDefault();
                 event.stopPropagation();
                 
+                // ПРОВЕРКА ГОТОВНОСТИ ПЕРЕД АКТИВАЦИЕЙ
+                if (!checkRoomActivationReady()) {
+                    console.error('❌ Комната не готова для активации:', roomActivationState);
+                    statusDiv.textContent = 'Ошибка: комната не готова. Проверьте подключение.';
+                    
+                    // Показываем детали состояния
+                    const states = Object.entries(roomActivationState)
+                        .filter(([_, ready]) => !ready)
+                        .map(([key]) => key);
+                    
+                    if (states.length > 0) {
+                        statusDiv.textContent += ` Ожидание: ${states.join(', ')}`;
+                    }
+                    
+                    return;
+                }
+                
                 if (socket && socket.connected) {
-                    console.log('Отправка запроса активации через WebSocket...');
+                    console.log('✅ Отправка запроса активации для комнаты:', roomId);
                     socket.emit('activate_ai_teacher', { room_id: roomId });
                     
                     // Немедленная обратная связь
                     newButton.style.display = 'none';
                     statusDiv.textContent = 'Активация AI-учителя...';
                     
-                    // Резервный таймаут
+                    // Таймаут для обработки ошибок активации
                     setTimeout(() => {
-                        if (newButton.style.display !== 'none') {
-                            console.log('Резервная активация по таймауту');
+                        if (socket && !aiTeacherActivated) {
+                            console.warn('⚠️ Активация заняла слишком много времени, пробуем резервный метод');
                             backupActivateAI();
                         }
-                    }, 3000);
+                    }, 5000);
                     
                 } else {
-                    console.error('Socket не подключен, пробуем резервный метод');
+                    console.error('❌ Socket не подключен, пробуем резервный метод');
                     backupActivateAI();
                 }
             });
@@ -4429,13 +4503,29 @@
 
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
+            // Инициализация системы состояний активации
+            roomActivationState = {
+                peerReady: false,
+                mediaReady: false, 
+                socketReady: false,
+                roomJoined: false
+            };
+            
             initSocket();
             createBackgroundAnimation();
             initWindowManagement();
             initZoom();
             initDrawingCanvas();
             initVisualization();
-            initActivateButton();
+            
+            // Запускаем медиа устройства
+            enableCameraAndMicrophone();
+            
+            // Инициализируем кнопку после небольшой задержки
+            setTimeout(() => {
+                initActivateButton();
+                updateActivationButton();
+            }, 1000);
             
             textToolBtn.addEventListener('click', () => setTool('text'));
             drawToolBtn.addEventListener('click', () => setTool('draw'));
@@ -4543,9 +4633,6 @@
             
             // Принудительно показываем кнопку через 3 секунды
             setTimeout(forceShowActivateButton, 3000);
-            
-            // Запускаем медиа устройства
-            enableCameraAndMicrophone();
         });
 
         document.addEventListener('fullscreenchange', () => {
