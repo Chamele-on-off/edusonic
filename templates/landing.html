@@ -1020,8 +1020,8 @@
             text-align: center;
         }
         
-        /* Popup Window */
-        .popup-overlay {
+        /* Modal */
+        .modal {
             display: none;
             position: fixed;
             top: 0;
@@ -1033,7 +1033,68 @@
             backdrop-filter: blur(10px);
         }
         
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 95%;
+            height: 95%;
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: var(--gradient);
+            color: white;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.3s ease;
+        }
+        
+        .close-modal:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .modal-body {
+            height: calc(100% - 80px);
+            width: 100%;
+        }
+        
+        .modal-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+        
+        /* Popup Window */
         .popup-window {
+            display: none;
             position: fixed;
             top: 50%;
             left: 50%;
@@ -1042,9 +1103,9 @@
             height: 90%;
             background: white;
             border-radius: 20px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+            z-index: 2000;
             overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            z-index: 2001;
         }
         
         .popup-header {
@@ -1309,9 +1370,11 @@
                 justify-content: center;
             }
             
+            .modal-content,
             .popup-window {
-                width: 95%;
-                height: 95%;
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
             }
         }
         
@@ -1379,12 +1442,6 @@
                 padding: 0.5rem 1rem;
                 font-size: 0.8rem;
             }
-            
-            .popup-window {
-                width: 100%;
-                height: 100%;
-                border-radius: 0;
-            }
         }
         
         /* Mobile Menu */
@@ -1443,21 +1500,19 @@
         <div class="tooltip">Личный кабинет</div>
     </a>
 
-    <!-- Popup Window -->
-    <div class="popup-overlay" id="popupOverlay">
-        <div class="popup-window" id="popupWindow">
-            <div class="popup-header">
-                <h3>Виртуальный класс EduSonic AI</h3>
-                <button class="close-popup" id="closePopup">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="popup-body">
-                <iframe src="/conference?room=demo&embed=true" class="popup-iframe" 
-                        title="EduSonic AI Conference" allow="microphone; camera; autoplay; fullscreen"
-                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals">
-                </iframe>
-            </div>
+    <!-- Modal Window (заменен на Popup) -->
+    <div class="popup-window" id="conferencePopup">
+        <div class="popup-header">
+            <h3>Виртуальный класс EduSonic AI</h3>
+            <button class="close-popup" id="closePopup">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="popup-body">
+            <iframe src="/conference?room=demo&embed=true" class="popup-iframe" 
+                    title="EduSonic AI Conference" allow="microphone; camera; autoplay; fullscreen"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals">
+            </iframe>
         </div>
     </div>
 
@@ -1606,7 +1661,7 @@
                 <div class="live-demo">
                     <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Интерактивная демо-версия</h3>
                     <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
-                        Нажмите на превью ниже, чтобы открыть полноценный виртуальный класс в popup-окне
+                        Нажмите на превью ниже, чтобы открыть полноценный виртуальный класс в новом окне
                     </p>
                     
                     <div class="demo-preview" id="demoPreview">
@@ -1685,9 +1740,6 @@
                         <button id="openPopupBtn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;">
                             <i class="fas fa-robot"></i> Запустить виртуальный класс
                         </button>
-                        <a href="/conference?room=demo" class="btn btn-secondary" target="_blank" style="padding: 1.2rem 2.5rem; margin-left: 1rem;">
-                            <i class="fas fa-external-link-alt"></i> Открыть в новой вкладке
-                        </a>
                     </div>
                 </div>
             </div>
@@ -1714,7 +1766,7 @@
                     <li>Ограниченная практика</li>
                     <li>Поддержка по email</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferencePopup('free')">Начать бесплатно</button>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('free')">Начать бесплатно</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Индивидуальный</h3>
@@ -1727,7 +1779,7 @@
                     <li>Подробная статистика</li>
                     <li>Приоритетная поддержка</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;" onclick="openConferencePopup('premium')">Выбрать тариф</button>
+                <button class="btn btn-primary" style="width: 100%;" onclick="openConference('premium')">Выбрать тариф</button>
             </div>
             <div class="pricing-card">
                 <h3>С углубленным изучением</h3>
@@ -1739,7 +1791,7 @@
                     <li>Углубленные материалы</li>
                     <li>Персональный куратор</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferencePopup('advanced')">Для отличников</button>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('advanced')">Для отличников</button>
             </div>
         </div>
         
@@ -1755,7 +1807,7 @@
                     <li>Семейные образовательные игры</li>
                     <li>Родительский контроль</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferencePopup('family')">Для семьи</button>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('family')">Для семьи</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Семейный PRO</h3>
@@ -1768,7 +1820,7 @@
                     <li>Персональный семейный куратор</li>
                     <li>Скидка 15% на следующий месяц</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;" onclick="openConferencePopup('family-pro')">Лучший выбор</button>
+                <button class="btn btn-primary" style="width: 100%;" onclick="openConference('family-pro')">Лучший выбор</button>
             </div>
         </div>
     </section>
@@ -1824,7 +1876,7 @@
                 Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
             </p>
             <div class="cta-buttons-large">
-                <button class="btn btn-primary btn-large" style="background: white; color: var(--accent);" onclick="openConferencePopup('demo')">
+                <button class="btn btn-primary btn-large" style="background: white; color: var(--accent);" onclick="openConference('demo')">
                     <i class="fas fa-play"></i> Начать бесплатно
                 </button>
                 <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
@@ -1991,44 +2043,39 @@
             "retina_detect": true
         });
 
-        // Управление popup-окном
-        const popupOverlay = document.getElementById('popupOverlay');
-        const popupWindow = document.getElementById('popupWindow');
+        // Управление popup окном
+        const popup = document.getElementById('conferencePopup');
         const openPopupBtn = document.getElementById('openPopupBtn');
         const closePopupBtn = document.getElementById('closePopup');
         const demoPreview = document.getElementById('demoPreview');
 
-        function openConferencePopup(room = 'demo') {
+        function openConference(room = 'demo') {
             const iframe = document.querySelector('.popup-iframe');
             iframe.src = `/conference?room=${room}&embed=true`;
-            popupOverlay.style.display = 'block';
+            popup.style.display = 'block';
             document.body.style.overflow = 'hidden';
         }
 
-        function closeConferencePopup() {
-            popupOverlay.style.display = 'none';
+        function closeConference() {
+            popup.style.display = 'none';
             document.body.style.overflow = 'auto';
-            
-            // Останавливаем видео и аудио в iframe при закрытии
-            const iframe = document.querySelector('.popup-iframe');
-            iframe.src = '';
         }
 
-        openPopupBtn.addEventListener('click', () => openConferencePopup('demo'));
-        demoPreview.addEventListener('click', () => openConferencePopup('demo'));
-        closePopupBtn.addEventListener('click', closeConferencePopup);
+        openPopupBtn.addEventListener('click', () => openConference('demo'));
+        demoPreview.addEventListener('click', () => openConference('demo'));
+        closePopupBtn.addEventListener('click', closeConference);
 
-        // Закрытие popup-окна при клике вне его
-        popupOverlay.addEventListener('click', (e) => {
-            if (e.target === popupOverlay) {
-                closeConferencePopup();
+        // Закрытие popup окна при клике вне его
+        popup.addEventListener('click', (e) => {
+            if (e.target === popup) {
+                closeConference();
             }
         });
 
-        // Закрытие popup-окна при нажатии Escape
+        // Закрытие popup окна при нажатии Escape
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && popupOverlay.style.display === 'block') {
-                closeConferencePopup();
+            if (e.key === 'Escape' && popup.style.display === 'block') {
+                closeConference();
             }
         });
 
@@ -2134,7 +2181,7 @@
         });
 
         // Глобальная функция для открытия конференции из кнопок тарифов
-        window.openConferencePopup = openConferencePopup;
+        window.openConference = openConference;
     </script>
 </body>
 </html>
