@@ -34,6 +34,15 @@ socketio = SocketIO(
     always_connect=True        # Всегда пытаться подключиться
 )
 
+
+# Ручная настройка CORS
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 BASE_DIR = Path(__file__).parent
 FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 LESSONS_DIR = BASE_DIR / 'lessons'
