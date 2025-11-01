@@ -519,49 +519,148 @@
             width: 100%;
         }
         
-        .demo-frame-container {
+        .demo-preview {
             width: 100%;
-            height: 600px;
+            height: 500px;
             border-radius: 15px;
             overflow: hidden;
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
             margin: 2rem 0;
             border: 1px solid rgba(0,0,0,0.05);
-            background: #f8f9fa;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
             position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
         
-        .demo-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: transparent;
-            display: block;
+        .demo-preview:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15);
         }
         
-        .demo-frame-loading {
+        .demo-preview-content {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 1.2rem;
+            text-align: center;
+            padding: 2rem;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(5px);
         }
         
-        .demo-frame-loading .spinner {
+        .demo-preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            padding: 1rem 2rem;
+            background: rgba(0,0,0,0.7);
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 2;
+        }
+        
+        .demo-preview-body {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            padding-top: 80px;
+        }
+        
+        .demo-preview-sidebar {
+            width: 250px;
+            background: rgba(0,0,0,0.5);
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .demo-preview-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .demo-preview-avatar {
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+            border: 3px solid rgba(255,255,255,0.3);
+        }
+        
+        .demo-preview-avatar i {
+            font-size: 4rem;
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .demo-preview-controls {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 1rem;
+            background: rgba(0,0,0,0.7);
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .demo-control-btn {
             width: 50px;
             height: 50px;
-            border: 4px solid rgba(255,255,255,0.3);
-            border-top: 4px solid white;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .demo-control-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.1);
+        }
+        
+        .demo-control-btn.primary {
+            background: var(--primary);
+        }
+        
+        .demo-preview-text {
+            text-align: center;
+            max-width: 600px;
+        }
+        
+        .demo-preview-text h3 {
+            font-size: 2rem;
             margin-bottom: 1rem;
+            color: white;
+        }
+        
+        .demo-preview-text p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
         }
         
         /* Web3 Banner */
@@ -921,6 +1020,78 @@
             text-align: center;
         }
         
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 2000;
+            backdrop-filter: blur(10px);
+        }
+        
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 95%;
+            height: 95%;
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background: var(--gradient);
+            color: white;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        
+        .close-modal {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.3s ease;
+        }
+        
+        .close-modal:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .modal-body {
+            height: calc(100% - 80px);
+            width: 100%;
+        }
+        
+        .modal-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+        
         /* Animations */
         @keyframes float {
             0%, 100% {
@@ -956,6 +1127,10 @@
             
             .section {
                 padding: 5rem 1.5rem;
+            }
+            
+            .demo-preview-sidebar {
+                width: 200px;
             }
         }
         
@@ -1065,6 +1240,31 @@
                 margin: 2rem 0;
             }
             
+            .demo-preview {
+                height: 400px;
+            }
+            
+            .demo-preview-sidebar {
+                display: none;
+            }
+            
+            .demo-preview-avatar {
+                width: 150px;
+                height: 150px;
+            }
+            
+            .demo-preview-avatar i {
+                font-size: 3rem;
+            }
+            
+            .demo-preview-text h3 {
+                font-size: 1.5rem;
+            }
+            
+            .demo-preview-text p {
+                font-size: 1rem;
+            }
+            
             .conference-stats {
                 gap: 1.5rem;
             }
@@ -1079,10 +1279,6 @@
                 width: 50px;
                 height: 50px;
                 font-size: 20px;
-            }
-            
-            .demo-frame-container {
-                height: 400px;
             }
             
             .live-demo {
@@ -1110,6 +1306,12 @@
                 width: 100%;
                 max-width: 300px;
                 justify-content: center;
+            }
+            
+            .modal-content {
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
             }
         }
         
@@ -1142,6 +1344,21 @@
                 grid-template-columns: 1fr;
             }
             
+            .demo-preview {
+                height: 350px;
+            }
+            
+            .demo-preview-controls {
+                flex-wrap: wrap;
+                justify-content: center;
+                width: 90%;
+            }
+            
+            .demo-control-btn {
+                width: 45px;
+                height: 45px;
+            }
+            
             .footer-content {
                 grid-template-columns: 1fr;
                 text-align: center;
@@ -1162,10 +1379,6 @@
                 padding: 0.5rem 1rem;
                 font-size: 0.8rem;
             }
-            
-            .demo-frame-container {
-                height: 300px;
-            }
         }
         
         /* Mobile Menu */
@@ -1177,33 +1390,6 @@
             .mobile-menu-btn {
                 display: block;
             }
-        }
-        
-        /* Iframe Status Styles */
-        .iframe-status {
-            text-align: center;
-            padding: 1rem;
-            margin: 1rem 0;
-            border-radius: 10px;
-            font-weight: 500;
-        }
-        
-        .iframe-status.success {
-            background: rgba(72, 187, 120, 0.1);
-            color: var(--success);
-            border: 1px solid rgba(72, 187, 120, 0.3);
-        }
-        
-        .iframe-status.error {
-            background: rgba(237, 137, 54, 0.1);
-            color: var(--warning);
-            border: 1px solid rgba(237, 137, 54, 0.3);
-        }
-        
-        .iframe-status.info {
-            background: rgba(126, 118, 249, 0.1);
-            color: var(--primary);
-            border: 1px solid rgba(126, 118, 249, 0.3);
         }
     </style>
 </head>
@@ -1250,6 +1436,24 @@
         <i class="fas fa-user-cog"></i>
         <div class="tooltip">Личный кабинет</div>
     </a>
+
+    <!-- Modal Window -->
+    <div class="modal" id="conferenceModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Виртуальный класс EduSonic AI</h3>
+                <button class="close-modal" id="closeModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <iframe src="/conference?room=demo&embed=true" class="modal-iframe" 
+                        title="EduSonic AI Conference" allow="microphone; camera; autoplay; fullscreen"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals">
+                </iframe>
+            </div>
+        </div>
+    </div>
 
     <!-- Hero Section -->
     <section class="hero">
@@ -1392,27 +1596,79 @@
                     </div>
                 </div>
                 
-                <!-- Live Demo Frame -->
+                <!-- Live Demo Preview -->
                 <div class="live-demo">
                     <h3 style="text-align: center; margin-bottom: 1rem; color: var(--text);">Интерактивная демо-версия</h3>
                     <p style="text-align: center; color: var(--text-light); margin-bottom: 2rem;">
-                        Нажмите "Активировать AI-учителя" и начните общение. Можно использовать микрофон или текстовый чат.
+                        Нажмите на превью ниже, чтобы открыть полноценный виртуальный класс в новом окне
                     </p>
                     
-                    <div id="iframe-status" class="iframe-status info" style="display: none;">
-                        <i class="fas fa-info-circle"></i> <span id="iframe-status-text">Загрузка демо...</span>
-                    </div>
-                    
-                    <div class="demo-frame-container">
-                        <iframe src="/conference?room=demo&embed=true" class="demo-frame" 
-                                title="EduSonic AI Demo" allow="microphone; camera; autoplay; fullscreen"
-                                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                                style="background: transparent; border: none; width: 100%; height: 100%;"
-                                id="demoFrame">
-                        </iframe>
-                        <div id="frameLoading" class="demo-frame-loading" style="display: flex;">
-                            <div class="spinner"></div>
-                            <p>Загрузка виртуального класса...</p>
+                    <div class="demo-preview" id="demoPreview">
+                        <div class="demo-preview-header">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <i class="fas fa-robot" style="color: white;"></i>
+                                <span style="color: white; font-weight: 600;">Виртуальный класс EduSonic AI</span>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57;"></div>
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></div>
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #28ca42;"></div>
+                            </div>
+                        </div>
+                        <div class="demo-preview-body">
+                            <div class="demo-preview-sidebar">
+                                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 10px; margin-bottom: 1rem;">
+                                    <div style="color: white; font-weight: 600; margin-bottom: 0.5rem;">Участники</div>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                        <div style="width: 8px; height: 8px; border-radius: 50%; background: #4cc9f0;"></div>
+                                        <span style="color: white; font-size: 0.9rem;">AI-Учитель</span>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <div style="width: 8px; height: 8px; border-radius: 50%; background: #f72585;"></div>
+                                        <span style="color: white; font-size: 0.9rem;">Вы</span>
+                                    </div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 10px;">
+                                    <div style="color: white; font-weight: 600; margin-bottom: 0.5rem;">Инструменты</div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                        <div style="width: 30px; height: 30px; background: rgba(255,255,255,0.2); border-radius: 5px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="fas fa-font" style="color: white; font-size: 0.8rem;"></i>
+                                        </div>
+                                        <div style="width: 30px; height: 30px; background: rgba(255,255,255,0.2); border-radius: 5px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="fas fa-pen" style="color: white; font-size: 0.8rem;"></i>
+                                        </div>
+                                        <div style="width: 30px; height: 30px; background: rgba(255,255,255,0.2); border-radius: 5px; display: flex; align-items: center; justify-content: center;">
+                                            <i class="fas fa-shapes" style="color: white; font-size: 0.8rem;"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="demo-preview-main">
+                                <div class="demo-preview-avatar">
+                                    <i class="fas fa-robot floating"></i>
+                                </div>
+                                <div class="demo-preview-text">
+                                    <h3>Готов к обучению!</h3>
+                                    <p>Нажмите для запуска полноценного виртуального класса с AI-репетитором</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="demo-preview-controls">
+                            <div class="demo-control-btn">
+                                <i class="fas fa-microphone"></i>
+                            </div>
+                            <div class="demo-control-btn">
+                                <i class="fas fa-video"></i>
+                            </div>
+                            <div class="demo-control-btn primary">
+                                <i class="fas fa-play"></i>
+                            </div>
+                            <div class="demo-control-btn">
+                                <i class="fas fa-desktop"></i>
+                            </div>
+                            <div class="demo-control-btn">
+                                <i class="fas fa-cog"></i>
+                            </div>
                         </div>
                     </div>
                     
@@ -1420,11 +1676,11 @@
                         <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
                             <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону
                         </p>
-                        <button id="activate-iframe-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;">
-                            <i class="fas fa-robot"></i> Активировать AI-учителя
+                        <button id="openModalBtn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;">
+                            <i class="fas fa-robot"></i> Запустить виртуальный класс
                         </button>
                         <a href="/conference?room=demo" class="btn btn-secondary" target="_blank" style="padding: 1.2rem 2.5rem; margin-left: 1rem;">
-                            <i class="fas fa-external-link-alt"></i> Открыть в полном окне
+                            <i class="fas fa-external-link-alt"></i> Открыть в новой вкладке
                         </a>
                     </div>
                 </div>
@@ -1452,7 +1708,7 @@
                     <li>Ограниченная практика</li>
                     <li>Поддержка по email</li>
                 </ul>
-                <a href="/conference?room=free" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Начать бесплатно</a>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('free')">Начать бесплатно</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Индивидуальный</h3>
@@ -1465,7 +1721,7 @@
                     <li>Подробная статистика</li>
                     <li>Приоритетная поддержка</li>
                 </ul>
-                <a href="/conference?room=premium" class="btn btn-primary" style="width: 100%;" target="_blank">Выбрать тариф</a>
+                <button class="btn btn-primary" style="width: 100%;" onclick="openConference('premium')">Выбрать тариф</button>
             </div>
             <div class="pricing-card">
                 <h3>С углубленным изучением</h3>
@@ -1477,7 +1733,7 @@
                     <li>Углубленные материалы</li>
                     <li>Персональный куратор</li>
                 </ul>
-                <a href="/conference?room=advanced" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для отличников</a>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('advanced')">Для отличников</button>
             </div>
         </div>
         
@@ -1493,7 +1749,7 @@
                     <li>Семейные образовательные игры</li>
                     <li>Родительский контроль</li>
                 </ul>
-                <a href="/conference?room=family" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для семьи</a>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('family')">Для семьи</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Семейный PRO</h3>
@@ -1506,7 +1762,7 @@
                     <li>Персональный семейный куратор</li>
                     <li>Скидка 15% на следующий месяц</li>
                 </ul>
-                <a href="/conference?room=family-pro" class="btn btn-primary" style="width: 100%;" target="_blank">Лучший выбор</a>
+                <button class="btn btn-primary" style="width: 100%;" onclick="openConference('family-pro')">Лучший выбор</button>
             </div>
         </div>
     </section>
@@ -1562,9 +1818,9 @@
                 Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
             </p>
             <div class="cta-buttons-large">
-                <a href="#conference" class="btn btn-primary btn-large" style="background: white; color: var(--accent);">
+                <button class="btn btn-primary btn-large" style="background: white; color: var(--accent);" onclick="openConference('demo')">
                     <i class="fas fa-play"></i> Начать бесплатно
-                </a>
+                </button>
                 <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
                     <i class="fas fa-user-cog"></i> Личный кабинет
                 </a>
@@ -1729,6 +1985,42 @@
             "retina_detect": true
         });
 
+        // Управление модальным окном
+        const modal = document.getElementById('conferenceModal');
+        const openModalBtn = document.getElementById('openModalBtn');
+        const closeModalBtn = document.getElementById('closeModal');
+        const demoPreview = document.getElementById('demoPreview');
+
+        function openConference(room = 'demo') {
+            const iframe = document.querySelector('.modal-iframe');
+            iframe.src = `/conference?room=${room}&embed=true`;
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeConference() {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        openModalBtn.addEventListener('click', () => openConference('demo'));
+        demoPreview.addEventListener('click', () => openConference('demo'));
+        closeModalBtn.addEventListener('click', closeConference);
+
+        // Закрытие модального окна при клике вне его
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeConference();
+            }
+        });
+
+        // Закрытие модального окна при нажатии Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal.style.display === 'block') {
+                closeConference();
+            }
+        });
+
         // Управление вкладками тарифов
         document.addEventListener('DOMContentLoaded', function() {
             const tabButtons = document.querySelectorAll('.tab-btn');
@@ -1828,155 +2120,10 @@
             });
             
             window.addEventListener('scroll', animateOnScroll);
-            
-            // Управление iframe демо-версии
-            const iframe = document.getElementById('demoFrame');
-            const activateBtn = document.getElementById('activate-iframe-btn');
-            const frameLoading = document.getElementById('frameLoading');
-            const iframeStatus = document.getElementById('iframe-status');
-            const iframeStatusText = document.getElementById('iframe-status-text');
-            let iframeReady = false;
-            
-            function showIframeStatus(message, type) {
-                iframeStatusText.textContent = message;
-                iframeStatus.className = `iframe-status ${type}`;
-                iframeStatus.style.display = 'block';
-            }
-            
-            function hideIframeStatus() {
-                iframeStatus.style.display = 'none';
-            }
-            
-            // Функция для отправки команды активации в iframe
-            function activateAITeacher() {
-                if (!iframe.contentWindow) {
-                    showIframeStatus('Демо еще загружается...', 'info');
-                    setTimeout(activateAITeacher, 1000);
-                    return;
-                }
-                
-                console.log('Sending activation command to iframe');
-                iframe.contentWindow.postMessage({
-                    type: 'activate_ai_teacher',
-                    room_id: 'demo'
-                }, '*');
-                
-                showIframeStatus('AI-учитель активируется...', 'info');
-                
-                // Показать сообщение пользователю
-                activateBtn.innerHTML = '<i class="fas fa-check"></i> AI-учитель активирован';
-                activateBtn.style.background = 'linear-gradient(135deg, var(--success), #48BB78)';
-                activateBtn.disabled = true;
-                
-                // Скрыть сообщение через 3 секунды
-                setTimeout(() => {
-                    hideIframeStatus();
-                }, 3000);
-            }
-            
-            // Слушаем сообщения от iframe
-            window.addEventListener('message', function(event) {
-                console.log('Received message from iframe:', event.data);
-                
-                if (event.data.type === 'iframe_loaded') {
-                    console.log('Iframe reported successful load');
-                    iframeReady = true;
-                    frameLoading.style.display = 'none';
-                    activateBtn.disabled = false;
-                    showIframeStatus('Демо загружено! Нажмите "Активировать AI-учителя"', 'success');
-                    
-                    setTimeout(() => {
-                        hideIframeStatus();
-                    }, 5000);
-                }
-                
-                if (event.data.type === 'ai_activated') {
-                    console.log('AI teacher activated in iframe');
-                    showIframeStatus('AI-учитель успешно активирован!', 'success');
-                    activateBtn.innerHTML = '<i class="fas fa-check"></i> AI-учитель активирован';
-                    activateBtn.style.background = 'linear-gradient(135deg, var(--success), #48BB78)';
-                    activateBtn.disabled = true;
-                    
-                    setTimeout(() => {
-                        hideIframeStatus();
-                    }, 5000);
-                }
-            });
-            
-            // Обработчик кнопки активации
-            activateBtn.addEventListener('click', function() {
-                if (iframeReady) {
-                    activateAITeacher();
-                } else {
-                    showIframeStatus('Демо еще загружается, попробуйте через секунду...', 'info');
-                    setTimeout(activateAITeacher, 2000);
-                }
-            });
-            
-            // Автоматическая активация при скролле к демо
-            const observer = new IntersectionObserver(function(entries) {
-                if (entries[0].isIntersecting && iframeReady) {
-                    console.log('Demo section visible');
-                    showIframeStatus('Демо загружено и готово к работе', 'success');
-                    setTimeout(() => {
-                        hideIframeStatus();
-                    }, 3000);
-                }
-            }, { threshold: 0.3 });
-            
-            const demoSection = document.querySelector('.live-demo');
-            if (demoSection) {
-                observer.observe(demoSection);
-            }
-            
-            // Резервная проверка загрузки iframe
-            setTimeout(function() {
-                if (!iframeReady) {
-                    console.log('Iframe loading timeout');
-                    frameLoading.style.display = 'none';
-                    showIframeStatus('Проблемы с загрузкой демо. Попробуйте обновить страницу.', 'error');
-                    activateBtn.disabled = false;
-                    activateBtn.innerHTML = '<i class="fas fa-redo"></i> Повторить попытку';
-                    activateBtn.onclick = function() {
-                        iframe.src = iframe.src + '&retry=' + new Date().getTime();
-                        frameLoading.style.display = 'flex';
-                        hideIframeStatus();
-                        setTimeout(() => {
-                            iframeReady = true;
-                            frameLoading.style.display = 'none';
-                            activateBtn.innerHTML = '<i class="fas fa-robot"></i> Активировать AI-учителя';
-                            activateAITeacher();
-                        }, 3000);
-                    };
-                }
-            }, 10000);
-            
-            // Обработчик ошибок загрузки iframe
-            iframe.addEventListener('load', function() {
-                console.log('Iframe load event fired');
-                // Даем iframe время на инициализацию
-                setTimeout(() => {
-                    if (!iframeReady) {
-                        iframeReady = true;
-                        frameLoading.style.display = 'none';
-                        activateBtn.disabled = false;
-                    }
-                }, 2000);
-            });
-            
-            iframe.addEventListener('error', function() {
-                console.error('Iframe loading error');
-                frameLoading.innerHTML = `
-                    <div style="text-align: center;">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                        <p>Ошибка загрузки демо</p>
-                        <button onclick="location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
-                            <i class="fas fa-redo"></i> Обновить страницу
-                        </button>
-                    </div>
-                `;
-            });
         });
+
+        // Глобальная функция для открытия конференции из кнопок тарифов
+        window.openConference = openConference;
     </script>
 </body>
 </html>
