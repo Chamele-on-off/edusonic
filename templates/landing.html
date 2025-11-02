@@ -1020,140 +1020,6 @@
             text-align: center;
         }
         
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 2000;
-            backdrop-filter: blur(10px);
-        }
-        
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 95%;
-            height: 95%;
-            background: white;
-            border-radius: 20px;
-            overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 2rem;
-            background: var(--gradient);
-            color: white;
-        }
-        
-        .modal-header h3 {
-            margin: 0;
-            font-size: 1.5rem;
-        }
-        
-        .close-modal {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 2rem;
-            cursor: pointer;
-            padding: 0;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: background 0.3s ease;
-        }
-        
-        .close-modal:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        
-        .modal-body {
-            height: calc(100% - 80px);
-            width: 100%;
-        }
-        
-        .modal-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: white;
-        }
-        
-        /* Popup Window */
-        .popup-window {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 90%;
-            height: 90%;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 25px 80px rgba(0,0,0,0.4);
-            z-index: 2000;
-            overflow: hidden;
-        }
-        
-        .popup-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 2rem;
-            background: var(--gradient);
-            color: white;
-        }
-        
-        .popup-header h3 {
-            margin: 0;
-            font-size: 1.5rem;
-        }
-        
-        .close-popup {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 2rem;
-            cursor: pointer;
-            padding: 0;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: background 0.3s ease;
-        }
-        
-        .close-popup:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        
-        .popup-body {
-            height: calc(100% - 80px);
-            width: 100%;
-        }
-        
-        .popup-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: white;
-        }
-        
         /* Animations */
         @keyframes float {
             0%, 100% {
@@ -1369,13 +1235,6 @@
                 max-width: 300px;
                 justify-content: center;
             }
-            
-            .modal-content,
-            .popup-window {
-                width: 100%;
-                height: 100%;
-                border-radius: 0;
-            }
         }
         
         @media (max-width: 480px) {
@@ -1500,22 +1359,6 @@
         <div class="tooltip">Личный кабинет</div>
     </a>
 
-    <!-- Modal Window (заменен на Popup) -->
-    <div class="popup-window" id="conferencePopup">
-        <div class="popup-header">
-            <h3>Виртуальный класс EduSonic AI</h3>
-            <button class="close-popup" id="closePopup">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="popup-body">
-            <iframe src="/conference?room=demo&embed=true" class="popup-iframe" 
-                    title="EduSonic AI Conference" allow="microphone; camera; autoplay; fullscreen"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals">
-            </iframe>
-        </div>
-    </div>
-
     <!-- Hero Section -->
     <section class="hero">
         <div class="particles" id="particles-js"></div>
@@ -1523,9 +1366,9 @@
             <h1>EduSonic AI</h1>
             <p>Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
             <div class="cta-buttons">
-                <a href="#conference" class="btn btn-conference">
+                <button class="btn btn-conference" onclick="openConferenceWindow('demo')">
                     <i class="fas fa-robot"></i> Попробовать бесплатно
-                </a>
+                </button>
                 <a href="#features" class="btn btn-secondary">Узнать больше →</a>
             </div>
         </div>
@@ -1606,7 +1449,7 @@
                     <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор. Давай вместе разберем эту интересную тему!"</p>
                 </div>
             </div>
-            <a href="#conference" class="btn btn-primary" style="background: white; color: var(--primary);">Попробовать прямо сейчас</a>
+            <button class="btn btn-primary" style="background: white; color: var(--primary);" onclick="openConferenceWindow('demo')">Попробовать прямо сейчас</button>
         </div>
     </section>
 
@@ -1664,7 +1507,7 @@
                         Нажмите на превью ниже, чтобы открыть полноценный виртуальный класс в новом окне
                     </p>
                     
-                    <div class="demo-preview" id="demoPreview">
+                    <div class="demo-preview" id="demoPreview" onclick="openConferenceWindow('demo')">
                         <div class="demo-preview-header">
                             <div style="display: flex; align-items: center; gap: 1rem;">
                                 <i class="fas fa-robot" style="color: white;"></i>
@@ -1737,7 +1580,7 @@
                         <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
                             <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону
                         </p>
-                        <button id="openPopupBtn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;">
+                        <button id="openConferenceBtn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;" onclick="openConferenceWindow('demo')">
                             <i class="fas fa-robot"></i> Запустить виртуальный класс
                         </button>
                     </div>
@@ -1766,7 +1609,7 @@
                     <li>Ограниченная практика</li>
                     <li>Поддержка по email</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('free')">Начать бесплатно</button>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferenceWindow('free')">Начать бесплатно</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Индивидуальный</h3>
@@ -1779,7 +1622,7 @@
                     <li>Подробная статистика</li>
                     <li>Приоритетная поддержка</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;" onclick="openConference('premium')">Выбрать тариф</button>
+                <button class="btn btn-primary" style="width: 100%;" onclick="openConferenceWindow('premium')">Выбрать тариф</button>
             </div>
             <div class="pricing-card">
                 <h3>С углубленным изучением</h3>
@@ -1791,7 +1634,7 @@
                     <li>Углубленные материалы</li>
                     <li>Персональный куратор</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('advanced')">Для отличников</button>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferenceWindow('advanced')">Для отличников</button>
             </div>
         </div>
         
@@ -1807,7 +1650,7 @@
                     <li>Семейные образовательные игры</li>
                     <li>Родительский контроль</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConference('family')">Для семьи</button>
+                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferenceWindow('family')">Для семьи</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Семейный PRO</h3>
@@ -1820,7 +1663,7 @@
                     <li>Персональный семейный куратор</li>
                     <li>Скидка 15% на следующий месяц</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;" onclick="openConference('family-pro')">Лучший выбор</button>
+                <button class="btn btn-primary" style="width: 100%;" onclick="openConferenceWindow('family-pro')">Лучший выбор</button>
             </div>
         </div>
     </section>
@@ -1876,7 +1719,7 @@
                 Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
             </p>
             <div class="cta-buttons-large">
-                <button class="btn btn-primary btn-large" style="background: white; color: var(--accent);" onclick="openConference('demo')">
+                <button class="btn btn-primary btn-large" style="background: white; color: var(--accent);" onclick="openConferenceWindow('demo')">
                     <i class="fas fa-play"></i> Начать бесплатно
                 </button>
                 <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
@@ -2043,41 +1886,17 @@
             "retina_detect": true
         });
 
-        // Управление popup окном
-        const popup = document.getElementById('conferencePopup');
-        const openPopupBtn = document.getElementById('openPopupBtn');
-        const closePopupBtn = document.getElementById('closePopup');
-        const demoPreview = document.getElementById('demoPreview');
-
-        function openConference(room = 'demo') {
-            const iframe = document.querySelector('.popup-iframe');
-            iframe.src = `/conference?room=${room}&embed=true`;
-            popup.style.display = 'block';
-            document.body.style.overflow = 'hidden';
+        // Функция для открытия конференции в новом окне
+        function openConferenceWindow(room = 'demo') {
+            const width = 1200;
+            const height = 800;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            
+            const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
+            
+            window.open(`/conference?room=${room}`, 'EduSonicConference', features);
         }
-
-        function closeConference() {
-            popup.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-
-        openPopupBtn.addEventListener('click', () => openConference('demo'));
-        demoPreview.addEventListener('click', () => openConference('demo'));
-        closePopupBtn.addEventListener('click', closeConference);
-
-        // Закрытие popup окна при клике вне его
-        popup.addEventListener('click', (e) => {
-            if (e.target === popup) {
-                closeConference();
-            }
-        });
-
-        // Закрытие popup окна при нажатии Escape
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && popup.style.display === 'block') {
-                closeConference();
-            }
-        });
 
         // Управление вкладками тарифов
         document.addEventListener('DOMContentLoaded', function() {
@@ -2181,7 +2000,7 @@
         });
 
         // Глобальная функция для открытия конференции из кнопок тарифов
-        window.openConference = openConference;
+        window.openConference = openConferenceWindow;
     </script>
 </body>
 </html>
