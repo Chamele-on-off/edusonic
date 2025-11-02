@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "local_llm": {
         "enabled": True,
         "base_url": "http://localhost:11434",
-        "model": "llama3.2:3b",
+        "model": "phi:2.7b",
         "timeout": 120,
         "max_retries": 2
     },
