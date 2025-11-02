@@ -10,7 +10,6 @@ from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
 from practice_manager import PracticeManager
-from lesson import lesson_manager  # Импортируем менеджер уроков
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -67,9 +66,6 @@ class DialogueManager:
         self.visualization_counter = 0
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
-        
-        # НОВОЕ: храним полные данные урока включая краткое содержание
-        self.lesson_full_data = {}
         
         self._load_lessons()
         
@@ -613,18 +609,15 @@ class DialogueManager:
             # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
             self.enable_visualization()
             
-            # ЗАГРУЖАЕМ СОДЕРЖАНИЕ ЧЕРЕЗ МЕНЕДЖЕР УРОКОВ (С КРАТКИМ СОДЕРЖАНИЕМ)
+            # Загружаем содержание урока
             print(f"📖 Загрузка содержания урока из: {lesson_data['file_path']}")
-            lesson_result = lesson_manager.load_lesson_content(lesson_data['file_path'])
-            self.lesson_content = lesson_result["paragraphs"]
-            self.lesson_full_data = lesson_result  # Сохраняем полные данные
+            self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
             
             if not self.lesson_content:
                 print("❌ Не удалось загрузить содержание урока")
                 return
             
             print(f"✅ Урок загружен, количество абзацев: {len(self.lesson_content)}")
-            print(f"✅ Краткое содержание сгенерировано: {len(lesson_result.get('summary', ''))} символов")
             
             # Инициализируем базу знаний
             self.knowledge_base = KnowledgeBase(self.current_subject)
@@ -714,7 +707,7 @@ class DialogueManager:
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ - РАБОТАЕТ ЛЮБАЯ ИЗ НИХ В ЛЮБОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
         continue_commands = [
             "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
-            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", " ладно", "ясно",
+            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
             "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"
         ]
 
@@ -793,12 +786,7 @@ class DialogueManager:
         self.lesson_started = True
         self.current_state = "lesson_reading"
         self.current_paragraph = 0
-        
-        # ЗАГРУЖАЕМ СОДЕРЖАНИЕ ЧЕРЕЗ МЕНЕДЖЕР УРОКОВ (С КРАТКИМ СОДЕРЖАНИЕМ)
-        lesson_result = lesson_manager.load_lesson_content(self.selected_lesson['file_path'])
-        self.lesson_content = lesson_result["paragraphs"]
-        self.lesson_full_data = lesson_result  # Сохраняем полные данные
-        
+        self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
         
         self.enable_visualization()
@@ -889,7 +877,7 @@ class DialogueManager:
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """УПРОЩЕННАЯ версия запуска практики с использованием готового краткого содержания"""
+        """УПРОЩЕННАЯ версия запуска практики"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -899,16 +887,9 @@ class DialogueManager:
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
         print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
-        # ПОДГОТАВЛИВАЕМ ДАННЫЕ ДЛЯ ПРАКТИКИ С ИСПОЛЬЗОВАНИЕМ ГОТОВОГО КРАТКОГО СОДЕРЖАНИЯ
-        lesson_data = {
-            "original_content": " ".join(self.lesson_content),
-            "summary": self.lesson_full_data.get("summary", "")  # Используем готовое краткое содержание
-        }
-        
-        print(f"📝 Используется готовое краткое содержание: {len(lesson_data['summary'])} символов")
-        
-        # Инициализируем менеджер практики с готовыми данными
-        self.practice_manager.initialize_practice_generation(lesson_data, self.current_subject)
+        # Инициализируем менеджер практики
+        lesson_context = " ".join(self.lesson_content)
+        self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
         # Уведомляем клиентов о начале практики
         if self.room_id:
@@ -1020,7 +1001,6 @@ class DialogueManager:
         self.current_subject = None
         self.lesson_content = []
         self.current_paragraph = 0
-        self.lesson_full_data = {}  # Очищаем полные данные урока
         
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
@@ -1145,7 +1125,6 @@ class DialogueManager:
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_question_index = 0
-        self.lesson_full_data = {}  # НОВОЕ: очищаем полные данные урока
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
