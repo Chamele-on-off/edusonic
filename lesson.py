@@ -1,11 +1,13 @@
 from pathlib import Path
 import re
-from typing import List, Optional
+from typing import List, Optional, Dict
+from llm import get_llm_instance  # Добавляем импорт LLM
 
 class LessonManager:
     def __init__(self, lessons_dir: str = "lessons"):
         self.lessons_dir = Path(lessons_dir)
         self.current_lessons = {}
+        self.llm = get_llm_instance()  # Добавляем LLM для генерации краткого содержания
         self._ensure_lessons_dir()
     
     def _ensure_lessons_dir(self):
@@ -18,12 +20,15 @@ class LessonManager:
                 with open(demo_lesson, 'w', encoding='utf-8') as f:
                     f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - это форма правления, при которой народ является источником власти.\n\nЭкономика - это хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - это совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - это система общеобязательных норм, охраняемых государством.\n\nСоциализация - это процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - это человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - это система норм и принципов, регулирующих поведение людей.\n\nГлобализация - это процесс всемирной экономической, политической и культурной интеграции.")
     
-    def load_lesson_content(self, lesson_file: str) -> List[str]:
-        """Загружает содержание урока из текстового файла"""
+    def load_lesson_content(self, lesson_file: str) -> Dict:
+        """Загружает содержание урока и генерирует краткое содержание"""
         try:
             lesson_path = self.lessons_dir / lesson_file
             if not lesson_path.exists():
-                return ["Урок не найден. Попробуйте выбрать другой урок."]
+                return {
+                    "paragraphs": ["Урок не найден. Попробуйте выбрать другой урок."],
+                    "summary": "Урок не найден"
+                }
                 
             with open(lesson_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -49,11 +54,70 @@ class LessonManager:
                 if current_paragraph:
                     paragraphs.append(' '.join(current_paragraph))
             
-            return paragraphs if paragraphs else ["Содержание урока временно недоступно."]
+            # ГЕНЕРИРУЕМ КРАТКОЕ СОДЕРЖАНИЕ ДЛЯ ПРАКТИКИ
+            lesson_summary = self._generate_lesson_summary(content, lesson_file)
+            
+            return {
+                "paragraphs": paragraphs if paragraphs else ["Содержание урока временно недоступно."],
+                "summary": lesson_summary,
+                "original_content": content[:500]  # Сохраняем начало для fallback
+            }
             
         except Exception as e:
             print(f"Ошибка загрузки урока {lesson_file}: {e}")
-            return ["Ошибка загрузки урока. Попробуйте позже."]
+            return {
+                "paragraphs": ["Ошибка загрузки урока. Попробуйте позже."],
+                "summary": "Ошибка загрузки урока"
+            }
+    
+    def _generate_lesson_summary(self, content: str, lesson_file: str) -> str:
+        """Генерирует краткое содержание урока для практики"""
+        try:
+            # Если контент очень короткий, используем его как есть
+            if len(content) < 200:
+                return content
+            
+            # Определяем предмет из названия файла
+            subject = self._detect_subject(lesson_file.replace('.txt', ''))
+            
+            prompt = f"""
+            Создай очень краткое содержание урока для генерации практических вопросов.
+            
+            ПРЕДМЕТ: {subject}
+            ПОЛНЫЙ ТЕКСТ УРОКА: {content[:1500]}...
+            
+            ТРЕБОВАНИЯ:
+            - Очень кратко (максимум 150 слов)
+            - Выдели только ключевые понятия и идеи
+            - Убери вводные фразы и примеры
+            - Сохрани основную суть для создания вопросов
+            - Формат: простой текст без маркеров
+            
+            Верни только краткое содержание.
+            """
+            
+            # Используем локальную модель для скорости
+            summary = self.llm._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject=subject,
+                system_prompt="Ты создаешь краткие содержания уроков для образовательных целей. Будь максимально лаконичным.",
+                max_tokens=200
+            )
+            
+            if summary and len(summary.strip()) > 50:
+                print(f"✅ Сгенерировано краткое содержание урока: {len(summary)} символов")
+                return summary.strip()
+            else:
+                # Fallback: используем начало контента
+                fallback_summary = content[:300] + "..." if len(content) > 300 else content
+                print(f"⚠️ Используется fallback содержание: {len(fallback_summary)} символов")
+                return fallback_summary
+                
+        except Exception as e:
+            print(f"❌ Ошибка генерации краткого содержания: {e}")
+            # Fallback на начало контента
+            return content[:250] + "..." if len(content) > 250 else content
     
     def get_available_lessons(self) -> dict:
         """Возвращает список доступных уроков"""
