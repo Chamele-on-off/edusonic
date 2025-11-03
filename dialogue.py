@@ -947,10 +947,21 @@ class DialogueManager:
             current_question["question"]
         )
         
+        # УЛУЧШЕННЫЙ FALLBACK ДЛЯ ПРАКТИКИ
+        if not feedback or "Хороший вопрос! Давайте разберем эту тему подробнее" in feedback:
+            feedback = "Спасибо за ответ! Переходим к следующему вопросу."
+        
+        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
+        questions_asked = len(self.practice_manager.generated_questions)
+        if questions_asked >= self.max_questions:
+            print(f"🏁 Достигнут лимит вопросов: {questions_asked}/{self.max_questions}")
+            self._end_practice_session()
+            return f"{feedback}. Практика завершена! Вы ответили на все {self.max_questions} вопросов."
+        
         if next_question:
             # Обновляем текущий вопрос
             self.current_practice_question = {
-                "id": len(self.practice_manager.generated_questions),
+                "id": questions_asked + 1,
                 "question": next_question,
                 "answer": ""
             }
@@ -958,6 +969,7 @@ class DialogueManager:
             
             response = f"{feedback}. Следующий вопрос: {next_question}"
             print(f"➡️ Следующий вопрос получен: {next_question[:80]}...")
+            print(f"📊 Вопросов задано: {questions_asked + 1}/{self.max_questions}")
             print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             return response
         else:
@@ -1144,7 +1156,8 @@ class DialogueManager:
             "waiting_for_answer": self.waiting_for_answer,
             "current_question": self.current_practice_question,
             "question_index": self.current_question_index,
-            "max_questions": self.max_questions
+            "max_questions": self.max_questions,
+            "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0
         }
 
     def force_start_practice(self, lesson_context: str, subject: str) -> str:
@@ -1247,7 +1260,9 @@ class DialogueManager:
             "conversation_history_length": len(self.conversation_history),
             "practice_stats": practice_stats,
             "current_practice_question": self.current_practice_question,
-            "room_id": self.room_id
+            "room_id": self.room_id,
+            "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
+            "max_questions": self.max_questions
         }
 
     def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
@@ -1349,7 +1364,9 @@ class DialogueManager:
                 "lesson_started": self.lesson_started,
                 "practice_active": self.practice_active,
                 "current_subject": self.current_subject,
-                "conversation_history_length": len(self.conversation_history)
+                "conversation_history_length": len(self.conversation_history),
+                "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
+                "max_questions": self.max_questions
             },
             "llm": llm_status,
             "knowledge_base": knowledge_stats,
