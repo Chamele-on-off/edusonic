@@ -877,7 +877,7 @@ class DialogueManager:
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """УПРОЩЕННАЯ версия запуска практики"""
+        """Запускает фазу практики с асинхронной генерацией вопросов"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -887,7 +887,7 @@ class DialogueManager:
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
         print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
-        # Инициализируем менеджер практики
+        # Инициализируем менеджер практики с асинхронной генерацией
         lesson_context = " ".join(self.lesson_content)
         self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
@@ -895,12 +895,12 @@ class DialogueManager:
         if self.room_id:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # ГЕНЕРИРУЕМ ПЕРВЫЙ ВОПРОС
-        print("🔄 Генерация первого вопроса практики...")
-        first_question = self.practice_manager.generate_single_question()
+        # ПОЛУЧАЕМ ПЕРВЫЙ ВОПРОС ИЗ ОЧЕРЕДИ
+        print("🔄 Получение первого вопроса практики...")
+        first_question = self.practice_manager.get_next_question()
         
         if first_question:
-            print(f"✅ Первый вопрос сгенерирован: {first_question}")
+            print(f"✅ Первый вопрос получен: {first_question}")
             self.waiting_for_answer = True
             self.current_practice_question = {
                 "id": 1,
@@ -910,33 +910,12 @@ class DialogueManager:
             print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
-            print("❌ Не удалось сгенерировать первый вопрос практики")
+            print("❌ Не удалось получить первый вопрос практики")
             self.practice_active = False
             return "Практические задания временно недоступны. Давайте продолжим урок или выберем другую тему."
 
-    def _generate_next_practice_question(self) -> Optional[str]:
-        """Генерирует следующий вопрос практики"""
-        try:
-            question = self.practice_manager.generate_single_question()
-            if question:
-                self.current_question_index += 1
-                self.current_practice_question = {
-                    "id": self.current_question_index + 1,
-                    "question": question,
-                    "answer": ""
-                }
-                self.waiting_for_answer = True
-                print(f"✅ Сгенерирован вопрос {self.current_question_index + 1}: {question}")
-                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
-                return question
-            else:
-                print("❌ Не удалось сгенерировать вопрос")
-                return None
-        except Exception as e:
-            print(f"❌ Ошибка генерации вопроса практики: {e}")
-            return None
-
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
+        """Оценивает ответ и возвращает следующий вопрос с асинхронной генерацией"""
         print(f"🔍 Обработка ответа: '{student_answer}'")
         print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
@@ -947,14 +926,14 @@ class DialogueManager:
         # ПРОВЕРЯЕМ, НЕ ЯВЛЯЕТСЯ ЛИ ОТВЕТ КОМАНДОЙ
         if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
             print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
-            next_question = self._generate_next_practice_question()
+            next_question = self.practice_manager.get_next_question()
             if next_question:
                 return f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
             else:
                 self._end_practice_session()
                 return "Практика завершена."
         
-        print(f"🎯 Оценка ответа и генерация следующего вопроса...")
+        print(f"🎯 Оценка ответа и получение следующего вопроса...")
         
         current_question = self.current_practice_question
         if not current_question:
@@ -962,39 +941,40 @@ class DialogueManager:
             self._end_practice_session()
             return "Практика завершена."
         
-        # Оцениваем ответ
-        evaluation = self.practice_manager.evaluate_single_answer(
+        # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД: оценка + следующий вопрос
+        feedback, next_question = self.practice_manager.evaluate_and_continue(
             student_answer, 
             current_question["question"]
         )
         
-        print(f"📝 Оценка: {evaluation}")
-        
-        # ВАЖНОЕ ИСПРАВЛЕНИЕ: Проверяем можно ли генерировать еще вопросы
-        if self.practice_manager.has_more_questions():
-            next_question = self._generate_next_practice_question()
-            if next_question:
-                response = f"{evaluation}. Следующий вопрос: {next_question}"
-                print(f"➡️ Следующий вопрос сгенерирован: {next_question}")
-                print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
-                return response
-            else:
-                print("❌ Не удалось сгенерировать следующий вопрос")
-                self._end_practice_session()
-                return f"{evaluation}. Практика завершена - возникли трудности с генерацией вопросов."
+        if next_question:
+            # Обновляем текущий вопрос
+            self.current_practice_question = {
+                "id": len(self.practice_manager.generated_questions),
+                "question": next_question,
+                "answer": ""
+            }
+            self.waiting_for_answer = True
+            
+            response = f"{feedback}. Следующий вопрос: {next_question}"
+            print(f"➡️ Следующий вопрос получен: {next_question[:80]}...")
+            print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
+            return response
         else:
-            print("🏁 Достигнут лимит вопросов (5)")
+            print("❌ Не удалось получить следующий вопрос")
             self._end_practice_session()
-            return f"{evaluation}. Практика завершена! Вы ответили на все 5 вопросов. Отличная работа!"
+            return f"{feedback}. Практика завершена!"
 
     def _handle_practice_answer(self, text: str) -> str:
+        """Обработка ответа ученика во время практики"""
         return self._evaluate_and_generate_next(text)
 
     def _end_practice_session(self):
+        """Завершает сессию практики"""
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
-        self.practice_manager.reset()
+        self.practice_manager.stop_async_generation()
         
         self.lesson_started = False
         self.selected_lesson = None
@@ -1007,6 +987,7 @@ class DialogueManager:
         print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
+        """Обработка вопросов ученика во время урока"""
         if not question.strip():
             return "Повторите вопрос пожалуйста, я не расслышал."
             
@@ -1112,6 +1093,7 @@ class DialogueManager:
         return self.current_state
 
     def reset(self):
+        """Полный сброс диалог менеджера"""
         self.current_state = "greeting"
         self.current_subject = None
         self.selected_lesson = None
@@ -1125,6 +1107,7 @@ class DialogueManager:
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_question_index = 0
+        self.practice_manager.reset()
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
@@ -1148,3 +1131,283 @@ class DialogueManager:
         if self.knowledge_base:
             return self.knowledge_base.get_stats()
         return None
+
+    def set_room_id(self, room_id: str):
+        """Установка ID комнаты для WebSocket коммуникации"""
+        self.room_id = room_id
+        print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
+
+    def get_practice_status(self) -> Dict:
+        """Возвращает статус практики"""
+        return {
+            "practice_active": self.practice_active,
+            "waiting_for_answer": self.waiting_for_answer,
+            "current_question": self.current_practice_question,
+            "question_index": self.current_question_index,
+            "max_questions": self.max_questions
+        }
+
+    def force_start_practice(self, lesson_context: str, subject: str) -> str:
+        """Принудительно запускает практику (для тестирования)"""
+        try:
+            self.lesson_started = False
+            self.current_state = "practice_session"
+            self.practice_active = True
+            self.waiting_for_answer = False
+            self.current_question_index = 0
+            
+            print("=== ПРИНУДИТЕЛЬНЫЙ ЗАПУСК ПРАКТИКИ ===")
+            
+            # Инициализируем менеджер практики
+            self.practice_manager.initialize_practice_generation(lesson_context, subject)
+            
+            # Получаем первый вопрос
+            first_question = self.practice_manager.get_next_question()
+            
+            if first_question:
+                self.waiting_for_answer = True
+                self.current_practice_question = {
+                    "id": 1,
+                    "question": first_question,
+                    "answer": ""
+                }
+                return f"Практика запущена. Первый вопрос: {first_question}"
+            else:
+                self.practice_active = False
+                return "Не удалось запустить практику"
+                
+        except Exception as e:
+            print(f"❌ Ошибка принудительного запуска практики: {e}")
+            return f"Ошибка запуска практики: {e}"
+
+    def skip_to_practice(self):
+        """Пропускает урок и сразу переходит к практике (для тестирования)"""
+        if not self.lesson_started or not self.lesson_content:
+            return "Сначала нужно начать урок"
+        
+        print("=== ПРОПУСК К ПРАКТИКЕ ===")
+        practice_message = self._start_practice_session()
+        return practice_message
+
+    def get_visualization_status(self) -> Dict:
+        """Возвращает статус визуализации"""
+        return {
+            "visualization_enabled": self.visualization_enabled,
+            "visualization_counter": self.visualization_counter,
+            "last_visualization_time": self.last_visualization_time,
+            "paragraphs_since_last_viz": self.paragraphs_since_last_viz
+        }
+
+    def force_visualization(self, text: str) -> bool:
+        """Принудительно генерирует визуализацию для текста"""
+        try:
+            if not self.room_id:
+                print("❌ Нет room_id для отправки визуализации")
+                return False
+            
+            context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph]) if self.lesson_content else ""
+            self._generate_visualization(text, context)
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка принудительной генерации визуализации: {e}")
+            return False
+
+    def get_conversation_stats(self) -> Dict:
+        """Возвращает статистику диалога"""
+        user_messages = [msg for msg in self.conversation_history if msg['is_user']]
+        teacher_messages = [msg for msg in self.conversation_history if not msg['is_user']]
+        
+        return {
+            "total_messages": len(self.conversation_history),
+            "user_messages": len(user_messages),
+            "teacher_messages": len(teacher_messages),
+            "current_state": self.current_state,
+            "lesson_started": self.lesson_started,
+            "current_paragraph": self.current_paragraph,
+            "total_paragraphs": len(self.lesson_content),
+            "conversation_context": self.conversation_context
+        }
+
+    def debug_info(self) -> Dict:
+        """Возвращает отладочную информацию"""
+        practice_stats = self.practice_manager.get_practice_stats() if hasattr(self.practice_manager, 'get_practice_stats') else {}
+        
+        return {
+            "current_state": self.current_state,
+            "current_subject": self.current_subject,
+            "lesson_started": self.lesson_started,
+            "practice_active": self.practice_active,
+            "waiting_for_answer": self.waiting_for_answer,
+            "current_paragraph": self.current_paragraph,
+            "total_paragraphs": len(self.lesson_content),
+            "available_subjects": self.get_available_subjects(),
+            "llm_mode": self.llm_query_mode,
+            "visualization_enabled": self.visualization_enabled,
+            "conversation_history_length": len(self.conversation_history),
+            "practice_stats": practice_stats,
+            "current_practice_question": self.current_practice_question,
+            "room_id": self.room_id
+        }
+
+    def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
+        """Добавляет пользовательский урок"""
+        try:
+            # Создаем имя файла
+            filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
+            lesson_path = self.lessons_dir / filename
+            
+            # Записываем контент
+            with open(lesson_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # Добавляем в список уроков
+            lesson_data = {
+                'id': filename.replace('.txt', ''),
+                'title': title,
+                'file_path': lesson_path,
+                'type': 'text',
+                'is_custom': True
+            }
+            
+            if subject not in self.lessons:
+                self.lessons[subject] = []
+            
+            self.lessons[subject].append(lesson_data)
+            
+            print(f"✅ Пользовательский урок добавлен: {title} ({subject})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка добавления пользовательского урока: {e}")
+            return False
+
+    def list_all_lessons(self) -> Dict[str, List[Dict]]:
+        """Возвращает все доступные уроки по предметам"""
+        return self.lessons
+
+    def get_lesson_progress(self) -> Dict:
+        """Возвращает прогресс по текущему уроку"""
+        if not self.lesson_started or not self.lesson_content:
+            return {"error": "Урок не начат"}
+        
+        progress_percent = (self.current_paragraph / len(self.lesson_content)) * 100 if self.lesson_content else 0
+        
+        return {
+            "current_paragraph": self.current_paragraph,
+            "total_paragraphs": len(self.lesson_content),
+            "progress_percent": round(progress_percent, 1),
+            "remaining_paragraphs": len(self.lesson_content) - self.current_paragraph,
+            "lesson_title": self.selected_lesson['title'] if self.selected_lesson else "Неизвестно",
+            "subject": self.current_subject
+        }
+
+    def continue_lesson(self) -> Optional[str]:
+        """Продолжает урок с текущей позиции"""
+        if not self.lesson_started:
+            return "Урок не начат. Скажите 'привет' чтобы начать."
+        
+        return self._get_next_paragraph()
+
+    def restart_lesson(self) -> str:
+        """Перезапускает текущий урок"""
+        if not self.selected_lesson:
+            return "Нет активного урока для перезапуска."
+        
+        try:
+            self.current_paragraph = 0
+            self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+            
+            if not self.lesson_content:
+                return "Ошибка загрузки урока."
+            
+            first_paragraph = self.lesson_content[0] if self.lesson_content else ""
+            return f"Урок перезапущен. {first_paragraph}"
+            
+        except Exception as e:
+            print(f"❌ Ошибка перезапуска урока: {e}")
+            return "Ошибка перезапуска урока."
+
+    def set_max_practice_questions(self, max_questions: int):
+        """Устанавливает максимальное количество вопросов в практике"""
+        if 1 <= max_questions <= 20:
+            self.max_questions = max_questions
+            self.practice_manager.max_questions = max_questions
+            print(f"🔧 Максимальное количество вопросов установлено: {max_questions}")
+        else:
+            print("❌ Некорректное количество вопросов. Должно быть от 1 до 20.")
+
+    def get_system_status(self) -> Dict:
+        """Возвращает общий статус системы"""
+        llm_status = self.llm.get_llm_status() if hasattr(self.llm, 'get_llm_status') else {}
+        knowledge_stats = self.get_knowledge_stats() or {}
+        practice_stats = self.practice_manager.get_practice_stats() if hasattr(self.practice_manager, 'get_practice_stats') else {}
+        
+        return {
+            "dialogue_manager": {
+                "current_state": self.current_state,
+                "lesson_started": self.lesson_started,
+                "practice_active": self.practice_active,
+                "current_subject": self.current_subject,
+                "conversation_history_length": len(self.conversation_history)
+            },
+            "llm": llm_status,
+            "knowledge_base": knowledge_stats,
+            "practice": practice_stats,
+            "visualization": self.get_visualization_status(),
+            "lessons": {
+                "available_subjects": self.get_available_subjects(),
+                "total_lessons": sum(len(lessons) for lessons in self.lessons.values())
+            }
+        }
+
+    def export_conversation_history(self) -> List[Dict]:
+        """Экспортирует историю диалога"""
+        return self.conversation_history.copy()
+
+    def clear_conversation_history(self):
+        """Очищает историю диалога"""
+        self.conversation_history = []
+        self.conversation_context = []
+        print("🗑️ История диалога очищена")
+
+    def simulate_student_answer(self, answer: str) -> str:
+        """Симулирует ответ студента (для тестирования)"""
+        if not self.practice_active or not self.waiting_for_answer:
+            return "Практика не активна или система не ожидает ответа"
+        
+        return self._evaluate_and_generate_next(answer)
+
+    def get_available_commands(self) -> Dict[str, str]:
+        """Возвращает список доступных команд"""
+        return {
+            "привет": "Начать диалог",
+            "продолжай": "Продолжить урок",
+            "стоп": "Остановить урок/практику",
+            "какой предмет": "Показать доступные предметы",
+            "практика": "Перейти к практике (если урок завершен)",
+            "статус": "Показать статус системы",
+            "помощь": "Показать эту справку"
+        }
+
+
+# Создаем глобальный экземпляр для тестирования
+if __name__ == "__main__":
+    # Тестирование базовой функциональности
+    dm = DialogueManager(None)
+    
+    print("🧪 Тестирование DialogueManager...")
+    
+    # Тест доступных предметов
+    subjects = dm.get_available_subjects()
+    print(f"📚 Доступные предметы: {subjects}")
+    
+    # Тест обработки приветствия
+    response = dm.process_input("привет")
+    print(f"👋 Ответ на приветствие: {response}")
+    
+    # Тест статуса системы
+    status = dm.get_system_status()
+    print(f"📊 Статус системы: {status}")
+    
+    print("✅ Тестирование завершено!")
