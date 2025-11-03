@@ -1,5 +1,3 @@
-# practice_manager.py - ВЕРСИЯ С АСИНХРОННОЙ ПРЕГЕНЕРАЦИЕЙ
-
 import re
 import json
 from pathlib import Path
@@ -21,7 +19,7 @@ class PracticeManager:
         self.question_queue = queue.Queue()  # Очередь готовых вопросов
         self.generated_questions = []        # История всех вопросов
         self.current_question_index = 0
-        self.max_questions = 5
+        self.max_questions = 5  # ЖЕСТКИЙ ЛИМИТ 5 ВОПРОСОВ
         
         # ФЛАГИ УПРАВЛЕНИЯ АСИНХРОННОЙ ГЕНЕРАЦИЕЙ
         self.generation_thread = None
@@ -46,6 +44,7 @@ class PracticeManager:
                 break
         
         print(f"🎯 Инициализирована генерация практики для предмета: {subject}")
+        print(f"📝 Максимальное количество вопросов: {self.max_questions}")
         
         # ЗАПУСКАЕМ АСИНХРОННУЮ ГЕНЕРАЦИЮ ВОПРОСОВ СРАЗУ
         self._start_async_generation()
@@ -72,12 +71,17 @@ class PracticeManager:
                    len(self.generated_questions) < self.max_questions - 1):  # -1 потому что первый уже сгенерирован
                 
                 try:
+                    # Проверяем лимит перед генерацией
+                    if len(self.generated_questions) >= self.max_questions:
+                        print("🏁 Достигнут лимит вопросов в фоновой генерации")
+                        break
+                    
                     # Генерируем следующий вопрос
                     next_question = self.generate_single_question()
                     
                     if next_question:
                         self.question_queue.put(next_question)
-                        print(f"✅ Фоново сгенерирован вопрос {len(self.generated_questions)}: {next_question[:80]}...")
+                        print(f"✅ Фоново сгенерирован вопрос {len(self.generated_questions)}/{self.max_questions}: {next_question[:80]}...")
                     
                     # Небольшая пауза между генерацией
                     time.sleep(1)
@@ -96,6 +100,11 @@ class PracticeManager:
     def get_next_question(self, timeout: float = 10.0) -> Optional[str]:
         """Получает следующий вопрос из очереди (с ожиданием если нужно)"""
         try:
+            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
+            if len(self.generated_questions) >= self.max_questions:
+                print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
+                return None
+            
             # Пытаемся взять вопрос из очереди без ожидания
             try:
                 question = self.question_queue.get_nowait()
@@ -126,8 +135,9 @@ class PracticeManager:
     def generate_single_question(self) -> Optional[str]:
         """Генерирует один вопрос (синхронно)"""
         try:
-            # Проверяем лимит вопросов
+            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
             if len(self.generated_questions) >= self.max_questions:
+                print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
             
             # УЛУЧШЕННЫЙ промпт с историей вопросов
@@ -192,42 +202,13 @@ class PracticeManager:
             
         except Exception as e:
             print(f"❌ Ошибка в evaluate_and_continue: {e}")
+            # ИСПРАВЛЕННЫЙ FALLBACK ДЛЯ ПРАКТИКИ
             feedback = "Спасибо за ответ! Переходим к следующему вопросу."
             next_question = self._get_fallback_question(ensure_unique=True)
             return feedback, next_question
 
-    def stop_async_generation(self):
-        """Останавливает фоновую генерацию"""
-        self.stop_generation = True
-        self.generation_active = False
-        if self.generation_thread and self.generation_thread.is_alive():
-            self.generation_thread.join(timeout=2.0)
-
-    # Остальные методы остаются без изменений...
-    def _get_previous_questions_text(self) -> str:
-        if not self.generated_questions:
-            return "Вопросов еще не было. Это первый вопрос."
-        
-        questions_text = "Уже заданные вопросы:\n"
-        for i, q_data in enumerate(self.generated_questions, 1):
-            questions_text += f"{i}. {q_data['question']}\n"
-        return questions_text
-
-    def _is_question_unique(self, new_question: str, similarity_threshold: float = 0.7) -> bool:
-        if not self.generated_questions:
-            return True
-        
-        new_question_lower = new_question.lower()
-        for existing_q in self.generated_questions:
-            existing_question_lower = existing_q["question"].lower()
-            similarity = SequenceMatcher(None, new_question_lower, existing_question_lower).ratio()
-            
-            if similarity > similarity_threshold:
-                return False
-        return True
-
     def evaluate_single_answer(self, student_answer: str, question: str) -> str:
-        """Оценивает ответ ученика (синхронно)"""
+        """Оценивает ответ ученика (синхронно) с ИСПРАВЛЕННЫМИ FALLBACK"""
         try:
             if not student_answer or len(student_answer.strip()) < 2:
                 return "Ответ слишком короткий. Пожалуйста, попробуйте ответить более развернуто."
@@ -241,10 +222,20 @@ class PracticeManager:
                 correct_answer = "Информация содержится в учебном материале."
             
             evaluation = self._evaluate_with_llm_context(question, student_answer, correct_answer)
-            return evaluation if evaluation else f"Спасибо за ответ! Правильный ответ: {correct_answer}"
+            
+            # ИСПРАВЛЕНИЕ: Заменяем неподходящие fallback ответы
+            if not evaluation or any(phrase in evaluation for phrase in [
+                "Хороший вопрос! Давайте разберем эту тему подробнее",
+                "Мне нужно немного времени подумать",
+                "Спасибо за вопрос! Я подумаю над ответом"
+            ]):
+                evaluation = f"Спасибо за ответ! Правильный ответ: {correct_answer}"
+            
+            return evaluation
             
         except Exception as e:
             print(f"❌ Ошибка оценки ответа: {e}")
+            # ИСПРАВЛЕННЫЙ FALLBACK
             return "Спасибо за ответ! Переходим к следующему вопросу."
 
     def _generate_correct_answer(self, question: str) -> Optional[str]:
@@ -283,8 +274,18 @@ class PracticeManager:
             ПРАВИЛЬНЫЙ ОТВЕТ: {correct_answer}
             ОТВЕТ УЧЕНИКА: {student_answer}
             
+            Контекст урока: {self.current_lesson_summary[:300]}
+            
             Дай добрую и поддерживающую обратную связь (2-3 предложения).
             Обращайся к ученику на "ты".
+            
+            НЕ ИСПОЛЬЗУЙ фразы:
+            - "Хороший вопрос! Давайте разберем эту тему подробнее"
+            - "Мне нужно немного времени подумать" 
+            - "Спасибо за вопрос! Я подумаю над ответом"
+            - "Давайте разберем эту тему подробнее"
+            
+            Вместо этого дай конкретную обратную связь по ответу.
             """
             
             evaluation = self.llm.query(
@@ -292,11 +293,49 @@ class PracticeManager:
                 context="",
                 subject=self.current_subject
             )
+            
+            # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА НА НЕПОДХОДЯЩИЕ ОТВЕТЫ
+            if evaluation and any(phrase in evaluation for phrase in [
+                "Хороший вопрос! Давайте разберем эту тему подробнее",
+                "Мне нужно немного времени подумать",
+                "Спасибо за вопрос! Я подумаю над ответом"
+            ]):
+                return f"Спасибо за ответ! Правильный ответ: {correct_answer}"
+                
             return evaluation if evaluation else f"Спасибо за ответ! Правильный ответ: {correct_answer}"
             
         except Exception as e:
             print(f"❌ Ошибка оценки через LLM: {e}")
             return f"Спасибо за ответ! Правильный ответ: {correct_answer}"
+
+    def stop_async_generation(self):
+        """Останавливает фоновую генерацию"""
+        self.stop_generation = True
+        self.generation_active = False
+        if self.generation_thread and self.generation_thread.is_alive():
+            self.generation_thread.join(timeout=2.0)
+
+    def _get_previous_questions_text(self) -> str:
+        if not self.generated_questions:
+            return "Вопросов еще не было. Это первый вопрос."
+        
+        questions_text = "Уже заданные вопросы:\n"
+        for i, q_data in enumerate(self.generated_questions, 1):
+            questions_text += f"{i}. {q_data['question']}\n"
+        return questions_text
+
+    def _is_question_unique(self, new_question: str, similarity_threshold: float = 0.7) -> bool:
+        if not self.generated_questions:
+            return True
+        
+        new_question_lower = new_question.lower()
+        for existing_q in self.generated_questions:
+            existing_question_lower = existing_q["question"].lower()
+            similarity = SequenceMatcher(None, new_question_lower, existing_question_lower).ratio()
+            
+            if similarity > similarity_threshold:
+                return False
+        return True
 
     def _clean_question_text(self, text: str) -> str:
         if not text:
@@ -330,7 +369,7 @@ class PracticeManager:
             return lesson_context[:500] + "..."
 
     def _get_fallback_question(self, ensure_unique: bool = False) -> str:
-        # ... (существующая реализация fallback вопросов)
+        # БАЗОВЫЕ ВОПРОСЫ ДЛЯ РАЗНЫХ ПРЕДМЕТОВ
         subject_questions = {
             "обществознание": [
                 "Что такое общество и каковы его основные элементы?",
@@ -339,30 +378,95 @@ class PracticeManager:
                 "Какие функции выполняет государство в современном обществе?",
                 "Что такое гражданское общество и как оно взаимодействует с государством?"
             ],
-            # ... другие предметы
+            "математика": [
+                "Объясни основную концепцию, которую мы только что изучили.",
+                "Как применить изученный метод на практике?",
+                "В чем особенность этого математического подхода?",
+                "Какие существуют альтернативные способы решения этой задачи?",
+                "Почему этот математический принцип важен для понимания?"
+            ],
+            "история": [
+                "Каковы были ключевые события изученного периода?",
+                "Как повлияли эти исторические события на современность?",
+                "В чем заключались основные причины исторических процессов, которые мы изучали?",
+                "Охарактеризуй ключевых исторических личностей этого периода.",
+                "Какие исторические закономерности можно проследить в изученном материале?"
+            ],
+            "физика": [
+                "Как работает основной физический принцип, который мы рассмотрели?",
+                "Объясни физический смысл изученного явления.",
+                "Где в повседневной жизни мы встречаемся с этим физическим законом?",
+                "Какие практические применения имеет это физическое открытие?",
+                "В чем заключается научная важность изученного физического явления?"
+            ],
+            "химия": [
+                "Опиши основные химические процессы из урока.",
+                "В чем особенность химических свойств изученных элементов?",
+                "Как протекает химическая реакция, которую мы изучали?",
+                "Какое практическое значение имеют эти химические процессы?",
+                "Объясни взаимосвязь между строением и свойствами химических веществ."
+            ],
+            "биология": [
+                "Каковы основные биологические процессы, которые мы изучили?",
+                "Опиши строение и функции биологических структур из урока.",
+                "Как взаимодействуют различные биологические системы?",
+                "В чем биологическое значение изученных процессов?",
+                "Какие адаптации организмов мы рассмотрели и в чем их смысл?"
+            ],
+            "литература": [
+                "В чем основная идея или тема произведения, которое мы обсуждали?",
+                "Охарактеризуй главных героев изученного произведения.",
+                "Как автор раскрывает основные темы в произведении?",
+                "В чем художественное своеобразие этого литературного произведения?",
+                "Какие нравственные проблемы поднимает автор в произведении?"
+            ],
+            "русский язык": [
+                "Объясни основное грамматическое правило, которое мы изучили.",
+                "В чем особенности применения этого правила на практике?",
+                "Какие исключения существуют из изученного правила?",
+                "Как правильно использовать изученные языковые конструкции?",
+                "Почему это грамматическое правило важно для правильной речи?"
+            ]
         }
         
-        questions = subject_questions.get(self.current_subject, [
+        # Базовый набор вопросов для любого предмета
+        general_questions = [
             "Объясни основную идею изученного материала.",
             "В чем заключается главная мысль этого урока?",
             "Какие ключевые понятия мы сегодня изучили?",
             "Как можно применить эти знания на практике?",
             "Почему эта тема важна для понимания предмета?"
-        ])
+        ]
+        
+        # Получаем вопросы для текущего предмета или общие вопросы
+        questions = subject_questions.get(self.current_subject, general_questions)
         
         if ensure_unique and self.generated_questions:
+            # Ищем вопрос, которого еще не было
             existing_questions = [q["question"] for q in self.generated_questions]
             for question in questions:
                 if question not in existing_questions:
                     return question
+            
+            # Если все вопросы уже использованы, берем из общего списка
+            for general_q in general_questions:
+                if general_q not in existing_questions:
+                    return general_q
         
+        # Возвращаем случайный вопрос
         import random
         return random.choice(questions)
 
     def has_more_questions(self) -> bool:
+        """Проверяет, можно ли генерировать еще вопросы"""
         return len(self.generated_questions) < self.max_questions
 
+    def get_generated_questions_count(self) -> int:
+        """Возвращает количество сгенерированных вопросов"""
+        return len(self.generated_questions)
+
     def reset(self):
+        """Сброс состояния менеджера практики"""
         self.stop_async_generation()
         self.current_lesson_context = ""
         self.current_lesson_summary = ""
@@ -376,12 +480,26 @@ class PracticeManager:
                 break
         print("🔄 Менеджер практики сброшен")
 
+    def get_current_question(self) -> Optional[str]:
+        """Возвращает текущий вопрос"""
+        if self.generated_questions:
+            return self.generated_questions[-1]["question"]
+        return None
+
     def get_practice_stats(self) -> Dict:
+        """Возвращает статистику по практике"""
+        question_types = {}
+        for q in self.generated_questions:
+            q_type = q.get("type", "unknown")
+            question_types[q_type] = question_types.get(q_type, 0) + 1
+        
         return {
             "total_questions": len(self.generated_questions),
+            "max_questions": self.max_questions,
             "questions_in_queue": self.question_queue.qsize(),
             "generation_active": self.generation_active,
             "current_subject": self.current_subject,
-            "max_questions": self.max_questions,
-            "has_more_questions": self.has_more_questions()
+            "has_more_questions": self.has_more_questions(),
+            "question_types": question_types,
+            "lesson_summary_length": len(self.current_lesson_summary)
         }
