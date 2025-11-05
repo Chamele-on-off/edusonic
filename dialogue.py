@@ -951,16 +951,12 @@ class DialogueManager:
         if not feedback or "Хороший вопрос! Давайте разберем эту тему подробнее" in feedback:
             feedback = "Спасибо за ответ! Переходим к следующему вопросу."
         
-        # ЖЕСТКАЯ ПРОВЕРКА ЛИМИТА ВОПРОСОВ
+        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
         questions_asked = len(self.practice_manager.generated_questions)
-        print(f"📊 Вопросов задано: {questions_asked}/{self.max_questions}")
-        
         if questions_asked >= self.max_questions:
             print(f"🏁 Достигнут лимит вопросов: {questions_asked}/{self.max_questions}")
             self._end_practice_session()
-            completion_message = f"{feedback}\n\n🎉 На сегодня с практикой все! Вы ответили на все {self.max_questions} вопросов. Урок окончен! Скажите 'привет' чтобы начать новый урок."
-            print("✅ Практика завершена корректно")
-            return completion_message
+            return f"{feedback}. Практика завершена! Вы ответили на все {self.max_questions} вопросов."
         
         if next_question:
             # Обновляем текущий вопрос
@@ -986,37 +982,21 @@ class DialogueManager:
         return self._evaluate_and_generate_next(text)
 
     def _end_practice_session(self):
-        """Завершает сессию практики и полностью сбрасывает состояние"""
-        print("=== 🏁 ЗАВЕРШЕНИЕ ПРАКТИКИ И СБРОС СОСТОЯНИЯ ===")
-        
-        # Останавливаем генерацию вопросов
-        self.practice_manager.stop_async_generation()
-        
-        # Полностью сбрасываем состояние
+        """Завершает сессию практики"""
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
-        self.current_question_index = 0
-        self.current_practice_question = None
+        self.practice_manager.stop_async_generation()
         
-        # Сбрасываем состояние урока
         self.lesson_started = False
         self.selected_lesson = None
         self.current_subject = None
         self.lesson_content = []
         self.current_paragraph = 0
-        self.knowledge_base = None
         
-        # Очищаем историю диалога
-        self.conversation_history = []
-        self.conversation_context = []
-        self.conversation_counter = 0
-        
-        # Уведомляем клиентов о завершении практики
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
-        
-        print("✅ Состояние полностью сброшено к началу диалога")
+        print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов ученика во время урока"""
