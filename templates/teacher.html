@@ -722,6 +722,36 @@
                 </div>
             </div>
         </div>
+
+        <!-- Секция управления практикой -->
+        <div class="management-panel">
+            <h2>Настройки практики</h2>
+            
+            <div class="llm-mode-panel">
+                <div class="form-group">
+                    <label for="practice-questions-select">Количество вопросов в практике:</label>
+                    <select id="practice-questions-select" class="subject-select">
+                        <option value="1">1 вопрос</option>
+                        <option value="3">3 вопроса</option>
+                        <option value="5" selected>5 вопросов</option>
+                        <option value="10">10 вопросов</option>
+                        <option value="0">Бесконечный режим</option>
+                    </select>
+                </div>
+                
+                <button id="set-practice-questions-btn" style="margin-top: 10px;">Применить настройки</button>
+                
+                <div id="practice-questions-status" class="success-message"></div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px;">
+                    <h4>📊 Текущие настройки практики</h4>
+                    <div id="practice-settings-info">
+                        <p>Загрузка настроек...</p>
+                    </div>
+                    <button id="refresh-practice-settings-btn" style="margin-top: 10px;">🔄 Обновить настройки</button>
+                </div>
+            </div>
+        </div>
         
         <div id="room-controls">
             <h3>Комната: <span id="room-id">default</span></h3>
@@ -921,6 +951,13 @@
         const llmPriorityStatus = document.getElementById('llm-priority-status');
         const llmStatusInfo = document.getElementById('llm-status-info');
         const refreshLlmStatusBtn = document.getElementById('refresh-llm-status-btn');
+        
+        // Элементы для управления практикой
+        const practiceQuestionsSelect = document.getElementById('practice-questions-select');
+        const setPracticeQuestionsBtn = document.getElementById('set-practice-questions-btn');
+        const practiceQuestionsStatus = document.getElementById('practice-questions-status');
+        const practiceSettingsInfo = document.getElementById('practice-settings-info');
+        const refreshPracticeSettingsBtn = document.getElementById('refresh-practice-settings-btn');
         
         // Элементы для скачивания
         const downloadKnowledgeBtn = document.getElementById('download-knowledge-btn');
@@ -1302,6 +1339,31 @@
                 });
         }
         
+        // Функции для работы с настройками практики
+        function loadPracticeSettings() {
+            // Получаем текущие настройки через сокет или API
+            if (socket) {
+                socket.emit('get_practice_settings', { room_id: currentRoom });
+            }
+            updatePracticeSettingsInfo();
+        }
+        
+        function setPracticeQuestions(maxQuestions) {
+            if (socket) {
+                socket.emit('set_practice_questions', { 
+                    room_id: currentRoom,
+                    max_questions: parseInt(maxQuestions)
+                });
+            }
+        }
+        
+        function updatePracticeSettingsInfo() {
+            // Получаем актуальные настройки из активной комнаты
+            if (socket) {
+                socket.emit('get_practice_status', { room_id: currentRoom });
+            }
+        }
+        
         // Функции для работы с файлами практики
         function loadPracticeFiles() {
             fetch('/api/practice_files')
@@ -1522,6 +1584,9 @@
             // Загружаем статус локальной модели
             loadLLMPriority();
             
+            // Загружаем настройки практики при загрузке страницы
+            loadPracticeSettings();
+            
             // Загружаем файлы практики при загрузке страницы
             loadPracticeFiles();
             
@@ -1561,6 +1626,16 @@
                 refreshLLMStatus();
             });
             
+            // Обработчики для управления практикой
+            setPracticeQuestionsBtn.addEventListener('click', function() {
+                const maxQuestions = practiceQuestionsSelect.value;
+                setPracticeQuestions(maxQuestions);
+            });
+            
+            refreshPracticeSettingsBtn.addEventListener('click', function() {
+                loadPracticeSettings();
+            });
+            
             // Обработчики для управления файлами практики
             selectFileBtn.addEventListener('click', function() {
                 practiceFileInput.click();
@@ -1598,6 +1673,37 @@
                         showStatus(uploadStatus, 'Только JSON файлы поддерживаются', false);
                     }
                 }
+            });
+            
+            // Обработчики сокетов для практики
+            socket.on('practice_settings_updated', function(data) {
+                showStatus(practiceQuestionsStatus, data.message);
+                updatePracticeSettingsInfo();
+            });
+            
+            socket.on('practice_status', function(data) {
+                if (data.success) {
+                    const status = data.status;
+                    let html = `
+                        <p><strong>Максимум вопросов:</strong> ${status.max_questions === 0 ? 'Бесконечный режим' : status.max_questions}</p>
+                        <p><strong>Вопросов задано:</strong> ${status.questions_asked}</p>
+                        <p><strong>Практика активна:</strong> ${status.practice_active ? '✅ Да' : '❌ Нет'}</p>
+                        <p><strong>Ожидание ответа:</strong> ${status.waiting_for_answer ? '✅ Да' : '❌ Нет'}</p>
+                    `;
+                    
+                    if (status.current_question) {
+                        html += `<p><strong>Текущий вопрос:</strong> ${status.current_question.question.substring(0, 100)}...</p>`;
+                    }
+                    
+                    practiceSettingsInfo.innerHTML = html;
+                    
+                    // Обновляем селект
+                    practiceQuestionsSelect.value = status.max_questions;
+                }
+            });
+            
+            socket.on('practice_settings_error', function(data) {
+                showStatus(practiceQuestionsStatus, 'Ошибка: ' + data.error, false);
             });
             
             // Выбор аватара
