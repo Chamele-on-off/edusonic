@@ -34,6 +34,7 @@ socketio = SocketIO(
     always_connect=True        # Всегда пытаться подключиться
 )
 
+
 # Ручная настройка CORS
 @app.after_request
 def after_request(response):
@@ -82,12 +83,6 @@ room_last_poll_time = defaultdict(lambda: 0)
 # Улучшенная система отслеживания запросов
 room_llm_pending_requests = defaultdict(dict)
 room_last_llm_update = defaultdict(lambda: 0)
-
-# НАСТРОЙКИ ПРАКТИКИ ДЛЯ КАЖДОЙ КОМНАТЫ
-room_practice_settings = defaultdict(lambda: {
-    'max_questions': 5,
-    'mode': 'limited'  # 'limited' или 'unlimited'
-})
 
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
@@ -344,10 +339,6 @@ def handle_join_room(data):
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    # Устанавливаем настройки практики для диалог менеджера
-    practice_settings = room_practice_settings[room_id]
-    room_dialogue[room_id].set_max_practice_questions(practice_settings['max_questions'])
-    
     if len(room_participants[room_id]) == 1:
         greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
@@ -364,13 +355,6 @@ def handle_join_room(data):
     
     # Отправляем текущий аватар комнаты новому участнику
     emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
-    
-    # Отправляем текущие настройки практики новому участнику
-    emit('practice_settings_updated', {
-        'room_id': room_id,
-        'max_questions': practice_settings['max_questions'],
-        'mode': practice_settings['mode']
-    }, to=request.sid)
     
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
         welcome_text = "Учитель с искусственным интеллектом активирован"
@@ -675,10 +659,6 @@ def handle_activate_ai_teacher(data):
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    # Устанавливаем настройки практики для нового диалог менеджера
-    practice_settings = room_practice_settings[room_id]
-    room_dialogue[room_id].set_max_practice_questions(practice_settings['max_questions'])
-    
     greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
@@ -745,45 +725,6 @@ def handle_practice_ended(data):
     room_current_question_index[room_id] = 0
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
-
-# НОВЫЙ ОБРАБОТЧИК ДЛЯ НАСТРОЕК ПРАКТИКИ
-@socketio.on('set_practice_settings')
-def handle_set_practice_settings(data):
-    """Обработчик установки настроек практики для комнаты"""
-    room_id = data['room_id']
-    max_questions = data['max_questions']
-    mode = data['mode']
-    
-    # Сохраняем настройки для комнаты
-    room_practice_settings[room_id] = {
-        'max_questions': max_questions,
-        'mode': mode
-    }
-    
-    # Обновляем настройки в диалог менеджере комнаты
-    if room_id in room_dialogue:
-        room_dialogue[room_id].set_max_practice_questions(max_questions)
-    
-    emit('practice_settings_updated', {
-        'room_id': room_id,
-        'max_questions': max_questions,
-        'mode': mode
-    }, room=room_id)
-    
-    print(f"🔧 Настройки практики обновлены в комнате {room_id}: {max_questions} вопросов, режим: {mode}")
-
-# ЭНДПОИНТ ДЛЯ ПОЛУЧЕНИЯ НАСТРОЕК ПРАКТИКИ
-@app.route('/api/practice/settings', methods=['GET'])
-def get_practice_settings():
-    """Получение текущих настроек практики для комнаты"""
-    room_id = request.args.get('room_id', 'default')
-    
-    settings = room_practice_settings[room_id]
-    return jsonify({
-        "success": True,
-        "room_id": room_id,
-        "settings": settings
-    })
 
 @socketio.on('visualization_generated')
 def handle_visualization_generated(data):
