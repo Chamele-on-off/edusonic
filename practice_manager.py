@@ -66,13 +66,14 @@ class PracticeManager:
         def generate_questions_worker():
             print("🔄 Фоновая генерация вопросов запущена...")
             
+            # ИЗМЕНЕНИЕ: проверяем бесконечный режим (max_questions = 0 или >= 1000)
             while (not self.stop_generation and 
                    self.generation_active and 
-                   len(self.generated_questions) < self.max_questions - 1):  # -1 потому что первый уже сгенерирован
+                   (self.max_questions == 0 or len(self.generated_questions) < self.max_questions - 1)):
                 
                 try:
-                    # Проверяем лимит перед генерацией
-                    if len(self.generated_questions) >= self.max_questions:
+                    # Проверяем лимит перед генерацией (кроме бесконечного режима)
+                    if self.max_questions > 0 and len(self.generated_questions) >= self.max_questions:
                         print("🏁 Достигнут лимит вопросов в фоновой генерации")
                         break
                     
@@ -81,7 +82,7 @@ class PracticeManager:
                     
                     if next_question:
                         self.question_queue.put(next_question)
-                        print(f"✅ Фоново сгенерирован вопрос {len(self.generated_questions)}/{self.max_questions}: {next_question[:80]}...")
+                        print(f"✅ Фоново сгенерирован вопрос {len(self.generated_questions)}/{self.max_questions if self.max_questions > 0 else '∞'}: {next_question[:80]}...")
                     
                     # Небольшая пауза между генерацией
                     time.sleep(1)
@@ -100,8 +101,8 @@ class PracticeManager:
     def get_next_question(self, timeout: float = 10.0) -> Optional[str]:
         """Получает следующий вопрос из очереди (с ожиданием если нужно)"""
         try:
-            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
-            if len(self.generated_questions) >= self.max_questions:
+            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ (кроме бесконечного режима)
+            if self.max_questions > 0 and len(self.generated_questions) >= self.max_questions:
                 print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
             
@@ -135,8 +136,8 @@ class PracticeManager:
     def generate_single_question(self) -> Optional[str]:
         """Генерирует один вопрос (синхронно)"""
         try:
-            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
-            if len(self.generated_questions) >= self.max_questions:
+            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ (кроме бесконечного режима)
+            if self.max_questions > 0 and len(self.generated_questions) >= self.max_questions:
                 print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
             
@@ -457,9 +458,29 @@ class PracticeManager:
         import random
         return random.choice(questions)
 
+    def _detect_question_type(self, question: str) -> str:
+        """Определяет тип вопроса для статистики"""
+        question_lower = question.lower()
+        
+        if any(word in question_lower for word in ['что такое', 'определение', 'понятие']):
+            return "определение"
+        elif any(word in question_lower for word in ['объясни', 'расскажи', 'опиши']):
+            return "объяснение"
+        elif any(word in question_lower for word in ['в чем разница', 'сравни', 'отличие']):
+            return "сравнение"
+        elif any(word in question_lower for word in ['пример', 'приведи пример']):
+            return "пример"
+        elif any(word in question_lower for word in ['почему', 'причина', 'обоснуй']):
+            return "обоснование"
+        elif any(word in question_lower for word in ['как', 'каким образом']):
+            return "процесс"
+        else:
+            return "общий"
+
     def has_more_questions(self) -> bool:
         """Проверяет, можно ли генерировать еще вопросы"""
-        return len(self.generated_questions) < self.max_questions
+        # Бесконечный режим (max_questions = 0) или есть лимит
+        return self.max_questions == 0 or len(self.generated_questions) < self.max_questions
 
     def get_generated_questions_count(self) -> int:
         """Возвращает количество сгенерированных вопросов"""
@@ -503,3 +524,122 @@ class PracticeManager:
             "question_types": question_types,
             "lesson_summary_length": len(self.current_lesson_summary)
         }
+
+    def set_max_questions(self, max_questions: int):
+        """Устанавливает максимальное количество вопросов"""
+        max_questions = int(max_questions)
+        
+        if max_questions == 0:
+            # Бесконечный режим
+            self.max_questions = 0
+            print(f"🔧 Установлен бесконечный режим практики")
+        elif 1 <= max_questions <= 100:
+            self.max_questions = max_questions
+            print(f"🔧 Максимальное количество вопросов установлено: {max_questions}")
+        else:
+            print(f"❌ Некорректное количество вопросов: {max_questions}")
+
+    def get_question_history(self) -> List[Dict]:
+        """Возвращает историю всех заданных вопросов"""
+        return self.generated_questions.copy()
+
+    def clear_question_history(self):
+        """Очищает историю вопросов"""
+        self.generated_questions = []
+        print("🗑️ История вопросов практики очищена")
+
+    def get_queue_size(self) -> int:
+        """Возвращает размер очереди вопросов"""
+        return self.question_queue.qsize()
+
+    def is_generation_active(self) -> bool:
+        """Проверяет, активна ли фоновая генерация"""
+        return self.generation_active
+
+    def force_generate_questions(self, count: int = 5) -> List[str]:
+        """Принудительно генерирует указанное количество вопросов"""
+        generated = []
+        for i in range(count):
+            question = self.generate_single_question()
+            if question:
+                generated.append(question)
+                print(f"🔧 Принудительно сгенерирован вопрос {i+1}/{count}: {question[:80]}...")
+            else:
+                break
+        return generated
+
+    def get_lesson_summary(self) -> str:
+        """Возвращает краткое содержание урока"""
+        return self.current_lesson_summary
+
+    def get_current_subject(self) -> str:
+        """Возвращает текущий предмет"""
+        return self.current_subject
+
+    def get_available_question_types(self) -> List[str]:
+        """Возвращает список доступных типов вопросов"""
+        return ["определение", "объяснение", "сравнение", "пример", "обоснование", "процесс", "общий"]
+
+    def debug_info(self) -> Dict:
+        """Возвращает отладочную информацию"""
+        return {
+            "current_subject": self.current_subject,
+            "max_questions": self.max_questions,
+            "generated_questions": len(self.generated_questions),
+            "queue_size": self.question_queue.qsize(),
+            "generation_active": self.generation_active,
+            "stop_generation": self.stop_generation,
+            "lesson_summary_length": len(self.current_lesson_summary),
+            "has_more_questions": self.has_more_questions(),
+            "question_types": self.get_practice_stats()["question_types"]
+        }
+
+
+# Создаем глобальный экземпляр для тестирования
+if __name__ == "__main__":
+    # Тестирование базовой функциональности
+    from llm import LLMIntegration
+    
+    print("🧪 Тестирование PracticeManager...")
+    
+    # Создаем мок LLM для тестирования
+    class MockLLM:
+        def query(self, question, context, subject):
+            test_questions = [
+                "Что такое тестовая концепция?",
+                "Объясни основной принцип тестирования.",
+                "В чем разница между тестом и проверкой?",
+                "Приведи пример тестового сценария.",
+                "Почему тестирование важно в обучении?"
+            ]
+            import random
+            return random.choice(test_questions)
+    
+    llm = MockLLM()
+    pm = PracticeManager(llm)
+    
+    # Тест инициализации
+    test_context = "Это тестовый контекст урока для проверки работы менеджера практики."
+    pm.initialize_practice_generation(test_context, "тестирование")
+    
+    # Тест генерации вопросов
+    for i in range(3):
+        question = pm.get_next_question()
+        if question:
+            print(f"✅ Вопрос {i+1}: {question}")
+            
+            # Тест оценки ответа
+            feedback, next_question = pm.evaluate_and_continue("Тестовый ответ", question)
+            print(f"📝 Обратная связь: {feedback}")
+        else:
+            print("❌ Не удалось получить вопрос")
+    
+    # Тест статистики
+    stats = pm.get_practice_stats()
+    print(f"📊 Статистика: {stats}")
+    
+    # Тест сброса
+    pm.reset()
+    print("🔄 PracticeManager сброшен")
+    
+    print("✅ Тестирование завершено!")
