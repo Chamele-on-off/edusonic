@@ -516,6 +516,26 @@
             background: #f8f9fa;
         }
         
+        .practice-settings-panel {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+        
+        .practice-mode-info {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            border-left: 4px solid #3498db;
+        }
+        
+        .practice-mode-info.unlimited {
+            border-left-color: #e74c3c;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -723,11 +743,11 @@
             </div>
         </div>
 
-        <!-- Секция управления практикой -->
+        <!-- НОВАЯ СЕКЦИЯ: Настройки практики -->
         <div class="management-panel">
             <h2>Настройки практики</h2>
             
-            <div class="llm-mode-panel">
+            <div class="practice-settings-panel">
                 <div class="form-group">
                     <label for="practice-questions-select">Количество вопросов в практике:</label>
                     <select id="practice-questions-select" class="subject-select">
@@ -749,6 +769,15 @@
                         <p>Загрузка настроек...</p>
                     </div>
                     <button id="refresh-practice-settings-btn" style="margin-top: 10px;">🔄 Обновить настройки</button>
+                </div>
+
+                <div class="practice-mode-info">
+                    <h4>ℹ️ О режимах практики</h4>
+                    <p><strong>Ограниченный режим:</strong> Система задаст указанное количество вопросов и автоматически завершит практику.</p>
+                    <p><strong>Бесконечный режим:</strong> Практика будет продолжаться до тех пор, пока вы не скажете "стоп".</p>
+                    <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
+                        Настройки применяются к текущей комнате и сохраняются до перезапуска сервера.
+                    </p>
                 </div>
             </div>
         </div>
@@ -952,7 +981,7 @@
         const llmStatusInfo = document.getElementById('llm-status-info');
         const refreshLlmStatusBtn = document.getElementById('refresh-llm-status-btn');
         
-        // Элементы для управления практикой
+        // Элементы для управления настройками практики
         const practiceQuestionsSelect = document.getElementById('practice-questions-select');
         const setPracticeQuestionsBtn = document.getElementById('set-practice-questions-btn');
         const practiceQuestionsStatus = document.getElementById('practice-questions-status');
@@ -1341,27 +1370,56 @@
         
         // Функции для работы с настройками практики
         function loadPracticeSettings() {
-            // Получаем текущие настройки через сокет или API
-            if (socket) {
-                socket.emit('get_practice_settings', { room_id: currentRoom });
-            }
-            updatePracticeSettingsInfo();
+            fetch('/api/practice/settings?room_id=' + currentRoom)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const settings = data.settings;
+                        practiceQuestionsSelect.value = settings.max_questions;
+                        updatePracticeSettingsInfo(settings);
+                    } else {
+                        practiceSettingsInfo.innerHTML = '<p>❌ Ошибка загрузки настроек: ' + data.error + '</p>';
+                    }
+                })
+                .catch(error => {
+                    practiceSettingsInfo.innerHTML = '<p>❌ Ошибка сети: ' + error + '</p>';
+                });
+        }
+        
+        function updatePracticeSettingsInfo(settings) {
+            const modeText = settings.max_questions === 0 ? 
+                'Бесконечный режим' : 
+                `Ограниченный режим (${settings.max_questions} вопросов)`;
+            
+            practiceSettingsInfo.innerHTML = `
+                <p><strong>Режим практики:</strong> ${modeText}</p>
+                <p><strong>Максимум вопросов:</strong> ${settings.max_questions === 0 ? '∞' : settings.max_questions}</p>
+                <p><strong>Статус:</strong> ✅ Настройки загружены</p>
+            `;
         }
         
         function setPracticeQuestions(maxQuestions) {
+            const mode = maxQuestions === '0' ? 'unlimited' : 'limited';
+            
+            // Отправляем настройки через WebSocket в текущую комнату
             if (socket) {
-                socket.emit('set_practice_questions', { 
+                socket.emit('set_practice_settings', {
                     room_id: currentRoom,
-                    max_questions: parseInt(maxQuestions)
+                    max_questions: parseInt(maxQuestions),
+                    mode: mode
                 });
             }
-        }
-        
-        function updatePracticeSettingsInfo() {
-            // Получаем актуальные настройки из активной комнаты
-            if (socket) {
-                socket.emit('get_practice_status', { room_id: currentRoom });
-            }
+            
+            const modeText = maxQuestions === '0' ? 'Бесконечный режим' : `Ограниченный режим (${maxQuestions} вопросов)`;
+            showStatus(practiceQuestionsStatus, `Настройки практики обновлены: ${modeText}`);
+            
+            // Обновляем информацию о настройках
+            updatePracticeSettingsInfo({
+                max_questions: parseInt(maxQuestions),
+                mode: mode
+            });
+            
+            log(`Установлены настройки практики: ${modeText}`);
         }
         
         // Функции для работы с файлами практики
@@ -1473,6 +1531,10 @@
             socket.emit('join_room', { room_id: roomId });
             
             log('Переключено в комнату: ' + roomId);
+            
+            // Загружаем настройки для новой комнаты
+            loadPracticeSettings();
+            loadLLMPriority();
         }
         
         // Логирование
@@ -1626,7 +1688,7 @@
                 refreshLLMStatus();
             });
             
-            // Обработчики для управления практикой
+            // Обработчики для управления настройками практики
             setPracticeQuestionsBtn.addEventListener('click', function() {
                 const maxQuestions = practiceQuestionsSelect.value;
                 setPracticeQuestions(maxQuestions);
@@ -1673,37 +1735,6 @@
                         showStatus(uploadStatus, 'Только JSON файлы поддерживаются', false);
                     }
                 }
-            });
-            
-            // Обработчики сокетов для практики
-            socket.on('practice_settings_updated', function(data) {
-                showStatus(practiceQuestionsStatus, data.message);
-                updatePracticeSettingsInfo();
-            });
-            
-            socket.on('practice_status', function(data) {
-                if (data.success) {
-                    const status = data.status;
-                    let html = `
-                        <p><strong>Максимум вопросов:</strong> ${status.max_questions === 0 ? 'Бесконечный режим' : status.max_questions}</p>
-                        <p><strong>Вопросов задано:</strong> ${status.questions_asked}</p>
-                        <p><strong>Практика активна:</strong> ${status.practice_active ? '✅ Да' : '❌ Нет'}</p>
-                        <p><strong>Ожидание ответа:</strong> ${status.waiting_for_answer ? '✅ Да' : '❌ Нет'}</p>
-                    `;
-                    
-                    if (status.current_question) {
-                        html += `<p><strong>Текущий вопрос:</strong> ${status.current_question.question.substring(0, 100)}...</p>`;
-                    }
-                    
-                    practiceSettingsInfo.innerHTML = html;
-                    
-                    // Обновляем селект
-                    practiceQuestionsSelect.value = status.max_questions;
-                }
-            });
-            
-            socket.on('practice_settings_error', function(data) {
-                showStatus(practiceQuestionsStatus, 'Ошибка: ' + data.error, false);
             });
             
             // Выбор аватара
