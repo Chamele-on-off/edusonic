@@ -46,7 +46,7 @@ class DialogueManager:
         self.current_expected_answer = ""
         self.waiting_for_answer = False
         self.current_practice_question = None
-        self.max_questions = 5  # Лимит вопросов для практики по умолчанию
+        self.max_questions = 5  # Лимит вопросов для практики
         
         # Новые поля для улучшенного диалога
         self.last_subject_prompt_time = 0
@@ -877,7 +877,7 @@ class DialogueManager:
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """Запускает фазу практики с учетом настроек количества вопросов"""
+        """Запускает фазу практики с асинхронной генерацией вопросов"""
         self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
@@ -886,20 +886,16 @@ class DialogueManager:
         
         print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
         print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
-        print(f"Максимум вопросов: {self.max_questions}")
         
-        # Инициализируем менеджер практики с учетом лимита вопросов
+        # Инициализируем менеджер практики с асинхронной генерацией
         lesson_context = " ".join(self.lesson_content)
-        self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject, self.max_questions)
+        self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
         # Уведомляем клиентов о начале практики
         if self.room_id:
-            self.socketio.emit('practice_started', {
-                'room_id': self.room_id,
-                'max_questions': self.max_questions
-            })
+            self.socketio.emit('practice_started', {'room_id': self.room_id})
         
-        # Получаем первый вопрос
+        # ПОЛУЧАЕМ ПЕРВЫЙ ВОПРОС ИЗ ОЧЕРЕДИ
         print("🔄 Получение первого вопроса практики...")
         first_question = self.practice_manager.get_next_question()
         
@@ -911,23 +907,15 @@ class DialogueManager:
                 "question": first_question,
                 "answer": ""
             }
-            
-            # Сообщение с информацией о режиме практики
-            mode_info = ""
-            if self.max_questions == 0:
-                mode_info = " Режим практики: бесконечный."
-            else:
-                mode_info = f" Всего вопросов: {self.max_questions}."
-                
             print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
-            return f"Отлично! Переходим к практике.{mode_info} Первый вопрос: {first_question}"
+            return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
             print("❌ Не удалось получить первый вопрос практики")
             self.practice_active = False
             return "Практические задания временно недоступны. Давайте продолжим урок или выберем другую тему."
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
-        """Оценивает ответ и возвращает следующий вопрос с учетом лимита"""
+        """Оценивает ответ и возвращает следующий вопрос с асинхронной генерацией"""
         print(f"🔍 Обработка ответа: '{student_answer}'")
         print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
@@ -953,22 +941,26 @@ class DialogueManager:
             self._end_practice_session()
             return "Практика завершена."
         
-        # Оценка ответа и получение следующего вопроса
+        # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД: оценка + следующий вопрос
         feedback, next_question = self.practice_manager.evaluate_and_continue(
             student_answer, 
             current_question["question"]
         )
         
-        # УЛУЧШЕННЫЙ FALLBACK
+        # УЛУЧШЕННЫЙ FALLBACK ДЛЯ ПРАКТИКИ
         if not feedback or "Хороший вопрос! Давайте разберем эту тему подробнее" in feedback:
             feedback = "Спасибо за ответ! Переходим к следующему вопросу."
         
-        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ (только если не бесконечный режим)
+        # ЖЕСТКАЯ ПРОВЕРКА ЛИМИТА ВОПРОСОВ
         questions_asked = len(self.practice_manager.generated_questions)
-        if self.max_questions > 0 and questions_asked >= self.max_questions:
+        print(f"📊 Вопросов задано: {questions_asked}/{self.max_questions}")
+        
+        if questions_asked >= self.max_questions:
             print(f"🏁 Достигнут лимит вопросов: {questions_asked}/{self.max_questions}")
             self._end_practice_session()
-            return f"{feedback}. Практика завершена! Вы ответили на все {self.max_questions} вопросов."
+            completion_message = f"{feedback}\n\n🎉 На сегодня с практикой все! Вы ответили на все {self.max_questions} вопросов. Урок окончен! Скажите 'привет' чтобы начать новый урок."
+            print("✅ Практика завершена корректно")
+            return completion_message
         
         if next_question:
             # Обновляем текущий вопрос
@@ -981,13 +973,7 @@ class DialogueManager:
             
             response = f"{feedback}. Следующий вопрос: {next_question}"
             print(f"➡️ Следующий вопрос получен: {next_question[:80]}...")
-            
-            # Информация о прогрессе (только в ограниченном режиме)
-            if self.max_questions > 0:
-                print(f"📊 Вопросов задано: {questions_asked + 1}/{self.max_questions}")
-                # Можно добавить информацию о прогрессе в ответ:
-                # response = f"{feedback}. ({questions_asked + 1}/{self.max_questions}) Следующий вопрос: {next_question}"
-            
+            print(f"📊 Вопросов задано: {questions_asked + 1}/{self.max_questions}")
             print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             return response
         else:
@@ -1000,21 +986,37 @@ class DialogueManager:
         return self._evaluate_and_generate_next(text)
 
     def _end_practice_session(self):
-        """Завершает сессию практики"""
+        """Завершает сессию практики и полностью сбрасывает состояние"""
+        print("=== 🏁 ЗАВЕРШЕНИЕ ПРАКТИКИ И СБРОС СОСТОЯНИЯ ===")
+        
+        # Останавливаем генерацию вопросов
+        self.practice_manager.stop_async_generation()
+        
+        # Полностью сбрасываем состояние
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
-        self.practice_manager.stop_async_generation()
+        self.current_question_index = 0
+        self.current_practice_question = None
         
+        # Сбрасываем состояние урока
         self.lesson_started = False
         self.selected_lesson = None
         self.current_subject = None
         self.lesson_content = []
         self.current_paragraph = 0
+        self.knowledge_base = None
         
+        # Очищаем историю диалога
+        self.conversation_history = []
+        self.conversation_context = []
+        self.conversation_counter = 0
+        
+        # Уведомляем клиентов о завершении практики
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
-        print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
+        
+        print("✅ Состояние полностью сброшено к началу диалога")
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов ученика во время урока"""
@@ -1190,7 +1192,7 @@ class DialogueManager:
             print("=== ПРИНУДИТЕЛЬНЫЙ ЗАПУСК ПРАКТИКИ ===")
             
             # Инициализируем менеджер практики
-            self.practice_manager.initialize_practice_generation(lesson_context, subject, self.max_questions)
+            self.practice_manager.initialize_practice_generation(lesson_context, subject)
             
             # Получаем первый вопрос
             first_question = self.practice_manager.get_next_question()
@@ -1363,12 +1365,12 @@ class DialogueManager:
 
     def set_max_practice_questions(self, max_questions: int):
         """Устанавливает максимальное количество вопросов в практике"""
-        if max_questions >= 0 and max_questions <= 50:  # 0 означает бесконечный режим
+        if 1 <= max_questions <= 20:
             self.max_questions = max_questions
             self.practice_manager.max_questions = max_questions
             print(f"🔧 Максимальное количество вопросов установлено: {max_questions}")
         else:
-            print("❌ Некорректное количество вопросов. Должно быть от 0 до 50.")
+            print("❌ Некорректное количество вопросов. Должно быть от 1 до 20.")
 
     def get_system_status(self) -> Dict:
         """Возвращает общий статус системы"""
