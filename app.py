@@ -726,6 +726,54 @@ def handle_practice_ended(data):
     emit('practice_ended', {}, room=room_id)
     print(f"Практика завершена в комнате {room_id}")
 
+@socketio.on('set_practice_questions')
+def handle_set_practice_questions(data):
+    """Установка максимального количества вопросов практики"""
+    room_id = data['room_id']
+    max_questions = data['max_questions']
+    
+    if room_id in room_dialogue:
+        room_dialogue[room_id].set_max_practice_questions(max_questions)
+        
+        emit('practice_settings_updated', {
+            'room_id': room_id,
+            'message': f'Максимальное количество вопросов установлено: {max_questions}',
+            'max_questions': max_questions
+        }, room=room_id)
+        
+        print(f"🔧 Установлено максимальное количество вопросов в комнате {room_id}: {max_questions}")
+
+@socketio.on('get_practice_settings')
+def handle_get_practice_settings(data):
+    """Получение текущих настроек практики"""
+    room_id = data['room_id']
+    
+    if room_id in room_dialogue:
+        max_questions = room_dialogue[room_id].max_questions
+        emit('practice_settings_info', {
+            'room_id': room_id,
+            'max_questions': max_questions
+        })
+
+@socketio.on('get_practice_status')
+def handle_get_practice_status(data):
+    """Получение статуса практики"""
+    room_id = data['room_id']
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].get_practice_status()
+        emit('practice_status', {
+            'room_id': room_id,
+            'success': True,
+            'status': status
+        })
+    else:
+        emit('practice_status', {
+            'room_id': room_id,
+            'success': False,
+            'error': 'Диалог менеджер не найден'
+        })
+
 @socketio.on('visualization_generated')
 def handle_visualization_generated(data):
     """Обработчик готовых визуализаций"""
