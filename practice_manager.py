@@ -174,11 +174,11 @@ class PracticeManager:
                 question = self._clean_question_text(llm_response)
                 
                 if question and len(question.strip()) > 10 and self._is_question_unique(question):
-                    # Сохраняем в историю
+                    # Сохраняем в историю - ИСПРАВЛЕНИЕ: убираем _detect_question_type
                     self.generated_questions.append({
                         "question": question,
                         "generated_at": time.time(),
-                        "type": self._detect_question_type(question)
+                        "type": "general"  # Простой тип вместо вызова отсутствующего метода
                     })
                     return question
             
@@ -213,7 +213,7 @@ class PracticeManager:
             if not student_answer or len(student_answer.strip()) < 2:
                 return "Ответ слишком короткий. Пожалуйста, попробуйте ответить более развернуто."
             
-            command_words = ['продолжай', 'дальше', 'следующий', 'стоп', 'останови']
+            command_words = ['продолжай', 'дальше', 'следующий',]
             if any(cmd in student_answer.lower() for cmd in command_words):
                 return "Это похоже на команду. Пожалуйста, дайте ответ на вопрос."
             
