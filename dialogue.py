@@ -924,7 +924,7 @@ class DialogueManager:
             return "Практика не активна."
         
         # ПРОВЕРЯЕМ, НЕ ЯВЛЯЕТСЯ ЛИ ОТВЕТ КОМАНДОЙ
-        if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
+        if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
             print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
             next_question = self.practice_manager.get_next_question()
             if next_question:
