@@ -213,7 +213,7 @@ class PracticeManager:
             if not student_answer or len(student_answer.strip()) < 2:
                 return "Ответ слишком короткий. Пожалуйста, попробуйте ответить более развернуто."
             
-            command_words = ['продолжай', 'дальше', 'следующий',]
+            command_words = ['продолжай', 'дальше', 'следующий']
             if any(cmd in student_answer.lower() for cmd in command_words):
                 return "Это похоже на команду. Пожалуйста, дайте ответ на вопрос."
             
