@@ -424,6 +424,24 @@ def handle_student_answer(data):
         print(f"🔇 Практика не активна, игнорирую ответ: {answer}")
         return
 
+    # ПРОВЕРЯЕМ КОМАНДУ "СТОП" ДЛЯ ЗАВЕРШЕНИЯ ПРАКТИКИ - ВАЖНОЕ ИЗМЕНЕНИЕ
+    if any(cmd in answer.lower() for cmd in ['стоп', 'останови', 'хватит', 'закончи']):
+        print(f"🛑 Команда остановки практики: {answer}")
+        if room_id in room_dialogue:
+            room_dialogue[room_id]._end_practice_session()
+            room_practice_active[room_id] = False
+            room_current_question_index[room_id] = 0
+            
+            response = "Практика завершена по вашей команде. Урок окончен!"
+            emit('speech_text', {
+                'text': f"Учитель: {response}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            speak_text(room_id, response, voice_type='female', is_teacher=True)
+            emit('practice_ended', {}, room=room_id)
+        return
+
     # Проверяем, ожидает ли система ответа в диалог менеджере
     if room_id in room_dialogue:
         dialogue = room_dialogue[room_id]
@@ -431,14 +449,13 @@ def handle_student_answer(data):
             print(f"🔇 Система не ожидает ответа, игнорирую: {answer}")
             return
 
-    # ДОБАВЛЯЕМ ПРОВЕРКУ НА КОМАНДЫ
-    if any(cmd in answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
+    # ДОБАВЛЯЕМ ПРОВЕРКУ НА КОМАНДЫ ПРОДОЛЖЕНИЯ
+    if any(cmd in answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
         print(f"🔇 Игнорирую команду вместо ответа: {answer}")
         # Вместо игнорирования, генерируем следующий вопрос
         if room_id in room_dialogue:
-            next_question = room_dialogue[room_id]._generate_next_practice_question()
-            if next_question:
-                response = f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
+            response = room_dialogue[room_id]._evaluate_and_generate_next("")
+            if response:
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
@@ -459,10 +476,6 @@ def handle_student_answer(data):
     if room_id in room_dialogue:
         print(f"🔄 Обработка ответа через диалог менеджер...")
         
-        # НЕ СБРАСЫВАЕМ ФЛАГ ОЖИДАНИЯ ЗДЕСЬ - это сделает диалог менеджер
-        # room_dialogue[room_id].waiting_for_answer = False
-        
-        # Используем новый метод для последовательной обработки
         response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
         
         if response:
@@ -1199,7 +1212,7 @@ def handle_get_llm_priority_status(data):
             'status': status
         })
 
-# АСИНХРОННЫЕ ЗАПРОСЫ К LLM С УЛУЧШЕННОЙ ЛОГИКОЙ
+# АСИНХРОННЫЕ ЗАПРОСЫ К LLM С УЛУЧШЕННОЙ ЛОГИКОИ
 @socketio.on('async_llm_request')
 def handle_async_llm_request(data):
     """Обработчик асинхронных запросов к LLM с улучшенным отслеживанием"""
