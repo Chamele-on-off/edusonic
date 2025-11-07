@@ -71,7 +71,7 @@ class PracticeManager:
                    len(self.generated_questions) < self.max_questions - 1):  # -1 потому что первый уже сгенерирован
                 
                 try:
-                    # Проверяем лимит перед генерацией
+                    # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит перед генерацией
                     if len(self.generated_questions) >= self.max_questions:
                         print("🏁 Достигнут лимит вопросов в фоновой генерации")
                         break
@@ -100,7 +100,7 @@ class PracticeManager:
     def get_next_question(self, timeout: float = 10.0) -> Optional[str]:
         """Получает следующий вопрос из очереди (с ожиданием если нужно)"""
         try:
-            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
+            # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит вопросов
             if len(self.generated_questions) >= self.max_questions:
                 print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
@@ -135,7 +135,7 @@ class PracticeManager:
     def generate_single_question(self) -> Optional[str]:
         """Генерирует один вопрос (синхронно)"""
         try:
-            # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
+            # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит вопросов
             if len(self.generated_questions) >= self.max_questions:
                 print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
