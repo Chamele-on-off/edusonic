@@ -502,147 +502,249 @@ class LLMIntegration:
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
-    def _parse_concepts_from_response(self, response: str) -> Dict:
-        """Парсит концепты из ответа LLM"""
-        concepts = {
-            "main_concept": "",
-            "aspects": []
-        }
-        
+    def _extract_json_from_response(self, response: str) -> Optional[Dict]:
+        """Извлекает JSON из ответа LLM"""
         try:
-            lines = response.split('\n')
-            for line in lines:
-                line = line.strip()
-                if line.startswith('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:'):
-                    concepts["main_concept"] = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
-                elif line.startswith('АСПЕКТ1:') or line.startswith('1.'):
-                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
-                    concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ2:') or line.startswith('2.'):
-                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
-                    concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ3:') or line.startswith('3.'):
-                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
-                    concepts["aspects"].append(aspect)
-            
-            # Если не нашли в строгом формате, пытаемся извлечь иначе
-            if not concepts["main_concept"]:
-                # Ищем самое длинное/важное слово как основное понятие
-                words = re.findall(r'\b[А-Яа-я]{5,}\b', response)
-                if words:
-                    concepts["main_concept"] = words[0]
-                    
-            if not concepts["aspects"]:
-                # Ищем другие значимые слова как аспекты
-                words = re.findall(r'\b[А-Яа-я]{4,}\b', response)
-                concepts["aspects"] = [w for w in words[1:4] if w != concepts["main_concept"]]
-                
-            # Заполняем если недостаточно аспектов
-            while len(concepts["aspects"]) < 3:
-                concepts["aspects"].append(f"Аспект {len(concepts['aspects']) + 1}")
-                
+            # Ищем JSON в ответе
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                return json.loads(json_str)
         except Exception as e:
-            print(f"❌ Ошибка парсинга концептов: {e}")
-            concepts = {
-                "main_concept": "Основное понятие",
-                "aspects": ["Аспект 1", "Аспект 2", "Аспект 3"]
-            }
+            print(f"❌ Ошибка парсинга JSON: {e}")
         
-        return concepts
+        return None
 
-    def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
-        """Генерация Mermaid из концептов"""
-        main_concept = concepts["main_concept"]
-        aspects = concepts["aspects"][:3]  # Берем первые 3 аспекта
+    def _validate_visualization_data(self, data: Dict) -> bool:
+        """Проверяет валидность данных визуализации"""
+        required_fields = ['type', 'main_concept', 'elements']
+        if not all(field in data for field in required_fields):
+            return False
         
-        mermaid_lines = ['flowchart TD']
-        mermaid_lines.append(f'    A["{main_concept}"]')
-        
-        for i, aspect in enumerate(aspects):
-            node_id = chr(66 + i)  # B, C, D
-            mermaid_lines.append(f'    A --> {node_id}["{aspect}"]')
-        
-        # Стили для лучшего отображения
-        mermaid_lines.extend([
-            '',
-            '    style A fill:#4263EB,color:#fff,stroke-width:2px',
-            '    style B fill:#4cc9f0,color:#333,stroke-width:2px',
-            '    style C fill:#3a0ca3,color:#fff,stroke-width:2px',
-            '    style D fill:#f72585,color:#fff,stroke-width:2px'
-        ])
-        
-        return '\n'.join(mermaid_lines)
+        # Проверяем элементы
+        elements = data.get('elements', [])
+        if not isinstance(elements, list) or len(elements) == 0:
+            return False
+            
+        # Проверяем что каждый элемент имеет name
+        for element in elements:
+            if 'name' not in element:
+                return False
+                
+        return True
 
-    def _generate_svg_from_concepts(self, concepts: Dict) -> str:
-        """Генерация SVG из концептов"""
-        main_concept = concepts["main_concept"][:20]  # Ограничиваем длину
-        aspects = [aspect[:15] for aspect in concepts["aspects"][:3]]  # Ограничиваем длину
+    def _get_fallback_visualization_data(self, topic: str) -> Dict:
+        """Fallback данные для визуализации"""
+        # Извлекаем ключевые слова из темы
+        words = re.findall(r'\b[А-Яа-я]{4,}\b', topic.lower())
+        filtered_words = [word for word in words if word not in ['статистика', 'анализ', 'методический', 'описательная', 'индуктивная']]
         
-        return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250">
-            <defs>
-                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#f8f9fa"/>
-                    <stop offset="100%" stop-color="#e9ecef"/>
-                </linearGradient>
-            </defs>
-            
-            <!-- Фон -->
-            <rect x="10" y="10" width="380" height="230" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
-            
-            <!-- Заголовок -->
-            <text x="200" y="30" text-anchor="middle" font-family="Arial" font-size="16" fill="#333" font-weight="bold">
-                Концептуальная карта
-            </text>
-            
-            <!-- Основное понятие -->
-            <rect x="100" y="50" width="200" height="50" fill="#4263EB" rx="10"/>
-            <text x="200" y="80" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
-                {main_concept}
-            </text>
-            
-            <!-- Аспекты -->
-            <rect x="50" y="140" width="90" height="35" fill="#4cc9f0" rx="8"/>
-            <text x="95" y="162" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
-                {aspects[0] if len(aspects) > 0 else "Аспект 1"}
-            </text>
-            
-            <rect x="155" y="140" width="90" height="35" fill="#3a0ca3" rx="8"/>
-            <text x="200" y="162" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[1] if len(aspects) > 1 else "Аспект 2"}
-            </text>
-            
-            <rect x="260" y="140" width="90" height="35" fill="#f72585" rx="8"/>
-            <text x="305" y="162" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[2] if len(aspects) > 2 else "Аспект 3"}
-            </text>
-            
-            <!-- Связи -->
-            <line x1="200" y1="100" x2="95" y2="140" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="200" y2="140" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="305" y2="140" stroke="#333" stroke-width="2"/>
-        </svg>
-        '''.strip()
-
-    def _generate_fallback_visualization(self, topic: str) -> dict:
-        """Fallback визуализация"""
-        # Извлекаем ключевые слова из темы для fallback
-        words = re.findall(r'\b[А-Яа-я]{4,}\b', topic)
-        main_concept = words[0] if words else "Тема"
-        aspects = words[1:4] if len(words) > 1 else ["Изучение", "Анализ", "Применение"]
-        
-        concepts = {
-            "main_concept": main_concept,
-            "aspects": aspects
-        }
+        if len(filtered_words) >= 2:
+            main_concept = filtered_words[0].capitalize()
+            element1 = filtered_words[1].capitalize() if len(filtered_words) > 1 else "Анализ"
+            element2 = filtered_words[2].capitalize() if len(filtered_words) > 2 else "Применение"
+        else:
+            main_concept = "Статистика"
+            element1 = "Описательная"
+            element2 = "Индуктивная"
         
         return {
-            "mermaid_code": self._generate_mermaid_from_concepts(concepts),
-            "svg_code": self._generate_svg_from_concepts(concepts),
-            "topic": topic,
-            "concepts": concepts,
-            "success": False
+            "type": "classification",
+            "main_concept": main_concept,
+            "elements": [
+                {
+                    "name": element1,
+                    "description": "Основной метод анализа данных",
+                    "connections": [main_concept]
+                },
+                {
+                    "name": element2, 
+                    "description": "Метод выводов и прогнозов",
+                    "connections": [main_concept]
+                }
+            ],
+            "additional_info": "Изучите взаимосвязи между понятиями для лучшего понимания"
         }
+
+    def get_visualization_data(self, topic: str, context: str = "") -> Dict:
+        """Запрашивает у LLM структурированные данные для визуализации с УПРОЩЕННЫМ промптом"""
+        prompt = f"""
+Создай структурированные данные для визуализации учебного материала.
+
+ТЕМА: {topic}
+
+Требования:
+- Выдели ОСНОВНОЕ ПОНЯТИЕ (1-2 слова)
+- Выдели 2-3 КЛЮЧЕВЫХ АСПЕКТА или ПОДРАЗДЕЛА
+- Укажи связи между ними
+- Используй ТОЛЬКО русские слова
+
+ФОРМАТ (JSON):
+{{
+    "type": "classification",
+    "main_concept": "основное понятие",
+    "elements": [
+        {{
+            "name": "аспект 1", 
+            "description": "краткое пояснение",
+            "connections": ["основное понятие"]
+        }},
+        {{
+            "name": "аспект 2",
+            "description": "краткое пояснение", 
+            "connections": ["основное понятие"]
+        }}
+    ]
+}}
+
+Пример для "Фотосинтез":
+{{
+    "type": "classification", 
+    "main_concept": "Фотосинтез",
+    "elements": [
+        {{
+            "name": "Световая фаза",
+            "description": "Поглощение света",
+            "connections": ["Фотосинтез"]
+        }},
+        {{
+            "name": "Темновая фаза",
+            "description": "Синтез глюкозы",
+            "connections": ["Фотосинтез"] 
+        }}
+    ]
+}}
+
+Тема: {topic}
+
+Верни ТОЛЬКО JSON без каких-либо других текстов!
+"""
+        
+        try:
+            response = self._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject="general",
+                system_prompt="""Ты создаешь структурированные данные для визуализации. 
+Строго соблюдай формат JSON. 
+Используй только русские слова.
+Создавай логические связи между понятиями.""",
+                max_tokens=500
+            )
+            
+            if response:
+                print(f"🔧 [Visualization] Получен ответ от LLM")
+                
+                # Пытаемся извлечь JSON
+                json_data = self._extract_json_from_response(response)
+                if json_data and self._validate_visualization_data(json_data):
+                    print(f"✅ Получены валидные данные для визуализации")
+                    return json_data
+                else:
+                    print(f"⚠️ Не удалось извлечь валидный JSON, используется fallback")
+                    
+        except Exception as e:
+            print(f"❌ Ошибка получения данных визуализации: {e}")
+        
+        # Fallback данные
+        return self._get_fallback_visualization_data(topic)
+
+    def generate_mermaid_from_data(self, viz_data: Dict) -> str:
+        """Генерирует Mermaid код из структурированных данных - УПРОЩЕННАЯ ВЕРСИЯ"""
+        try:
+            main_concept = viz_data.get('main_concept', 'Основное понятие')
+            elements = viz_data.get('elements', [])
+            
+            # Ограничиваем количество элементов для читаемости
+            elements = elements[:3]
+            
+            mermaid_lines = ['flowchart TD']
+            mermaid_lines.append(f'    A["{main_concept}"]')
+            
+            # Добавляем элементы
+            for i, element in enumerate(elements):
+                node_id = chr(66 + i)  # B, C, D
+                element_name = element.get('name', f'Элемент {i+1}')
+                mermaid_lines.append(f'    A --> {node_id}["{element_name}"]')
+            
+            # Добавляем базовые стили
+            mermaid_lines.extend([
+                '',
+                '    style A fill:#4263EB,color:#fff',
+                '    style B fill:#4cc9f0,color:#333',
+                '    style C fill:#3a0ca3,color:#fff', 
+                '    style D fill:#f72585,color:#fff'
+            ])
+            
+            result = '\n'.join(mermaid_lines)
+            print(f"✅ Сгенерирован Mermaid код: {result}")
+            return result
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации Mermaid: {e}")
+            return self._generate_fallback_mermaid()
+
+    def _generate_fallback_mermaid(self) -> str:
+        """Fallback Mermaid диаграмма"""
+        return '''flowchart TD
+    A["Статистика"] --> B["Описательная"]
+    A --> C["Индуктивная"]
+    
+    style A fill:#4263EB,color:#fff
+    style B fill:#4cc9f0,color:#333
+    style C fill:#3a0ca3,color:#fff'''
+
+    def generate_svg_from_data(self, viz_data: Dict) -> str:
+        """Генерирует SVG из структурированных данных - УПРОЩЕННАЯ ВЕРСИЯ"""
+        try:
+            main_concept = viz_data.get('main_concept', 'Основное понятие')
+            elements = viz_data.get('elements', [])
+            
+            # Ограничиваем длину текста
+            short_concept = main_concept[:15] + "..." if len(main_concept) > 15 else main_concept
+            element_names = [elem.get('name', f'Эл.{i+1}')[:10] for i, elem in enumerate(elements[:2])]
+            
+            return f'''
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+                <rect x="10" y="10" width="280" height="180" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2" rx="10"/>
+                
+                <!-- Основное понятие -->
+                <rect x="50" y="30" width="200" height="40" fill="#4263EB" rx="8"/>
+                <text x="150" y="55" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
+                    {short_concept}
+                </text>
+                
+                <!-- Элементы -->
+                <rect x="80" y="100" width="60" height="30" fill="#4cc9f0" rx="6"/>
+                <text x="110" y="119" text-anchor="middle" font-family="Arial" font-size="10" fill="#333">
+                    {element_names[0] if len(element_names) > 0 else "Аспект 1"}
+                </text>
+                
+                <rect x="160" y="100" width="60" height="30" fill="#3a0ca3" rx="6"/>
+                <text x="190" y="119" text-anchor="middle" font-family="Arial" font-size="10" fill="white">
+                    {element_names[1] if len(element_names) > 1 else "Аспект 2"}
+                </text>
+                
+                <!-- Связи -->
+                <line x1="150" y1="70" x2="110" y2="100" stroke="#333" stroke-width="2"/>
+                <line x1="150" y1="70" x2="190" y2="100" stroke="#333" stroke-width="2"/>
+            </svg>
+            '''.strip()
+                
+        except Exception as e:
+            print(f"❌ Ошибка генерации SVG: {e}")
+            return self._generate_fallback_svg()
+
+    def _generate_fallback_svg(self) -> str:
+        """Fallback SVG"""
+        return '''
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200">
+            <rect x="10" y="10" width="280" height="180" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2" rx="10"/>
+            <text x="150" y="100" text-anchor="middle" font-family="Arial" font-size="14" fill="#666">
+                Визуализация...
+            </text>
+        </svg>
+        '''.strip()
 
     def check_visualization_need(self, text: str) -> bool:
         """Проверяет, нужна ли визуализация для данного текста"""
@@ -677,84 +779,44 @@ class LLMIntegration:
         return (has_keywords or has_structure) and is_long_enough
 
     def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация РАСШИРЕННОЙ концептуальной карты на основе темы"""
+        """Генерация визуализаций через структурированные данные от LLM - УПРОЩЕННАЯ ВЕРСИЯ"""
         try:
-            print(f"🎨 Генерация расширенной концептуальной карты для: {topic[:100]}...")
+            print(f"🎨 Генерация визуализаций для: {topic}")
             
-            # УЛУЧШЕННЫЙ ПРОМПТ для расширенной структуры
-            prompt = f"""
-На основе темы урока создай расширенную концептуальную карту с дополнительными понятиями.
-
-ТЕМА УРОКА: {topic}
-КОНТЕКСТ: {context}
-
-ТРЕБОВАНИЯ:
-1. НЕ ограничивайся только словами из текста - добавь СМЕЖНЫЕ и РАСШИРЯЮЩИЕ понятия
-2. Создай 1 центральное понятие и 3-4 связанных аспекта
-3. Каждый аспект должен РАСКРЫВАТЬ и УГЛУБЛЯТЬ тему
-4. Используй конкретные термины, а не общие слова
-
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ (самый важный термин):
-- [основное понятие]
-
-РАСШИРЯЮЩИЕ АСПЕКТЫ (дополнительные понятия):
-1. [аспект 1] - [краткое пояснение как раскрывает тему]
-2. [аспект 2] - [краткое пояснение как раскрывает тему] 
-3. [аспект 3] - [краткое пояснение как раскрывает тему]
-
-Пример для "Фотосинтез":
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Фотосинтез
-РАСШИРЯЮЩИЕ АСПЕКТЫ:
-1. Хлорофилл - пигмент поглощающий свет
-2. Глюкоза - конечный продукт синтеза
-3. Кислород - побочный продукт процесса
-4. Хлоропласты - органеллы где происходит процесс
-
-Тема: {topic}
-
-Верни ТОЛЬКО в формате:
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: [понятие]
-АСПЕКТ1: [аспект 1]
-АСПЕКТ2: [аспект 2] 
-АСПЕКТ3: [аспект 3]
-"""
+            # Получаем структурированные данные от LLM
+            viz_data = self.get_visualization_data(topic, context)
+            print(f"🔧 Получены данные: {viz_data.get('main_concept', 'unknown')}")
             
-            response = self._query_llm_api(
-                prompt=prompt,
-                context="",
-                subject="general",
-                system_prompt="""Ты создаешь расширенные концептуальные карты для обучения.
-                Добавляй смежные и углубляющие понятия, не ограничивайся текстом урока.
-                Используй конкретные научные термины где это уместно.""",
-                max_tokens=500
-            )
+            # Генерируем Mermaid из данных
+            mermaid_code = self.generate_mermaid_from_data(viz_data)
             
-            if response:
-                print(f"🔧 Получен ответ от LLM: {response[:200]}...")
+            # Генерируем SVG из данных
+            svg_code = self.generate_svg_from_data(viz_data)
+            
+            result = {
+                "mermaid_code": mermaid_code,
+                "svg_code": svg_code,
+                "topic": topic,
+                "viz_data": viz_data,
+                "success": bool(mermaid_code and svg_code)
+            }
+            
+            if result["success"]:
+                print(f"✅ Визуализации успешно сгенерированы")
+            else:
+                print(f"❌ Не удалось сгенерировать визуализации")
                 
-                # Парсим ответ
-                concepts = self._parse_concepts_from_response(response)
-                if concepts and concepts["main_concept"]:
-                    print(f"✅ Извлечены концепты: {concepts}")
-                    
-                    # Генерируем визуализацию
-                    mermaid_code = self._generate_mermaid_from_concepts(concepts)
-                    svg_code = self._generate_svg_from_concepts(concepts)
-                    
-                    return {
-                        "mermaid_code": mermaid_code,
-                        "svg_code": svg_code,
-                        "topic": topic,
-                        "concepts": concepts,
-                        "success": True
-                    }
-            
-            # Fallback - если не удалось получить от LLM
-            return self._generate_fallback_visualization(topic)
+            return result
             
         except Exception as e:
-            print(f"❌ Ошибка генерации визуализации: {e}")
-            return self._generate_fallback_visualization(topic)
+            print(f"❌ Ошибка генерации визуализаций: {e}")
+            return {
+                "mermaid_code": self._generate_fallback_mermaid(),
+                "svg_code": self._generate_fallback_svg(),
+                "topic": topic,
+                "success": False,
+                "error": str(e)
+            }
 
     def test_connection(self) -> bool:
         """Тестирование подключения к API"""
@@ -814,8 +876,7 @@ if __name__ == "__main__":
     
     if viz_result["success"]:
         print("✅ Визуализации успешно сгенерированы!")
-        print(f"📊 Основное понятие: {viz_result['concepts'].get('main_concept', 'unknown')}")
-        print(f"📊 Аспекты: {viz_result['concepts'].get('aspects', [])}")
+        print(f"📊 Основное понятие: {viz_result['viz_data'].get('main_concept', 'unknown')}")
         print(f"📊 Mermaid код:")
         print(viz_result['mermaid_code'])
     else:
