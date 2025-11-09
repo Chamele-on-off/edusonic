@@ -675,6 +675,7 @@ class DialogueManager:
                 print(f"🎨 Генерация визуализации для: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
+                    # Используем улучшенную генерацию через структурированные данные
                     viz_result = self.llm.generate_visualization(text, context)
                     
                     if viz_result and viz_result.get("success"):
