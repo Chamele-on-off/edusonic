@@ -944,7 +944,7 @@ class LLMIntegration:
             print(f"❌ Ошибка генерации визуализаций: {e}")
             return {
                 "mermaid_code": "",
-                "svg_code": "",
+                "svg_code": "", 
                 "topic": topic,
                 "success": False,
                 "error": str(e)
