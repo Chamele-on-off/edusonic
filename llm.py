@@ -503,64 +503,77 @@ class LLMIntegration:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
     def _parse_concepts_from_response(self, response: str) -> Dict:
-        """Парсит концепты из ответа LLM - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Парсит концепты из ответа LLM - ПОЛНОСТЬЮ ПЕРЕРАБОТАННАЯ ВЕРСИЯ"""
         concepts = {
             "main_concept": "",
             "aspects": []
         }
         
         try:
+            print(f"🔍 Парсинг ответа LLM: {response[:200]}...")
+            
             lines = response.split('\n')
             for line in lines:
                 line = line.strip()
                 
-                # ИЩЕМ ЦЕНТРАЛЬНОЕ ПОНЯТИЕ
+                # ИЩЕМ ЦЕНТРАЛЬНОЕ ПОНЯТИЕ - улучшенная логика
                 if 'ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:' in line:
-                    concepts["main_concept"] = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
+                    main_concept = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
+                    # Удаляем все технические метки и цифры
+                    main_concept = re.sub(r'[АСПЕКТ\d*\-\s]*$', '', main_concept).strip()
+                    if main_concept and len(main_concept) > 2:
+                        concepts["main_concept"] = main_concept
                 
-                # ИЩЕМ АСПЕКТЫ - ИСПРАВЛЕННАЯ ЛОГИКА
+                # ИЩЕМ АСПЕКТЫ - полностью переработанная логика
                 elif 'АСПЕКТ1:' in line:
-                    # Берем все после "АСПЕКТ1:" до конца строки или до следующего "АСПЕКТ"
-                    aspect_text = line.replace('АСПЕКТ1:', '').strip()
-                    # Удаляем возможные дефисы и нумерацию
-                    aspect_text = re.sub(r'^[\d\-\s]*', '', aspect_text)
-                    if aspect_text and len(aspect_text) > 2:
+                    aspect_text = self._extract_clean_aspect(line, 'АСПЕКТ1:')
+                    if aspect_text:
                         concepts["aspects"].append(aspect_text)
                 
                 elif 'АСПЕКТ2:' in line:
-                    aspect_text = line.replace('АСПЕКТ2:', '').strip()
-                    aspect_text = re.sub(r'^[\d\-\s]*', '', aspect_text)
-                    if aspect_text and len(aspect_text) > 2:
+                    aspect_text = self._extract_clean_aspect(line, 'АСПЕКТ2:')
+                    if aspect_text:
                         concepts["aspects"].append(aspect_text)
                 
                 elif 'АСПЕКТ3:' in line:
-                    aspect_text = line.replace('АСПЕКТ3:', '').strip()
-                    aspect_text = re.sub(r'^[\d\-\s]*', '', aspect_text)
-                    if aspect_text and len(aspect_text) > 2:
+                    aspect_text = self._extract_clean_aspect(line, 'АСПЕКТ3:')
+                    if aspect_text:
+                        concepts["aspects"].append(aspect_text)
+                
+                elif 'АСПЕКТ4:' in line:
+                    aspect_text = self._extract_clean_aspect(line, 'АСПЕКТ4:')
+                    if aspect_text:
                         concepts["aspects"].append(aspect_text)
                 
                 # Альтернативный формат с нумерацией
-                elif re.match(r'^1\.', line):
-                    aspect_text = re.sub(r'^1\.\s*', '', line).strip()
-                    aspect_text = re.sub(r'^[\d\-\s]*', '', aspect_text)
-                    if aspect_text and len(aspect_text) > 2:
+                elif re.match(r'^1[\.\:]', line):
+                    aspect_text = self._extract_clean_aspect(line, r'^1[\.\:]\s*')
+                    if aspect_text:
                         concepts["aspects"].append(aspect_text)
                 
-                elif re.match(r'^2\.', line):
-                    aspect_text = re.sub(r'^2\.\s*', '', line).strip()
-                    aspect_text = re.sub(r'^[\d\-\s]*', '', aspect_text)
-                    if aspect_text and len(aspect_text) > 2:
+                elif re.match(r'^2[\.\:]', line):
+                    aspect_text = self._extract_clean_aspect(line, r'^2[\.\:]\s*')
+                    if aspect_text:
                         concepts["aspects"].append(aspect_text)
                 
-                elif re.match(r'^3\.', line):
-                    aspect_text = re.sub(r'^3\.\s*', '', line).strip()
-                    aspect_text = re.sub(r'^[\d\-\s]*', '', aspect_text)
-                    if aspect_text and len(aspect_text) > 2:
+                elif re.match(r'^3[\.\:]', line):
+                    aspect_text = self._extract_clean_aspect(line, r'^3[\.\:]\s*')
+                    if aspect_text:
+                        concepts["aspects"].append(aspect_text)
+                
+                elif re.match(r'^4[\.\:]', line):
+                    aspect_text = self._extract_clean_aspect(line, r'^4[\.\:]\s*')
+                    if aspect_text:
                         concepts["aspects"].append(aspect_text)
             
-            # УДАЛЯЕМ ПУСТЫЕ И КОРОТКИЕ АСПЕКТЫ
-            concepts["aspects"] = [aspect for aspect in concepts["aspects"] 
-                                 if aspect and len(aspect.strip()) > 2]
+            # УДАЛЯЕМ ПУСТЫЕ И КОРОТКИЕ АСПЕКТЫ, а также технические метки
+            clean_aspects = []
+            for aspect in concepts["aspects"]:
+                clean_aspect = self._clean_aspect_text(aspect)
+                if clean_aspect and len(clean_aspect.strip()) > 2:
+                    clean_aspects.append(clean_aspect)
+            
+            concepts["aspects"] = clean_aspects
             
             # Если не нашли в строгом формате, пытаемся извлечь иначе
             if not concepts["main_concept"]:
@@ -578,9 +591,9 @@ class LLMIntegration:
             while len(concepts["aspects"]) < 3:
                 concepts["aspects"].append(f"Аспект {len(concepts['aspects']) + 1}")
                 
-            # ОЧИСТКА ОТ ТЕХНИЧЕСКИХ МЕТОК
-            concepts["main_concept"] = re.sub(r'АСПЕКТ\d*', '', concepts["main_concept"]).strip()
-            concepts["aspects"] = [re.sub(r'АСПЕКТ\d*', '', aspect).strip() for aspect in concepts["aspects"]]
+            # ФИНАЛЬНАЯ ОЧИСТКА
+            concepts["main_concept"] = self._clean_aspect_text(concepts["main_concept"])
+            concepts["aspects"] = [self._clean_aspect_text(aspect) for aspect in concepts["aspects"]]
             
         except Exception as e:
             print(f"❌ Ошибка парсинга концептов: {e}")
@@ -589,24 +602,59 @@ class LLMIntegration:
                 "aspects": ["Первый аспект", "Второй аспект", "Третий аспект"]
             }
         
-        print(f"🔍 Извлеченные концепты: {concepts}")
+        print(f"✅ Извлеченные концепты: {concepts}")
         return concepts
 
+    def _extract_clean_aspect(self, line: str, pattern: str) -> str:
+        """Извлекает и очищает аспект из строки"""
+        try:
+            # Удаляем паттерн из начала строки
+            if pattern.startswith('^'):
+                # Регулярное выражение для нумерации
+                aspect_text = re.sub(pattern, '', line).strip()
+            else:
+                # Простая замена для текстовых паттернов
+                aspect_text = line.replace(pattern, '').strip()
+            
+            return self._clean_aspect_text(aspect_text)
+        except Exception as e:
+            print(f"❌ Ошибка извлечения аспекта: {e}")
+            return ""
+
+    def _clean_aspect_text(self, text: str) -> str:
+        """Тщательная очистка текста аспекта"""
+        if not text:
+            return ""
+        
+        # Удаляем технические метки
+        text = re.sub(r'АСПЕКТ\d*', '', text)
+        # Удаляем дефисы и точки в начале
+        text = re.sub(r'^[\d\-\s\.]*', '', text)
+        # Удаляем лишние пробелы
+        text = re.sub(r'\s+', ' ', text)
+        # Обрезаем до разумной длины
+        text = text.strip()[:30]
+        
+        return text
+
     def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
-        """Генерация Mermaid из концептов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Генерация Mermaid из концептов - ПОЛНОСТЬЮ ПЕРЕРАБОТАННАЯ ВЕРСИЯ"""
         main_concept = concepts["main_concept"] or "Основное понятие"
-        aspects = concepts["aspects"][:3]  # Берем первые 3 аспекта
+        aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
         
         # Очищаем названия от лишних символов
-        main_concept = re.sub(r'[^А-Яа-я0-9\s]', '', main_concept).strip()
-        aspects = [re.sub(r'[^А-Яа-я0-9\s]', '', aspect).strip() for aspect in aspects]
+        main_concept = self._prepare_text_for_mermaid(main_concept)
+        aspects = [self._prepare_text_for_mermaid(aspect) for aspect in aspects]
         
         mermaid_lines = ['flowchart TD']
+        
+        # Основное понятие
         mermaid_lines.append(f'    A["{main_concept}"]')
         
+        # Аспекты
         for i, aspect in enumerate(aspects):
             if aspect and len(aspect.strip()) > 0:
-                node_id = chr(66 + i)  # B, C, D
+                node_id = chr(66 + i)  # B, C, D, E
                 mermaid_lines.append(f'    A --> {node_id}["{aspect}"]')
         
         # Стили для лучшего отображения
@@ -615,22 +663,43 @@ class LLMIntegration:
             '    style A fill:#4263EB,color:#fff,stroke-width:2px',
             '    style B fill:#4cc9f0,color:#333,stroke-width:2px',
             '    style C fill:#3a0ca3,color:#fff,stroke-width:2px',
-            '    style D fill:#f72585,color:#fff,stroke-width:2px'
+            '    style D fill:#f72585,color:#fff,stroke-width:2px',
+            '    style E fill:#7209b7,color:#fff,stroke-width:2px'
         ])
         
-        return '\n'.join(mermaid_lines)
+        result = '\n'.join(mermaid_lines)
+        print(f"📊 Сгенерирован Mermaid код: {result}")
+        return result
+
+    def _prepare_text_for_mermaid(self, text: str) -> str:
+        """Подготавливает текст для Mermaid диаграммы"""
+        if not text:
+            return ""
+        
+        # Удаляем лишние пробелы и обрезаем
+        text = re.sub(r'\s+', ' ', text).strip()
+        # Обрезаем до разумной длины для Mermaid
+        text = text[:25]
+        # Заменяем кавычки на безопасные
+        text = text.replace('"', "'")
+        
+        return text
 
     def _generate_svg_from_concepts(self, concepts: Dict) -> str:
-        """Генерация SVG из концептов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-        main_concept = (concepts["main_concept"] or "Основное понятие")[:20]  # Ограничиваем длину
-        aspects = [aspect[:15] for aspect in concepts["aspects"][:3]]  # Ограничиваем длину
+        """Генерация SVG из концептов - ПОЛНОСТЬЮ ПЕРЕРАБОТАННАЯ ВЕРСИЯ"""
+        main_concept = concepts["main_concept"] or "Основное понятие"
+        aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
         
         # Очищаем названия
-        main_concept = re.sub(r'[^А-Яа-я0-9\s]', '', main_concept).strip()
-        aspects = [re.sub(r'[^А-Яа-я0-9\s]', '', aspect).strip() for aspect in aspects]
+        main_concept = self._prepare_text_for_svg(main_concept)
+        aspects = [self._prepare_text_for_svg(aspect) for aspect in aspects]
         
-        return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250">
+        # Рассчитываем позиции в зависимости от количества аспектов
+        aspect_count = len(aspects)
+        aspect_positions = self._calculate_aspect_positions(aspect_count)
+        
+        svg_content = f'''
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
             <defs>
                 <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stop-color="#f8f9fa"/>
@@ -639,52 +708,88 @@ class LLMIntegration:
             </defs>
             
             <!-- Фон -->
-            <rect x="10" y="10" width="380" height="230" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
+            <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
             
             <!-- Заголовок -->
-            <text x="200" y="30" text-anchor="middle" font-family="Arial" font-size="16" fill="#333" font-weight="bold">
+            <text x="200" y="35" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#333" font-weight="bold">
                 Концептуальная карта
             </text>
             
             <!-- Основное понятие -->
-            <rect x="100" y="50" width="200" height="50" fill="#4263EB" rx="10"/>
-            <text x="200" y="80" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
+            <rect x="100" y="60" width="200" height="50" fill="#4263EB" rx="10"/>
+            <text x="200" y="90" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white" font-weight="bold">
                 {main_concept}
             </text>
-            
-            <!-- Аспекты -->
-            <rect x="50" y="140" width="90" height="35" fill="#4cc9f0" rx="8"/>
-            <text x="95" y="162" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
-                {aspects[0] if len(aspects) > 0 else "Аспект 1"}
+        '''
+        
+        # Добавляем аспекты
+        for i, (aspect, pos) in enumerate(zip(aspects, aspect_positions)):
+            if aspect:
+                colors = ['#4cc9f0', '#3a0ca3', '#f72585', '#7209b7']
+                color = colors[i] if i < len(colors) else '#6c757d'
+                
+                svg_content += f'''
+            <!-- Аспект {i+1} -->
+            <rect x="{pos['x']}" y="{pos['y']}" width="{pos['width']}" height="35" fill="{color}" rx="8"/>
+            <text x="{pos['text_x']}" y="{pos['text_y']}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">
+                {aspect}
             </text>
             
-            <rect x="155" y="140" width="90" height="35" fill="#3a0ca3" rx="8"/>
-            <text x="200" y="162" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[1] if len(aspects) > 1 else "Аспект 2"}
-            </text>
-            
-            <rect x="260" y="140" width="90" height="35" fill="#f72585" rx="8"/>
-            <text x="305" y="162" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[2] if len(aspects) > 2 else "Аспект 3"}
-            </text>
-            
-            <!-- Связи -->
-            <line x1="200" y1="100" x2="95" y2="140" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="200" y2="140" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="305" y2="140" stroke="#333" stroke-width="2"/>
+            <!-- Связь -->
+            <line x1="200" y1="110" x2="{pos['text_x']}" y2="{pos['y']}" stroke="#333" stroke-width="2"/>
+                '''
+        
+        svg_content += '''
         </svg>
-        '''.strip()
+        '''
+        
+        return svg_content.strip()
+
+    def _calculate_aspect_positions(self, aspect_count: int) -> List[Dict]:
+        """Рассчитывает позиции для аспектов в SVG"""
+        positions = []
+        
+        if aspect_count == 1:
+            positions.append({'x': 155, 'y': 180, 'width': 90, 'text_x': 200, 'text_y': 202})
+        elif aspect_count == 2:
+            positions.append({'x': 80, 'y': 180, 'width': 90, 'text_x': 125, 'text_y': 202})
+            positions.append({'x': 230, 'y': 180, 'width': 90, 'text_x': 275, 'text_y': 202})
+        elif aspect_count == 3:
+            positions.append({'x': 50, 'y': 180, 'width': 90, 'text_x': 95, 'text_y': 202})
+            positions.append({'x': 155, 'y': 180, 'width': 90, 'text_x': 200, 'text_y': 202})
+            positions.append({'x': 260, 'y': 180, 'width': 90, 'text_x': 305, 'text_y': 202})
+        else:  # 4 аспекта
+            positions.append({'x': 30, 'y': 180, 'width': 80, 'text_x': 70, 'text_y': 202})
+            positions.append({'x': 120, 'y': 180, 'width': 80, 'text_x': 160, 'text_y': 202})
+            positions.append({'x': 210, 'y': 180, 'width': 80, 'text_x': 250, 'text_y': 202})
+            positions.append({'x': 300, 'y': 180, 'width': 80, 'text_x': 340, 'text_y': 202})
+        
+        return positions
+
+    def _prepare_text_for_svg(self, text: str) -> str:
+        """Подготавливает текст для SVG"""
+        if not text:
+            return ""
+        
+        # Удаляем лишние пробелы и обрезаем
+        text = re.sub(r'\s+', ' ', text).strip()
+        # Обрезаем до разумной длины для SVG
+        text = text[:20]
+        # Заменяем HTML-небезопасные символы
+        text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        return text
 
     def _generate_fallback_visualization(self, topic: str) -> dict:
         """Fallback визуализация"""
         # Извлекаем ключевые слова из темы для fallback
         words = re.findall(r'\b[А-Яа-я]{4,}\b', topic)
         main_concept = words[0] if words else "Тема"
-        aspects = words[1:4] if len(words) > 1 else ["Изучение", "Анализ", "Применение"]
+        aspects = words[1:5] if len(words) > 1 else ["Изучение", "Анализ", "Применение", "Практика"]
         
         concepts = {
             "main_concept": main_concept,
-            "aspects": aspects
+            "aspects": aspects[:4]  # Максимум 4 аспекта
         }
         
         return {
@@ -728,7 +833,7 @@ class LLMIntegration:
         return (has_keywords or has_structure) and is_long_enough
 
     def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация РАСШИРЕННОЙ концептуальной карты на основе темы - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Генерация РАСШИРЕННОЙ концептуальной карты на основе темы - УЛУЧШЕННАЯ ВЕРСИЯ"""
         try:
             print(f"🎨 Генерация расширенной концептуальной карты для: {topic[:100]}...")
             
@@ -744,6 +849,8 @@ class LLMIntegration:
 2. Создай 1 центральное понятие и 3-4 связанных понятия
 3. Используй конкретные термины, а не общие слова
 4. НЕ используй в названиях слова "АСПЕКТ1", "АСПЕКТ2" и т.д. - используй реальные термины
+5. Центральное понятие должно быть кратким и емким
+6. Связанные понятия должны быть конкретными и информативными
 
 ЦЕНТРАЛЬНОЕ ПОНЯТИЕ (самый важный термин):
 - [основное понятие]
@@ -752,13 +859,15 @@ class LLMIntegration:
 1. [реальный термин 1]
 2. [реальный термин 2] 
 3. [реальный термин 3]
+4. [реальный термин 4] (если уместно)
 
-Пример для "Фотосинтез":
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Фотосинтез
+Пример для "Сферы жизни общества":
+ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Сферы жизни общества
 РАСШИРЯЮЩИЕ ПОНЯТИЯ:
-1. Хлорофилл 
-2. Глюкоза 
-3. Кислород 
+1. Экономическая сфера
+2. Политическая сфера  
+3. Социальная сфера
+4. Духовная сфера
 
 Тема: {topic}
 
@@ -767,6 +876,7 @@ class LLMIntegration:
 АСПЕКТ1: [реальный термин 1]
 АСПЕКТ2: [реальный термин 2] 
 АСПЕКТ3: [реальный термин 3]
+АСПЕКТ4: [реальный термин 4] (если нужно)
 """
             
             response = self._query_llm_api(
@@ -776,7 +886,8 @@ class LLMIntegration:
                 system_prompt="""Ты создаешь расширенные концептуальные карты для обучения.
                 Добавляй смежные и углубляющие понятия, не ограничивайся текстом урока.
                 Используй конкретные научные термины где это уместно.
-                НЕ используй слова "АСПЕКТ1", "АСПЕКТ2" в самих названиях понятий.""",
+                НЕ используй слова "АСПЕКТ1", "АСПЕКТ2" в самих названиях понятий.
+                Следи за тем, чтобы центральное понятие было кратким и понятным.""",
                 max_tokens=500
             )
             
@@ -859,7 +970,7 @@ if __name__ == "__main__":
     print("🔧 Тестирование улучшенного LLM модуля...")
     
     # Тестирование генерации визуализации
-    test_topic = "Статистика включает описательную статистику и индуктивную статистику"
+    test_topic = "Важнейшие сферы жизни общества: экономическая, политическая, социальная и духовная"
     print(f"\n🔄 Генерация визуализации для: {test_topic}")
     viz_result = llm.generate_visualization(test_topic)
     
@@ -869,6 +980,7 @@ if __name__ == "__main__":
         print(f"📊 Аспекты: {viz_result['concepts'].get('aspects', [])}")
         print(f"📊 Mermaid код:")
         print(viz_result['mermaid_code'])
+        print(f"📊 SVG код (длина): {len(viz_result['svg_code'])} символов")
     else:
         print("❌ Не удалось сгенерировать визуализации")
     
