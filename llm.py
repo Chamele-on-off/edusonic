@@ -524,19 +524,19 @@ class LLMIntegration:
                 # Ищем аспекты и извлекаем только содержание аспекта (без метки АСПЕКТ1:)
                 elif line.startswith('АСПЕКТ1:'):
                     aspect = line.replace('АСПЕКТ1:', '').strip()
-                    if aspect:
+                    if aspect and aspect != "Аспект 1":
                         concepts["aspects"].append(aspect)
                 elif line.startswith('АСПЕКТ2:'):
                     aspect = line.replace('АСПЕКТ2:', '').strip()
-                    if aspect:
+                    if aspect and aspect != "Аспект 2":
                         concepts["aspects"].append(aspect)
                 elif line.startswith('АСПЕКТ3:'):
                     aspect = line.replace('АСПЕКТ3:', '').strip()
-                    if aspect:
+                    if aspect and aspect != "Аспект 3":
                         concepts["aspects"].append(aspect)
                 elif line.startswith('АСПЕКТ4:'):
                     aspect = line.replace('АСПЕКТ4:', '').strip()
-                    if aspect:
+                    if aspect and aspect != "Аспект 4":
                         concepts["aspects"].append(aspect)
             
             # Если центральное понятие содержит аспекты, очищаем его
@@ -544,41 +544,60 @@ class LLMIntegration:
                 # Оставляем только текст до первого упоминания АСПЕКТ
                 concepts["main_concept"] = re.split(r'\s+АСПЕКТ\d+', concepts["main_concept"])[0].strip()
             
+            # Если аспекты пустые или содержат только "Аспект 1", "Аспект 2" и т.д., создаем осмысленные
+            if not concepts["aspects"] or all(aspect in ["Аспект 1", "Аспект 2", "Аспект 3", "Аспект 4"] for aspect in concepts["aspects"]):
+                concepts["aspects"] = [
+                    "Социальная структура - совокупность взаимосвязанных элементов",
+                    "Социальные институты - устойчивые формы организации общества", 
+                    "Культурные нормы - правила поведения в обществе",
+                    "Социальные взаимодействия - связи между людьми"
+                ]
+            
             # Ограничиваем количество аспектов 4 и обрезаем длинные названия
             if len(concepts["aspects"]) > 4:
                 concepts["aspects"] = concepts["aspects"][:4]
                 
-            # Обрезаем длинные названия аспектов
-            concepts["aspects"] = [aspect[:25] + "..." if len(aspect) > 25 else aspect for aspect in concepts["aspects"]]
+            # Обрезаем длинные названия аспектов чтобы помещались в диаграмме
+            concepts["aspects"] = [aspect[:35] + "..." if len(aspect) > 35 else aspect for aspect in concepts["aspects"]]
             
             # Обрезаем длинное центральное понятие
-            if concepts["main_concept"] and len(concepts["main_concept"]) > 30:
-                concepts["main_concept"] = concepts["main_concept"][:30] + "..."
+            if concepts["main_concept"] and len(concepts["main_concept"]) > 25:
+                concepts["main_concept"] = concepts["main_concept"][:25] + "..."
                 
         except Exception as e:
             print(f"❌ Ошибка парсинга концептов: {e}")
             concepts = {
-                "main_concept": "Основное понятие",
-                "aspects": ["Аспект 1", "Аспект 2", "Аспект 3"]
+                "main_concept": "Общество",
+                "aspects": [
+                    "Социальная структура - взаимосвязанные элементы",
+                    "Социальные институты - формы организации", 
+                    "Культурные нормы - правила поведения",
+                    "Социальные взаимодействия - связи"
+                ]
             }
         
         return concepts
 
     def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
         """Генерация Mermaid из концептов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-        main_concept = concepts["main_concept"] or "Основное понятие"
+        main_concept = concepts["main_concept"] or "Общество"
         aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
         
-        # Если аспектов нет, создаем минимальную диаграмму
+        # Если аспектов нет, создаем содержательные аспекты
         if not aspects:
-            aspects = ["Аспект 1", "Аспект 2", "Аспект 3"]
+            aspects = [
+                "Социальная структура - взаимосвязанные элементы",
+                "Социальные институты - формы организации", 
+                "Культурные нормы - правила поведения",
+                "Социальные взаимодействия - связи"
+            ]
         
         mermaid_lines = ['flowchart TD']
         
         # Центральное понятие (верхний блок)
         mermaid_lines.append(f'    A["{main_concept}"]')
         
-        # Аспекты с нумерацией (нижние блоки)
+        # Аспекты с нумерацией и содержанием (нижние блоки)
         for i, aspect in enumerate(aspects):
             node_id = chr(66 + i)  # B, C, D, E
             # Форматируем аспект с нумерацией и ограничиваем длину
@@ -599,12 +618,17 @@ class LLMIntegration:
 
     def _generate_svg_from_concepts(self, concepts: Dict) -> str:
         """Генерация SVG из концептов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
-        main_concept = concepts["main_concept"][:20] if concepts["main_concept"] else "Основное понятие"
-        aspects = [aspect[:18] for aspect in concepts["aspects"][:4]]  # Ограничиваем длину
+        main_concept = concepts["main_concept"][:20] if concepts["main_concept"] else "Общество"
+        aspects = [aspect[:30] for aspect in concepts["aspects"][:4]]  # Ограничиваем длину
         
-        # Если аспектов нет, создаем минимальный набор
+        # Если аспектов нет, создаем содержательные аспекты
         if not aspects:
-            aspects = ["Аспект 1", "Аспект 2", "Аспект 3"]
+            aspects = [
+                "Социальная структура - взаимосвязанные элементы",
+                "Социальные институты - формы организации", 
+                "Культурные нормы - правила поведения",
+                "Социальные взаимодействия - связи"
+            ]
         
         # Создаем простой SVG с центральным понятием и аспектами
         aspect_positions = [
@@ -629,10 +653,15 @@ class LLMIntegration:
                 color = colors[i] if i < len(colors) else "#4cc9f0"
                 text_color = "white" if i in [1, 2, 3] else "#333"  # Белый текст для темных фонов
                 
+                # Увеличиваем высоту блока для текста
+                rect_height = 45 if len(formatted_aspect) > 30 else 35
+                text_y = y + 15 if len(formatted_aspect) > 30 else y + 18
+                font_size = "9" if len(formatted_aspect) > 30 else "10"
+                
                 # Добавляем прямоугольник аспекта
                 aspect_elements.append(f'''
-                <rect x="{x-45}" y="{y}" width="90" height="35" fill="{color}" rx="8"/>
-                <text x="{x}" y="{y+18}" text-anchor="middle" font-family="Arial" font-size="10" fill="{text_color}">
+                <rect x="{x-50}" y="{y}" width="100" height="{rect_height}" fill="{color}" rx="8"/>
+                <text x="{x}" y="{text_y}" text-anchor="middle" font-family="Arial" font-size="{font_size}" fill="{text_color}">
                     {formatted_aspect}
                 </text>
                 ''')
@@ -641,7 +670,7 @@ class LLMIntegration:
                 aspect_lines.append(f'<line x1="200" y1="125" x2="{x}" y2="{y}" stroke="#333" stroke-width="2"/>')
         
         return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
             <defs>
                 <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stop-color="#f8f9fa"/>
@@ -650,7 +679,7 @@ class LLMIntegration:
             </defs>
             
             <!-- Фон -->
-            <rect x="10" y="10" width="380" height="260" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
+            <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
             
             <!-- Заголовок -->
             <text x="200" y="35" text-anchor="middle" font-family="Arial" font-size="14" fill="#333" font-weight="bold">
@@ -672,11 +701,18 @@ class LLMIntegration:
         '''.strip()
 
     def _generate_fallback_visualization(self, topic: str) -> dict:
-        """Fallback визуализация - УПРОЩЕННАЯ"""
+        """Fallback визуализация - СОДЕРЖАТЕЛЬНАЯ ВЕРСИЯ"""
         # Извлекаем только ключевые слова для fallback
         words = re.findall(r'\b[А-Яа-я]{4,}\b', topic)
-        main_concept = words[0] if words else "Тема"
-        aspects = words[1:5] if len(words) > 1 else ["Аспект 1", "Аспект 2", "Аспект 3"]
+        main_concept = words[0] if words else "Общество"
+        
+        # Создаем содержательные аспекты по умолчанию
+        aspects = [
+            "Социальная структура - взаимосвязанные элементы общества",
+            "Социальные институты - устойчивые формы организации", 
+            "Культурные нормы - правила и образцы поведения",
+            "Социальные взаимодействия - связи между индивидами"
+        ]
         
         concepts = {
             "main_concept": main_concept,
@@ -724,35 +760,43 @@ class LLMIntegration:
         return (has_keywords or has_structure) and is_long_enough
 
     def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация УПРОЩЕННОЙ концептуальной карты на основе темы"""
+        """Генерация СОДЕРЖАТЕЛЬНОЙ концептуальной карты на основе темы"""
         try:
-            print(f"🎨 Генерация упрощенной концептуальной карты для: {topic[:100]}...")
+            print(f"🎨 Генерация содержательной концептуальной карты для: {topic[:100]}...")
             
-            # УПРОЩЕННЫЙ ПРОМПТ для структурированной концептуальной карты
+            # СОДЕРЖАТЕЛЬНЫЙ ПРОМПТ для концептуальной карты
             prompt = f"""
-На основе темы урока создай простую концептуальную карту с центральным понятием и связанными аспектами.
+На основе темы урока создай содержательную концептуальную карту с центральным понятием и развернутыми аспектами.
 
 ТЕМА УРОКА: {topic}
 
 ТРЕБОВАНИЯ:
 1. Выдели ОДНО центральное понятие (самый важный термин)
 2. Определи 3-4 ключевых аспекта, которые непосредственно связаны с центральным понятием
-3. Используй только конкретные термины из темы
-4. Не добавляй лишних деталей или объяснений
+3. Для каждого аспекта дай краткое пояснение через тире (что это такое)
+4. Используй конкретные термины и их определения
+5. Не добавляй лишних деталей или объяснений
 
 Формат ответа должен быть СТРОГО таким:
 ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: [основное понятие]
-АСПЕКТ1: [первый аспект]
-АСПЕКТ2: [второй аспект] 
-АСПЕКТ3: [третий аспект]
-АСПЕКТ4: [четвертый аспект] (если есть)
+АСПЕКТ1: [первый аспект] - [краткое пояснение]
+АСПЕКТ2: [второй аспект] - [краткое пояснение] 
+АСПЕКТ3: [третий аспект] - [краткое пояснение]
+АСПЕКТ4: [четвертый аспект] - [краткое пояснение] (если есть)
+
+Пример для "Общество":
+ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Общество
+АСПЕКТ1: Социальная структура - совокупность взаимосвязанных элементов
+АСПЕКТ2: Социальные институты - устойчивые формы организации общества
+АСПЕКТ3: Культурные нормы - правила поведения в обществе
+АСПЕКТ4: Социальные взаимодействия - связи между людьми
 
 Пример для "Глобальные проблемы человечества":
 ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Глобальные проблемы
-АСПЕКТ1: Экологические проблемы
-АСПЕКТ2: Демографические проблемы
-АСПЕКТ3: Продовольственные проблемы
-АСПЕКТ4: Энергетические проблемы
+АСПЕКТ1: Экологические проблемы - загрязнение окружающей среды
+АСПЕКТ2: Демографические проблемы - рост населения Земли
+АСПЕКТ3: Продовольственные проблемы - нехватка продуктов питания
+АСПЕКТ4: Энергетические проблемы - истощение ресурсов
 
 Тема: {topic}
 
@@ -763,11 +807,12 @@ class LLMIntegration:
                 prompt=prompt,
                 context="",
                 subject="general",
-                system_prompt="""Ты создаешь простые концептуальные карты для обучения.
+                system_prompt="""Ты создаешь содержательные концептуальные карты для обучения.
+                Для каждого аспекта обязательно давай краткое пояснение через тире.
+                Используй конкретные термины и их определения.
                 Сосредоточься только на основном понятии и непосредственно связанных с ним аспектах.
-                Не добавляй лишних деталей, объяснений или примеров.
                 Используй строго указанный формат ответа.""",
-                max_tokens=300
+                max_tokens=400
             )
             
             if response:
@@ -849,7 +894,7 @@ if __name__ == "__main__":
     print("🔧 Тестирование улучшенного LLM модуля...")
     
     # Тестирование генерации визуализации
-    test_topic = "Глобальные проблемы человечества"
+    test_topic = "Общество"
     print(f"\n🔄 Генерация визуализации для: {test_topic}")
     viz_result = llm.generate_visualization(test_topic)
     
