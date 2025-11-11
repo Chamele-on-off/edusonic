@@ -503,7 +503,7 @@ class LLMIntegration:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
     def _parse_concepts_from_response(self, response: str) -> Dict:
-        """Парсит концепты из ответа LLM - УПРОЩЕННАЯ ВЕРСИЯ ТОЛЬКО ДЛЯ ДИАГРАММ"""
+        """Парсит концепты из ответа LLM - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         concepts = {
             "main_concept": "",
             "aspects": []
@@ -513,9 +513,15 @@ class LLMIntegration:
             lines = response.split('\n')
             for line in lines:
                 line = line.strip()
-                # Ищем только основные понятия и аспекты в строгом формате
+                
+                # Ищем центральное понятие
                 if line.startswith('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:'):
-                    concepts["main_concept"] = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
+                    main_concept = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
+                    # Убираем лишние слова, оставляем только основное понятие
+                    main_concept = re.sub(r'\s+АСПЕКТ\d+.*', '', main_concept)
+                    concepts["main_concept"] = main_concept
+                
+                # Ищем аспекты и извлекаем только содержание аспекта (без метки АСПЕКТ1:)
                 elif line.startswith('АСПЕКТ1:'):
                     aspect = line.replace('АСПЕКТ1:', '').strip()
                     if aspect:
@@ -533,16 +539,21 @@ class LLMIntegration:
                     if aspect:
                         concepts["aspects"].append(aspect)
             
-            # Если не нашли в строгом формате, используем минимальную логику
-            if not concepts["main_concept"]:
-                # Берем первое значимое слово как основное понятие
-                words = re.findall(r'\b[А-Яа-я]{4,}\b', response)
-                if words:
-                    concepts["main_concept"] = words[0]
-                    
-            # Ограничиваем количество аспектов 4
+            # Если центральное понятие содержит аспекты, очищаем его
+            if concepts["main_concept"] and any(marker in concepts["main_concept"] for marker in ['АСПЕКТ1', 'АСПЕКТ2', 'АСПЕКТ3', 'АСПЕКТ4']):
+                # Оставляем только текст до первого упоминания АСПЕКТ
+                concepts["main_concept"] = re.split(r'\s+АСПЕКТ\d+', concepts["main_concept"])[0].strip()
+            
+            # Ограничиваем количество аспектов 4 и обрезаем длинные названия
             if len(concepts["aspects"]) > 4:
                 concepts["aspects"] = concepts["aspects"][:4]
+                
+            # Обрезаем длинные названия аспектов
+            concepts["aspects"] = [aspect[:25] + "..." if len(aspect) > 25 else aspect for aspect in concepts["aspects"]]
+            
+            # Обрезаем длинное центральное понятие
+            if concepts["main_concept"] and len(concepts["main_concept"]) > 30:
+                concepts["main_concept"] = concepts["main_concept"][:30] + "..."
                 
         except Exception as e:
             print(f"❌ Ошибка парсинга концептов: {e}")
@@ -554,7 +565,7 @@ class LLMIntegration:
         return concepts
 
     def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
-        """Генерация Mermaid из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
+        """Генерация Mermaid из концептов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         main_concept = concepts["main_concept"] or "Основное понятие"
         aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
         
@@ -563,27 +574,33 @@ class LLMIntegration:
             aspects = ["Аспект 1", "Аспект 2", "Аспект 3"]
         
         mermaid_lines = ['flowchart TD']
+        
+        # Центральное понятие (верхний блок)
         mermaid_lines.append(f'    A["{main_concept}"]')
         
+        # Аспекты с нумерацией (нижние блоки)
         for i, aspect in enumerate(aspects):
             node_id = chr(66 + i)  # B, C, D, E
-            mermaid_lines.append(f'    A --> {node_id}["{aspect}"]')
+            # Форматируем аспект с нумерацией и ограничиваем длину
+            formatted_aspect = f"{i+1}) {aspect}"
+            mermaid_lines.append(f'    A --> {node_id}["{formatted_aspect}"]')
         
-        # Минимальные стили
+        # Минимальные стили с увеличенными размерами блоков
         mermaid_lines.extend([
             '',
             '    style A fill:#4263EB,color:#fff,stroke-width:2px',
             '    style B fill:#4cc9f0,color:#333,stroke-width:2px',
             '    style C fill:#3a0ca3,color:#fff,stroke-width:2px',
-            '    style D fill:#f72585,color:#fff,stroke-width:2px'
+            '    style D fill:#f72585,color:#fff,stroke-width:2px',
+            '    style E fill:#7209b7,color:#fff,stroke-width:2px'
         ])
         
         return '\n'.join(mermaid_lines)
 
     def _generate_svg_from_concepts(self, concepts: Dict) -> str:
-        """Генерация SVG из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
+        """Генерация SVG из концептов - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         main_concept = concepts["main_concept"][:20] if concepts["main_concept"] else "Основное понятие"
-        aspects = [aspect[:15] for aspect in concepts["aspects"][:4]]  # Ограничиваем длину
+        aspects = [aspect[:18] for aspect in concepts["aspects"][:4]]  # Ограничиваем длину
         
         # Если аспектов нет, создаем минимальный набор
         if not aspects:
@@ -591,35 +608,40 @@ class LLMIntegration:
         
         # Создаем простой SVG с центральным понятием и аспектами
         aspect_positions = [
-            (95, 162),   # Аспект 1
-            (200, 162),  # Аспект 2  
-            (305, 162),  # Аспект 3
-            (200, 200)   # Аспект 4 (если есть)
+            (95, 170),   # Аспект 1
+            (200, 170),  # Аспект 2  
+            (305, 170),  # Аспект 3
+            (200, 220)   # Аспект 4 (если есть)
         ]
         
         aspect_elements = []
+        aspect_lines = []
+        
         for i, aspect in enumerate(aspects):
             if i < len(aspect_positions):
                 x, y = aspect_positions[i]
-                if i == 3:  # Четвертый аспект размещаем ниже
-                    aspect_elements.append(f'''
-                    <rect x="{x-45}" y="{y}" width="90" height="35" fill="#7209b7" rx="8"/>
-                    <text x="{x}" y="{y+18}" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                        {aspect}
-                    </text>
-                    <line x1="200" y1="125" x2="{x}" y2="{y}" stroke="#333" stroke-width="2"/>
-                    ''')
-                else:
-                    aspect_elements.append(f'''
-                    <rect x="{x-45}" y="{y}" width="90" height="35" fill="#4cc9f0" rx="8"/>
-                    <text x="{x}" y="{y+18}" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
-                        {aspect}
-                    </text>
-                    <line x1="200" y1="125" x2="{x}" y2="{y}" stroke="#333" stroke-width="2"/>
-                    ''')
+                
+                # Форматируем аспект с нумерацией
+                formatted_aspect = f"{i+1}) {aspect}"
+                
+                # Определяем цвет в зависимости от позиции
+                colors = ["#4cc9f0", "#3a0ca3", "#f72585", "#7209b7"]
+                color = colors[i] if i < len(colors) else "#4cc9f0"
+                text_color = "white" if i in [1, 2, 3] else "#333"  # Белый текст для темных фонов
+                
+                # Добавляем прямоугольник аспекта
+                aspect_elements.append(f'''
+                <rect x="{x-45}" y="{y}" width="90" height="35" fill="{color}" rx="8"/>
+                <text x="{x}" y="{y+18}" text-anchor="middle" font-family="Arial" font-size="10" fill="{text_color}">
+                    {formatted_aspect}
+                </text>
+                ''')
+                
+                # Добавляем линию соединения
+                aspect_lines.append(f'<line x1="200" y1="125" x2="{x}" y2="{y}" stroke="#333" stroke-width="2"/>')
         
         return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 250">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280">
             <defs>
                 <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stop-color="#f8f9fa"/>
@@ -628,18 +650,21 @@ class LLMIntegration:
             </defs>
             
             <!-- Фон -->
-            <rect x="10" y="10" width="380" height="230" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
+            <rect x="10" y="10" width="380" height="260" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
             
             <!-- Заголовок -->
-            <text x="200" y="30" text-anchor="middle" font-family="Arial" font-size="16" fill="#333" font-weight="bold">
+            <text x="200" y="35" text-anchor="middle" font-family="Arial" font-size="14" fill="#333" font-weight="bold">
                 Концептуальная карта
             </text>
             
             <!-- Основное понятие -->
-            <rect x="100" y="70" width="200" height="50" fill="#4263EB" rx="10"/>
-            <text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
+            <rect x="80" y="70" width="240" height="50" fill="#4263EB" rx="10"/>
+            <text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="12" fill="white" font-weight="bold">
                 {main_concept}
             </text>
+            
+            <!-- Линии соединения -->
+            {''.join(aspect_lines)}
             
             <!-- Аспекты -->
             {''.join(aspect_elements)}
@@ -722,11 +747,12 @@ class LLMIntegration:
 АСПЕКТ3: [третий аспект]
 АСПЕКТ4: [четвертый аспект] (если есть)
 
-Пример для "Фотосинтез":
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Фотосинтез
-АСПЕКТ1: Хлорофилл
-АСПЕКТ2: Глюкоза
-АСПЕКТ3: Кислород
+Пример для "Глобальные проблемы человечества":
+ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Глобальные проблемы
+АСПЕКТ1: Экологические проблемы
+АСПЕКТ2: Демографические проблемы
+АСПЕКТ3: Продовольственные проблемы
+АСПЕКТ4: Энергетические проблемы
 
 Тема: {topic}
 
@@ -823,7 +849,7 @@ if __name__ == "__main__":
     print("🔧 Тестирование улучшенного LLM модуля...")
     
     # Тестирование генерации визуализации
-    test_topic = "Статистика включает описательную статистику и индуктивную статистику"
+    test_topic = "Глобальные проблемы человечества"
     print(f"\n🔄 Генерация визуализации для: {test_topic}")
     viz_result = llm.generate_visualization(test_topic)
     
