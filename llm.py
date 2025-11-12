@@ -503,36 +503,44 @@ class LLMIntegration:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
     def _parse_concepts_from_response(self, response: str) -> Dict:
-        """Парсит концепты из ответа LLM - УПРОЩЕННАЯ ВЕРСИЯ ТОЛЬКО ДЛЯ ОСНОВНЫХ ПОНЯТИЙ"""
+        """Парсит концепты из ответа LLM - УПРОЩЕННАЯ ВЕРСИЯ ТОЛЬКО ДЛЯ JSON"""
         concepts = {
             "main_concept": "",
             "aspects": []
         }
         
         try:
+            # Пытаемся найти JSON в ответе
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                data = json.loads(json_str)
+                
+                concepts["main_concept"] = data.get("main_concept", "")
+                aspects = data.get("aspects", [])
+                if isinstance(aspects, list):
+                    concepts["aspects"] = [str(aspect) for aspect in aspects if aspect]
+                else:
+                    concepts["aspects"] = []
+                
+                print(f"✅ Извлечены концепты из JSON: {concepts}")
+                return concepts
+            
+            # Fallback: если JSON не найден, используем старый метод
             lines = response.split('\n')
             for line in lines:
                 line = line.strip()
-                # Ищем центральное понятие
                 if line.startswith('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:'):
                     concepts["main_concept"] = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
-                # Ищем аспекты - теперь каждый аспект на отдельной строке
-                elif line.startswith('АСПЕКТ1:'):
-                    aspect = line.replace('АСПЕКТ1:', '').strip()
-                    if aspect:
-                        concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ2:'):
-                    aspect = line.replace('АСПЕКТ2:', '').strip()
-                    if aspect:
-                        concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ3:'):
-                    aspect = line.replace('АСПЕКТ3:', '').strip()
-                    if aspect:
-                        concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ4:'):
-                    aspect = line.replace('АСПЕКТ4:', '').strip()
-                    if aspect:
-                        concepts["aspects"].append(aspect)
+                elif line.startswith('АСПЕКТ1:') or line.startswith('1.'):
+                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
+                    concepts["aspects"].append(aspect)
+                elif line.startswith('АСПЕКТ2:') or line.startswith('2.'):
+                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
+                    concepts["aspects"].append(aspect)
+                elif line.startswith('АСПЕКТ3:') or line.startswith('3.'):
+                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
+                    concepts["aspects"].append(aspect)
             
             # Если не нашли в строгом формате, пытаемся извлечь иначе
             if not concepts["main_concept"]:
@@ -560,16 +568,20 @@ class LLMIntegration:
         return concepts
 
     def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
-        """Генерация Mermaid из концептов - ТОЛЬКО ОСНОВНЫЕ ПОНЯТИЯ"""
+        """Генерация Mermaid из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
         main_concept = concepts["main_concept"] or "Основное понятие"
         aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
         
+        # Очищаем названия от лишних символов
+        main_concept_clean = re.sub(r'[^\w\s]', '', main_concept)
+        
         mermaid_lines = ['flowchart TD']
-        mermaid_lines.append(f'    A["{main_concept}"]')
+        mermaid_lines.append(f'    A["{main_concept_clean}"]')
         
         for i, aspect in enumerate(aspects):
             node_id = chr(66 + i)  # B, C, D, E
-            mermaid_lines.append(f'    A --> {node_id}["{aspect}"]')
+            aspect_clean = re.sub(r'[^\w\s]', '', str(aspect))
+            mermaid_lines.append(f'    A --> {node_id}["{aspect_clean}"]')
         
         # Стили для лучшего отображения
         mermaid_lines.extend([
@@ -584,9 +596,17 @@ class LLMIntegration:
         return '\n'.join(mermaid_lines)
 
     def _generate_svg_from_concepts(self, concepts: Dict) -> str:
-        """Генерация SVG из концептов - ТОЛЬКО ОСНОВНЫЕ ПОНЯТИЯ"""
-        main_concept = concepts["main_concept"][:20] if concepts["main_concept"] else "Основное понятие"  # Ограничиваем длину
-        aspects = [aspect[:15] for aspect in concepts["aspects"][:4]]  # Ограничиваем длину
+        """Генерация SVG из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
+        main_concept = concepts["main_concept"] or "Основное понятие"
+        aspects = [str(aspect) for aspect in concepts["aspects"][:4]]  # Берем до 4 аспектов
+        
+        # Ограничиваем длину текста
+        main_concept_display = main_concept[:20]
+        aspects_display = [aspect[:15] for aspect in aspects]
+        
+        # Заполняем недостающие аспекты
+        while len(aspects_display) < 4:
+            aspects_display.append(f"Аспект {len(aspects_display) + 1}")
         
         return f'''
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
@@ -606,37 +626,37 @@ class LLMIntegration:
             </text>
             
             <!-- Основное понятие -->
-            <rect x="100" y="60" width="200" height="40" fill="#4263EB" rx="10"/>
-            <text x="200" y="85" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
-                {main_concept}
+            <rect x="100" y="60" width="200" height="50" fill="#4263EB" rx="10"/>
+            <text x="200" y="90" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
+                {main_concept_display}
             </text>
             
             <!-- Аспекты -->
-            <rect x="50" y="150" width="80" height="30" fill="#4cc9f0" rx="8"/>
-            <text x="90" y="170" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
-                {aspects[0] if len(aspects) > 0 else "Аспект 1"}
+            <rect x="50" y="170" width="80" height="35" fill="#4cc9f0" rx="8"/>
+            <text x="90" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
+                {aspects_display[0]}
             </text>
             
-            <rect x="140" y="150" width="80" height="30" fill="#3a0ca3" rx="8"/>
-            <text x="180" y="170" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[1] if len(aspects) > 1 else "Аспект 2"}
+            <rect x="140" y="170" width="80" height="35" fill="#3a0ca3" rx="8"/>
+            <text x="180" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
+                {aspects_display[1]}
             </text>
             
-            <rect x="230" y="150" width="80" height="30" fill="#f72585" rx="8"/>
-            <text x="270" y="170" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[2] if len(aspects) > 2 else "Аспект 3"}
+            <rect x="230" y="170" width="80" height="35" fill="#f72585" rx="8"/>
+            <text x="270" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
+                {aspects_display[2]}
             </text>
             
-            <rect x="160" y="200" width="80" height="30" fill="#7209b7" rx="8"/>
-            <text x="200" y="220" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects[3] if len(aspects) > 3 else "Аспект 4"}
+            <rect x="320" y="170" width="60" height="35" fill="#7209b7" rx="8"/>
+            <text x="350" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
+                {aspects_display[3]}
             </text>
             
             <!-- Связи -->
-            <line x1="200" y1="100" x2="90" y2="150" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="180" y2="150" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="270" y2="150" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="100" x2="200" y2="200" stroke="#333" stroke-width="2"/>
+            <line x1="200" y1="110" x2="90" y2="170" stroke="#333" stroke-width="2"/>
+            <line x1="200" y1="110" x2="180" y2="170" stroke="#333" stroke-width="2"/>
+            <line x1="200" y1="110" x2="270" y2="170" stroke="#333" stroke-width="2"/>
+            <line x1="200" y1="110" x2="350" y2="170" stroke="#333" stroke-width="2"/>
         </svg>
         '''.strip()
 
@@ -645,7 +665,7 @@ class LLMIntegration:
         # Извлекаем ключевые слова из темы для fallback
         words = re.findall(r'\b[А-Яа-я]{4,}\b', topic)
         main_concept = words[0] if words else "Тема"
-        aspects = words[1:5] if len(words) > 1 else ["Изучение", "Анализ", "Применение", "Оценка"]
+        aspects = words[1:5] if len(words) > 1 else ["Аспект 1", "Аспект 2", "Аспект 3", "Аспект 4"]
         
         concepts = {
             "main_concept": main_concept,
@@ -693,49 +713,37 @@ class LLMIntegration:
         return (has_keywords or has_structure) and is_long_enough
 
     def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация УПРОЩЕННОЙ концептуальной карты на основе темы - ТОЛЬКО ОСНОВНЫЕ ПОНЯТИЯ"""
+        """Генерация УПРОЩЕННОЙ концептуальной карты на основе темы"""
         try:
             print(f"🎨 Генерация упрощенной концептуальной карты для: {topic[:100]}...")
             
-            # УПРОЩЕННЫЙ ПРОМПТ для структурированной концептуальной карты
+            # УПРОЩЕННЫЙ ПРОМПТ для получения только основного понятия и аспектов в JSON формате
             prompt = f"""
-На основе темы урока создай простую концептуальную карту с центральным понятием и связанными аспектами.
+На основе темы урока создай простую концептуальную карту с одним центральным понятием и связанными аспектами.
 
 ТЕМА УРОКА: {topic}
 КОНТЕКСТ: {context}
 
 ТРЕБОВАНИЯ:
 1. Выдели ОДНО центральное понятие (самый важный термин)
-2. Выдели 3-4 связанных аспекта (ключевые связанные понятия)
-3. Используй только конкретные термины, без общих слов
-4. Каждый элемент должен быть на отдельной строке
+2. Определи 3-4 связанных аспекта или подпонятия
+3. Верни ответ ТОЛЬКО в формате JSON
 
-ФОРМАТ ОТВЕТА (точно соблюдай формат и разделение пустыми строками):
-
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: [основное понятие]
-
-АСПЕКТ1: [первый связанный аспект]
-
-АСПЕКТ2: [второй связанный аспект]
-
-АСПЕКТ3: [третий связанный аспект]
-
-АСПЕКТ4: [четвертый связанный аспект] (если есть)
+Формат JSON:
+{{
+    "main_concept": "основное понятие",
+    "aspects": ["аспект 1", "аспект 2", "аспект 3"]
+}}
 
 Пример для "Фотосинтез":
-ЦЕНТРАЛЬНОЕ ПОНЯТИЕ: Фотосинтез
-
-АСПЕКТ1: Хлорофилл
-
-АСПЕКТ2: Глюкоза
-
-АСПЕКТ3: Кислород
-
-АСПЕКТ4: Хлоропласты
+{{
+    "main_concept": "Фотосинтез",
+    "aspects": ["Хлорофилл", "Глюкоза", "Кислород", "Солнечный свет"]
+}}
 
 Тема: {topic}
 
-Верни ТОЛЬКО в указанном формате без дополнительных пояснений.
+Верни ТОЛЬКО JSON без дополнительного текста.
 """
             
             response = self._query_llm_api(
@@ -743,16 +751,20 @@ class LLMIntegration:
                 context="",
                 subject="general",
                 system_prompt="""Ты создаешь простые концептуальные карты для обучения.
-                Используй только конкретные термины. Строго соблюдай формат ответа.
-                Каждый элемент должен быть на отдельной строке с пустой строкой между ними.""",
-                max_tokens=300
+                Возвращай ответ ТОЛЬКО в формате JSON с полями main_concept и aspects.
+                Не добавляй пояснений или дополнительного текста.""",
+                max_tokens=500
             )
             
             if response:
                 print(f"🔧 Получен ответ от LLM: {response[:200]}...")
                 
-                # Парсим ответ
-                concepts = self._parse_concepts_from_response(response)
+                # Очищаем ответ от возможного лишнего текста
+                cleaned_response = self._clean_json_response(response)
+                
+                # Парсим JSON ответ
+                concepts = self._parse_json_concepts(cleaned_response)
+                
                 if concepts and concepts["main_concept"]:
                     print(f"✅ Извлечены концепты: {concepts}")
                     
@@ -774,6 +786,61 @@ class LLMIntegration:
         except Exception as e:
             print(f"❌ Ошибка генерации визуализации: {e}")
             return self._generate_fallback_visualization(topic)
+
+    def _clean_json_response(self, response: str) -> str:
+        """Очистка JSON ответа от лишнего текста"""
+        if not response:
+            return ""
+        
+        # Удаляем markdown обратные кавычки
+        response = re.sub(r'```json\s*', '', response)
+        response = re.sub(r'```\s*', '', response)
+        
+        # Ищем JSON объект
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            return json_match.group()
+        
+        return response.strip()
+
+    def _parse_json_concepts(self, json_response: str) -> Dict:
+        """Парсинг концептов из JSON ответа"""
+        concepts = {
+            "main_concept": "",
+            "aspects": []
+        }
+        
+        try:
+            if not json_response:
+                return concepts
+                
+            data = json.loads(json_response)
+            
+            concepts["main_concept"] = data.get("main_concept", "")
+            
+            aspects = data.get("aspects", [])
+            if isinstance(aspects, list):
+                # Ограничиваем количество аспектов и очищаем их
+                concepts["aspects"] = [str(aspect).strip() for aspect in aspects[:4] if aspect]
+            else:
+                concepts["aspects"] = []
+                
+            # Заполняем если недостаточно аспектов
+            while len(concepts["aspects"]) < 3:
+                concepts["aspects"].append(f"Аспект {len(concepts['aspects']) + 1}")
+                
+        except json.JSONDecodeError as e:
+            print(f"❌ Ошибка парсинга JSON: {e}")
+            # Пробуем извлечь концепты текстовым методом
+            concepts = self._parse_concepts_from_response(json_response)
+        except Exception as e:
+            print(f"❌ Ошибка обработки JSON концептов: {e}")
+            concepts = {
+                "main_concept": "Основное понятие",
+                "aspects": ["Аспект 1", "Аспект 2", "Аспект 3"]
+            }
+        
+        return concepts
 
     def test_connection(self) -> bool:
         """Тестирование подключения к API"""
