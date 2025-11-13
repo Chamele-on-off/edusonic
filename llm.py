@@ -503,30 +503,13 @@ class LLMIntegration:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
     def _parse_concepts_from_response(self, response: str) -> Dict:
-        """Парсит концепты из ответа LLM - УПРОЩЕННАЯ ВЕРСИЯ ТОЛЬКО ДЛЯ JSON"""
+        """Парсит концепты из ответа LLM"""
         concepts = {
             "main_concept": "",
             "aspects": []
         }
         
         try:
-            # Пытаемся найти JSON в ответе
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                data = json.loads(json_str)
-                
-                concepts["main_concept"] = data.get("main_concept", "")
-                aspects = data.get("aspects", [])
-                if isinstance(aspects, list):
-                    concepts["aspects"] = [str(aspect) for aspect in aspects if aspect]
-                else:
-                    concepts["aspects"] = []
-                
-                print(f"✅ Извлечены концепты из JSON: {concepts}")
-                return concepts
-            
-            # Fallback: если JSON не найден, используем старый метод
             lines = response.split('\n')
             for line in lines:
                 line = line.strip()
@@ -568,20 +551,16 @@ class LLMIntegration:
         return concepts
 
     def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
-        """Генерация Mermaid из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
-        main_concept = concepts["main_concept"] or "Основное понятие"
-        aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
-        
-        # Очищаем названия от лишних символов
-        main_concept_clean = re.sub(r'[^\w\s]', '', main_concept)
+        """Генерация Mermaid из концептов"""
+        main_concept = concepts["main_concept"]
+        aspects = concepts["aspects"][:3]  # Берем первые 3 аспекта
         
         mermaid_lines = ['flowchart TD']
-        mermaid_lines.append(f'    A["{main_concept_clean}"]')
+        mermaid_lines.append(f'    A["{main_concept}"]')
         
         for i, aspect in enumerate(aspects):
-            node_id = chr(66 + i)  # B, C, D, E
-            aspect_clean = re.sub(r'[^\w\s]', '', str(aspect))
-            mermaid_lines.append(f'    A --> {node_id}["{aspect_clean}"]')
+            node_id = chr(66 + i)  # B, C, D
+            mermaid_lines.append(f'    A --> {node_id}["{aspect}"]')
         
         # Стили для лучшего отображения
         mermaid_lines.extend([
@@ -589,83 +568,17 @@ class LLMIntegration:
             '    style A fill:#4263EB,color:#fff,stroke-width:2px',
             '    style B fill:#4cc9f0,color:#333,stroke-width:2px',
             '    style C fill:#3a0ca3,color:#fff,stroke-width:2px',
-            '    style D fill:#f72585,color:#fff,stroke-width:2px',
-            '    style E fill:#7209b7,color:#fff,stroke-width:2px'
+            '    style D fill:#f72585,color:#fff,stroke-width:2px'
         ])
         
         return '\n'.join(mermaid_lines)
-
-    def _generate_svg_from_concepts(self, concepts: Dict) -> str:
-        """Генерация SVG из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
-        main_concept = concepts["main_concept"] or "Основное понятие"
-        aspects = [str(aspect) for aspect in concepts["aspects"][:4]]  # Берем до 4 аспектов
-        
-        # Ограничиваем длину текста
-        main_concept_display = main_concept[:20]
-        aspects_display = [aspect[:15] for aspect in aspects]
-        
-        # Заполняем недостающие аспекты
-        while len(aspects_display) < 4:
-            aspects_display.append(f"Аспект {len(aspects_display) + 1}")
-        
-        return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
-            <defs>
-                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#f8f9fa"/>
-                    <stop offset="100%" stop-color="#e9ecef"/>
-                </linearGradient>
-            </defs>
-            
-            <!-- Фон -->
-            <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
-            
-            <!-- Заголовок -->
-            <text x="200" y="30" text-anchor="middle" font-family="Arial" font-size="16" fill="#333" font-weight="bold">
-                Концептуальная карта
-            </text>
-            
-            <!-- Основное понятие -->
-            <rect x="100" y="60" width="200" height="50" fill="#4263EB" rx="10"/>
-            <text x="200" y="90" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
-                {main_concept_display}
-            </text>
-            
-            <!-- Аспекты -->
-            <rect x="50" y="170" width="80" height="35" fill="#4cc9f0" rx="8"/>
-            <text x="90" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
-                {aspects_display[0]}
-            </text>
-            
-            <rect x="140" y="170" width="80" height="35" fill="#3a0ca3" rx="8"/>
-            <text x="180" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects_display[1]}
-            </text>
-            
-            <rect x="230" y="170" width="80" height="35" fill="#f72585" rx="8"/>
-            <text x="270" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects_display[2]}
-            </text>
-            
-            <rect x="320" y="170" width="60" height="35" fill="#7209b7" rx="8"/>
-            <text x="350" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects_display[3]}
-            </text>
-            
-            <!-- Связи -->
-            <line x1="200" y1="110" x2="90" y2="170" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="110" x2="180" y2="170" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="110" x2="270" y2="170" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="110" x2="350" y2="170" stroke="#333" stroke-width="2"/>
-        </svg>
-        '''.strip()
 
     def _generate_fallback_visualization(self, topic: str) -> dict:
         """Fallback визуализация"""
         # Извлекаем ключевые слова из темы для fallback
         words = re.findall(r'\b[А-Яа-я]{4,}\b', topic)
         main_concept = words[0] if words else "Тема"
-        aspects = words[1:5] if len(words) > 1 else ["Аспект 1", "Аспект 2", "Аспект 3", "Аспект 4"]
+        aspects = words[1:4] if len(words) > 1 else ["Изучение", "Анализ", "Применение"]
         
         concepts = {
             "main_concept": main_concept,
@@ -674,7 +587,7 @@ class LLMIntegration:
         
         return {
             "mermaid_code": self._generate_mermaid_from_concepts(concepts),
-            "svg_code": self._generate_svg_from_concepts(concepts),
+            "svg_code": "",  # Отказываемся от SVG
             "topic": topic,
             "concepts": concepts,
             "success": False
@@ -713,68 +626,64 @@ class LLMIntegration:
         return (has_keywords or has_structure) and is_long_enough
 
     def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация УПРОЩЕННОЙ концептуальной карты на основе темы"""
+        """Генерация концептуальной карты на основе темы - УПРОЩЕННАЯ ВЕРСИЯ"""
         try:
-            print(f"🎨 Генерация упрощенной концептуальной карты для: {topic[:100]}...")
+            print(f"🎨 Генерация концептуальной карты для: {topic[:100]}...")
             
-            # УПРОЩЕННЫЙ ПРОМПТ для получения только основного понятия и аспектов в JSON формате
+            # УПРОЩЕННЫЙ ПРОМПТ для генерации только mermaid кода
             prompt = f"""
-На основе темы урока создай простую концептуальную карту с одним центральным понятием и связанными аспектами.
+На основе темы урока создай концептуальную карту в формате Mermaid.
 
 ТЕМА УРОКА: {topic}
 КОНТЕКСТ: {context}
 
 ТРЕБОВАНИЯ:
-1. Выдели ОДНО центральное понятие (самый важный термин)
-2. Определи 3-4 расширяющих текст понятия или словосочетания для слайда презентации 
-3. Верни ответ ТОЛЬКО в формате JSON
+1. Определи ОДНО центральное понятие
+2. Определи 3-4 связанных аспекта
+3. Верни ТОЛЬКО код Mermaid в формате:
+   flowchart TD
+   A["Центральное понятие"]
+   A --> B["Аспект 1"]
+   A --> C["Аспект 2"]
+   A --> D["Аспект 3"]
 
-Формат JSON:
-{{
-    "main_concept": "основное понятие",
-    "aspects": ["понятие 1 или словосочетание 1", "понятие 2 или словосочетание 2", "понятие 3 или словосочетание 3"]
-}}
-
-Пример для "Экономика как наука":
-{{
-    "main_concept": "Экономика как наука",
-    "aspects": ["Изучает хозяйство", "Решает вопросы распределения благ", "Решает вопросы производства благ", "Изучает экономическую политику"]
-}}
+Пример для "Фотосинтез":
+flowchart TD
+    A["Фотосинтез"]
+    A --> B["Хлорофилл"]
+    A --> C["Глюкоза"]
+    A --> D["Кислород"]
 
 Тема: {topic}
 
-Верни ТОЛЬКО JSON без дополнительного текста.
+Верни ТОЛЬКО код Mermaid без пояснений.
 """
             
             response = self._query_llm_api(
                 prompt=prompt,
                 context="",
                 subject="general",
-                system_prompt="""Ты создаешь простые концептуальные карты для обучения.
-                Возвращай ответ ТОЛЬКО в формате JSON с полями main_concept и aspects.
-                Не добавляй пояснений или дополнительного текста.""",
-                max_tokens=500
+                system_prompt="""Ты создаешь простые концептуальные карты в формате Mermaid.
+                Используй ТОЛЬКО корректный синтаксис Mermaid.
+                Возвращай ТОЛЬКО код без пояснений.""",
+                max_tokens=300
             )
             
             if response:
                 print(f"🔧 Получен ответ от LLM: {response[:200]}...")
                 
-                # Очищаем ответ от возможного лишнего текста
-                cleaned_response = self._clean_json_response(response)
+                # ОЧИСТКА КОДА MERMAID
+                mermaid_code = self._clean_mermaid_code(response)
                 
-                # Парсим JSON ответ
-                concepts = self._parse_json_concepts(cleaned_response)
-                
-                if concepts and concepts["main_concept"]:
-                    print(f"✅ Извлечены концепты: {concepts}")
+                if mermaid_code and self._validate_mermaid_code(mermaid_code):
+                    print(f"✅ Валидный Mermaid код получен: {mermaid_code[:100]}...")
                     
-                    # Генерируем визуализацию
-                    mermaid_code = self._generate_mermaid_from_concepts(concepts)
-                    svg_code = self._generate_svg_from_concepts(concepts)
+                    # Извлекаем концепты для обратной совместимости
+                    concepts = self._extract_concepts_from_mermaid(mermaid_code)
                     
                     return {
                         "mermaid_code": mermaid_code,
-                        "svg_code": svg_code,
+                        "svg_code": "",  # Отказываемся от SVG
                         "topic": topic,
                         "concepts": concepts,
                         "success": True
@@ -787,54 +696,88 @@ class LLMIntegration:
             print(f"❌ Ошибка генерации визуализации: {e}")
             return self._generate_fallback_visualization(topic)
 
-    def _clean_json_response(self, response: str) -> str:
-        """Очистка JSON ответа от лишнего текста"""
-        if not response:
+    def _clean_mermaid_code(self, code: str) -> str:
+        """Очистка Mermaid кода от лишних символов"""
+        if not code:
             return ""
         
         # Удаляем markdown обратные кавычки
-        response = re.sub(r'```json\s*', '', response)
-        response = re.sub(r'```\s*', '', response)
+        code = re.sub(r'```[\s\S]*?```', '', code)
+        code = re.sub(r'`', '', code)
         
-        # Ищем JSON объект
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            return json_match.group()
+        # Удаляем комментарии Mermaid
+        code = re.sub(r'%%.*', '', code)
         
-        return response.strip()
+        # Удаляем лишние пробелы и пустые строки
+        code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
+        
+        # Проверяем базовый синтаксис
+        valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
+        
+        # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
+        if not any(code.strip().startswith(start) for start in valid_starts):
+            code = 'flowchart TD\n' + code
+        
+        # Убедимся, что есть базовые элементы
+        lines = code.split('\n')
+        if len(lines) < 2 or ('-->' not in code and '->' not in code):
+            # Добавляем простую структуру если нет связей
+            if len(lines) > 1:
+                code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
+            else:
+                code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
+        
+        return code.strip()
 
-    def _parse_json_concepts(self, json_response: str) -> Dict:
-        """Парсинг концептов из JSON ответа"""
+    def _validate_mermaid_code(self, code: str) -> bool:
+        """Проверяет валидность Mermaid кода"""
+        if not code:
+            return False
+            
+        # Базовые проверки синтаксиса
+        required_patterns = [
+            r'flowchart\s+TD|graph\s+TD',
+            r'-->|->',
+            r'\[".*"\]|\(.*\)'
+        ]
+        
+        for pattern in required_patterns:
+            if not re.search(pattern, code, re.IGNORECASE):
+                print(f"❌ Невалидный Mermaid код: отсутствует паттерн {pattern}")
+                return False
+                
+        return True
+
+    def _extract_concepts_from_mermaid(self, mermaid_code: str) -> Dict:
+        """Извлекает концепты из Mermaid кода для обратной совместимости"""
         concepts = {
             "main_concept": "",
             "aspects": []
         }
         
         try:
-            if not json_response:
-                return concepts
-                
-            data = json.loads(json_response)
+            lines = mermaid_code.split('\n')
+            for line in lines:
+                line = line.strip()
+                # Ищем основное понятие (первый элемент с ссылками)
+                if '-->' in line and '["' in line:
+                    # Извлекаем основное понятие из левой части
+                    main_match = re.search(r'(\w+)\[".*?"\]\s*-->', line)
+                    if main_match:
+                        concepts["main_concept"] = main_match.group(1)
+                    
+                    # Извлекаем аспекты из правой части
+                    aspect_matches = re.findall(r'-->\s*(\w+)\[".*?"\]', line)
+                    concepts["aspects"].extend(aspect_matches)
             
-            concepts["main_concept"] = data.get("main_concept", "")
-            
-            aspects = data.get("aspects", [])
-            if isinstance(aspects, list):
-                # Ограничиваем количество аспектов и очищаем их
-                concepts["aspects"] = [str(aspect).strip() for aspect in aspects[:4] if aspect]
-            else:
-                concepts["aspects"] = []
+            # Если не нашли, создаем fallback
+            if not concepts["main_concept"]:
+                concepts["main_concept"] = "Основное понятие"
+            if not concepts["aspects"]:
+                concepts["aspects"] = ["Аспект 1", "Аспект 2", "Аспект 3"]
                 
-            # Заполняем если недостаточно аспектов
-            while len(concepts["aspects"]) < 3:
-                concepts["aspects"].append(f"Аспект {len(concepts['aspects']) + 1}")
-                
-        except json.JSONDecodeError as e:
-            print(f"❌ Ошибка парсинга JSON: {e}")
-            # Пробуем извлечь концепты текстовым методом
-            concepts = self._parse_concepts_from_response(json_response)
         except Exception as e:
-            print(f"❌ Ошибка обработки JSON концептов: {e}")
+            print(f"❌ Ошибка извлечения концептов из Mermaid: {e}")
             concepts = {
                 "main_concept": "Основное понятие",
                 "aspects": ["Аспект 1", "Аспект 2", "Аспект 3"]
