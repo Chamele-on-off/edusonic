@@ -9,16 +9,17 @@
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <style>
         :root {
-            --primary: #4263EB;
-            --secondary: #3a0ca3;
+            --primary: #7E76F9;
+            --secondary: #6A61E5;
             --success: #4cc9f0;
             --danger: #f72585;
             --dark: #212529;
             --light: #f8f9fa;
             --gray: #6c757d;
-            --teacher-color: #4cc9f0;
+            --teacher-color: #7E76F9;
             --student-color: #f72585;
             --board-bg: #F5F6F8;
             --board-text: #333333;
@@ -36,8 +37,8 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #0a0e2a;
-            color: white;
+            background: linear-gradient(135deg, #f0f4ff, #e6f0ff, #f5f0ff);
+            color: #333;
             height: 100vh;
             display: flex;
             flex-direction: column;
@@ -48,7 +49,7 @@
         /* Embed mode styles */
         body.embedded {
             height: auto;
-            background: #1a2a6c;
+            background: #f0f4ff;
         }
         
         body.embedded #header {
@@ -57,7 +58,7 @@
         
         body.embedded #controls {
             padding: 10px;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(255, 255, 255, 0.95);
         }
         
         body.embedded .control-btn {
@@ -71,7 +72,7 @@
         }
         
         #header {
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(255, 255, 255, 0.95);
             padding: 12px 20px;
             display: flex;
             justify-content: space-between;
@@ -79,6 +80,7 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             z-index: 100;
+            border-bottom: 1px solid rgba(126, 118, 249, 0.1);
         }
         
         #logo {
@@ -87,6 +89,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            color: var(--primary);
         }
         
         #main {
@@ -104,45 +107,14 @@
             position: relative;
         }
         
-        #background-animation {
+        /* Particles Background */
+        #particles-background {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: 0;
-        }
-        
-        /* Геометрические фигуры для фона */
-        .geo-shape {
-            position: absolute;
-            pointer-events: none;
-            opacity: 0.6;
-        }
-        
-        .geo-line {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--primary), transparent);
-            transform-origin: left center;
-        }
-        
-        .geo-circle {
-            border-radius: 50%;
-            border: 1px solid var(--success);
-            background: radial-gradient(circle, transparent 30%, rgba(76, 201, 240, 0.1) 100%);
-        }
-        
-        .geo-triangle {
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-color: transparent transparent var(--danger) transparent;
-            background: transparent;
-        }
-        
-        .geo-square {
-            border: 1px solid var(--secondary);
-            background: rgba(58, 12, 163, 0.1);
         }
         
         /* Основное окно урока */
@@ -444,7 +416,7 @@
         
         .text-widget:active {
             cursor: grabbing;
-            box-shadow: 0 4px 20px rgba(66, 99, 235, 0.15);
+            box-shadow: 0 4px 20px rgba(126, 118, 249, 0.15);
         }
         
         .widget-handle {
@@ -578,7 +550,7 @@
             border: 3px solid var(--teacher-color);
             border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 8px 25px rgba(76, 201, 240, 0.3);
+            box-shadow: 0 8px 25px rgba(126, 118, 249, 0.3);
             z-index: 10;
             background: black;
             transition: all 0.3s ease;
@@ -597,7 +569,7 @@
             position: absolute;
             bottom: calc(100% + 10px);
             right: 0;
-            background: linear-gradient(135deg, var(--teacher-color), #3a86ff);
+            background: linear-gradient(135deg, var(--teacher-color), var(--secondary));
             color: white;
             padding: 12px 20px;
             border-radius: 20px;
@@ -605,7 +577,7 @@
             font-size: 14px;
             z-index: 11;
             display: none;
-            box-shadow: 0 8px 20px rgba(76, 201, 240, 0.4);
+            box-shadow: 0 8px 20px rgba(126, 118, 249, 0.4);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             animation: speechAppear 0.3s ease-out;
@@ -665,7 +637,7 @@
             position: absolute;
             top: 20px;
             left: 20px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(255, 255, 255, 0.9);
             padding: 10px 15px;
             border-radius: 8px;
             font-size: 14px;
@@ -676,6 +648,7 @@
             flex-direction: column;
             gap: 5px;
             max-width: 80%;
+            border: 1px solid rgba(126, 118, 249, 0.1);
         }
         
         #participants {
@@ -685,7 +658,7 @@
         }
         
         #controls {
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(255, 255, 255, 0.95);
             padding: 15px;
             display: flex;
             justify-content: center;
@@ -693,6 +666,7 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             z-index: 100;
+            border-top: 1px solid rgba(126, 118, 249, 0.1);
         }
         
         .control-btn {
@@ -700,8 +674,8 @@
             height: 60px;
             border-radius: 50%;
             border: none;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
+            background: rgba(126, 118, 249, 0.1);
+            color: var(--primary);
             cursor: pointer;
             display: flex;
             flex-direction: column;
@@ -718,11 +692,12 @@
         }
         
         .control-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(126, 118, 249, 0.2);
         }
         
         .control-btn.active {
             background: var(--primary);
+            color: white;
         }
         
         .control-btn span {
@@ -732,6 +707,7 @@
         
         #end-call-btn {
             background: var(--danger);
+            color: white;
         }
         
         #end-call-btn:active {
@@ -752,7 +728,7 @@
             font-size: 18px;
             cursor: pointer;
             z-index: 1000;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 5px 15px rgba(126, 118, 249, 0.3);
             transition: all 0.3s ease;
             display: none;
             -webkit-user-select: none;
@@ -769,7 +745,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(255, 255, 255, 0.95);
             padding: 20px;
             border-radius: 15px;
             text-align: center;
@@ -777,6 +753,7 @@
             -webkit-backdrop-filter: blur(10px);
             z-index: 20;
             display: none;
+            border: 1px solid rgba(126, 118, 249, 0.1);
         }
         
         .camera-permission button {
@@ -901,7 +878,7 @@
             width: 40px;
             height: 40px;
             border: 4px solid #f3f3f3;
-            border-top: 4px solid #4263EB;
+            border-top: 4px solid var(--primary);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin-bottom: 15px;
@@ -947,7 +924,7 @@
         }
 
         .retry-button {
-            background: #4263EB;
+            background: var(--primary);
             color: white;
         }
 
@@ -958,7 +935,7 @@
         }
 
         .retry-button:hover {
-            background: #3a0ca3;
+            background: var(--secondary);
         }
 
         .fallback-button:hover {
@@ -986,7 +963,7 @@
             color: #333;
             font-size: 16px;
             padding: 10px;
-            background: linear-gradient(135deg, #4263EB, #3a0ca3);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
             color: white;
             border-radius: 8px 8px 0 0;
         }
@@ -1022,8 +999,8 @@
             top: 100px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
+            background: rgba(255, 255, 255, 0.95);
+            color: var(--primary);
             padding: 15px 25px;
             border-radius: 25px;
             font-size: 16px;
@@ -1033,7 +1010,7 @@
             display: none;
             max-width: 80%;
             text-align: center;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 5px 20px rgba(126, 118, 249, 0.2);
             border: 2px solid var(--student-color);
         }
 
@@ -1042,131 +1019,85 @@
             font-weight: 500;
         }
 
-        /* Индикатор размышления - НОВЫЙ СТИЛЬ */
+        /* Индикатор размышления - Частицы */
         .thinking-indicator {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 180px;
-            height: 180px;
+            width: 200px;
+            height: 200px;
             z-index: 15;
             display: none;
             pointer-events: none;
         }
 
-        .thinking-sphere {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .particle-ring {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            opacity: 0;
-            transition: opacity 0.5s ease;
-        }
-
-        .particle-ring.active {
-            opacity: 1;
-        }
-
-        .particle {
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background: #4cc9f0;
-            border-radius: 50%;
-            filter: blur(1px);
-            animation: particle-float 3s infinite ease-in-out;
-        }
-
-        .energy-line {
-            position: absolute;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #4cc9f0, transparent);
-            transform-origin: left center;
-            animation: energy-rotate 4s infinite linear;
-        }
-
-        .thinking-text {
-            position: absolute;
-            bottom: -40px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: #4cc9f0;
-            font-family: 'Arial', sans-serif;
-            font-size: 14px;
-            font-weight: 600;
-            text-align: center;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity 0.5s ease;
-        }
-
-        .thinking-text.active {
-            opacity: 1;
-        }
-
-        @keyframes particle-float {
-            0%, 100% { transform: translateY(0) scale(1); opacity: 0.7; }
-            50% { transform: translateY(-10px) scale(1.1); opacity: 1; }
-        }
-
-        @keyframes energy-rotate {
-            0% { transform: rotate(0deg) scale(1); }
-            50% { transform: rotate(180deg) scale(1.1); }
-            100% { transform: rotate(360deg) scale(1); }
-        }
-
-        @keyframes glow-pulse {
-            0%, 100% { box-shadow: 0 0 20px rgba(76, 201, 240, 0.3); }
-            50% { box-shadow: 0 0 40px rgba(76, 201, 240, 0.6); }
-        }
-
-        /* Стили для нового фона */
-        .particle-background {
+        #thinking-particles {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden;
-            z-index: 0;
         }
 
-        .floating-particle {
+        .thinking-text {
             position: absolute;
-            background: rgba(76, 201, 240, 0.1);
-            border-radius: 50%;
-            animation: float 6s infinite ease-in-out;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 16px;
+            text-align: center;
+            z-index: 16;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
         }
 
-        .energy-connection {
+        /* LLM Status Indicator */
+        .llm-status-indicator {
             position: absolute;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(76, 201, 240, 0.3), transparent);
-            transform-origin: left center;
-            animation: energy-flow 8s infinite linear;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: none;
+            border: 1px solid rgba(126, 118, 249, 0.1);
         }
 
-        @keyframes float {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            25% { transform: translate(10px, -15px) scale(1.1); }
-            50% { transform: translate(-5px, 10px) scale(0.9); }
-            75% { transform: translate(-15px, -5px) scale(1.05); }
+        .llm-status-working {
+            background: rgba(126, 118, 249, 0.9);
+            color: white;
         }
 
-        @keyframes energy-flow {
-            0% { transform: rotate(0deg) scaleX(1); opacity: 0.3; }
-            50% { transform: rotate(180deg) scaleX(1.2); opacity: 0.6; }
-            100% { transform: rotate(360deg) scaleX(1); opacity: 0.3; }
+        .llm-status-error {
+            background: rgba(247, 37, 133, 0.9);
+            color: white;
+        }
+
+        .llm-status-success {
+            background: rgba(126, 118, 249, 0.9);
+            color: white;
+        }
+
+        /* Auto-continue status */
+        #auto-continue-status {
+            font-size: 12px;
+            margin-top: 3px;
+            color: var(--gray);
+        }
+
+        /* Анимации */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 768px) {
@@ -1279,13 +1210,8 @@
             }
 
             .thinking-indicator {
-                width: 140px;
-                height: 140px;
-            }
-
-            .thinking-text {
-                font-size: 12px;
-                bottom: -35px;
+                width: 150px;
+                height: 150px;
             }
         }
         
@@ -1405,8 +1331,8 @@
             }
 
             .thinking-text {
-                font-size: 11px;
-                bottom: -30px;
+                font-size: 14px;
+                padding: 8px 16px;
             }
         }
         
@@ -1469,7 +1395,7 @@
             transform: translate(-50%, -50%);
             width: 40px;
             height: 40px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
+            border: 4px solid rgba(126, 118, 249, 0.3);
             border-top-color: var(--teacher-color);
             border-radius: 50%;
             animation: spin 1s ease-in-out infinite;
@@ -1484,7 +1410,7 @@
         #speech-status {
             font-size: 12px;
             margin-top: 3px;
-            color: #95a5a6;
+            color: var(--gray);
         }
         
         /* Visualization loading */
@@ -1537,46 +1463,6 @@
             height: 15px;
             cursor: nwse-resize;
         }
-
-        /* LLM Status Indicator */
-        .llm-status-indicator {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            display: none;
-        }
-
-        .llm-status-working {
-            background: rgba(76, 201, 240, 0.8);
-        }
-
-        .llm-status-error {
-            background: rgba(247, 37, 133, 0.8);
-        }
-
-        .llm-status-success {
-            background: rgba(76, 201, 240, 0.8);
-        }
-
-        /* Auto-continue status */
-        #auto-continue-status {
-            font-size: 12px;
-            margin-top: 3px;
-            color: #95a5a6;
-        }
-
-        /* Анимации */
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -1590,20 +1476,13 @@
 
     <div id="main">
         <div id="video-container">
-            <!-- Новый фон с частицами -->
-            <div id="background-animation" class="particle-background"></div>
+            <!-- Particles Background -->
+            <div id="particles-background"></div>
             
-            <!-- Индикатор размышления - НОВЫЙ ДИЗАЙН -->
+            <!-- Индикатор размышления - Частицы -->
             <div class="thinking-indicator" id="thinking-indicator">
-                <div class="thinking-sphere">
-                    <div class="particle-ring" id="particle-ring-1"></div>
-                    <div class="particle-ring" id="particle-ring-2"></div>
-                    <div class="particle-ring" id="particle-ring-3"></div>
-                    <div class="energy-line" id="energy-line-1"></div>
-                    <div class="energy-line" id="energy-line-2"></div>
-                    <div class="energy-line" id="energy-line-3"></div>
-                </div>
-                <div class="thinking-text" id="thinking-text">Размышляю...</div>
+                <div id="thinking-particles"></div>
+                <div class="thinking-text">Размышляю...</div>
             </div>
             
             <!-- Дисплей распознанной речи -->
@@ -1785,10 +1664,10 @@
                     <i class="fas fa-users"></i>
                     <span id="participants-count">1</span> участников
                 </div>
-                <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">😴 Режим покоя</div>
+                <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">😴 Режим покоя</div>
                 <div id="speech-status">🎤 Распознавание: выкл</div>
                 <div id="auto-continue-status">⏰ Автопродолжение: выкл</div>
-                <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: #95a5a6;">
+                <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
                     <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
                 </div>
             </div>
@@ -1972,7 +1851,7 @@
                         <button onclick="mermaidFix.retryLast()" style="
                             margin-top: 10px;
                             padding: 8px 16px;
-                            background: #4263EB;
+                            background: var(--primary);
                             color: white;
                             border: none;
                             border-radius: 4px;
@@ -2159,7 +2038,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet">
                                 <style>
                                     .fallback-text { font-family: Arial; font-size: 14px; fill: #666; }
-                                    .fallback-shape { fill: #4263EB; stroke: #3a0ca3; stroke-width: 2; }
+                                    .fallback-shape { fill: var(--primary); stroke: var(--secondary); stroke-width: 2; }
                                 </style>
                                 <rect x="50" y="50" width="300" height="200" rx="10" class="fallback-shape" opacity="0.1"/>
                                 <text x="200" y="120" text-anchor="middle" class="fallback-text">
@@ -2326,7 +2205,7 @@
         const visualizationWindow = document.getElementById('visualization-window');
         const lessonText = document.getElementById('lesson-text');
         const lessonCanvas = document.getElementById('lesson-canvas');
-        const backgroundAnimation = document.getElementById('background-animation');
+        const backgroundAnimation = document.getElementById('particles-background');
         const cameraPermission = document.getElementById('camera-permission');
         const enableCameraBtn = document.getElementById('enable-camera-btn');
         const textWidget = document.getElementById('main-text-widget');
@@ -2362,13 +2241,7 @@
         const speechDisplay = document.getElementById('speech-display');
         const speechText = document.getElementById('speech-text');
         const thinkingIndicator = document.getElementById('thinking-indicator');
-        const particleRing1 = document.getElementById('particle-ring-1');
-        const particleRing2 = document.getElementById('particle-ring-2');
-        const particleRing3 = document.getElementById('particle-ring-3');
-        const energyLine1 = document.getElementById('energy-line-1');
-        const energyLine2 = document.getElementById('energy-line-2');
-        const energyLine3 = document.getElementById('energy-line-3');
-        const thinkingText = document.getElementById('thinking-text');
+        const thinkingParticles = document.getElementById('thinking-particles');
 
         // Глобальные переменные
         let userStream = null;
@@ -2379,7 +2252,6 @@
         let recognition = null;
         let aiTeacherActivated = false;
         let aiTeacherWasActivated = false;
-        let animationShapes = [];
         let currentLesson = null;
         let currentParagraph = 0;
         let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -2458,8 +2330,254 @@
             roomJoined: false
         };
 
-        // Таймер для отложенного запуска анимации индикатора
-        let thinkingAnimationTimer = null;
+        // Particles.js инстансы
+        let particlesBackground = null;
+        let thinkingParticlesInstance = null;
+        let thinkingIndicatorTimeout = null;
+
+        // Инициализация частиц фона
+        function initParticlesBackground() {
+            particlesBackground = particlesJS('particles-background', {
+                "particles": {
+                    "number": {
+                        "value": 60,
+                        "density": {
+                            "enable": true,
+                            "value_area": 800
+                        }
+                    },
+                    "color": {
+                        "value": ["#7E76F9", "#6A61E5", "#FF7B9C", "#4cc9f0"]
+                    },
+                    "shape": {
+                        "type": "circle",
+                        "stroke": {
+                            "width": 0,
+                            "color": "#000000"
+                        }
+                    },
+                    "opacity": {
+                        "value": 0.5,
+                        "random": true,
+                        "anim": {
+                            "enable": false,
+                            "speed": 1,
+                            "opacity_min": 0.1,
+                            "sync": false
+                        }
+                    },
+                    "size": {
+                        "value": 3,
+                        "random": true,
+                        "anim": {
+                            "enable": false,
+                            "speed": 40,
+                            "size_min": 0.1,
+                            "sync": false
+                        }
+                    },
+                    "line_linked": {
+                        "enable": true,
+                        "distance": 120,
+                        "color": "#7E76F9",
+                        "opacity": 0.2,
+                        "width": 1
+                    },
+                    "move": {
+                        "enable": true,
+                        "speed": 1.5,
+                        "direction": "none",
+                        "random": false,
+                        "straight": false,
+                        "out_mode": "out",
+                        "bounce": false,
+                        "attract": {
+                            "enable": false,
+                            "rotateX": 600,
+                            "rotateY": 1200
+                        }
+                    }
+                },
+                "interactivity": {
+                    "detect_on": "canvas",
+                    "events": {
+                        "onhover": {
+                            "enable": true,
+                            "mode": "grab"
+                        },
+                        "onclick": {
+                            "enable": true,
+                            "mode": "push"
+                        },
+                        "resize": true
+                    },
+                    "modes": {
+                        "grab": {
+                            "distance": 140,
+                            "line_linked": {
+                                "opacity": 0.3
+                            }
+                        },
+                        "bubble": {
+                            "distance": 400,
+                            "size": 40,
+                            "duration": 2,
+                            "opacity": 8,
+                            "speed": 3
+                        },
+                        "repulse": {
+                            "distance": 200,
+                            "duration": 0.4
+                        },
+                        "push": {
+                            "particles_nb": 4
+                        },
+                        "remove": {
+                            "particles_nb": 2
+                        }
+                    }
+                },
+                "retina_detect": true
+            });
+        }
+
+        // Инициализация частиц для индикатора размышления
+        function initThinkingParticles() {
+            thinkingParticlesInstance = particlesJS('thinking-particles', {
+                "particles": {
+                    "number": {
+                        "value": 40,
+                        "density": {
+                            "enable": true,
+                            "value_area": 400
+                        }
+                    },
+                    "color": {
+                        "value": ["#7E76F9", "#6A61E5", "#FF7B9C", "#4cc9f0"]
+                    },
+                    "shape": {
+                        "type": "circle",
+                        "stroke": {
+                            "width": 0,
+                            "color": "#000000"
+                        }
+                    },
+                    "opacity": {
+                        "value": 0.8,
+                        "random": true,
+                        "anim": {
+                            "enable": true,
+                            "speed": 1,
+                            "opacity_min": 0.2,
+                            "sync": false
+                        }
+                    },
+                    "size": {
+                        "value": 4,
+                        "random": true,
+                        "anim": {
+                            "enable": true,
+                            "speed": 4,
+                            "size_min": 1,
+                            "sync": false
+                        }
+                    },
+                    "line_linked": {
+                        "enable": true,
+                        "distance": 100,
+                        "color": "#7E76F9",
+                        "opacity": 0.6,
+                        "width": 2
+                    },
+                    "move": {
+                        "enable": true,
+                        "speed": 2,
+                        "direction": "none",
+                        "random": false,
+                        "straight": false,
+                        "out_mode": "bounce",
+                        "bounce": false,
+                        "attract": {
+                            "enable": true,
+                            "rotateX": 600,
+                            "rotateY": 1200
+                        }
+                    }
+                },
+                "interactivity": {
+                    "detect_on": "canvas",
+                    "events": {
+                        "onhover": {
+                            "enable": true,
+                            "mode": "repulse"
+                        },
+                        "onclick": {
+                            "enable": true,
+                            "mode": "push"
+                        },
+                        "resize": true
+                    },
+                    "modes": {
+                        "grab": {
+                            "distance": 140,
+                            "line_linked": {
+                                "opacity": 0.8
+                            }
+                        },
+                        "bubble": {
+                            "distance": 400,
+                            "size": 40,
+                            "duration": 2,
+                            "opacity": 8,
+                            "speed": 3
+                        },
+                        "repulse": {
+                            "distance": 100,
+                            "duration": 0.4
+                        },
+                        "push": {
+                            "particles_nb": 4
+                        },
+                        "remove": {
+                            "particles_nb": 2
+                        }
+                    }
+                },
+                "retina_detect": true
+            });
+        }
+
+        // Функции для индикатора размышления с задержкой
+        function showThinkingIndicator() {
+            // Очищаем предыдущий таймаут
+            if (thinkingIndicatorTimeout) {
+                clearTimeout(thinkingIndicatorTimeout);
+            }
+            
+            // Устанавливаем новый таймаут на 2 секунды
+            thinkingIndicatorTimeout = setTimeout(() => {
+                if (thinkingIndicator) {
+                    thinkingIndicator.style.display = 'block';
+                    initThinkingParticles();
+                }
+            }, 2000);
+        }
+
+        function hideThinkingIndicator() {
+            // Очищаем таймаут если индикатор еще не показан
+            if (thinkingIndicatorTimeout) {
+                clearTimeout(thinkingIndicatorTimeout);
+                thinkingIndicatorTimeout = null;
+            }
+            
+            if (thinkingIndicator) {
+                thinkingIndicator.style.display = 'none';
+                // Останавливаем частицы
+                if (thinkingParticlesInstance && thinkingParticlesInstance.pJSDom && thinkingParticlesInstance.pJSDom[0]) {
+                    thinkingParticlesInstance.pJSDom[0].pJS.fn.particlesEmpty();
+                }
+            }
+        }
 
         function checkRoomActivationReady() {
             return roomActivationState.peerReady && 
@@ -2472,6 +2590,7 @@
             const button = document.getElementById('activate-ai-btn');
             if (!button) return;
             
+            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
             if (aiTeacherWasActivated) {
                 button.style.display = 'none';
                 return;
@@ -2494,178 +2613,12 @@
             updateActivationButton();
         }
 
-        // НОВАЯ ФУНКЦИЯ: Создание частиц для фона
-        function createParticleBackground() {
-            // Очищаем старые элементы
-            backgroundAnimation.innerHTML = '';
-            
-            // Создаем плавающие частицы
-            for (let i = 0; i < 25; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'floating-particle';
-                
-                const size = Math.random() * 8 + 2;
-                particle.style.width = `${size}px`;
-                particle.style.height = `${size}px`;
-                particle.style.left = `${Math.random() * 100}%`;
-                particle.style.top = `${Math.random() * 100}%`;
-                particle.style.background = `rgba(76, 201, 240, ${Math.random() * 0.1 + 0.05})`;
-                particle.style.animationDelay = `${Math.random() * 6}s`;
-                
-                backgroundAnimation.appendChild(particle);
-            }
-            
-            // Создаем энергетические соединения
-            for (let i = 0; i < 15; i++) {
-                const connection = document.createElement('div');
-                connection.className = 'energy-connection';
-                
-                const length = Math.random() * 200 + 50;
-                connection.style.width = `${length}px`;
-                connection.style.left = `${Math.random() * 100}%`;
-                connection.style.top = `${Math.random() * 100}%`;
-                connection.style.animationDelay = `${Math.random() * 8}s`;
-                
-                backgroundAnimation.appendChild(connection);
-            }
-        }
-
-        // НОВАЯ ФУНКЦИЯ: Создание частиц для индикатора размышления
-        function createThinkingParticles() {
-            // Очищаем старые частицы
-            particleRing1.innerHTML = '';
-            particleRing2.innerHTML = '';
-            particleRing3.innerHTML = '';
-            
-            // Создаем частицы для первого кольца
-            for (let i = 0; i < 12; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                
-                const angle = (i / 12) * Math.PI * 2;
-                const radius = 60;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                
-                particle.style.left = `calc(50% + ${x}px)`;
-                particle.style.top = `calc(50% + ${y}px)`;
-                particle.style.animationDelay = `${i * 0.2}s`;
-                
-                particleRing1.appendChild(particle);
-            }
-            
-            // Создаем частицы для второго кольца
-            for (let i = 0; i < 16; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                
-                const angle = (i / 16) * Math.PI * 2;
-                const radius = 40;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                
-                particle.style.left = `calc(50% + ${x}px)`;
-                particle.style.top = `calc(50% + ${y}px)`;
-                particle.style.animationDelay = `${i * 0.15}s`;
-                particle.style.background = 'rgba(66, 99, 235, 0.8)';
-                
-                particleRing2.appendChild(particle);
-            }
-            
-            // Создаем частицы для третьего кольца
-            for (let i = 0; i < 20; i++) {
-                const particle = document.createElement('div');
-                particle.className = 'particle';
-                
-                const angle = (i / 20) * Math.PI * 2;
-                const radius = 80;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                
-                particle.style.left = `calc(50% + ${x}px)`;
-                particle.style.top = `calc(50% + ${y}px)`;
-                particle.style.animationDelay = `${i * 0.25}s`;
-                particle.style.background = 'rgba(247, 37, 133, 0.6)';
-                
-                particleRing3.appendChild(particle);
-            }
-            
-            // Настраиваем энергетические линии
-            energyLine1.style.width = '120px';
-            energyLine1.style.top = 'calc(50% - 1px)';
-            energyLine1.style.left = 'calc(50% - 60px)';
-            energyLine1.style.animationDelay = '0s';
-            
-            energyLine2.style.width = '100px';
-            energyLine2.style.top = 'calc(50% - 1px)';
-            energyLine2.style.left = 'calc(50% - 50px)';
-            energyLine2.style.animationDelay = '1.3s';
-            
-            energyLine3.style.width = '140px';
-            energyLine3.style.top = 'calc(50% - 1px)';
-            energyLine3.style.left = 'calc(50% - 70px)';
-            energyLine3.style.animationDelay = '2.7s';
-        }
-
-        // НОВАЯ ФУНКЦИЯ: Показать индикатор размышления с задержкой
-        function showThinkingIndicator() {
-            // Очищаем предыдущий таймер
-            if (thinkingAnimationTimer) {
-                clearTimeout(thinkingAnimationTimer);
-            }
-            
-            // Устанавливаем таймер на 2 секунды
-            thinkingAnimationTimer = setTimeout(() => {
-                if (thinkingIndicator) {
-                    thinkingIndicator.style.display = 'block';
-                    
-                    // Создаем частицы
-                    createThinkingParticles();
-                    
-                    // Активируем кольца с задержкой
-                    setTimeout(() => {
-                        particleRing1.classList.add('active');
-                    }, 200);
-                    
-                    setTimeout(() => {
-                        particleRing2.classList.add('active');
-                    }, 500);
-                    
-                    setTimeout(() => {
-                        particleRing3.classList.add('active');
-                        thinkingText.classList.add('active');
-                    }, 800);
-                }
-            }, 2000);
-        }
-
-        // НОВАЯ ФУНКЦИЯ: Скрыть индикатор размышления
-        function hideThinkingIndicator() {
-            // Очищаем таймер, если анимация еще не началась
-            if (thinkingAnimationTimer) {
-                clearTimeout(thinkingAnimationTimer);
-                thinkingAnimationTimer = null;
-            }
-            
-            if (thinkingIndicator) {
-                // Деактивируем элементы с анимацией
-                particleRing1.classList.remove('active');
-                particleRing2.classList.remove('active');
-                particleRing3.classList.remove('active');
-                thinkingText.classList.remove('active');
-                
-                // Скрываем индикатор после завершения анимации
-                setTimeout(() => {
-                    thinkingIndicator.style.display = 'none';
-                }, 500);
-            }
-        }
-
         // Функции для отображения распознанной речи
         function showSpeechDisplay(text) {
             speechText.textContent = text;
             speechDisplay.style.display = 'block';
             
+            // Автоматическое скрытие через 5 секунд
             setTimeout(() => {
                 speechDisplay.style.display = 'none';
             }, 5000);
@@ -2673,161 +2626,6 @@
 
         function hideSpeechDisplay() {
             speechDisplay.style.display = 'none';
-        }
-
-        // Инициализация PeerJS
-        function initPeerJS() {
-            console.log('Инициализация PeerJS для комнаты:', roomId);
-            
-            peer = new Peer({
-                host: '0.peerjs.com',
-                port: 443,
-                path: '/',
-                secure: true,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
-            });
-
-            peer.on('open', (id) => {
-                console.log('✅ PeerJS подключен с ID:', id, 'для комнаты:', roomId);
-                peerId = id;
-                statusDiv.textContent = 'Подключение к конференции...';
-                
-                setActivationState('peerReady', true);
-                
-                if (socket && socket.connected) {
-                    socket.emit('join_room', { 
-                        room_id: roomId,
-                        peer_id: id 
-                    });
-                } else {
-                    console.warn('WebSocket не готов для отправки join_room');
-                }
-            });
-
-            peer.on('call', (call) => {
-                console.log('Получен входящий вызов от:', call.peer);
-                
-                call.answer(localStream);
-                
-                call.on('stream', (remoteStream) => {
-                    console.log('Получен удаленный поток от:', call.peer);
-                    addRemoteVideo(call.peer, remoteStream);
-                });
-                
-                call.on('close', () => {
-                    console.log('Вызов завершен от:', call.peer);
-                    removeRemoteVideo(call.peer);
-                });
-                
-                call.on('error', (err) => {
-                    console.error('Ошибка вызова:', err);
-                    removeRemoteVideo(call.peer);
-                });
-            });
-
-            peer.on('connection', (conn) => {
-                console.log('Получено соединение данных от:', conn.peer);
-            });
-
-            peer.on('disconnected', () => {
-                console.log('PeerJS отключен');
-                statusDiv.textContent = 'Переподключение...';
-                setActivationState('peerReady', false);
-                peer.reconnect();
-            });
-
-            peer.on('close', () => {
-                console.log('PeerJS закрыт');
-                statusDiv.textContent = 'Соединение закрыто';
-                setActivationState('peerReady', false);
-            });
-
-            peer.on('error', (err) => {
-                console.error('PeerJS ошибка:', err);
-                statusDiv.textContent = 'Ошибка соединения: ' + err.type;
-                setActivationState('peerReady', false);
-            });
-        }
-
-        // Добавление удаленного видео
-        function addRemoteVideo(peerId, stream) {
-            if (remoteStreams.has(peerId)) {
-                return;
-            }
-
-            const videoContainer = document.createElement('div');
-            videoContainer.className = 'remote-video-container';
-            videoContainer.id = `remote-${peerId}`;
-
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            video.autoplay = true;
-            video.playsinline = true;
-
-            const peerLabel = document.createElement('div');
-            peerLabel.className = 'remote-peer-label';
-            peerLabel.textContent = `Участник ${peerId.substring(0, 6)}`;
-
-            videoContainer.appendChild(video);
-            videoContainer.appendChild(peerLabel);
-            remoteVideosContainer.appendChild(videoContainer);
-
-            remoteStreams.set(peerId, {
-                stream: stream,
-                videoElement: video,
-                container: videoContainer
-            });
-
-            updateParticipantsCount();
-        }
-
-        // Удаление удаленного видео
-        function removeRemoteVideo(peerId) {
-            const remote = remoteStreams.get(peerId);
-            if (remote) {
-                if (remote.container && remote.container.parentNode) {
-                    remote.container.parentNode.removeChild(remote.container);
-                }
-                remoteStreams.delete(peerId);
-                updateParticipantsCount();
-            }
-        }
-
-        // Обновление счетчика участников
-        function updateParticipantsCount() {
-            const totalParticipants = remoteStreams.size + 1;
-            participantsCount.textContent = totalParticipants;
-        }
-
-        // Подключение к другим участникам
-        function connectToPeer(remotePeerId) {
-            if (!localStream || peerId === remotePeerId) {
-                return;
-            }
-
-            console.log('Подключение к участнику:', remotePeerId);
-            
-            const call = peer.call(remotePeerId, localStream);
-            
-            call.on('stream', (remoteStream) => {
-                console.log('Получен поток от:', remotePeerId);
-                addRemoteVideo(remotePeerId, remoteStream);
-            });
-            
-            call.on('close', () => {
-                console.log('Соединение закрыто с:', remotePeerId);
-                removeRemoteVideo(remotePeerId);
-            });
-            
-            call.on('error', (err) => {
-                console.error('Ошибка соединения с', remotePeerId, ':', err);
-                removeRemoteVideo(remotePeerId);
-            });
         }
 
         // Функции автоматического продолжения
@@ -2883,11 +2681,11 @@
         function updateAutoContinueStatus(status) {
             if (autoContinueStatus) {
                 if (status.includes('активен')) {
-                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: #4cc9f0;">' + status + '</span>';
+                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: var(--primary);">' + status + '</span>';
                 } else if (status.includes('отправлена')) {
-                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: #f72585;">' + status + '</span>';
+                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: var(--danger);">' + status + '</span>';
                 } else {
-                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: #95a5a6;">' + status + '</span>';
+                    autoContinueStatus.innerHTML = '⏰ Автопродолжение: <span style="color: var(--gray);">' + status + '</span>';
                 }
             }
         }
@@ -3307,6 +3105,7 @@
                         }
                     }
 
+                    // Показываем промежуточные результаты
                     if (interimTranscript) {
                         showSpeechDisplay(interimTranscript + '...');
                     }
@@ -3342,10 +3141,12 @@
                         console.log('Распознана речь:', cleanText);
                         lastFinalResult = cleanText;
                         
+                        // Показываем финальный результат
                         showSpeechDisplay(cleanText);
                         
                         handleStudentActivity();
                         
+                        // Отправляем на сервер
                         handleRecognizedSpeech(cleanText);
                     }
                     
@@ -3417,10 +3218,10 @@
             if (speechStatus) {
                 if (listening) {
                     speechStatus.textContent = '🎤 Распознавание: слушаю...';
-                    speechStatus.style.color = '#4cc9f0';
+                    speechStatus.style.color = 'var(--primary)';
                 } else {
                     speechStatus.textContent = '🎤 Распознавание: выкл';
-                    speechStatus.style.color = '#95a5a6';
+                    speechStatus.style.color = 'var(--gray)';
                 }
             }
         }
@@ -3429,9 +3230,10 @@
         function handleRecognizedSpeech(text) {
             console.log('Обработка распознанной речи:', text);
             
-            // ПОКАЗЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ С ЗАДЕРЖКОЙ
+            // ПОКАЗЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ
             showThinkingIndicator();
             
+            // Проверяем подключение
             if (!socket || !socket.connected) {
                 console.error('WebSocket не подключен, переподключаемся...');
                 initSocket();
@@ -3443,12 +3245,14 @@
                         });
                     } else {
                         console.error('Не удалось переподключиться');
+                        // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
                         hideThinkingIndicator();
                     }
                 }, 1000);
                 return;
             }
             
+            // Проверяем, активирован ли AI-учитель
             if (!aiTeacherActivated) {
                 console.log('AI-учитель не активирован, игнорируем речь:', text);
                 hideThinkingIndicator();
@@ -3457,6 +3261,7 @@
             
             console.log('Отправка речи на сервер:', text);
             
+            // Отправляем на сервер
             socket.emit('recognized_speech', {
                 room_id: roomId,
                 text: text
@@ -3464,6 +3269,8 @@
             
             showStudentSpeech(text, 'me');
             handleStudentActivity();
+            
+            // Индикатор скроется когда учитель начнет отвечать (в speakText)
         }
 
         // iOS Audio Fix
@@ -3780,10 +3587,10 @@
             
             if (currentAnimationMode === 'speech') {
                 animationStatus.textContent = '🗣️ Речевая анимация (12 FPS)';
-                animationStatus.style.color = '#4cc9f0';
+                animationStatus.style.color = 'var(--primary)';
             } else {
                 animationStatus.textContent = '😴 Нейтральная анимация (8 FPS)';
-                animationStatus.style.color = '#95a5a6';
+                animationStatus.style.color = 'var(--gray)';
             }
         }
 
@@ -3793,7 +3600,7 @@
             canvas.height = 400;
             const ctx = canvas.getContext('2d');
             
-            ctx.fillStyle = '#3498db';
+            ctx.fillStyle = 'var(--primary)';
             ctx.fillRect(0, 0, 400, 400);
             
             ctx.fillStyle = '#fff';
@@ -3833,11 +3640,6 @@
         }
 
         // Функции инициализации
-        function createBackgroundAnimation() {
-            // ИСПОЛЬЗУЕМ НОВЫЙ ФОН С ЧАСТИЦАМИ
-            createParticleBackground();
-        }
-
         function initDrawingCanvas() {
             const resizeCanvas = () => {
                 drawingCanvas.width = drawingCanvas.offsetWidth;
@@ -4194,6 +3996,7 @@
                     audio: true
                 });
                 
+                // Заменяем локальный поток на экран
                 if (localStream) {
                     localStream.getTracks().forEach(track => track.stop());
                 }
@@ -4201,13 +4004,16 @@
                 localStream = screenStream;
                 selfVideo.srcObject = screenStream;
                 
+                // Обновляем поток для всех подключенных участников
                 remoteStreams.forEach((remote, peerId) => {
                     // Здесь нужно обновить соединение с новым потоком
+                    // В реальном приложении это требует более сложной логики
                 });
                 
                 screenBtn.classList.add('active');
                 screenBtn.querySelector('span').textContent = 'Остановить';
                 
+                // Обработчик завершения демонстрации экрана
                 screenStream.getVideoTracks()[0].onended = () => {
                     stopScreenShare();
                 };
@@ -4222,6 +4028,7 @@
                 localStream.getTracks().forEach(track => track.stop());
             }
             
+            // Возвращаем камеру
             enableCameraAndMicrophone();
             
             screenBtn.classList.remove('active');
@@ -4243,6 +4050,7 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
+                    // Запускаем распознавание речи при включении микрофона
                     if (recognition) {
                         setTimeout(() => {
                             recognition.start();
@@ -4254,6 +4062,7 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
+                    // Останавливаем распознавание речи при выключении микрофона
                     if (recognition) {
                         recognition.stop();
                         updateSpeechStatus(false);
@@ -4311,14 +4120,17 @@
         }
 
         function endCall() {
+            // Закрываем все медиа потоки
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
             
+            // Закрываем все удаленные соединения
             remoteStreams.forEach((remote, peerId) => {
                 removeRemoteVideo(peerId);
             });
             
+            // Закрываем Peer соединение
             if (peer) {
                 peer.destroy();
             }
@@ -4378,10 +4190,13 @@
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
+                // ОБНОВЛЕНО: Устанавливаем состояние медиа готовности
                 setActivationState('mediaReady', true);
                 
+                // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
                 
+                // Инициализируем распознавание речи
                 initSpeechRecognition();
                 
             } catch (error) {
@@ -4401,6 +4216,7 @@
         function initSocket() {
             socket = io();
             
+            // Мониторинг событий WebSocket
             const originalEmit = socket.emit;
             socket.emit = function(event, data) {
                 console.log('📤 WebSocket emit:', event, data);
@@ -4411,8 +4227,10 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
+                // ОБНОВЛЕНО: Устанавливаем состояние socket готовности
                 setActivationState('socketReady', true);
                 
+                // Ждем инициализации PeerJS перед отправкой room_id
                 if (peerId) {
                     socket.emit('join_room', { 
                         room_id: roomId,
@@ -4429,12 +4247,14 @@
                 initLlmSystem();
             });
             
+            // ОБНОВЛЕНО: Добавляем обработчик успешного присоединения к комнате
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 setActivationState('roomJoined', true);
-                participantsCount.textContent = data.count);
+                participantsCount.textContent = data.count;
             });
             
+            // Новый обработчик для участников
             socket.on('participant_joined', (data) => {
                 console.log('Новый участник:', data.peer_id);
                 if (data.peer_id !== peerId) {
@@ -4447,6 +4267,7 @@
                 removeRemoteVideo(data.peer_id);
             });
             
+            // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
                 setActivationState('socketReady', false);
@@ -4499,6 +4320,7 @@
             
             socket.on('speech_text', (data) => {
                 if (data.is_teacher) {
+                    // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
                     hideThinkingIndicator();
                     
                     const teacherText = data.text.replace('Учитель: ', '');
@@ -4526,7 +4348,7 @@
             
             socket.on('ai_teacher_activated', () => {
                 aiTeacherActivated = true;
-                aiTeacherWasActivated = true;
+                aiTeacherWasActivated = true; // ЗАПОМИНАЕМ ЧТО БЫЛ АКТИВИРОВАН
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
                 console.log('✅ AI-учитель активирован для комнаты:', roomId);
@@ -4544,14 +4366,17 @@
                 console.error('❌ Ошибка активации AI-учителя для комнаты', roomId, ':', data.error);
                 statusDiv.textContent = 'Ошибка активации: ' + data.error;
                 
+                // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
                 hideThinkingIndicator();
                 
+                // Показываем кнопку снова для повторной попытки
                 const button = document.getElementById('activate-ai-btn');
                 if (button) {
                     button.style.display = 'block';
                     button.innerHTML = 'Повторить активацию';
                 }
                 
+                // Сбрасываем состояние активации
                 aiTeacherActivated = false;
                 aiTeacherWasActivated = false;
             });
@@ -4635,6 +4460,7 @@
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
             });
 
+            // Логируем все входящие события
             socket.onAny((event, data) => {
                 console.log('📥 WebSocket on:', event, data);
             });
@@ -4745,10 +4571,12 @@
         function initActivateButton() {
             const button = document.getElementById('activate-ai-btn');
             
+            // Убедимся, что кнопка кликабельна
             button.style.zIndex = '1000';
             button.style.pointerEvents = 'auto';
             button.style.position = 'fixed';
             
+            // Удаляем старые обработчики
             button.replaceWith(button.cloneNode(true));
             const newButton = document.getElementById('activate-ai-btn');
             
@@ -4760,10 +4588,12 @@
                 event.preventDefault();
                 event.stopPropagation();
                 
+                // ПРОВЕРКА ГОТОВНОСТИ ПЕРЕД АКТИВАЦИЕЙ
                 if (!checkRoomActivationReady()) {
                     console.error('❌ Комната не готова для активации:', roomActivationState);
                     statusDiv.textContent = 'Ошибка: комната не готова. Проверьте подключение.';
                     
+                    // Показываем детали состояния
                     const states = Object.entries(roomActivationState)
                         .filter(([_, ready]) => !ready)
                         .map(([key]) => key);
@@ -4779,9 +4609,11 @@
                     console.log('✅ Отправка запроса активации для комнаты:', roomId);
                     socket.emit('activate_ai_teacher', { room_id: roomId });
                     
+                    // Немедленная обратная связь
                     newButton.style.display = 'none';
                     statusDiv.textContent = 'Активация AI-учителя...';
                     
+                    // Таймаут для обработки ошибок активации
                     setTimeout(() => {
                         if (socket && !aiTeacherActivated) {
                             console.warn('⚠️ Активация заняла слишком много времени, пробуем резервный метод');
@@ -4800,11 +4632,13 @@
         function backupActivateAI() {
             console.log('Использование резервного метода активации');
             
+            // Помечаем как активированного
             aiTeacherActivated = true;
             aiTeacherWasActivated = true;
             activateAiBtn.style.display = 'none';
             statusDiv.textContent = 'AI-Teacher активирован (локальный режим)';
             
+            // Загружаем аватар
             loadAvatarFrames('teacher');
         }
 
@@ -4818,11 +4652,13 @@
             button.style.pointerEvents = 'auto';
             button.style.position = 'fixed';
             
+            // Переинициализируем обработчики
             initActivateButton();
         }
 
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
+            // Инициализация системы состояний активации
             roomActivationState = {
                 peerReady: false,
                 mediaReady: false, 
@@ -4830,15 +4666,19 @@
                 roomJoined: false
             };
             
+            // Инициализация частиц фона
+            initParticlesBackground();
+            
             initSocket();
-            createBackgroundAnimation(); // ИСПОЛЬЗУЕМ НОВЫЙ ФОН С ЧАСТИЦАМИ
             initWindowManagement();
             initZoom();
             initDrawingCanvas();
             initVisualization();
             
+            // Запускаем медиа устройства
             enableCameraAndMicrophone();
             
+            // Инициализируем кнопку после небольшой задержки
             setTimeout(() => {
                 initActivateButton();
                 updateActivationButton();
@@ -4913,9 +4753,11 @@
                 await enableCameraAndMicrophone();
             });
 
+            // Apply embedded mode styles if needed
             if (isEmbedded) {
                 document.body.classList.add('embedded');
                 
+                // Auto-activate AI teacher in embedded mode
                 setTimeout(() => {
                     if (socket) {
                         socket.emit('activate_ai_teacher', { room_id: roomId });
@@ -4929,21 +4771,10 @@
                 }
             });
             
-            window.addEventListener('resize', () => {
-                createParticleBackground();
-            });
-            
-            if (isIOS) {
-                document.addEventListener('touchstart', function() {
-                    if (!audioContext) {
-                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    }
-                }, { once: true });
-            }
-            
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
             
+            // Принудительно показываем кнопку через 3 секунды
             setTimeout(forceShowActivateButton, 3000);
         });
 
@@ -4951,6 +4782,165 @@
             isFullscreen = !!document.fullscreenElement;
             fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
         });
+
+        // Инициализация PeerJS
+        function initPeerJS() {
+            console.log('Инициализация PeerJS для комнаты:', roomId);
+            
+            // Создаем Peer с публичным сервером
+            peer = new Peer({
+                host: '0.peerjs.com',
+                port: 443,
+                path: '/',
+                secure: true,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+
+            peer.on('open', (id) => {
+                console.log('✅ PeerJS подключен с ID:', id, 'для комнаты:', roomId);
+                peerId = id;
+                statusDiv.textContent = 'Подключение к конференции...';
+                
+                // ОБНОВЛЕНО: Устанавливаем состояние Peer готовности
+                setActivationState('peerReady', true);
+                
+                // Сообщаем серверу о нашем peerId
+                if (socket && socket.connected) {
+                    socket.emit('join_room', { 
+                        room_id: roomId,
+                        peer_id: id 
+                    });
+                } else {
+                    console.warn('WebSocket не готов для отправки join_room');
+                }
+            });
+
+            peer.on('call', (call) => {
+                console.log('Получен входящий вызов от:', call.peer);
+                
+                // Отвечаем на вызов с нашим потоком
+                call.answer(localStream);
+                
+                call.on('stream', (remoteStream) => {
+                    console.log('Получен удаленный поток от:', call.peer);
+                    addRemoteVideo(call.peer, remoteStream);
+                });
+                
+                call.on('close', () => {
+                    console.log('Вызов завершен от:', call.peer);
+                    removeRemoteVideo(call.peer);
+                });
+                
+                call.on('error', (err) => {
+                    console.error('Ошибка вызова:', err);
+                    removeRemoteVideo(call.peer);
+                });
+            });
+
+            peer.on('connection', (conn) => {
+                console.log('Получено соединение данных от:', conn.peer);
+            });
+
+            peer.on('disconnected', () => {
+                console.log('PeerJS отключен');
+                statusDiv.textContent = 'Переподключение...';
+                setActivationState('peerReady', false);
+                peer.reconnect();
+            });
+
+            peer.on('close', () => {
+                console.log('PeerJS закрыт');
+                statusDiv.textContent = 'Соединение закрыто';
+                setActivationState('peerReady', false);
+            });
+
+            peer.on('error', (err) => {
+                console.error('PeerJS ошибка:', err);
+                statusDiv.textContent = 'Ошибка соединения: ' + err.type;
+                setActivationState('peerReady', false);
+            });
+        }
+
+        // Добавление удаленного видео
+        function addRemoteVideo(peerId, stream) {
+            if (remoteStreams.has(peerId)) {
+                return; // Уже добавлено
+            }
+
+            const videoContainer = document.createElement('div');
+            videoContainer.className = 'remote-video-container';
+            videoContainer.id = `remote-${peerId}`;
+
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.autoplay = true;
+            video.playsinline = true;
+
+            const peerLabel = document.createElement('div');
+            peerLabel.className = 'remote-peer-label';
+            peerLabel.textContent = `Участник ${peerId.substring(0, 6)}`;
+
+            videoContainer.appendChild(video);
+            videoContainer.appendChild(peerLabel);
+            remoteVideosContainer.appendChild(videoContainer);
+
+            remoteStreams.set(peerId, {
+                stream: stream,
+                videoElement: video,
+                container: videoContainer
+            });
+
+            updateParticipantsCount();
+        }
+
+        // Удаление удаленного видео
+        function removeRemoteVideo(peerId) {
+            const remote = remoteStreams.get(peerId);
+            if (remote) {
+                if (remote.container && remote.container.parentNode) {
+                    remote.container.parentNode.removeChild(remote.container);
+                }
+                remoteStreams.delete(peerId);
+                updateParticipantsCount();
+            }
+        }
+
+        // Обновление счетчика участников
+        function updateParticipantsCount() {
+            const totalParticipants = remoteStreams.size + 1; // +1 для текущего пользователя
+            participantsCount.textContent = totalParticipants;
+        }
+
+        // Подключение к другим участникам
+        function connectToPeer(remotePeerId) {
+            if (!localStream || peerId === remotePeerId) {
+                return;
+            }
+
+            console.log('Подключение к участнику:', remotePeerId);
+            
+            const call = peer.call(remotePeerId, localStream);
+            
+            call.on('stream', (remoteStream) => {
+                console.log('Получен поток от:', remotePeerId);
+                addRemoteVideo(remotePeerId, remoteStream);
+            });
+            
+            call.on('close', () => {
+                console.log('Соединение закрыто с:', remotePeerId);
+                removeRemoteVideo(remotePeerId);
+            });
+            
+            call.on('error', (err) => {
+                console.error('Ошибка соединения с', remotePeerId, ':', err);
+                removeRemoteVideo(remotePeerId);
+            });
+        }
     </script>
 </body>
 </html>
