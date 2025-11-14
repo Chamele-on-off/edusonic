@@ -19,6 +19,7 @@ import re
 import tempfile
 from local_llm_manager import get_llm_manager
 from key_manager import get_key_manager
+from typing import Optional
 
 # Настройка SocketIO с правильными таймаутами
 app = Flask(__name__, static_folder='static')
