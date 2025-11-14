@@ -113,10 +113,36 @@
             z-index: 0;
         }
         
-        .animated-circle {
+        /* Геометрические фигуры для фона */
+        .geo-shape {
             position: absolute;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        
+        .geo-line {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            transform-origin: left center;
+        }
+        
+        .geo-circle {
             border-radius: 50%;
-            opacity: 0.3;
+            border: 1px solid var(--success);
+            background: radial-gradient(circle, transparent 30%, rgba(76, 201, 240, 0.1) 100%);
+        }
+        
+        .geo-triangle {
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-color: transparent transparent var(--danger) transparent;
+            background: transparent;
+        }
+        
+        .geo-square {
+            border: 1px solid var(--secondary);
+            background: rgba(58, 12, 163, 0.1);
         }
         
         /* Основное окно урока */
@@ -1016,6 +1042,67 @@
             font-weight: 500;
         }
 
+        /* Индикатор размышления */
+        .thinking-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            z-index: 15;
+            display: none;
+            pointer-events: none;
+        }
+
+        .thinking-bioform {
+            width: 100%;
+            height: 100%;
+            border-radius: 60% 40% 40% 60% / 60% 40% 60% 40%;
+            background: linear-gradient(135deg, #4263EB, #4cc9f0);
+            opacity: 0.8;
+            animation: morphing 8s infinite ease-in-out;
+            box-shadow: 
+                0 0 30px rgba(66, 99, 235, 0.5),
+                inset 0 0 20px rgba(255, 255, 255, 0.3);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .thinking-bioform:before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            right: -5px;
+            bottom: -5px;
+            border-radius: inherit;
+            background: linear-gradient(135deg, #4263EB, #4cc9f0, #f72585);
+            z-index: -1;
+            opacity: 0.5;
+            animation: morphing 12s infinite ease-in-out reverse;
+        }
+
+        @keyframes morphing {
+            0% { border-radius: 60% 40% 40% 60% / 60% 40% 60% 40%; }
+            25% { border-radius: 40% 60% 60% 40% / 40% 60% 40% 60%; }
+            50% { border-radius: 50% 50% 40% 60% / 40% 50% 50% 60%; }
+            75% { border-radius: 60% 40% 50% 50% / 60% 40% 50% 50%; }
+            100% { border-radius: 60% 40% 40% 60% / 60% 40% 60% 40%; }
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 30px rgba(66, 99, 235, 0.5); }
+            50% { box-shadow: 0 0 50px rgba(66, 99, 235, 0.8); }
+        }
+
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -1418,6 +1505,11 @@
     <div id="main">
         <div id="video-container">
             <div id="background-animation"></div>
+            
+            <!-- Индикатор размышления -->
+            <div class="thinking-indicator" id="thinking-indicator">
+                <div class="thinking-bioform">Размышляю...</div>
+            </div>
             
             <!-- Дисплей распознанной речи -->
             <div id="speech-display">
@@ -2174,6 +2266,7 @@
         const llmPriorityText = document.getElementById('llm-priority-text');
         const speechDisplay = document.getElementById('speech-display');
         const speechText = document.getElementById('speech-text');
+        const thinkingIndicator = document.getElementById('thinking-indicator');
 
         // Глобальные переменные
         let userStream = null;
@@ -2183,7 +2276,8 @@
         let isFullscreen = false;
         let recognition = null;
         let aiTeacherActivated = false;
-        let animationCircles = [];
+        let aiTeacherWasActivated = false; // НОВАЯ ПЕРЕМЕННАЯ
+        let animationShapes = [];
         let currentLesson = null;
         let currentParagraph = 0;
         let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -2273,6 +2367,12 @@
             const button = document.getElementById('activate-ai-btn');
             if (!button) return;
             
+            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
+            if (aiTeacherWasActivated) {
+                button.style.display = 'none';
+                return;
+            }
+            
             if (checkRoomActivationReady()) {
                 button.style.display = 'block';
                 button.disabled = false;
@@ -2303,6 +2403,151 @@
 
         function hideSpeechDisplay() {
             speechDisplay.style.display = 'none';
+        }
+
+        // Функции для индикатора размышления
+        function showThinkingIndicator() {
+            if (thinkingIndicator) {
+                thinkingIndicator.style.display = 'block';
+            }
+        }
+
+        function hideThinkingIndicator() {
+            if (thinkingIndicator) {
+                thinkingIndicator.style.display = 'none';
+            }
+        }
+
+        // НОВАЯ ФУНКЦИЯ: Создание геометрической анимации как в landing.html
+        function createGeometricAnimation() {
+            // Очищаем старые элементы
+            backgroundAnimation.innerHTML = '';
+            animationShapes = [];
+            
+            const colors = [
+                'rgba(126, 118, 249, 0.6)',  // primary
+                'rgba(255, 123, 156, 0.6)',  // accent
+                'rgba(76, 201, 240, 0.6)',   // success
+                'rgba(247, 37, 133, 0.6)'    // danger
+            ];
+            
+            // Создаем линии (созвездия)
+            for (let i = 0; i < 20; i++) {
+                const line = document.createElement('div');
+                line.className = 'geo-shape geo-line';
+                
+                // Случайная длина и позиция
+                const length = Math.random() * 150 + 50;
+                line.style.width = `${length}px`;
+                line.style.left = `${Math.random() * 100}%`;
+                line.style.top = `${Math.random() * 100}%`;
+                
+                // Случайный цвет
+                line.style.background = `linear-gradient(90deg, transparent, ${colors[Math.floor(Math.random() * colors.length)]}, transparent)`;
+                
+                // Случайный угол
+                const angle = Math.random() * 360;
+                line.style.transform = `rotate(${angle}deg)`;
+                
+                backgroundAnimation.appendChild(line);
+                animationShapes.push(line);
+                
+                // Анимация плавающего движения
+                anime({
+                    targets: line,
+                    translateX: () => anime.random(-80, 80),
+                    translateY: () => anime.random(-80, 80),
+                    rotate: () => anime.random(-45, 45),
+                    duration: () => anime.random(15000, 25000),
+                    easing: 'easeInOutQuad',
+                    loop: true,
+                    direction: 'alternate'
+                });
+            }
+            
+            // Создаем круги
+            for (let i = 0; i < 12; i++) {
+                const circle = document.createElement('div');
+                circle.className = 'geo-shape geo-circle';
+                
+                const size = Math.random() * 30 + 10;
+                circle.style.width = `${size}px`;
+                circle.style.height = `${size}px`;
+                circle.style.left = `${Math.random() * 100}%`;
+                circle.style.top = `${Math.random() * 100}%`;
+                circle.style.borderColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                backgroundAnimation.appendChild(circle);
+                animationShapes.push(circle);
+                
+                // Анимация пульсации
+                anime({
+                    targets: circle,
+                    scale: () => anime.random(0.7, 1.3),
+                    opacity: () => anime.random(0.3, 0.8),
+                    duration: () => anime.random(8000, 15000),
+                    easing: 'easeInOutQuad',
+                    loop: true,
+                    direction: 'alternate'
+                });
+            }
+            
+            // Создаем треугольники
+            for (let i = 0; i < 8; i++) {
+                const triangle = document.createElement('div');
+                triangle.className = 'geo-shape geo-triangle';
+                
+                triangle.style.left = `${Math.random() * 100}%`;
+                triangle.style.top = `${Math.random() * 100}%`;
+                triangle.style.borderBottomColor = colors[Math.floor(Math.random() * colors.length)];
+                triangle.style.borderLeftWidth = `${Math.random() * 15 + 10}px`;
+                triangle.style.borderRightWidth = `${Math.random() * 15 + 10}px`;
+                triangle.style.borderBottomWidth = `${Math.random() * 25 + 15}px`;
+                
+                backgroundAnimation.appendChild(triangle);
+                animationShapes.push(triangle);
+                
+                // Анимация вращения и движения
+                anime({
+                    targets: triangle,
+                    translateX: () => anime.random(-60, 60),
+                    translateY: () => anime.random(-60, 60),
+                    rotate: () => anime.random(0, 360),
+                    duration: () => anime.random(12000, 20000),
+                    easing: 'easeInOutQuad',
+                    loop: true,
+                    direction: 'alternate'
+                });
+            }
+            
+            // Создаем квадраты
+            for (let i = 0; i < 6; i++) {
+                const square = document.createElement('div');
+                square.className = 'geo-shape geo-square';
+                
+                const size = Math.random() * 40 + 20;
+                square.style.width = `${size}px`;
+                square.style.height = `${size}px`;
+                square.style.left = `${Math.random() * 100}%`;
+                square.style.top = `${Math.random() * 100}%`;
+                square.style.borderColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                backgroundAnimation.appendChild(square);
+                animationShapes.push(square);
+                
+                // Анимация вращения и масштабирования
+                anime({
+                    targets: square,
+                    translateX: () => anime.random(-50, 50),
+                    translateY: () => anime.random(-50, 50),
+                    rotate: () => anime.random(-180, 180),
+                    scale: () => anime.random(0.8, 1.2),
+                    duration: () => anime.random(10000, 18000),
+                    easing: 'easeInOutQuad',
+                    loop: true,
+                    direction: 'alternate'
+                });
+            }
         }
 
         // Инициализация PeerJS
@@ -3066,6 +3311,9 @@
         function handleRecognizedSpeech(text) {
             console.log('Обработка распознанной речи:', text);
             
+            // ПОКАЗЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ
+            showThinkingIndicator();
+            
             // Проверяем подключение
             if (!socket || !socket.connected) {
                 console.error('WebSocket не подключен, переподключаемся...');
@@ -3078,6 +3326,8 @@
                         });
                     } else {
                         console.error('Не удалось переподключиться');
+                        // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
+                        hideThinkingIndicator();
                     }
                 }, 1000);
                 return;
@@ -3086,6 +3336,7 @@
             // Проверяем, активирован ли AI-учитель
             if (!aiTeacherActivated) {
                 console.log('AI-учитель не активирован, игнорируем речь:', text);
+                hideThinkingIndicator();
                 return;
             }
             
@@ -3099,6 +3350,8 @@
             
             showStudentSpeech(text, 'me');
             handleStudentActivity();
+            
+            // Индикатор скроется когда учитель начнет отвечать (в speakText)
         }
 
         // iOS Audio Fix
@@ -3469,34 +3722,8 @@
 
         // Функции инициализации
         function createBackgroundAnimation() {
-            for (let i = 0; i < 8; i++) {
-                const circle = document.createElement('div');
-                circle.className = 'animated-circle';
-                
-                const size = Math.random() * 80 + 40;
-                circle.style.width = `${size}px`;
-                circle.style.height = `${size}px`;
-                circle.style.left = `${Math.random() * 100}%`;
-                circle.style.top = `${Math.random() * 100}%`;
-                
-                const colors = ['#4361ee', '#3a0ca3', '#4cc9f0', '#f72585'];
-                circle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-                
-                backgroundAnimation.appendChild(circle);
-                animationCircles.push(circle);
-                
-                anime({
-                    targets: circle,
-                    translateX: () => anime.random(-200, 200),
-                    translateY: () => anime.random(-200, 200),
-                    scale: () => anime.random(0.5, 1.2),
-                    duration: () => anime.random(4000, 12000),
-                    easing: 'easeInOutQuad',
-                    complete: function(anim) {
-                        anim.restart();
-                    }
-                });
-            }
+            // ИСПОЛЬЗУЕМ НОВУЮ ГЕОМЕТРИЧЕСКУЮ АНИМАЦИЮ
+            createGeometricAnimation();
         }
 
         function initDrawingCanvas() {
@@ -4001,6 +4228,7 @@
             stopAnimation();
             setAutoContinueEnabled(false);
             hideSpeechDisplay();
+            hideThinkingIndicator();
             
             if (socket) {
                 socket.emit('leave_room', { room_id: roomId });
@@ -4155,6 +4383,9 @@
                 try {
                     console.log('Получено аудио сообщение, текст:', data.text.substring(0, 100) + '...');
                     
+                    // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
+                    hideThinkingIndicator();
+                    
                     startSpeechAnimation(data.text);
                     playAudio(data.audio);
                     
@@ -4166,6 +4397,7 @@
                     
                 } catch (error) {
                     console.error('Ошибка обработки аудио:', error);
+                    hideThinkingIndicator();
                     if (!isLessonActive) {
                         showTeacherSpeech(data.text);
                     }
@@ -4174,6 +4406,9 @@
             
             socket.on('speech_text', (data) => {
                 if (data.is_teacher) {
+                    // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
+                    hideThinkingIndicator();
+                    
                     const teacherText = data.text.replace('Учитель: ', '');
                     startSpeechAnimation(teacherText);
                     
@@ -4199,6 +4434,7 @@
             
             socket.on('ai_teacher_activated', () => {
                 aiTeacherActivated = true;
+                aiTeacherWasActivated = true; // ЗАПОМИНАЕМ ЧТО БЫЛ АКТИВИРОВАН
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
                 console.log('✅ AI-учитель активирован для комнаты:', roomId);
@@ -4216,6 +4452,9 @@
                 console.error('❌ Ошибка активации AI-учителя для комнаты', roomId, ':', data.error);
                 statusDiv.textContent = 'Ошибка активации: ' + data.error;
                 
+                // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
+                hideThinkingIndicator();
+                
                 // Показываем кнопку снова для повторной попытки
                 const button = document.getElementById('activate-ai-btn');
                 if (button) {
@@ -4225,6 +4464,7 @@
                 
                 // Сбрасываем состояние активации
                 aiTeacherActivated = false;
+                aiTeacherWasActivated = false;
             });
             
             socket.on('lesson_started', (data) => {
@@ -4480,6 +4720,7 @@
             
             // Помечаем как активированного
             aiTeacherActivated = true;
+            aiTeacherWasActivated = true;
             activateAiBtn.style.display = 'none';
             statusDiv.textContent = 'AI-Teacher активирован (локальный режим)';
             
@@ -4512,7 +4753,7 @@
             };
             
             initSocket();
-            createBackgroundAnimation();
+            createBackgroundAnimation(); // ИСПОЛЬЗУЕМ НОВУЮ ГЕОМЕТРИЧЕСКУЮ АНИМАЦИЮ
             initWindowManagement();
             initZoom();
             initDrawingCanvas();
@@ -4615,9 +4856,9 @@
             });
             
             window.addEventListener('resize', () => {
-                animationCircles.forEach(circle => circle.remove());
-                animationCircles = [];
-                createBackgroundAnimation();
+                animationShapes.forEach(shape => shape.remove());
+                animationShapes = [];
+                createGeometricAnimation(); // ПЕРЕСОЗДАЕМ ГЕОМЕТРИЧЕСКУЮ АНИМАЦИЮ
             });
             
             if (isIOS) {
