@@ -36,7 +36,7 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            background: #0a0e2a;
             color: white;
             height: 100vh;
             display: flex;
@@ -1042,65 +1042,131 @@
             font-weight: 500;
         }
 
-        /* Индикатор размышления */
+        /* Индикатор размышления - НОВЫЙ СТИЛЬ */
         .thinking-indicator {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 120px;
-            height: 120px;
+            width: 180px;
+            height: 180px;
             z-index: 15;
             display: none;
             pointer-events: none;
         }
 
-        .thinking-bioform {
+        .thinking-sphere {
             width: 100%;
             height: 100%;
-            border-radius: 60% 40% 40% 60% / 60% 40% 60% 40%;
-            background: linear-gradient(135deg, #4263EB, #4cc9f0);
-            opacity: 0.8;
-            animation: morphing 8s infinite ease-in-out;
-            box-shadow: 
-                0 0 30px rgba(66, 99, 235, 0.5),
-                inset 0 0 20px rgba(255, 255, 255, 0.3);
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-weight: 600;
-            font-size: 14px;
-            text-align: center;
-            padding: 20px;
         }
 
-        .thinking-bioform:before {
-            content: '';
+        .particle-ring {
             position: absolute;
-            top: -5px;
-            left: -5px;
-            right: -5px;
-            bottom: -5px;
-            border-radius: inherit;
-            background: linear-gradient(135deg, #4263EB, #4cc9f0, #f72585);
-            z-index: -1;
-            opacity: 0.5;
-            animation: morphing 12s infinite ease-in-out reverse;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.5s ease;
         }
 
-        @keyframes morphing {
-            0% { border-radius: 60% 40% 40% 60% / 60% 40% 60% 40%; }
-            25% { border-radius: 40% 60% 60% 40% / 40% 60% 40% 60%; }
-            50% { border-radius: 50% 50% 40% 60% / 40% 50% 50% 60%; }
-            75% { border-radius: 60% 40% 50% 50% / 60% 40% 50% 50%; }
-            100% { border-radius: 60% 40% 40% 60% / 60% 40% 60% 40%; }
+        .particle-ring.active {
+            opacity: 1;
         }
 
-        @keyframes glow {
-            0%, 100% { box-shadow: 0 0 30px rgba(66, 99, 235, 0.5); }
-            50% { box-shadow: 0 0 50px rgba(66, 99, 235, 0.8); }
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #4cc9f0;
+            border-radius: 50%;
+            filter: blur(1px);
+            animation: particle-float 3s infinite ease-in-out;
+        }
+
+        .energy-line {
+            position: absolute;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #4cc9f0, transparent);
+            transform-origin: left center;
+            animation: energy-rotate 4s infinite linear;
+        }
+
+        .thinking-text {
+            position: absolute;
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #4cc9f0;
+            font-family: 'Arial', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .thinking-text.active {
+            opacity: 1;
+        }
+
+        @keyframes particle-float {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.7; }
+            50% { transform: translateY(-10px) scale(1.1); opacity: 1; }
+        }
+
+        @keyframes energy-rotate {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.1); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        @keyframes glow-pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(76, 201, 240, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(76, 201, 240, 0.6); }
+        }
+
+        /* Стили для нового фона */
+        .particle-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .floating-particle {
+            position: absolute;
+            background: rgba(76, 201, 240, 0.1);
+            border-radius: 50%;
+            animation: float 6s infinite ease-in-out;
+        }
+
+        .energy-connection {
+            position: absolute;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(76, 201, 240, 0.3), transparent);
+            transform-origin: left center;
+            animation: energy-flow 8s infinite linear;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(10px, -15px) scale(1.1); }
+            50% { transform: translate(-5px, 10px) scale(0.9); }
+            75% { transform: translate(-15px, -5px) scale(1.05); }
+        }
+
+        @keyframes energy-flow {
+            0% { transform: rotate(0deg) scaleX(1); opacity: 0.3; }
+            50% { transform: rotate(180deg) scaleX(1.2); opacity: 0.6; }
+            100% { transform: rotate(360deg) scaleX(1); opacity: 0.3; }
         }
 
         @media (max-width: 768px) {
@@ -1210,6 +1276,16 @@
                 top: 80px;
                 font-size: 14px;
                 padding: 12px 20px;
+            }
+
+            .thinking-indicator {
+                width: 140px;
+                height: 140px;
+            }
+
+            .thinking-text {
+                font-size: 12px;
+                bottom: -35px;
             }
         }
         
@@ -1321,6 +1397,16 @@
                 top: 70px;
                 font-size: 12px;
                 padding: 10px 16px;
+            }
+
+            .thinking-indicator {
+                width: 120px;
+                height: 120px;
+            }
+
+            .thinking-text {
+                font-size: 11px;
+                bottom: -30px;
             }
         }
         
@@ -1504,11 +1590,20 @@
 
     <div id="main">
         <div id="video-container">
-            <div id="background-animation"></div>
+            <!-- Новый фон с частицами -->
+            <div id="background-animation" class="particle-background"></div>
             
-            <!-- Индикатор размышления -->
+            <!-- Индикатор размышления - НОВЫЙ ДИЗАЙН -->
             <div class="thinking-indicator" id="thinking-indicator">
-                <div class="thinking-bioform">Размышляю...</div>
+                <div class="thinking-sphere">
+                    <div class="particle-ring" id="particle-ring-1"></div>
+                    <div class="particle-ring" id="particle-ring-2"></div>
+                    <div class="particle-ring" id="particle-ring-3"></div>
+                    <div class="energy-line" id="energy-line-1"></div>
+                    <div class="energy-line" id="energy-line-2"></div>
+                    <div class="energy-line" id="energy-line-3"></div>
+                </div>
+                <div class="thinking-text" id="thinking-text">Размышляю...</div>
             </div>
             
             <!-- Дисплей распознанной речи -->
@@ -2267,6 +2362,13 @@
         const speechDisplay = document.getElementById('speech-display');
         const speechText = document.getElementById('speech-text');
         const thinkingIndicator = document.getElementById('thinking-indicator');
+        const particleRing1 = document.getElementById('particle-ring-1');
+        const particleRing2 = document.getElementById('particle-ring-2');
+        const particleRing3 = document.getElementById('particle-ring-3');
+        const energyLine1 = document.getElementById('energy-line-1');
+        const energyLine2 = document.getElementById('energy-line-2');
+        const energyLine3 = document.getElementById('energy-line-3');
+        const thinkingText = document.getElementById('thinking-text');
 
         // Глобальные переменные
         let userStream = null;
@@ -2276,7 +2378,7 @@
         let isFullscreen = false;
         let recognition = null;
         let aiTeacherActivated = false;
-        let aiTeacherWasActivated = false; // НОВАЯ ПЕРЕМЕННАЯ
+        let aiTeacherWasActivated = false;
         let animationShapes = [];
         let currentLesson = null;
         let currentParagraph = 0;
@@ -2356,6 +2458,9 @@
             roomJoined: false
         };
 
+        // Таймер для отложенного запуска анимации индикатора
+        let thinkingAnimationTimer = null;
+
         function checkRoomActivationReady() {
             return roomActivationState.peerReady && 
                    roomActivationState.mediaReady && 
@@ -2367,7 +2472,6 @@
             const button = document.getElementById('activate-ai-btn');
             if (!button) return;
             
-            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
             if (aiTeacherWasActivated) {
                 button.style.display = 'none';
                 return;
@@ -2390,12 +2494,178 @@
             updateActivationButton();
         }
 
+        // НОВАЯ ФУНКЦИЯ: Создание частиц для фона
+        function createParticleBackground() {
+            // Очищаем старые элементы
+            backgroundAnimation.innerHTML = '';
+            
+            // Создаем плавающие частицы
+            for (let i = 0; i < 25; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'floating-particle';
+                
+                const size = Math.random() * 8 + 2;
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.left = `${Math.random() * 100}%`;
+                particle.style.top = `${Math.random() * 100}%`;
+                particle.style.background = `rgba(76, 201, 240, ${Math.random() * 0.1 + 0.05})`;
+                particle.style.animationDelay = `${Math.random() * 6}s`;
+                
+                backgroundAnimation.appendChild(particle);
+            }
+            
+            // Создаем энергетические соединения
+            for (let i = 0; i < 15; i++) {
+                const connection = document.createElement('div');
+                connection.className = 'energy-connection';
+                
+                const length = Math.random() * 200 + 50;
+                connection.style.width = `${length}px`;
+                connection.style.left = `${Math.random() * 100}%`;
+                connection.style.top = `${Math.random() * 100}%`;
+                connection.style.animationDelay = `${Math.random() * 8}s`;
+                
+                backgroundAnimation.appendChild(connection);
+            }
+        }
+
+        // НОВАЯ ФУНКЦИЯ: Создание частиц для индикатора размышления
+        function createThinkingParticles() {
+            // Очищаем старые частицы
+            particleRing1.innerHTML = '';
+            particleRing2.innerHTML = '';
+            particleRing3.innerHTML = '';
+            
+            // Создаем частицы для первого кольца
+            for (let i = 0; i < 12; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                
+                const angle = (i / 12) * Math.PI * 2;
+                const radius = 60;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                particle.style.left = `calc(50% + ${x}px)`;
+                particle.style.top = `calc(50% + ${y}px)`;
+                particle.style.animationDelay = `${i * 0.2}s`;
+                
+                particleRing1.appendChild(particle);
+            }
+            
+            // Создаем частицы для второго кольца
+            for (let i = 0; i < 16; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                
+                const angle = (i / 16) * Math.PI * 2;
+                const radius = 40;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                particle.style.left = `calc(50% + ${x}px)`;
+                particle.style.top = `calc(50% + ${y}px)`;
+                particle.style.animationDelay = `${i * 0.15}s`;
+                particle.style.background = 'rgba(66, 99, 235, 0.8)';
+                
+                particleRing2.appendChild(particle);
+            }
+            
+            // Создаем частицы для третьего кольца
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                
+                const angle = (i / 20) * Math.PI * 2;
+                const radius = 80;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                particle.style.left = `calc(50% + ${x}px)`;
+                particle.style.top = `calc(50% + ${y}px)`;
+                particle.style.animationDelay = `${i * 0.25}s`;
+                particle.style.background = 'rgba(247, 37, 133, 0.6)';
+                
+                particleRing3.appendChild(particle);
+            }
+            
+            // Настраиваем энергетические линии
+            energyLine1.style.width = '120px';
+            energyLine1.style.top = 'calc(50% - 1px)';
+            energyLine1.style.left = 'calc(50% - 60px)';
+            energyLine1.style.animationDelay = '0s';
+            
+            energyLine2.style.width = '100px';
+            energyLine2.style.top = 'calc(50% - 1px)';
+            energyLine2.style.left = 'calc(50% - 50px)';
+            energyLine2.style.animationDelay = '1.3s';
+            
+            energyLine3.style.width = '140px';
+            energyLine3.style.top = 'calc(50% - 1px)';
+            energyLine3.style.left = 'calc(50% - 70px)';
+            energyLine3.style.animationDelay = '2.7s';
+        }
+
+        // НОВАЯ ФУНКЦИЯ: Показать индикатор размышления с задержкой
+        function showThinkingIndicator() {
+            // Очищаем предыдущий таймер
+            if (thinkingAnimationTimer) {
+                clearTimeout(thinkingAnimationTimer);
+            }
+            
+            // Устанавливаем таймер на 2 секунды
+            thinkingAnimationTimer = setTimeout(() => {
+                if (thinkingIndicator) {
+                    thinkingIndicator.style.display = 'block';
+                    
+                    // Создаем частицы
+                    createThinkingParticles();
+                    
+                    // Активируем кольца с задержкой
+                    setTimeout(() => {
+                        particleRing1.classList.add('active');
+                    }, 200);
+                    
+                    setTimeout(() => {
+                        particleRing2.classList.add('active');
+                    }, 500);
+                    
+                    setTimeout(() => {
+                        particleRing3.classList.add('active');
+                        thinkingText.classList.add('active');
+                    }, 800);
+                }
+            }, 2000);
+        }
+
+        // НОВАЯ ФУНКЦИЯ: Скрыть индикатор размышления
+        function hideThinkingIndicator() {
+            // Очищаем таймер, если анимация еще не началась
+            if (thinkingAnimationTimer) {
+                clearTimeout(thinkingAnimationTimer);
+                thinkingAnimationTimer = null;
+            }
+            
+            if (thinkingIndicator) {
+                // Деактивируем элементы с анимацией
+                particleRing1.classList.remove('active');
+                particleRing2.classList.remove('active');
+                particleRing3.classList.remove('active');
+                thinkingText.classList.remove('active');
+                
+                // Скрываем индикатор после завершения анимации
+                setTimeout(() => {
+                    thinkingIndicator.style.display = 'none';
+                }, 500);
+            }
+        }
+
         // Функции для отображения распознанной речи
         function showSpeechDisplay(text) {
             speechText.textContent = text;
             speechDisplay.style.display = 'block';
             
-            // Автоматическое скрытие через 5 секунд
             setTimeout(() => {
                 speechDisplay.style.display = 'none';
             }, 5000);
@@ -2405,156 +2675,10 @@
             speechDisplay.style.display = 'none';
         }
 
-        // Функции для индикатора размышления
-        function showThinkingIndicator() {
-            if (thinkingIndicator) {
-                thinkingIndicator.style.display = 'block';
-            }
-        }
-
-        function hideThinkingIndicator() {
-            if (thinkingIndicator) {
-                thinkingIndicator.style.display = 'none';
-            }
-        }
-
-        // НОВАЯ ФУНКЦИЯ: Создание геометрической анимации как в landing.html
-        function createGeometricAnimation() {
-            // Очищаем старые элементы
-            backgroundAnimation.innerHTML = '';
-            animationShapes = [];
-            
-            const colors = [
-                'rgba(126, 118, 249, 0.6)',  // primary
-                'rgba(255, 123, 156, 0.6)',  // accent
-                'rgba(76, 201, 240, 0.6)',   // success
-                'rgba(247, 37, 133, 0.6)'    // danger
-            ];
-            
-            // Создаем линии (созвездия)
-            for (let i = 0; i < 20; i++) {
-                const line = document.createElement('div');
-                line.className = 'geo-shape geo-line';
-                
-                // Случайная длина и позиция
-                const length = Math.random() * 150 + 50;
-                line.style.width = `${length}px`;
-                line.style.left = `${Math.random() * 100}%`;
-                line.style.top = `${Math.random() * 100}%`;
-                
-                // Случайный цвет
-                line.style.background = `linear-gradient(90deg, transparent, ${colors[Math.floor(Math.random() * colors.length)]}, transparent)`;
-                
-                // Случайный угол
-                const angle = Math.random() * 360;
-                line.style.transform = `rotate(${angle}deg)`;
-                
-                backgroundAnimation.appendChild(line);
-                animationShapes.push(line);
-                
-                // Анимация плавающего движения
-                anime({
-                    targets: line,
-                    translateX: () => anime.random(-80, 80),
-                    translateY: () => anime.random(-80, 80),
-                    rotate: () => anime.random(-45, 45),
-                    duration: () => anime.random(15000, 25000),
-                    easing: 'easeInOutQuad',
-                    loop: true,
-                    direction: 'alternate'
-                });
-            }
-            
-            // Создаем круги
-            for (let i = 0; i < 12; i++) {
-                const circle = document.createElement('div');
-                circle.className = 'geo-shape geo-circle';
-                
-                const size = Math.random() * 30 + 10;
-                circle.style.width = `${size}px`;
-                circle.style.height = `${size}px`;
-                circle.style.left = `${Math.random() * 100}%`;
-                circle.style.top = `${Math.random() * 100}%`;
-                circle.style.borderColor = colors[Math.floor(Math.random() * colors.length)];
-                
-                backgroundAnimation.appendChild(circle);
-                animationShapes.push(circle);
-                
-                // Анимация пульсации
-                anime({
-                    targets: circle,
-                    scale: () => anime.random(0.7, 1.3),
-                    opacity: () => anime.random(0.3, 0.8),
-                    duration: () => anime.random(8000, 15000),
-                    easing: 'easeInOutQuad',
-                    loop: true,
-                    direction: 'alternate'
-                });
-            }
-            
-            // Создаем треугольники
-            for (let i = 0; i < 8; i++) {
-                const triangle = document.createElement('div');
-                triangle.className = 'geo-shape geo-triangle';
-                
-                triangle.style.left = `${Math.random() * 100}%`;
-                triangle.style.top = `${Math.random() * 100}%`;
-                triangle.style.borderBottomColor = colors[Math.floor(Math.random() * colors.length)];
-                triangle.style.borderLeftWidth = `${Math.random() * 15 + 10}px`;
-                triangle.style.borderRightWidth = `${Math.random() * 15 + 10}px`;
-                triangle.style.borderBottomWidth = `${Math.random() * 25 + 15}px`;
-                
-                backgroundAnimation.appendChild(triangle);
-                animationShapes.push(triangle);
-                
-                // Анимация вращения и движения
-                anime({
-                    targets: triangle,
-                    translateX: () => anime.random(-60, 60),
-                    translateY: () => anime.random(-60, 60),
-                    rotate: () => anime.random(0, 360),
-                    duration: () => anime.random(12000, 20000),
-                    easing: 'easeInOutQuad',
-                    loop: true,
-                    direction: 'alternate'
-                });
-            }
-            
-            // Создаем квадраты
-            for (let i = 0; i < 6; i++) {
-                const square = document.createElement('div');
-                square.className = 'geo-shape geo-square';
-                
-                const size = Math.random() * 40 + 20;
-                square.style.width = `${size}px`;
-                square.style.height = `${size}px`;
-                square.style.left = `${Math.random() * 100}%`;
-                square.style.top = `${Math.random() * 100}%`;
-                square.style.borderColor = colors[Math.floor(Math.random() * colors.length)];
-                
-                backgroundAnimation.appendChild(square);
-                animationShapes.push(square);
-                
-                // Анимация вращения и масштабирования
-                anime({
-                    targets: square,
-                    translateX: () => anime.random(-50, 50),
-                    translateY: () => anime.random(-50, 50),
-                    rotate: () => anime.random(-180, 180),
-                    scale: () => anime.random(0.8, 1.2),
-                    duration: () => anime.random(10000, 18000),
-                    easing: 'easeInOutQuad',
-                    loop: true,
-                    direction: 'alternate'
-                });
-            }
-        }
-
         // Инициализация PeerJS
         function initPeerJS() {
             console.log('Инициализация PeerJS для комнаты:', roomId);
             
-            // Создаем Peer с публичным сервером
             peer = new Peer({
                 host: '0.peerjs.com',
                 port: 443,
@@ -2573,10 +2697,8 @@
                 peerId = id;
                 statusDiv.textContent = 'Подключение к конференции...';
                 
-                // ОБНОВЛЕНО: Устанавливаем состояние Peer готовности
                 setActivationState('peerReady', true);
                 
-                // Сообщаем серверу о нашем peerId
                 if (socket && socket.connected) {
                     socket.emit('join_room', { 
                         room_id: roomId,
@@ -2590,7 +2712,6 @@
             peer.on('call', (call) => {
                 console.log('Получен входящий вызов от:', call.peer);
                 
-                // Отвечаем на вызов с нашим потоком
                 call.answer(localStream);
                 
                 call.on('stream', (remoteStream) => {
@@ -2636,7 +2757,7 @@
         // Добавление удаленного видео
         function addRemoteVideo(peerId, stream) {
             if (remoteStreams.has(peerId)) {
-                return; // Уже добавлено
+                return;
             }
 
             const videoContainer = document.createElement('div');
@@ -2679,7 +2800,7 @@
 
         // Обновление счетчика участников
         function updateParticipantsCount() {
-            const totalParticipants = remoteStreams.size + 1; // +1 для текущего пользователя
+            const totalParticipants = remoteStreams.size + 1;
             participantsCount.textContent = totalParticipants;
         }
 
@@ -3186,7 +3307,6 @@
                         }
                     }
 
-                    // Показываем промежуточные результаты
                     if (interimTranscript) {
                         showSpeechDisplay(interimTranscript + '...');
                     }
@@ -3222,12 +3342,10 @@
                         console.log('Распознана речь:', cleanText);
                         lastFinalResult = cleanText;
                         
-                        // Показываем финальный результат
                         showSpeechDisplay(cleanText);
                         
                         handleStudentActivity();
                         
-                        // Отправляем на сервер
                         handleRecognizedSpeech(cleanText);
                     }
                     
@@ -3311,10 +3429,9 @@
         function handleRecognizedSpeech(text) {
             console.log('Обработка распознанной речи:', text);
             
-            // ПОКАЗЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ
+            // ПОКАЗЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ С ЗАДЕРЖКОЙ
             showThinkingIndicator();
             
-            // Проверяем подключение
             if (!socket || !socket.connected) {
                 console.error('WebSocket не подключен, переподключаемся...');
                 initSocket();
@@ -3326,14 +3443,12 @@
                         });
                     } else {
                         console.error('Не удалось переподключиться');
-                        // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
                         hideThinkingIndicator();
                     }
                 }, 1000);
                 return;
             }
             
-            // Проверяем, активирован ли AI-учитель
             if (!aiTeacherActivated) {
                 console.log('AI-учитель не активирован, игнорируем речь:', text);
                 hideThinkingIndicator();
@@ -3342,7 +3457,6 @@
             
             console.log('Отправка речи на сервер:', text);
             
-            // Отправляем на сервер
             socket.emit('recognized_speech', {
                 room_id: roomId,
                 text: text
@@ -3350,8 +3464,6 @@
             
             showStudentSpeech(text, 'me');
             handleStudentActivity();
-            
-            // Индикатор скроется когда учитель начнет отвечать (в speakText)
         }
 
         // iOS Audio Fix
@@ -3722,8 +3834,8 @@
 
         // Функции инициализации
         function createBackgroundAnimation() {
-            // ИСПОЛЬЗУЕМ НОВУЮ ГЕОМЕТРИЧЕСКУЮ АНИМАЦИЮ
-            createGeometricAnimation();
+            // ИСПОЛЬЗУЕМ НОВЫЙ ФОН С ЧАСТИЦАМИ
+            createParticleBackground();
         }
 
         function initDrawingCanvas() {
@@ -4082,7 +4194,6 @@
                     audio: true
                 });
                 
-                // Заменяем локальный поток на экран
                 if (localStream) {
                     localStream.getTracks().forEach(track => track.stop());
                 }
@@ -4090,16 +4201,13 @@
                 localStream = screenStream;
                 selfVideo.srcObject = screenStream;
                 
-                // Обновляем поток для всех подключенных участников
                 remoteStreams.forEach((remote, peerId) => {
                     // Здесь нужно обновить соединение с новым потоком
-                    // В реальном приложении это требует более сложной логики
                 });
                 
                 screenBtn.classList.add('active');
                 screenBtn.querySelector('span').textContent = 'Остановить';
                 
-                // Обработчик завершения демонстрации экрана
                 screenStream.getVideoTracks()[0].onended = () => {
                     stopScreenShare();
                 };
@@ -4114,7 +4222,6 @@
                 localStream.getTracks().forEach(track => track.stop());
             }
             
-            // Возвращаем камеру
             enableCameraAndMicrophone();
             
             screenBtn.classList.remove('active');
@@ -4136,7 +4243,6 @@
                     micBtn.querySelector('span').textContent = 'Выкл';
                     statusDiv.textContent = 'Микрофон включен';
                     
-                    // Запускаем распознавание речи при включении микрофона
                     if (recognition) {
                         setTimeout(() => {
                             recognition.start();
@@ -4148,7 +4254,6 @@
                     micBtn.querySelector('span').textContent = 'Вкл';
                     statusDiv.textContent = 'Микрофон выключен';
                     
-                    // Останавливаем распознавание речи при выключении микрофона
                     if (recognition) {
                         recognition.stop();
                         updateSpeechStatus(false);
@@ -4206,17 +4311,14 @@
         }
 
         function endCall() {
-            // Закрываем все медиа потоки
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
             
-            // Закрываем все удаленные соединения
             remoteStreams.forEach((remote, peerId) => {
                 removeRemoteVideo(peerId);
             });
             
-            // Закрываем Peer соединение
             if (peer) {
                 peer.destroy();
             }
@@ -4276,13 +4378,10 @@
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
-                // ОБНОВЛЕНО: Устанавливаем состояние медиа готовности
                 setActivationState('mediaReady', true);
                 
-                // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
                 
-                // Инициализируем распознавание речи
                 initSpeechRecognition();
                 
             } catch (error) {
@@ -4302,7 +4401,6 @@
         function initSocket() {
             socket = io();
             
-            // Мониторинг событий WebSocket
             const originalEmit = socket.emit;
             socket.emit = function(event, data) {
                 console.log('📤 WebSocket emit:', event, data);
@@ -4313,10 +4411,8 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
-                // ОБНОВЛЕНО: Устанавливаем состояние socket готовности
                 setActivationState('socketReady', true);
                 
-                // Ждем инициализации PeerJS перед отправкой room_id
                 if (peerId) {
                     socket.emit('join_room', { 
                         room_id: roomId,
@@ -4333,14 +4429,12 @@
                 initLlmSystem();
             });
             
-            // ОБНОВЛЕНО: Добавляем обработчик успешного присоединения к комнате
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 setActivationState('roomJoined', true);
-                participantsCount.textContent = data.count;
+                participantsCount.textContent = data.count);
             });
             
-            // Новый обработчик для участников
             socket.on('participant_joined', (data) => {
                 console.log('Новый участник:', data.peer_id);
                 if (data.peer_id !== peerId) {
@@ -4353,7 +4447,6 @@
                 removeRemoteVideo(data.peer_id);
             });
             
-            // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
                 setActivationState('socketReady', false);
@@ -4406,7 +4499,6 @@
             
             socket.on('speech_text', (data) => {
                 if (data.is_teacher) {
-                    // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
                     hideThinkingIndicator();
                     
                     const teacherText = data.text.replace('Учитель: ', '');
@@ -4434,7 +4526,7 @@
             
             socket.on('ai_teacher_activated', () => {
                 aiTeacherActivated = true;
-                aiTeacherWasActivated = true; // ЗАПОМИНАЕМ ЧТО БЫЛ АКТИВИРОВАН
+                aiTeacherWasActivated = true;
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
                 console.log('✅ AI-учитель активирован для комнаты:', roomId);
@@ -4452,17 +4544,14 @@
                 console.error('❌ Ошибка активации AI-учителя для комнаты', roomId, ':', data.error);
                 statusDiv.textContent = 'Ошибка активации: ' + data.error;
                 
-                // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
                 hideThinkingIndicator();
                 
-                // Показываем кнопку снова для повторной попытки
                 const button = document.getElementById('activate-ai-btn');
                 if (button) {
                     button.style.display = 'block';
                     button.innerHTML = 'Повторить активацию';
                 }
                 
-                // Сбрасываем состояние активации
                 aiTeacherActivated = false;
                 aiTeacherWasActivated = false;
             });
@@ -4546,7 +4635,6 @@
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
             });
 
-            // Логируем все входящие события
             socket.onAny((event, data) => {
                 console.log('📥 WebSocket on:', event, data);
             });
@@ -4657,12 +4745,10 @@
         function initActivateButton() {
             const button = document.getElementById('activate-ai-btn');
             
-            // Убедимся, что кнопка кликабельна
             button.style.zIndex = '1000';
             button.style.pointerEvents = 'auto';
             button.style.position = 'fixed';
             
-            // Удаляем старые обработчики
             button.replaceWith(button.cloneNode(true));
             const newButton = document.getElementById('activate-ai-btn');
             
@@ -4674,12 +4760,10 @@
                 event.preventDefault();
                 event.stopPropagation();
                 
-                // ПРОВЕРКА ГОТОВНОСТИ ПЕРЕД АКТИВАЦИЕЙ
                 if (!checkRoomActivationReady()) {
                     console.error('❌ Комната не готова для активации:', roomActivationState);
                     statusDiv.textContent = 'Ошибка: комната не готова. Проверьте подключение.';
                     
-                    // Показываем детали состояния
                     const states = Object.entries(roomActivationState)
                         .filter(([_, ready]) => !ready)
                         .map(([key]) => key);
@@ -4695,11 +4779,9 @@
                     console.log('✅ Отправка запроса активации для комнаты:', roomId);
                     socket.emit('activate_ai_teacher', { room_id: roomId });
                     
-                    // Немедленная обратная связь
                     newButton.style.display = 'none';
                     statusDiv.textContent = 'Активация AI-учителя...';
                     
-                    // Таймаут для обработки ошибок активации
                     setTimeout(() => {
                         if (socket && !aiTeacherActivated) {
                             console.warn('⚠️ Активация заняла слишком много времени, пробуем резервный метод');
@@ -4718,13 +4800,11 @@
         function backupActivateAI() {
             console.log('Использование резервного метода активации');
             
-            // Помечаем как активированного
             aiTeacherActivated = true;
             aiTeacherWasActivated = true;
             activateAiBtn.style.display = 'none';
             statusDiv.textContent = 'AI-Teacher активирован (локальный режим)';
             
-            // Загружаем аватар
             loadAvatarFrames('teacher');
         }
 
@@ -4738,13 +4818,11 @@
             button.style.pointerEvents = 'auto';
             button.style.position = 'fixed';
             
-            // Переинициализируем обработчики
             initActivateButton();
         }
 
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
-            // Инициализация системы состояний активации
             roomActivationState = {
                 peerReady: false,
                 mediaReady: false, 
@@ -4753,16 +4831,14 @@
             };
             
             initSocket();
-            createBackgroundAnimation(); // ИСПОЛЬЗУЕМ НОВУЮ ГЕОМЕТРИЧЕСКУЮ АНИМАЦИЮ
+            createBackgroundAnimation(); // ИСПОЛЬЗУЕМ НОВЫЙ ФОН С ЧАСТИЦАМИ
             initWindowManagement();
             initZoom();
             initDrawingCanvas();
             initVisualization();
             
-            // Запускаем медиа устройства
             enableCameraAndMicrophone();
             
-            // Инициализируем кнопку после небольшой задержки
             setTimeout(() => {
                 initActivateButton();
                 updateActivationButton();
@@ -4837,11 +4913,9 @@
                 await enableCameraAndMicrophone();
             });
 
-            // Apply embedded mode styles if needed
             if (isEmbedded) {
                 document.body.classList.add('embedded');
                 
-                // Auto-activate AI teacher in embedded mode
                 setTimeout(() => {
                     if (socket) {
                         socket.emit('activate_ai_teacher', { room_id: roomId });
@@ -4856,9 +4930,7 @@
             });
             
             window.addEventListener('resize', () => {
-                animationShapes.forEach(shape => shape.remove());
-                animationShapes = [];
-                createGeometricAnimation(); // ПЕРЕСОЗДАЕМ ГЕОМЕТРИЧЕСКУЮ АНИМАЦИЮ
+                createParticleBackground();
             });
             
             if (isIOS) {
@@ -4872,7 +4944,6 @@
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
             
-            // Принудительно показываем кнопку через 3 секунды
             setTimeout(forceShowActivateButton, 3000);
         });
 
