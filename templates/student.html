@@ -705,7 +705,7 @@
         let currentStudentData = null;
 
         // Обработка формы входа
-        document.getElementById('studentLoginForm').addEventListener('submit', function(e) {
+        document.getElementById('studentLoginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
             const studentName = document.getElementById('studentName').value.trim();
@@ -728,16 +728,55 @@
                 return;
             }
             
-            // Сохраняем данные ученика
-            currentStudentData = {
-                name: studentName,
-                level: educationLevel,
-                age: studentAge,
-                loginTime: new Date().toISOString()
-            };
-            
-            saveStudentData(currentStudentData);
-            showSubjectSelection(currentStudentData);
+            // Сохраняем данные ученика через API
+            try {
+                const response = await fetch('/api/student/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: studentName,
+                        level: educationLevel,
+                        age: studentAge
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentStudentData = {
+                        name: studentName,
+                        level: educationLevel,
+                        age: studentAge,
+                        student_id: result.student_id,
+                        loginTime: new Date().toISOString()
+                    };
+                    
+                    // Сохраняем в localStorage для быстрого доступа
+                    localStorage.setItem('studentData', JSON.stringify(currentStudentData));
+                    
+                    // Показываем сообщение о создании комнат
+                    if (result.rooms_created) {
+                        showSuccessMessage('Автоматически созданы персональные комнаты для обучения!');
+                    }
+                    
+                    showSubjectSelection(currentStudentData);
+                } else {
+                    showError('Ошибка сохранения данных: ' + (result.error || 'Неизвестная ошибка'));
+                }
+            } catch (error) {
+                console.error('Error saving student data:', error);
+                // Fallback: сохраняем только в localStorage
+                currentStudentData = {
+                    name: studentName,
+                    level: educationLevel,
+                    age: studentAge,
+                    loginTime: new Date().toISOString()
+                };
+                localStorage.setItem('studentData', JSON.stringify(currentStudentData));
+                showSubjectSelection(currentStudentData);
+            }
         });
         
         function showError(message) {
@@ -761,8 +800,19 @@
             }, 5000);
         }
         
-        function saveStudentData(studentData) {
-            localStorage.setItem('studentData', JSON.stringify(studentData));
+        function showSuccessMessage(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'info-message';
+            successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+            
+            const subjectSelection = document.getElementById('subjectSelection');
+            subjectSelection.insertBefore(successDiv, subjectSelection.firstChild);
+            
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.parentNode.removeChild(successDiv);
+                }
+            }, 5000);
         }
         
         function loadStudentData() {
@@ -777,6 +827,27 @@
             // Заполняем информацию об ученике
             updateStudentInfoDisplay(studentData);
             loadAvailableSubjects();
+            
+            // Загружаем информацию о созданных комнатах
+            if (studentData.student_id) {
+                loadStudentRooms(studentData.student_id);
+            }
+        }
+        
+        function loadStudentRooms(studentId) {
+            fetch(`/api/student/${studentId}/rooms`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log(`Загружено ${data.total_rooms} комнат для ученика ${data.student_name}`);
+                        if (data.total_rooms > 0) {
+                            console.log('Автоматически созданные комнаты:', data.rooms);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error("Ошибка загрузки информации о комнатах:", error);
+                });
         }
         
         function updateStudentInfoDisplay(studentData) {
@@ -833,7 +904,7 @@
             document.getElementById('editForm').classList.add('hidden');
         }
         
-        function saveStudentInfo() {
+        async function saveStudentInfo() {
             const newName = document.getElementById('editStudentName').value.trim();
             const newLevel = document.getElementById('editEducationLevel').value;
             const newAge = document.getElementById('editStudentAge').value;
@@ -854,7 +925,32 @@
                 return;
             }
             
-            // Обновляем данные
+            // Обновляем данные через API
+            if (currentStudentData && currentStudentData.student_id) {
+                try {
+                    const response = await fetch(`/api/student/${currentStudentData.student_id}/update`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            name: newName,
+                            education_level: newLevel,
+                            age: newAge
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!result.success) {
+                        console.error('Error updating student data:', result.error);
+                    }
+                } catch (error) {
+                    console.error('Error updating student data:', error);
+                }
+            }
+            
+            // Обновляем локальные данные
             currentStudentData = {
                 ...currentStudentData,
                 name: newName,
@@ -862,27 +958,10 @@
                 age: newAge
             };
             
-            saveStudentData(currentStudentData);
+            localStorage.setItem('studentData', JSON.stringify(currentStudentData));
             updateStudentInfoDisplay(currentStudentData);
             hideEditForm();
-            
-            // Показываем уведомление об успешном сохранении
             showSuccessMessage('Данные успешно обновлены!');
-        }
-        
-        function showSuccessMessage(message) {
-            const successDiv = document.createElement('div');
-            successDiv.className = 'info-message';
-            successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
-            
-            const subjectSelection = document.getElementById('subjectSelection');
-            subjectSelection.insertBefore(successDiv, subjectSelection.firstChild);
-            
-            setTimeout(() => {
-                if (successDiv.parentNode) {
-                    successDiv.parentNode.removeChild(successDiv);
-                }
-            }, 3000);
         }
         
         function loadAvailableSubjects() {
@@ -964,13 +1043,48 @@
         }
         
         function enterClassroom(subjectId, subjectName, studentName) {
-            // Создаем уникальное имя комнаты
-            const roomName = `${subjectId}_${studentName.replace(/\s+/g, '_').toLowerCase()}_${Date.now()}`;
+            if (!currentStudentData || !currentStudentData.student_id) {
+                console.error("Данные ученика не загружены");
+                createNewRoom(subjectId, subjectName, studentName);
+                return;
+            }
             
-            // Создаем URL для виртуального класса
+            // Получаем информацию о комнате ученика для выбранного предмета
+            fetch(`/api/student/${currentStudentData.student_id}/room/${subjectId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const roomInfo = data.room;
+                        const conferenceUrl = data.conference_url;
+                        
+                        console.log("Using existing room:", roomInfo.room_name);
+                        openConferenceWindow(conferenceUrl, roomInfo.room_name);
+                    } else {
+                        // Fallback: создаем комнату старым способом
+                        console.warn("Не найдена существующая комната, создаем новую:", data.error);
+                        createNewRoom(subjectId, subjectName, studentName);
+                    }
+                })
+                .catch(error => {
+                    console.error("Ошибка получения комнаты:", error);
+                    // Fallback: создаем комнату старым способом
+                    createNewRoom(subjectId, subjectName, studentName);
+                });
+        }
+
+        // Функция-запасной вариант для создания новой комнаты
+        function createNewRoom(subjectId, subjectName, studentName) {
+            const roomName = `${subjectId}_${studentName.replace(/\s+/g, '_').toLowerCase()}_${Date.now()}`;
             const classroomUrl = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}&subject_name=${encodeURIComponent(subjectName)}`;
             
-            // Открываем комнату в новом окне (не всплывающем)
+            console.log("Creating new room:", roomName);
+            openConferenceWindow(classroomUrl, roomName);
+        }
+
+        // Обновленная функция открытия конференции
+        function openConferenceWindow(url, roomName = 'demo') {
+            console.log("Opening conference URL:", url);
+            
             const width = 1200;
             const height = 800;
             const left = (screen.width - width) / 2;
@@ -978,25 +1092,21 @@
             
             const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
             
-            const newWindow = window.open(classroomUrl, 'EduSonicClassroom', features);
+            const newWindow = window.open(url, `EduSonic_${roomName}`, features);
             
-            // Если новое окно заблокировано (поп-ап блокер)
-            if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
-                document.getElementById('loadingState').classList.add('hidden');
-                document.getElementById('subjectSelection').classList.remove('hidden');
+            if (newWindow) {
+                console.log("Window opened successfully");
+                newWindow.focus();
                 
-                showError('Не удалось открыть виртуальный класс. Пожалуйста, разрешите всплывающие окна для этого сайта и попробуйте снова.');
-                return;
-            }
-            
-            // Фокусируемся на новом окне
-            newWindow.focus();
-            
-            // Через 3 секунды возвращаемся к выбору предмета (на случай если пользователь закроет окно класса)
-            setTimeout(() => {
+                setTimeout(() => {
+                    document.getElementById('loadingState').classList.add('hidden');
+                    document.getElementById('subjectSelection').classList.remove('hidden');
+                }, 3000);
+            } else {
                 document.getElementById('loadingState').classList.add('hidden');
                 document.getElementById('subjectSelection').classList.remove('hidden');
-            }, 3000);
+                showError('Не удалось открыть виртуальный класс. Пожалуйста, разрешите всплывающие окна.');
+            }
         }
         
         // Проверяем, есть ли сохраненные данные ученика при загрузке страницы
