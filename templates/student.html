@@ -255,6 +255,24 @@
             margin-bottom: 0.3rem;
         }
         
+        .edit-info-btn {
+            background: none;
+            border: none;
+            color: var(--primary);
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: color 0.3s ease;
+        }
+        
+        .edit-info-btn:hover {
+            color: var(--secondary);
+            text-decoration: underline;
+        }
+        
         .welcome-message {
             text-align: center;
             margin-bottom: 2rem;
@@ -419,6 +437,17 @@
             text-align: center;
         }
         
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        
         /* Стили для выбранного предмета */
         .selected-subject-indicator {
             position: absolute;
@@ -433,6 +462,31 @@
             justify-content: center;
             color: white;
             font-size: 12px;
+        }
+        
+        /* Стили для формы редактирования */
+        .edit-form {
+            background: rgba(248, 250, 252, 0.8);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(126, 118, 249, 0.2);
+        }
+        
+        .edit-form h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .form-actions .btn {
+            flex: 1;
         }
     </style>
 </head>
@@ -506,11 +560,58 @@
                 <p>Выбери предмет для изучения</p>
             </div>
             
+            <!-- Информация об ученике -->
             <div class="student-info">
-                <h3><i class="fas fa-user-graduate"></i> Информация об ученике</h3>
-                <p><strong>Имя:</strong> <span id="infoName"></span></p>
-                <p><strong>Класс:</strong> <span id="infoLevel"></span></p>
-                <p><strong>Возраст:</strong> <span id="infoAge"></span> лет</p>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h3><i class="fas fa-user-graduate"></i> Информация об ученике</h3>
+                        <p><strong>Имя:</strong> <span id="infoName"></span></p>
+                        <p><strong>Класс:</strong> <span id="infoLevel"></span></p>
+                        <p><strong>Возраст:</strong> <span id="infoAge"></span> лет</p>
+                    </div>
+                    <button class="edit-info-btn" onclick="showEditForm()">
+                        <i class="fas fa-edit"></i> Изменить
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Форма редактирования (скрыта по умолчанию) -->
+            <div id="editForm" class="edit-form hidden">
+                <h3><i class="fas fa-edit"></i> Редактировать данные</h3>
+                <div class="form-group">
+                    <label for="editStudentName">Имя ученика</label>
+                    <input type="text" id="editStudentName" placeholder="Введите ваше имя">
+                </div>
+                <div class="form-group">
+                    <label for="editEducationLevel">Уровень образования</label>
+                    <select id="editEducationLevel">
+                        <option value="">Выберите класс</option>
+                        <option value="1">1 класс</option>
+                        <option value="2">2 класс</option>
+                        <option value="3">3 класс</option>
+                        <option value="4">4 класс</option>
+                        <option value="5">5 класс</option>
+                        <option value="6">6 класс</option>
+                        <option value="7">7 класс</option>
+                        <option value="8">8 класс</option>
+                        <option value="9">9 класс</option>
+                        <option value="10">10 класс</option>
+                        <option value="11">11 класс</option>
+                        <option value="student">Студент</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editStudentAge">Возраст</label>
+                    <input type="number" id="editStudentAge" min="6" max="18" placeholder="Ваш возраст">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="hideEditForm()">
+                        <i class="fas fa-times"></i> Отмена
+                    </button>
+                    <button type="button" class="btn" onclick="saveStudentInfo()">
+                        <i class="fas fa-save"></i> Сохранить
+                    </button>
+                </div>
             </div>
             
             <div class="welcome-message">
@@ -601,6 +702,7 @@
 
         // Текущий выбранный предмет
         let selectedSubject = null;
+        let currentStudentData = null;
 
         // Обработка формы входа
         document.getElementById('studentLoginForm').addEventListener('submit', function(e) {
@@ -626,18 +728,16 @@
                 return;
             }
             
-            // Сохраняем данные ученика в localStorage
-            const studentData = {
+            // Сохраняем данные ученика
+            currentStudentData = {
                 name: studentName,
                 level: educationLevel,
                 age: studentAge,
                 loginTime: new Date().toISOString()
             };
             
-            localStorage.setItem('studentData', JSON.stringify(studentData));
-            
-            // Показываем выбор предмета
-            showSubjectSelection(studentData);
+            saveStudentData(currentStudentData);
+            showSubjectSelection(currentStudentData);
         });
         
         function showError(message) {
@@ -646,16 +746,7 @@
             if (!errorDiv) {
                 errorDiv = document.createElement('div');
                 errorDiv.id = 'errorMessage';
-                errorDiv.style.cssText = `
-                    background: rgba(239, 68, 68, 0.1);
-                    border: 1px solid rgba(239, 68, 68, 0.2);
-                    color: #dc2626;
-                    padding: 1rem;
-                    border-radius: 8px;
-                    margin-bottom: 1rem;
-                    font-size: 0.9rem;
-                    text-align: center;
-                `;
+                errorDiv.className = 'error-message';
                 const form = document.getElementById('studentLoginForm');
                 form.parentNode.insertBefore(errorDiv, form);
             }
@@ -670,17 +761,34 @@
             }, 5000);
         }
         
+        function saveStudentData(studentData) {
+            localStorage.setItem('studentData', JSON.stringify(studentData));
+        }
+        
+        function loadStudentData() {
+            const saved = localStorage.getItem('studentData');
+            return saved ? JSON.parse(saved) : null;
+        }
+        
         function showSubjectSelection(studentData) {
             document.getElementById('loginForm').classList.add('hidden');
             document.getElementById('subjectSelection').classList.remove('hidden');
             
             // Заполняем информацию об ученике
+            updateStudentInfoDisplay(studentData);
+            loadAvailableSubjects();
+        }
+        
+        function updateStudentInfoDisplay(studentData) {
             document.getElementById('studentGreeting').textContent = studentData.name;
             document.getElementById('infoName').textContent = studentData.name;
             document.getElementById('infoLevel').textContent = getLevelText(studentData.level);
             document.getElementById('infoAge').textContent = studentData.age;
             
-            loadAvailableSubjects();
+            // Заполняем форму редактирования
+            document.getElementById('editStudentName').value = studentData.name;
+            document.getElementById('editEducationLevel').value = studentData.level;
+            document.getElementById('editStudentAge').value = studentData.age;
         }
         
         function getLevelText(level) {
@@ -705,6 +813,7 @@
             document.getElementById('subjectSelection').classList.add('hidden');
             document.getElementById('loginForm').classList.remove('hidden');
             document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('editForm').classList.add('hidden');
             
             // Сбрасываем выбранный предмет
             selectedSubject = null;
@@ -714,6 +823,66 @@
             if (errorDiv) {
                 errorDiv.parentNode.removeChild(errorDiv);
             }
+        }
+        
+        function showEditForm() {
+            document.getElementById('editForm').classList.remove('hidden');
+        }
+        
+        function hideEditForm() {
+            document.getElementById('editForm').classList.add('hidden');
+        }
+        
+        function saveStudentInfo() {
+            const newName = document.getElementById('editStudentName').value.trim();
+            const newLevel = document.getElementById('editEducationLevel').value;
+            const newAge = document.getElementById('editStudentAge').value;
+            
+            // Валидация
+            if (!newName) {
+                showError('Пожалуйста, введите имя');
+                return;
+            }
+            
+            if (!newLevel) {
+                showError('Пожалуйста, выберите класс');
+                return;
+            }
+            
+            if (!newAge || newAge < 6 || newAge > 18) {
+                showError('Пожалуйста, введите корректный возраст (от 6 до 18 лет)');
+                return;
+            }
+            
+            // Обновляем данные
+            currentStudentData = {
+                ...currentStudentData,
+                name: newName,
+                level: newLevel,
+                age: newAge
+            };
+            
+            saveStudentData(currentStudentData);
+            updateStudentInfoDisplay(currentStudentData);
+            hideEditForm();
+            
+            // Показываем уведомление об успешном сохранении
+            showSuccessMessage('Данные успешно обновлены!');
+        }
+        
+        function showSuccessMessage(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'info-message';
+            successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+            
+            const subjectSelection = document.getElementById('subjectSelection');
+            subjectSelection.insertBefore(successDiv, subjectSelection.firstChild);
+            
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.parentNode.removeChild(successDiv);
+                }
+            }, 3000);
         }
         
         function loadAvailableSubjects() {
@@ -779,7 +948,10 @@
                 return;
             }
             
-            const studentData = JSON.parse(localStorage.getItem('studentData'));
+            if (!currentStudentData) {
+                alert('Ошибка: данные ученика не найдены');
+                return;
+            }
             
             // Показываем состояние загрузки
             document.getElementById('subjectSelection').classList.add('hidden');
@@ -787,7 +959,7 @@
             
             // Небольшая задержка для показа анимации загрузки
             setTimeout(() => {
-                enterClassroom(selectedSubject.id, selectedSubject.name, studentData.name);
+                enterClassroom(selectedSubject.id, selectedSubject.name, currentStudentData.name);
             }, 1500);
         }
         
@@ -798,7 +970,7 @@
             // Создаем URL для виртуального класса
             const classroomUrl = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}&subject_name=${encodeURIComponent(subjectName)}`;
             
-            // Открываем комнату в новом окне
+            // Открываем комнату в новом окне (не всплывающем)
             const width = 1200;
             const height = 800;
             const left = (screen.width - width) / 2;
@@ -813,7 +985,7 @@
                 document.getElementById('loadingState').classList.add('hidden');
                 document.getElementById('subjectSelection').classList.remove('hidden');
                 
-                alert('Не удалось открыть виртуальный класс. Пожалуйста, разрешите всплывающие окна для этого сайта и попробуйте снова.');
+                showError('Не удалось открыть виртуальный класс. Пожалуйста, разрешите всплывающие окна для этого сайта и попробуйте снова.');
                 return;
             }
             
@@ -829,24 +1001,24 @@
         
         // Проверяем, есть ли сохраненные данные ученика при загрузке страницы
         window.addEventListener('load', function() {
-            const savedData = localStorage.getItem('studentData');
+            const savedData = loadStudentData();
             if (savedData) {
                 try {
-                    const studentData = JSON.parse(savedData);
-                    
                     // Проверяем, не прошло ли слишком много времени с последнего входа
-                    const loginTime = new Date(studentData.loginTime);
+                    const loginTime = new Date(savedData.loginTime);
                     const currentTime = new Date();
                     const hoursDiff = (currentTime - loginTime) / (1000 * 60 * 60);
                     
                     // Если прошло меньше 24 часов, автоматически показываем выбор предмета
                     if (hoursDiff < 24) {
-                        // Заполняем форму сохраненными данными
-                        document.getElementById('studentName').value = studentData.name;
-                        document.getElementById('educationLevel').value = studentData.level;
-                        document.getElementById('studentAge').value = studentData.age;
+                        currentStudentData = savedData;
                         
-                        showSubjectSelection(studentData);
+                        // Заполняем форму сохраненными данными
+                        document.getElementById('studentName').value = savedData.name;
+                        document.getElementById('educationLevel').value = savedData.level;
+                        document.getElementById('studentAge').value = savedData.age;
+                        
+                        showSubjectSelection(savedData);
                     } else {
                         // Удаляем устаревшие данные
                         localStorage.removeItem('studentData');
@@ -882,26 +1054,22 @@
                 if (this.value < 6) this.value = 6;
                 if (this.value > 18) this.value = 18;
             });
+            
+            // То же самое для формы редактирования
+            document.getElementById('editStudentName').addEventListener('input', function() {
+                this.value = this.value.replace(/[^a-zA-Zа-яА-ЯёЁ\s]/g, '');
+            });
+            
+            document.getElementById('editStudentAge').addEventListener('input', function() {
+                if (this.value < 6) this.value = 6;
+                if (this.value > 18) this.value = 18;
+            });
         }
         
         // Обработка перед закрытием страницы
         window.addEventListener('beforeunload', function() {
             // Можно добавить сохранение состояния или предупреждение
         });
-        
-        // Дополнительные функции для улучшения UX
-        function animateValue(element, start, end, duration) {
-            let startTimestamp = null;
-            const step = (timestamp) => {
-                if (!startTimestamp) startTimestamp = timestamp;
-                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                element.innerHTML = Math.floor(progress * (end - start) + start);
-                if (progress < 1) {
-                    window.requestAnimationFrame(step);
-                }
-            };
-            window.requestAnimationFrame(step);
-        }
     </script>
 </body>
 </html>
