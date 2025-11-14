@@ -250,11 +250,25 @@ def teacher():
     """Страница учителя (личный кабинет)"""
     return render_template('teacher.html')
 
+@app.route('/student')
+def student():
+    """Страница ученика (личный кабинет)"""
+    return render_template('student.html')
+
 @app.route('/conference')
 def conference():
     room_id = request.args.get('room', 'default')
     embed = request.args.get('embed', 'false') == 'true'
-    return render_template('conference.html', room_id=room_id, embed=embed)
+    student_mode = request.args.get('student', 'false') == 'true'
+    subject = request.args.get('subject', '')
+    subject_name = request.args.get('subject_name', '')
+    
+    return render_template('conference.html', 
+                         room_id=room_id, 
+                         embed=embed,
+                         student_mode=student_mode,
+                         subject=subject,
+                         subject_name=subject_name)
 
 @app.route('/api/avatars')
 def get_avatars():
@@ -335,12 +349,24 @@ def handle_join_room(data):
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
         room_dialogue[room_id].room_id = room_id
+        
+        # ПРОВЕРЯЕМ, ЯВЛЯЕТСЯ ЛИ ЭТО КОМНАТОЙ УЧЕНИКА С ВЫБРАННЫМ ПРЕДМЕТОМ
+        subject_from_room = _extract_subject_from_room(room_id)
+        if subject_from_room:
+            # Устанавливаем режим ученика
+            room_dialogue[room_id].set_student_mode(subject_from_room)
+            print(f"🎓 Комната {room_id} настроена в режиме ученика с предметом: {subject_from_room}")
     
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
     if len(room_participants[room_id]) == 1:
-        greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
+        # В режиме ученика меняем приветствие
+        if room_dialogue[room_id].is_student_mode:
+            subject = room_dialogue[room_id].auto_selected_subject
+            greeting = f"Привет! Я твой AI-репетитор по {subject}. Давайте познакомимся и начнем интересный урок!"
+        else:
+            greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     # Уведомляем других участников о новом подключении
@@ -363,6 +389,26 @@ def handle_join_room(data):
     
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
+
+def _extract_subject_from_room(room_id: str) -> Optional[str]:
+    """Извлекает предмет из названия комнаты для режима ученика"""
+    if '_' in room_id:
+        subject_part = room_id.split('_')[0].lower()
+        subject_map = {
+            'math': 'математика',
+            'mathematics': 'математика',
+            'physics': 'физика', 
+            'chemistry': 'химия',
+            'biology': 'биология',
+            'history': 'история',
+            'social': 'обществознание',
+            'literature': 'литература',
+            'russian': 'русский язык',
+            'english': 'английский язык',
+            'geography': 'география'
+        }
+        return subject_map.get(subject_part)
+    return None
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
@@ -672,7 +718,13 @@ def handle_activate_ai_teacher(data):
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
+    # В режиме ученика меняем приветствие
+    if room_dialogue[room_id].is_student_mode:
+        subject = room_dialogue[room_id].auto_selected_subject
+        greeting = f"Привет! Я твой AI-репетитор по {subject}. Давайте познакомимся и начнем интересный урок!"
+    else:
+        greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
+    
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
