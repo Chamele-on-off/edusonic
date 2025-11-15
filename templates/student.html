@@ -176,6 +176,9 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            display: block;
         }
         
         .subject-card:hover {
@@ -188,12 +191,6 @@
             transform: translateY(-1px);
         }
         
-        .subject-card.selected {
-            border-color: var(--primary);
-            background: linear-gradient(135deg, rgba(126, 118, 249, 0.1), rgba(106, 97, 229, 0.05));
-            box-shadow: 0 5px 15px rgba(126, 118, 249, 0.2);
-        }
-        
         .subject-icon {
             font-size: 2.5rem;
             margin-bottom: 0.8rem;
@@ -203,10 +200,6 @@
         
         .subject-card:hover .subject-icon {
             transform: scale(1.1);
-        }
-        
-        .subject-card.selected .subject-icon {
-            color: var(--secondary);
         }
         
         .subject-name {
@@ -292,27 +285,6 @@
         .welcome-message p {
             color: var(--text-light);
             font-size: 0.95rem;
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 2rem;
-        }
-        
-        .loading-spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
         
         .subject-description {
@@ -403,29 +375,6 @@
             }
         }
         
-        /* Специальные стили для маленьких экранов */
-        @media (max-width: 360px) {
-            .subjects-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .auth-container {
-                padding: 1rem;
-            }
-        }
-        
-        /* Стили для состояния загрузки */
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .btn:disabled:hover {
-            transform: none;
-            box-shadow: none;
-        }
-        
         /* Информационные сообщения */
         .info-message {
             background: rgba(59, 130, 246, 0.1);
@@ -447,22 +396,6 @@
             margin-bottom: 1rem;
             font-size: 0.9rem;
             text-align: center;
-        }
-        
-        /* Стили для выбранного предмета */
-        .selected-subject-indicator {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 20px;
-            height: 20px;
-            background: var(--success);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
         }
         
         /* Стили для формы редактирования */
@@ -490,8 +423,8 @@
             flex: 1;
         }
 
-        /* Стили для управления аватаром */
-        .avatar-controls {
+        /* Стили для статуса комнат */
+        .rooms-status {
             background: rgba(248, 250, 252, 0.8);
             border-radius: 12px;
             padding: 1.5rem;
@@ -499,44 +432,34 @@
             border: 1px solid rgba(126, 118, 249, 0.2);
         }
 
-        .avatar-controls h3 {
+        .rooms-status h3 {
             color: var(--primary);
             margin-bottom: 1rem;
             font-size: 1.1rem;
         }
 
-        .avatar-select-container {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
+        .rooms-list {
+            display: grid;
+            gap: 0.5rem;
         }
 
-        .avatar-select {
-            flex: 1;
-            min-width: 200px;
+        .room-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             padding: 0.8rem;
-            border: 2px solid #e1e1e1;
+            background: white;
             border-radius: 8px;
-            font-size: 0.95rem;
+            border: 1px solid #e1e1e1;
         }
 
-        .avatar-preview {
-            width: 80px;
-            height: 80px;
-            border: 2px solid #e1e1e1;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f8f9fa;
-            overflow: hidden;
+        .room-ready {
+            color: var(--success);
+            font-weight: 600;
         }
 
-        .avatar-preview img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
+        .room-pending {
+            color: var(--warning);
         }
     </style>
 </head>
@@ -664,21 +587,12 @@
                 </div>
             </div>
 
-            <!-- Управление аватаром -->
-            <div class="avatar-controls">
-                <h3><i class="fas fa-user-circle"></i> Выбор аватара учителя</h3>
-                <div class="avatar-select-container">
-                    <select id="avatarSelect" class="avatar-select">
-                        <option value="">Выберите аватар...</option>
-                    </select>
-                    <div class="avatar-preview" id="avatarPreview">
-                        <i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>
-                    </div>
-                    <button class="btn" id="setAvatarBtn" onclick="setAvatarForRoom()" style="flex: 0 0 auto;">
-                        <i class="fas fa-check"></i> Установить аватар
-                    </button>
+            <!-- Статус комнат -->
+            <div class="rooms-status">
+                <h3><i class="fas fa-door-open"></i> Ваши учебные комнаты</h3>
+                <div class="rooms-list" id="roomsList">
+                    <!-- Список комнат будет загружен здесь -->
                 </div>
-                <div id="avatarStatus" class="info-message" style="display: none; margin-top: 1rem;"></div>
             </div>
             
             <div class="welcome-message">
@@ -693,12 +607,6 @@
             <button class="btn btn-secondary" onclick="showLoginForm()" style="margin-top: 2rem;">
                 <i class="fas fa-sign-out-alt"></i> Выйти
             </button>
-        </div>
-        
-        <!-- Состояние загрузки -->
-        <div id="loadingState" class="loading hidden">
-            <div class="loading-spinner"></div>
-            <p>Загружаем виртуальный класс...</p>
         </div>
     </div>
 
@@ -770,116 +678,13 @@
             }
         ];
 
-        // Текущий выбранный предмет
-        let selectedSubject = null;
         let currentStudentData = null;
-        let currentRoomId = null;
-        let availableAvatars = [];
+        let studentRooms = [];
 
         // Инициализация Socket.io
         socket.on('connect', function() {
             console.log('✅ Connected to server');
         });
-
-        socket.on('avatar_changed', function(data) {
-            console.log('✅ Avatar changed:', data.avatar_name);
-            showAvatarStatus(`Аватар успешно установлен: ${data.avatar_name}`, true);
-        });
-
-        // Загрузка доступных аватаров
-        async function loadAvatars() {
-            try {
-                const response = await fetch('/api/avatars');
-                const data = await response.json();
-                
-                if (data.avatars && data.avatars.length > 0) {
-                    availableAvatars = data.avatars;
-                    const avatarSelect = document.getElementById('avatarSelect');
-                    avatarSelect.innerHTML = '<option value="">Выберите аватар...</option>';
-                    
-                    data.avatars.forEach(avatar => {
-                        const option = document.createElement('option');
-                        option.value = avatar;
-                        option.textContent = avatar;
-                        avatarSelect.appendChild(option);
-                    });
-                    
-                    // Автоматически выбираем аватар "woman" если он есть
-                    const womanAvatar = data.avatars.find(avatar => avatar.toLowerCase().includes('woman'));
-                    if (womanAvatar) {
-                        avatarSelect.value = womanAvatar;
-                        updateAvatarPreview(womanAvatar);
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading avatars:', error);
-            }
-        }
-
-        // Обновление превью аватара
-        function updateAvatarPreview(avatarName) {
-            const preview = document.getElementById('avatarPreview');
-            if (avatarName) {
-                // Загружаем первое изображение аватара для превью
-                fetch(`/api/frames/${avatarName}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.frames && data.frames.length > 0) {
-                            const firstFrame = data.frames[0];
-                            preview.innerHTML = `<img src="/frames/${avatarName}/${firstFrame}" alt="${avatarName}" onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 2rem; color: #6c757d;\\'></i>';">`;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error loading avatar preview:', error);
-                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
-                    });
-            } else {
-                preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
-            }
-        }
-
-        // Установка аватара для комнаты (как в teacher.html)
-        function setAvatarForRoom() {
-            const avatarSelect = document.getElementById('avatarSelect');
-            const selectedAvatar = avatarSelect.value;
-            
-            if (!selectedAvatar) {
-                showAvatarStatus('Пожалуйста, выберите аватар', false);
-                return;
-            }
-            
-            if (!currentRoomId) {
-                showAvatarStatus('Сначала создайте комнату', false);
-                return;
-            }
-            
-            console.log(`🎯 Setting avatar for room ${currentRoomId}: ${selectedAvatar}`);
-            
-            // Отправляем команду смены аватара как в teacher.html
-            socket.emit('avatar_changed', {
-                room_id: currentRoomId,
-                avatar_name: selectedAvatar
-            });
-            
-            // Также отправляем команду запуска анимации
-            socket.emit('client_start_animation', {
-                room_id: currentRoomId,
-                avatar_name: selectedAvatar
-            });
-            
-            showAvatarStatus(`Аватар "${selectedAvatar}" устанавливается...`, true);
-        }
-
-        function showAvatarStatus(message, isSuccess) {
-            const statusDiv = document.getElementById('avatarStatus');
-            statusDiv.textContent = message;
-            statusDiv.className = isSuccess ? 'info-message' : 'error-message';
-            statusDiv.style.display = 'block';
-            
-            setTimeout(() => {
-                statusDiv.style.display = 'none';
-            }, 5000);
-        }
 
         // Обработка формы входа
         document.getElementById('studentLoginForm').addEventListener('submit', async function(e) {
@@ -938,13 +743,11 @@
                     // Сохраняем в localStorage для быстрого доступа
                     localStorage.setItem('studentData', JSON.stringify(currentStudentData));
                     
-                    // Показываем сообщение о создании комнат
-                    if (result.rooms_created) {
-                        showSuccessMessage('Автоматически созданы персональные комнаты для обучения!');
-                    }
+                    // Создаем комнаты для всех предметов
+                    await createStudentRooms();
                     
-                    // Загружаем аватары после успешного входа
-                    await loadAvatars();
+                    // Загружаем информацию о комнатах
+                    await loadStudentRooms();
                     
                     showSubjectSelection(currentStudentData);
                 } else {
@@ -961,11 +764,88 @@
                 };
                 localStorage.setItem('studentData', JSON.stringify(currentStudentData));
                 
-                // Загружаем аватары даже при fallback
-                await loadAvatars();
+                // Создаем комнаты и показываем выбор предмета
+                await createStudentRooms();
+                await loadStudentRooms();
                 showSubjectSelection(currentStudentData);
             }
         });
+        
+        // Создание комнат для всех предметов
+        async function createStudentRooms() {
+            if (!currentStudentData || !currentStudentData.student_id) return;
+            
+            try {
+                const response = await fetch('/api/student/create-rooms', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        student_id: currentStudentData.student_id,
+                        student_name: currentStudentData.name,
+                        conference_id: currentStudentData.conference_id || Date.now().toString()
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log(`✅ Создано ${result.created_rooms} комнат для ученика`);
+                    if (result.rooms) {
+                        studentRooms = result.rooms;
+                    }
+                } else {
+                    console.error('Ошибка создания комнат:', result.error);
+                }
+            } catch (error) {
+                console.error('Error creating rooms:', error);
+            }
+        }
+        
+        // Загрузка информации о комнатах ученика
+        async function loadStudentRooms() {
+            if (!currentStudentData || !currentStudentData.student_id) return;
+            
+            try {
+                const response = await fetch(`/api/student/${currentStudentData.student_id}/rooms`);
+                const data = await response.json();
+                
+                if (data.success && data.rooms) {
+                    studentRooms = data.rooms;
+                    updateRoomsList();
+                }
+            } catch (error) {
+                console.error('Error loading rooms:', error);
+            }
+        }
+        
+        // Обновление списка комнат в интерфейсе
+        function updateRoomsList() {
+            const roomsList = document.getElementById('roomsList');
+            roomsList.innerHTML = '';
+            
+            if (studentRooms.length === 0) {
+                roomsList.innerHTML = '<div class="room-item"><span>Комнаты загружаются...</span><span class="room-pending">⏳</span></div>';
+                return;
+            }
+            
+            studentRooms.forEach(room => {
+                const roomItem = document.createElement('div');
+                roomItem.className = 'room-item';
+                roomItem.innerHTML = `
+                    <span>${getSubjectName(room.subject_id)}</span>
+                    <span class="room-ready">✅ Готова</span>
+                `;
+                roomsList.appendChild(roomItem);
+            });
+        }
+        
+        // Получение названия предмета по ID
+        function getSubjectName(subjectId) {
+            const subject = subjects.find(s => s.id === subjectId);
+            return subject ? subject.name : subjectId;
+        }
         
         function showError(message) {
             // Создаем или обновляем сообщение об ошибке
@@ -1015,27 +895,6 @@
             // Заполняем информацию об ученике
             updateStudentInfoDisplay(studentData);
             loadAvailableSubjects();
-            
-            // Загружаем информацию о созданных комнатах
-            if (studentData.student_id) {
-                loadStudentRooms(studentData.student_id);
-            }
-        }
-        
-        function loadStudentRooms(studentId) {
-            fetch(`/api/student/${studentId}/rooms`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        console.log(`Загружено ${data.total_rooms} комнат для ученика ${data.student_name}`);
-                        if (data.total_rooms > 0) {
-                            console.log('Автоматически созданные комнаты:', data.rooms);
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error("Ошибка загрузки информации о комнатах:", error);
-                });
         }
         
         function updateStudentInfoDisplay(studentData) {
@@ -1071,12 +930,7 @@
         function showLoginForm() {
             document.getElementById('subjectSelection').classList.add('hidden');
             document.getElementById('loginForm').classList.remove('hidden');
-            document.getElementById('loadingState').classList.add('hidden');
             document.getElementById('editForm').classList.add('hidden');
-            
-            // Сбрасываем выбранный предмет
-            selectedSubject = null;
-            currentRoomId = null;
             
             // Удаляем сообщение об ошибке если есть
             const errorDiv = document.getElementById('errorMessage');
@@ -1158,8 +1012,10 @@
             grid.innerHTML = '';
             
             subjects.forEach(subject => {
-                const subjectCard = document.createElement('div');
+                const subjectCard = document.createElement('a');
                 subjectCard.className = 'subject-card';
+                subjectCard.href = getConferenceUrl(subject.id);
+                subjectCard.target = '_blank';
                 subjectCard.innerHTML = `
                     <div class="subject-icon">
                         <i class="${subject.icon}"></i>
@@ -1168,171 +1024,19 @@
                     <div class="subject-description">${subject.description}</div>
                 `;
                 
-                subjectCard.onclick = () => selectSubject(subject);
                 grid.appendChild(subjectCard);
             });
         }
         
-        function selectSubject(subject) {
-            // Снимаем выделение со всех предметов
-            document.querySelectorAll('.subject-card').forEach(card => {
-                card.classList.remove('selected');
-            });
+        // Минималистичная функция для получения URL конференции
+        function getConferenceUrl(subjectId) {
+            if (!currentStudentData) return '#';
             
-            // Выделяем выбранный предмет
-            event.currentTarget.classList.add('selected');
-            selectedSubject = subject;
+            const conferenceId = currentStudentData.conference_id || Date.now().toString();
+            const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
+            const roomName = `${subjectId}_${studentName}_${conferenceId}`;
             
-            // Показываем кнопку начала урока
-            showStartButton();
-        }
-        
-        function showStartButton() {
-            // Удаляем старую кнопку если есть
-            const oldButton = document.getElementById('startLessonButton');
-            if (oldButton) {
-                oldButton.remove();
-            }
-            
-            const button = document.createElement('button');
-            button.id = 'startLessonButton';
-            button.className = 'btn';
-            button.innerHTML = `
-                <i class="fas fa-play"></i> 
-                Начать урок по ${selectedSubject.name}
-            `;
-            button.onclick = startLesson;
-            
-            const grid = document.getElementById('subjectsGrid');
-            grid.parentNode.insertBefore(button, grid.nextSibling);
-            
-            // Прокручиваем к кнопке
-            button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        
-        function startLesson() {
-            if (!selectedSubject) {
-                alert('Пожалуйста, выберите предмет для изучения');
-                return;
-            }
-            
-            if (!currentStudentData) {
-                alert('Ошибка: данные ученика не найдены');
-                return;
-            }
-            
-            // Показываем состояние загрузки
-            document.getElementById('subjectSelection').classList.add('hidden');
-            document.getElementById('loadingState').classList.remove('hidden');
-            
-            // Небольшая задержка для показа анимации загрузки
-            setTimeout(() => {
-                enterClassroom(selectedSubject.id, selectedSubject.name, currentStudentData.name);
-            }, 1500);
-        }
-        
-        function enterClassroom(subjectId, subjectName, studentName) {
-            if (!currentStudentData || !currentStudentData.student_id) {
-                console.error("Данные ученика не загружены");
-                createNewRoom(subjectId, subjectName, studentName);
-                return;
-            }
-            
-            // Получаем информацию о комнате ученика для выбранного предмета
-            fetch(`/api/student/${currentStudentData.student_id}/room/${subjectId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const roomInfo = data.room;
-                        const conferenceUrl = data.conference_url;
-                        
-                        console.log("Using existing room:", roomInfo.room_name);
-                        currentRoomId = roomInfo.room_name;
-                        
-                        // Автоматически устанавливаем аватар "woman" для комнаты
-                        setAvatarAutomatically(roomInfo.room_name);
-                        
-                        openConferenceWindow(conferenceUrl, roomInfo.room_name);
-                    } else {
-                        // Fallback: создаем комнату старым способом
-                        console.warn("Не найдена существующая комната, создаем новую:", data.error);
-                        createNewRoom(subjectId, subjectName, studentName);
-                    }
-                })
-                .catch(error => {
-                    console.error("Ошибка получения комнаты:", error);
-                    // Fallback: создаем комнату старым способом
-                    createNewRoom(subjectId, subjectName, studentName);
-                });
-        }
-
-        // Автоматическая установка аватара для комнаты
-        function setAvatarAutomatically(roomId) {
-            const womanAvatar = availableAvatars.find(avatar => avatar.toLowerCase().includes('woman'));
-            if (womanAvatar) {
-                console.log(`🎯 Automatically setting woman avatar for room ${roomId}`);
-                
-                // Отправляем команды как в teacher.html
-                socket.emit('avatar_changed', {
-                    room_id: roomId,
-                    avatar_name: womanAvatar
-                });
-                
-                socket.emit('client_start_animation', {
-                    room_id: roomId,
-                    avatar_name: womanAvatar
-                });
-            }
-        }
-
-        // Функция-запасной вариант для создания новой комнаты
-        function createNewRoom(subjectId, subjectName, studentName) {
-            // ✅ ИСПОЛЬЗУЕМ ЕДИНЫЙ CONFERENCE_ID ЕСЛИ ОН ЕСТЬ
-            let conferenceId = currentStudentData.conference_id;
-            if (!conferenceId) {
-                conferenceId = Date.now();
-                console.warn("Conference ID не найден, создаем новый:", conferenceId);
-            }
-            
-            const roomName = `${subjectId}_${studentName.replace(/\s+/g, '_').toLowerCase()}_${conferenceId}`;
-            const classroomUrl = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}&subject_name=${encodeURIComponent(subjectName)}`;
-            
-            console.log("Creating new room:", roomName);
-            currentRoomId = roomName;
-            
-            // Автоматически устанавливаем аватар "woman" для новой комнаты
-            setAvatarAutomatically(roomName);
-            
-            openConferenceWindow(classroomUrl, roomName);
-        }
-
-        // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТКРЫТИЯ КОНФЕРЕНЦИИ - ТОЧНО КАК В LANDING.HTML
-        function openConferenceWindow(url, roomName = 'demo') {
-            console.log("Opening conference URL:", url);
-            
-            // ТОЧНО ТАК ЖЕ КАК В LANDING.HTML
-            const width = 1200;
-            const height = 800;
-            const left = (screen.width - width) / 2;
-            const top = (screen.height - height) / 2;
-            
-            const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
-            
-            const newWindow = window.open(url, 'EduSonicConference', features);
-            
-            if (newWindow) {
-                console.log("Conference window opened successfully");
-                newWindow.focus();
-                
-                setTimeout(() => {
-                    document.getElementById('loadingState').classList.add('hidden');
-                    document.getElementById('subjectSelection').classList.remove('hidden');
-                }, 3000);
-            } else {
-                document.getElementById('loadingState').classList.add('hidden');
-                document.getElementById('subjectSelection').classList.remove('hidden');
-                showError('Не удалось открыть виртуальный класс. Пожалуйста, разрешите всплывающие окна.');
-            }
+            return `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}`;
         }
         
         // Проверяем, есть ли сохраненные данные ученика при загрузке страницы
@@ -1354,8 +1058,8 @@
                         document.getElementById('educationLevel').value = savedData.level;
                         document.getElementById('studentAge').value = savedData.age;
                         
-                        // Загружаем аватары
-                        loadAvatars().then(() => {
+                        // Загружаем информацию о комнатах
+                        loadStudentRooms().then(() => {
                             showSubjectSelection(savedData);
                         });
                     } else {
@@ -1403,55 +1107,11 @@
                 if (this.value < 6) this.value = 6;
                 if (this.value > 18) this.value = 18;
             });
-            
-            // Обработчик изменения выбора аватара
-            document.getElementById('avatarSelect').addEventListener('change', function() {
-                updateAvatarPreview(this.value);
-            });
         }
         
         // Обработка перед закрытием страницы
         window.addEventListener('beforeunload', function() {
             // Можно добавить сохранение состояния или предупреждение
-        });
-
-        // ✅ ДОБАВЛЯЕМ ФУНКЦИЮ ДЛЯ ОБНОВЛЕНИЯ CONFERENCE_ID СУЩЕСТВУЮЩИХ УЧЕНИКОВ
-        function updateConferenceIdsForExistingStudents() {
-            fetch('/api/admin/update_student_conference_ids')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        console.log(`✅ Обновлено ${data.updated_count} учеников`);
-                        if (currentStudentData) {
-                            // Перезагружаем данные ученика
-                            loadStudentData();
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error("Ошибка обновления conference_id:", error);
-                });
-        }
-
-        // ✅ ДОБАВЛЯЕМ КНОПКУ ДЛЯ АДМИНИСТРАТОРА (только для разработки)
-        function addAdminButton() {
-            const adminButton = document.createElement('button');
-            adminButton.className = 'btn btn-secondary';
-            adminButton.style.marginTop = '1rem';
-            adminButton.style.background = 'var(--warning)';
-            adminButton.innerHTML = '<i class="fas fa-tools"></i> Обновить ID конференций';
-            adminButton.onclick = updateConferenceIdsForExistingStudents;
-            
-            const subjectSelection = document.getElementById('subjectSelection');
-            if (subjectSelection) {
-                subjectSelection.appendChild(adminButton);
-            }
-        }
-
-        // Вызываем добавление кнопки администратора при загрузке
-        window.addEventListener('load', function() {
-            // Добавляем кнопку администратора (можно убрать в продакшене)
-            setTimeout(addAdminButton, 1000);
         });
     </script>
 </body>
