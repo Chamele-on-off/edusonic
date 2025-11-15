@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EduSonic AI - Личный кабинет ученика</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -488,6 +489,55 @@
         .form-actions .btn {
             flex: 1;
         }
+
+        /* Стили для управления аватаром */
+        .avatar-controls {
+            background: rgba(248, 250, 252, 0.8);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(126, 118, 249, 0.2);
+        }
+
+        .avatar-controls h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .avatar-select-container {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .avatar-select {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.8rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+        .avatar-preview {
+            width: 80px;
+            height: 80px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            overflow: hidden;
+        }
+
+        .avatar-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
     </style>
 </head>
 <body>
@@ -613,6 +663,23 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Управление аватаром -->
+            <div class="avatar-controls">
+                <h3><i class="fas fa-user-circle"></i> Выбор аватара учителя</h3>
+                <div class="avatar-select-container">
+                    <select id="avatarSelect" class="avatar-select">
+                        <option value="">Выберите аватар...</option>
+                    </select>
+                    <div class="avatar-preview" id="avatarPreview">
+                        <i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>
+                    </div>
+                    <button class="btn" id="setAvatarBtn" onclick="setAvatarForRoom()" style="flex: 0 0 auto;">
+                        <i class="fas fa-check"></i> Установить аватар
+                    </button>
+                </div>
+                <div id="avatarStatus" class="info-message" style="display: none; margin-top: 1rem;"></div>
+            </div>
             
             <div class="welcome-message">
                 <h2><i class="fas fa-rocket"></i> Готовы к обучению?</h2>
@@ -636,6 +703,9 @@
     </div>
 
     <script>
+        // Socket.io connection
+        const socket = io();
+
         // Данные о предметах
         const subjects = [
             { 
@@ -703,6 +773,113 @@
         // Текущий выбранный предмет
         let selectedSubject = null;
         let currentStudentData = null;
+        let currentRoomId = null;
+        let availableAvatars = [];
+
+        // Инициализация Socket.io
+        socket.on('connect', function() {
+            console.log('✅ Connected to server');
+        });
+
+        socket.on('avatar_changed', function(data) {
+            console.log('✅ Avatar changed:', data.avatar_name);
+            showAvatarStatus(`Аватар успешно установлен: ${data.avatar_name}`, true);
+        });
+
+        // Загрузка доступных аватаров
+        async function loadAvatars() {
+            try {
+                const response = await fetch('/api/avatars');
+                const data = await response.json();
+                
+                if (data.avatars && data.avatars.length > 0) {
+                    availableAvatars = data.avatars;
+                    const avatarSelect = document.getElementById('avatarSelect');
+                    avatarSelect.innerHTML = '<option value="">Выберите аватар...</option>';
+                    
+                    data.avatars.forEach(avatar => {
+                        const option = document.createElement('option');
+                        option.value = avatar;
+                        option.textContent = avatar;
+                        avatarSelect.appendChild(option);
+                    });
+                    
+                    // Автоматически выбираем аватар "woman" если он есть
+                    const womanAvatar = data.avatars.find(avatar => avatar.toLowerCase().includes('woman'));
+                    if (womanAvatar) {
+                        avatarSelect.value = womanAvatar;
+                        updateAvatarPreview(womanAvatar);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading avatars:', error);
+            }
+        }
+
+        // Обновление превью аватара
+        function updateAvatarPreview(avatarName) {
+            const preview = document.getElementById('avatarPreview');
+            if (avatarName) {
+                // Загружаем первое изображение аватара для превью
+                fetch(`/api/frames/${avatarName}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.frames && data.frames.length > 0) {
+                            const firstFrame = data.frames[0];
+                            preview.innerHTML = `<img src="/frames/${avatarName}/${firstFrame}" alt="${avatarName}" onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 2rem; color: #6c757d;\\'></i>';">`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading avatar preview:', error);
+                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
+                    });
+            } else {
+                preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
+            }
+        }
+
+        // Установка аватара для комнаты (как в teacher.html)
+        function setAvatarForRoom() {
+            const avatarSelect = document.getElementById('avatarSelect');
+            const selectedAvatar = avatarSelect.value;
+            
+            if (!selectedAvatar) {
+                showAvatarStatus('Пожалуйста, выберите аватар', false);
+                return;
+            }
+            
+            if (!currentRoomId) {
+                showAvatarStatus('Сначала создайте комнату', false);
+                return;
+            }
+            
+            console.log(`🎯 Setting avatar for room ${currentRoomId}: ${selectedAvatar}`);
+            
+            // Отправляем команду смены аватара как в teacher.html
+            socket.emit('avatar_changed', {
+                room_id: currentRoomId,
+                avatar_name: selectedAvatar
+            });
+            
+            // Также отправляем команду запуска анимации
+            socket.emit('client_start_animation', {
+                room_id: currentRoomId,
+                avatar_name: selectedAvatar
+            });
+            
+            showAvatarStatus(`Аватар "${selectedAvatar}" устанавливается...`, true);
+        }
+
+        function showAvatarStatus(message, isSuccess) {
+            const statusDiv = document.getElementById('avatarStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = isSuccess ? 'info-message' : 'error-message';
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
 
         // Обработка формы входа
         document.getElementById('studentLoginForm').addEventListener('submit', async function(e) {
@@ -766,6 +943,9 @@
                         showSuccessMessage('Автоматически созданы персональные комнаты для обучения!');
                     }
                     
+                    // Загружаем аватары после успешного входа
+                    await loadAvatars();
+                    
                     showSubjectSelection(currentStudentData);
                 } else {
                     showError('Ошибка сохранения данных: ' + (result.error || 'Неизвестная ошибка'));
@@ -780,6 +960,9 @@
                     loginTime: new Date().toISOString()
                 };
                 localStorage.setItem('studentData', JSON.stringify(currentStudentData));
+                
+                // Загружаем аватары даже при fallback
+                await loadAvatars();
                 showSubjectSelection(currentStudentData);
             }
         });
@@ -893,6 +1076,7 @@
             
             // Сбрасываем выбранный предмет
             selectedSubject = null;
+            currentRoomId = null;
             
             // Удаляем сообщение об ошибке если есть
             const errorDiv = document.getElementById('errorMessage');
@@ -1063,6 +1247,11 @@
                         const conferenceUrl = data.conference_url;
                         
                         console.log("Using existing room:", roomInfo.room_name);
+                        currentRoomId = roomInfo.room_name;
+                        
+                        // Автоматически устанавливаем аватар "woman" для комнаты
+                        setAvatarAutomatically(roomInfo.room_name);
+                        
                         openConferenceWindow(conferenceUrl, roomInfo.room_name);
                     } else {
                         // Fallback: создаем комнату старым способом
@@ -1075,6 +1264,25 @@
                     // Fallback: создаем комнату старым способом
                     createNewRoom(subjectId, subjectName, studentName);
                 });
+        }
+
+        // Автоматическая установка аватара для комнаты
+        function setAvatarAutomatically(roomId) {
+            const womanAvatar = availableAvatars.find(avatar => avatar.toLowerCase().includes('woman'));
+            if (womanAvatar) {
+                console.log(`🎯 Automatically setting woman avatar for room ${roomId}`);
+                
+                // Отправляем команды как в teacher.html
+                socket.emit('avatar_changed', {
+                    room_id: roomId,
+                    avatar_name: womanAvatar
+                });
+                
+                socket.emit('client_start_animation', {
+                    room_id: roomId,
+                    avatar_name: womanAvatar
+                });
+            }
         }
 
         // Функция-запасной вариант для создания новой комнаты
@@ -1090,6 +1298,11 @@
             const classroomUrl = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}&subject_name=${encodeURIComponent(subjectName)}`;
             
             console.log("Creating new room:", roomName);
+            currentRoomId = roomName;
+            
+            // Автоматически устанавливаем аватар "woman" для новой комнаты
+            setAvatarAutomatically(roomName);
+            
             openConferenceWindow(classroomUrl, roomName);
         }
 
@@ -1134,7 +1347,10 @@
                         document.getElementById('educationLevel').value = savedData.level;
                         document.getElementById('studentAge').value = savedData.age;
                         
-                        showSubjectSelection(savedData);
+                        // Загружаем аватары
+                        loadAvatars().then(() => {
+                            showSubjectSelection(savedData);
+                        });
                     } else {
                         // Удаляем устаревшие данные
                         localStorage.removeItem('studentData');
@@ -1179,6 +1395,11 @@
             document.getElementById('editStudentAge').addEventListener('input', function() {
                 if (this.value < 6) this.value = 6;
                 if (this.value > 18) this.value = 18;
+            });
+            
+            // Обработчик изменения выбора аватара
+            document.getElementById('avatarSelect').addEventListener('change', function() {
+                updateAvatarPreview(this.value);
             });
         }
         
