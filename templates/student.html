@@ -1306,16 +1306,23 @@
             openConferenceWindow(classroomUrl, roomName);
         }
 
-        // ✅ ОБНОВЛЕННАЯ ФУНКЦИЯ ОТКРЫТИЯ КОНФЕРЕНЦИИ (как в landing.html)
+        // ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТКРЫТИЯ КОНФЕРЕНЦИИ - ТОЧНО КАК В LANDING.HTML
         function openConferenceWindow(url, roomName = 'demo') {
             console.log("Opening conference URL:", url);
             
-            // Открываем в новой вкладке, как в landing.html
-            const newTab = window.open(url, '_blank');
+            // ТОЧНО ТАК ЖЕ КАК В LANDING.HTML
+            const width = 1200;
+            const height = 800;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
             
-            if (newTab) {
-                console.log("Tab opened successfully");
-                newTab.focus();
+            const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
+            
+            const newWindow = window.open(url, 'EduSonicConference', features);
+            
+            if (newWindow) {
+                console.log("Conference window opened successfully");
+                newWindow.focus();
                 
                 setTimeout(() => {
                     document.getElementById('loadingState').classList.add('hidden');
