@@ -753,6 +753,11 @@
                         loginTime: new Date().toISOString()
                     };
                     
+                    // ✅ Сохраняем conference_id если он есть в ответе
+                    if (result.conference_id) {
+                        currentStudentData.conference_id = result.conference_id;
+                    }
+                    
                     // Сохраняем в localStorage для быстрого доступа
                     localStorage.setItem('studentData', JSON.stringify(currentStudentData));
                     
@@ -1074,29 +1079,30 @@
 
         // Функция-запасной вариант для создания новой комнаты
         function createNewRoom(subjectId, subjectName, studentName) {
-            const roomName = `${subjectId}_${studentName.replace(/\s+/g, '_').toLowerCase()}_${Date.now()}`;
+            // ✅ ИСПОЛЬЗУЕМ ЕДИНЫЙ CONFERENCE_ID ЕСЛИ ОН ЕСТЬ
+            let conferenceId = currentStudentData.conference_id;
+            if (!conferenceId) {
+                conferenceId = Date.now();
+                console.warn("Conference ID не найден, создаем новый:", conferenceId);
+            }
+            
+            const roomName = `${subjectId}_${studentName.replace(/\s+/g, '_').toLowerCase()}_${conferenceId}`;
             const classroomUrl = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}&subject_name=${encodeURIComponent(subjectName)}`;
             
             console.log("Creating new room:", roomName);
             openConferenceWindow(classroomUrl, roomName);
         }
 
-        // Обновленная функция открытия конференции
+        // ✅ ОБНОВЛЕННАЯ ФУНКЦИЯ ОТКРЫТИЯ КОНФЕРЕНЦИИ (как в landing.html)
         function openConferenceWindow(url, roomName = 'demo') {
             console.log("Opening conference URL:", url);
             
-            const width = 1200;
-            const height = 800;
-            const left = (screen.width - width) / 2;
-            const top = (screen.height - height) / 2;
+            // Открываем в новой вкладке, как в landing.html
+            const newTab = window.open(url, '_blank');
             
-            const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
-            
-            const newWindow = window.open(url, `EduSonic_${roomName}`, features);
-            
-            if (newWindow) {
-                console.log("Window opened successfully");
-                newWindow.focus();
+            if (newTab) {
+                console.log("Tab opened successfully");
+                newTab.focus();
                 
                 setTimeout(() => {
                     document.getElementById('loadingState').classList.add('hidden');
@@ -1179,6 +1185,45 @@
         // Обработка перед закрытием страницы
         window.addEventListener('beforeunload', function() {
             // Можно добавить сохранение состояния или предупреждение
+        });
+
+        // ✅ ДОБАВЛЯЕМ ФУНКЦИЮ ДЛЯ ОБНОВЛЕНИЯ CONFERENCE_ID СУЩЕСТВУЮЩИХ УЧЕНИКОВ
+        function updateConferenceIdsForExistingStudents() {
+            fetch('/api/admin/update_student_conference_ids')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log(`✅ Обновлено ${data.updated_count} учеников`);
+                        if (currentStudentData) {
+                            // Перезагружаем данные ученика
+                            loadStudentData();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error("Ошибка обновления conference_id:", error);
+                });
+        }
+
+        // ✅ ДОБАВЛЯЕМ КНОПКУ ДЛЯ АДМИНИСТРАТОРА (только для разработки)
+        function addAdminButton() {
+            const adminButton = document.createElement('button');
+            adminButton.className = 'btn btn-secondary';
+            adminButton.style.marginTop = '1rem';
+            adminButton.style.background = 'var(--warning)';
+            adminButton.innerHTML = '<i class="fas fa-tools"></i> Обновить ID конференций';
+            adminButton.onclick = updateConferenceIdsForExistingStudents;
+            
+            const subjectSelection = document.getElementById('subjectSelection');
+            if (subjectSelection) {
+                subjectSelection.appendChild(adminButton);
+            }
+        }
+
+        // Вызываем добавление кнопки администратора при загрузке
+        window.addEventListener('load', function() {
+            // Добавляем кнопку администратора (можно убрать в продакшене)
+            setTimeout(addAdminButton, 1000);
         });
     </script>
 </body>
