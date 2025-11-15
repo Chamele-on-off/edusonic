@@ -461,6 +461,63 @@
         .room-pending {
             color: var(--warning);
         }
+
+        /* Стили для управления аватаром */
+        .avatar-controls {
+            background: rgba(248, 250, 252, 0.8);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(126, 118, 249, 0.2);
+        }
+
+        .avatar-controls h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .avatar-select-container {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .avatar-select {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.8rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            font-size: 0.95rem;
+        }
+
+        .avatar-preview {
+            width: 80px;
+            height: 80px;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            overflow: hidden;
+        }
+
+        .avatar-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .avatar-status {
+            margin-top: 1rem;
+            padding: 0.8rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -587,6 +644,23 @@
                 </div>
             </div>
 
+            <!-- Управление аватаром -->
+            <div class="avatar-controls">
+                <h3><i class="fas fa-user-circle"></i> Выбор аватара учителя</h3>
+                <div class="avatar-select-container">
+                    <select id="avatarSelect" class="avatar-select">
+                        <option value="">Выберите аватар...</option>
+                    </select>
+                    <div class="avatar-preview" id="avatarPreview">
+                        <i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>
+                    </div>
+                    <button class="btn" id="setAvatarBtn" onclick="setAvatarForAllRooms()" style="flex: 0 0 auto;">
+                        <i class="fas fa-check"></i> Установить аватар для всех комнат
+                    </button>
+                </div>
+                <div id="avatarStatus" class="avatar-status" style="display: none;"></div>
+            </div>
+
             <!-- Статус комнат -->
             <div class="rooms-status">
                 <h3><i class="fas fa-door-open"></i> Ваши учебные комнаты</h3>
@@ -680,11 +754,203 @@
 
         let currentStudentData = null;
         let studentRooms = [];
+        let availableAvatars = [];
+        let selectedAvatar = '';
 
         // Инициализация Socket.io
         socket.on('connect', function() {
             console.log('✅ Connected to server');
         });
+
+        socket.on('avatar_changed', function(data) {
+            console.log('✅ Avatar changed in room:', data.room_id, data.avatar_name);
+            updateRoomAvatarStatus(data.room_id, data.avatar_name);
+        });
+
+        // Загрузка доступных аватаров
+        async function loadAvatars() {
+            try {
+                const response = await fetch('/api/avatars');
+                const data = await response.json();
+                
+                if (data.avatars && data.avatars.length > 0) {
+                    availableAvatars = data.avatars;
+                    const avatarSelect = document.getElementById('avatarSelect');
+                    avatarSelect.innerHTML = '<option value="">Выберите аватар...</option>';
+                    
+                    data.avatars.forEach(avatar => {
+                        const option = document.createElement('option');
+                        option.value = avatar;
+                        option.textContent = avatar;
+                        avatarSelect.appendChild(option);
+                    });
+                    
+                    // Автоматически выбираем аватар "woman" если он есть
+                    const womanAvatar = data.avatars.find(avatar => avatar.toLowerCase().includes('woman'));
+                    if (womanAvatar) {
+                        avatarSelect.value = womanAvatar;
+                        selectedAvatar = womanAvatar;
+                        updateAvatarPreview(womanAvatar);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading avatars:', error);
+            }
+        }
+
+        // Обновление превью аватара
+        function updateAvatarPreview(avatarName) {
+            const preview = document.getElementById('avatarPreview');
+            if (avatarName) {
+                // Загружаем первое изображение аватара для превью
+                fetch(`/api/frames/${avatarName}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.frames && data.frames.length > 0) {
+                            const firstFrame = data.frames[0];
+                            preview.innerHTML = `<img src="/frames/${avatarName}/${firstFrame}" alt="${avatarName}" onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 2rem; color: #6c757d;\\'></i>';">`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading avatar preview:', error);
+                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
+                    });
+            } else {
+                preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
+            }
+        }
+
+        // Установка аватара для всех комнат
+        async function setAvatarForAllRooms() {
+            const avatarSelect = document.getElementById('avatarSelect');
+            const selectedAvatar = avatarSelect.value;
+            
+            if (!selectedAvatar) {
+                showAvatarStatus('Пожалуйста, выберите аватар', false);
+                return;
+            }
+            
+            if (!currentStudentData || !currentStudentData.student_id) {
+                showAvatarStatus('Сначала войдите в систему', false);
+                return;
+            }
+            
+            if (studentRooms.length === 0) {
+                showAvatarStatus('Комнаты еще не созданы', false);
+                return;
+            }
+            
+            console.log(`🎯 Setting avatar "${selectedAvatar}" for all ${studentRooms.length} rooms`);
+            
+            // Сохраняем выбранный аватар
+            selectedAvatar = selectedAvatar;
+            
+            // Показываем статус
+            showAvatarStatus(`Устанавливаем аватар "${selectedAvatar}" для всех комнат...`, true);
+            
+            // Устанавливаем аватар для каждой комнаты
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const room of studentRooms) {
+                try {
+                    // Отправляем команду смены аватара
+                    socket.emit('avatar_changed', {
+                        room_id: room.room_name,
+                        avatar_name: selectedAvatar
+                    });
+                    
+                    // Также отправляем команду запуска анимации
+                    socket.emit('client_start_animation', {
+                        room_id: room.room_name,
+                        avatar_name: selectedAvatar
+                    });
+                    
+                    // Обновляем статус комнаты
+                    updateRoomAvatarStatus(room.room_name, selectedAvatar);
+                    successCount++;
+                    
+                    // Небольшая задержка между запросами
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (error) {
+                    console.error(`Error setting avatar for room ${room.room_name}:`, error);
+                    errorCount++;
+                }
+            }
+            
+            // Сохраняем выбор аватара на сервере
+            try {
+                const response = await fetch('/api/student/set-avatar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        student_id: currentStudentData.student_id,
+                        avatar_name: selectedAvatar
+                    })
+                });
+                
+                const result = await response.json();
+                if (!result.success) {
+                    console.error('Error saving avatar preference:', result.error);
+                }
+            } catch (error) {
+                console.error('Error saving avatar preference:', error);
+            }
+            
+            // Показываем итоговый статус
+            if (errorCount === 0) {
+                showAvatarStatus(`✅ Аватар "${selectedAvatar}" успешно установлен для всех ${successCount} комнат!`, true);
+            } else {
+                showAvatarStatus(`⚠️ Аватар установлен для ${successCount} комнат, ошибок: ${errorCount}`, false);
+            }
+        }
+
+        // Обновление статуса аватара для конкретной комнаты
+        function updateRoomAvatarStatus(roomId, avatarName) {
+            const roomItems = document.querySelectorAll('.room-item');
+            roomItems.forEach(item => {
+                const roomNameElement = item.querySelector('span:first-child');
+                if (roomNameElement && roomNameElement.textContent.includes(getSubjectNameFromRoomId(roomId))) {
+                    const statusElement = item.querySelector('.room-avatar-status');
+                    if (statusElement) {
+                        statusElement.textContent = `👤 ${avatarName}`;
+                    } else {
+                        const avatarStatus = document.createElement('span');
+                        avatarStatus.className = 'room-avatar-status';
+                        avatarStatus.style.color = 'var(--primary)';
+                        avatarStatus.style.fontSize = '0.8rem';
+                        avatarStatus.textContent = `👤 ${avatarName}`;
+                        item.appendChild(avatarStatus);
+                    }
+                }
+            });
+        }
+
+        // Получение названия предмета из ID комнаты
+        function getSubjectNameFromRoomId(roomId) {
+            for (const subject of subjects) {
+                if (roomId.includes(subject.id)) {
+                    return subject.name;
+                }
+            }
+            return roomId;
+        }
+
+        function showAvatarStatus(message, isSuccess) {
+            const statusDiv = document.getElementById('avatarStatus');
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            statusDiv.style.background = isSuccess ? 'rgba(72, 187, 120, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            statusDiv.style.border = isSuccess ? '1px solid rgba(72, 187, 120, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)';
+            statusDiv.style.color = isSuccess ? '#166534' : '#dc2626';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
 
         // Обработка формы входа
         document.getElementById('studentLoginForm').addEventListener('submit', async function(e) {
@@ -743,11 +1009,17 @@
                     // Сохраняем в localStorage для быстрого доступа
                     localStorage.setItem('studentData', JSON.stringify(currentStudentData));
                     
+                    // Загружаем аватары
+                    await loadAvatars();
+                    
                     // Создаем комнаты для всех предметов
                     await createStudentRooms();
                     
                     // Загружаем информацию о комнатах
                     await loadStudentRooms();
+                    
+                    // Автоматически устанавливаем аватар по умолчанию
+                    await setDefaultAvatar();
                     
                     showSubjectSelection(currentStudentData);
                 } else {
@@ -764,12 +1036,31 @@
                 };
                 localStorage.setItem('studentData', JSON.stringify(currentStudentData));
                 
-                // Создаем комнаты и показываем выбор предмета
+                // Загружаем аватары и показываем выбор предмета
+                await loadAvatars();
                 await createStudentRooms();
                 await loadStudentRooms();
+                await setDefaultAvatar();
                 showSubjectSelection(currentStudentData);
             }
         });
+        
+        // Автоматическая установка аватара по умолчанию
+        async function setDefaultAvatar() {
+            if (!selectedAvatar && availableAvatars.length > 0) {
+                const womanAvatar = availableAvatars.find(avatar => avatar.toLowerCase().includes('woman'));
+                if (womanAvatar) {
+                    selectedAvatar = womanAvatar;
+                    document.getElementById('avatarSelect').value = womanAvatar;
+                    updateAvatarPreview(womanAvatar);
+                    
+                    // Устанавливаем аватар для всех комнат
+                    if (studentRooms.length > 0) {
+                        await setAvatarForAllRooms();
+                    }
+                }
+            }
+        }
         
         // Создание комнат для всех предметов
         async function createStudentRooms() {
@@ -1058,9 +1349,11 @@
                         document.getElementById('educationLevel').value = savedData.level;
                         document.getElementById('studentAge').value = savedData.age;
                         
-                        // Загружаем информацию о комнатах
-                        loadStudentRooms().then(() => {
-                            showSubjectSelection(savedData);
+                        // Загружаем аватары и информацию о комнатах
+                        loadAvatars().then(() => {
+                            loadStudentRooms().then(() => {
+                                showSubjectSelection(savedData);
+                            });
                         });
                     } else {
                         // Удаляем устаревшие данные
@@ -1106,6 +1399,12 @@
             document.getElementById('editStudentAge').addEventListener('input', function() {
                 if (this.value < 6) this.value = 6;
                 if (this.value > 18) this.value = 18;
+            });
+            
+            // Обработчик изменения выбора аватара
+            document.getElementById('avatarSelect').addEventListener('change', function() {
+                selectedAvatar = this.value;
+                updateAvatarPreview(this.value);
             });
         }
         
