@@ -88,21 +88,6 @@ room_last_poll_time = defaultdict(lambda: 0)
 room_llm_pending_requests = defaultdict(dict)
 room_last_llm_update = defaultdict(lambda: 0)
 
-# Улучшенная система управления комнатами
-room_initialization_status = defaultdict(lambda: {
-    'peer_ready': False,
-    'media_ready': False,
-    'socket_ready': False, 
-    'room_joined': False,
-    'initialization_time': 0,
-    'retry_count': 0
-})
-
-# Максимальное время инициализации комнаты (30 секунд)
-MAX_INIT_TIME = 30
-# Максимальное количество попыток переинициализации
-MAX_RETRIES = 3
-
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
 
@@ -197,29 +182,16 @@ def setup_llm_manager():
     llm_manager.register_room_callback('global', global_llm_callback)
     print("✅ LLM Manager настроен с улучшенным callback")
 
-def safe_room_initialization(room_id):
-    """Безопасная инициализация комнаты с защитой от ошибок"""
+def _fast_room_initialization(room_id):
+    """Быстрая инициализация комнаты без блокировки"""
     try:
-        print(f"🔧 Безопасная инициализация комнаты {room_id}")
-        
-        # Проверяем существование комнаты
-        if room_id not in room_initialization_status:
-            room_initialization_status[room_id] = {
-                'peer_ready': False,
-                'media_ready': False,
-                'socket_ready': False, 
-                'room_joined': False,
-                'initialization_time': time.time(),
-                'retry_count': 0
-            }
-        
-        # Инициализируем диалог менеджер если нужно
+        # Создаем диалог менеджер если нужно
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            print(f"🔄 Создание диалог менеджера для {room_id}")
+            print(f"🔄 Быстрое создание диалог менеджера для {room_id}")
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
         
-        # Устанавливаем аватар по умолчанию для комнат учеников
+        # Устанавливаем аватар по умолчанию
         if room_id not in room_current_avatar:
             if '_' in room_id and room_id != 'default':
                 room_current_avatar[room_id] = 'woman'
@@ -234,180 +206,12 @@ def safe_room_initialization(room_id):
                 room_dialogue[room_id].set_student_mode(subject)
                 print(f"🎓 Установлен режим ученика для {room_id}: {subject}")
         
-        # Обновляем статус
-        room_initialization_status[room_id].update({
-            'initialization_time': time.time(),
-            'retry_count': room_initialization_status[room_id].get('retry_count', 0) + 1
-        })
-        
-        print(f"✅ Безопасная инициализация завершена для {room_id}")
+        print(f"✅ Быстрая инициализация завершена для {room_id}")
         return True
         
     except Exception as e:
-        print(f"❌ Критическая ошибка безопасной инициализации {room_id}: {e}")
+        print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
         return False
-
-def initialize_room_safely(room_id):
-    """Безопасная инициализация комнаты с проверками"""
-    try:
-        # Проверяем, не превышено ли время инициализации
-        current_time = time.time()
-        init_status = room_initialization_status[room_id]
-        
-        if (current_time - init_status['initialization_time'] > MAX_INIT_TIME and 
-            init_status['retry_count'] >= MAX_RETRIES):
-            print(f"⚠️ Превышено время инициализации комнаты {room_id}, сбрасываем состояние")
-            reset_room_state(room_id)
-            return False
-        
-        # Инициализируем диалог менеджер если его нет
-        if room_id not in room_dialogue:
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            print(f"✅ Инициализирован диалог менеджер для комнаты {room_id}")
-        
-        # Устанавливаем режим ученика если это комната ученика
-        subject_from_room = _extract_subject_from_room(room_id)
-        if subject_from_room and not room_dialogue[room_id].is_student_mode:
-            room_dialogue[room_id].set_student_mode(subject_from_room)
-            print(f"🎓 Комната {room_id} настроена в режиме ученика")
-        
-        # Устанавливаем аватар по умолчанию
-        if room_id not in room_current_avatar:
-            if '_' in room_id and room_id != 'default':
-                room_current_avatar[room_id] = 'woman'
-            else:
-                room_current_avatar[room_id] = 'teacher'
-        
-        # Устанавливаем режим LLM
-        room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-        
-        # Обновляем статус инициализации
-        room_initialization_status[room_id].update({
-            'initialization_time': current_time,
-            'retry_count': init_status['retry_count'] + 1
-        })
-        
-        print(f"✅ Комната {room_id} успешно инициализирована")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Ошибка инициализации комнаты {room_id}: {e}")
-        return False
-
-def reset_room_state(room_id):
-    """Полный сброс состояния комнаты"""
-    try:
-        # Удаляем все состояния комнаты
-        if room_id in room_dialogue:
-            del room_dialogue[room_id]
-        if room_id in room_participants:
-            room_participants[room_id].clear()
-        if room_id in room_speech_data:
-            room_speech_data[room_id].clear()
-        if room_id in room_initialization_status:
-            del room_initialization_status[room_id]
-        
-        print(f"🔄 Состояние комнаты {room_id} сброшено")
-        return True
-    except Exception as e:
-        print(f"❌ Ошибка сброса состояния комнаты {room_id}: {e}")
-        return False
-
-def check_room_ready(room_id):
-    """Проверяет готовность комнаты к работе"""
-    if room_id not in room_initialization_status:
-        return False
-    
-    status = room_initialization_status[room_id]
-    
-    # Комната считается готовой если прошла успешная инициализация
-    # и есть активные участники
-    has_participants = room_id in room_participants and len(room_participants[room_id]) > 0
-    is_initialized = room_id in room_dialogue and room_dialogue[room_id] is not None
-    
-    return has_participants and is_initialized
-
-def check_and_emit_room_ready(room_id):
-    """Проверяет готовность комнаты и отправляет событие если готова"""
-    if not check_room_ready(room_id):
-        return False
-    
-    # Дополнительные проверки для полной готовности
-    status = room_initialization_status.get(room_id, {})
-    has_participants = room_id in room_participants and len(room_participants[room_id]) > 0
-    is_initialized = room_id in room_dialogue and room_dialogue[room_id] is not None
-    
-    # Комната считается полностью готовой если:
-    # 1. Есть участники
-    # 2. Диалог менеджер инициализирован
-    # 3. Peer и Media готовы (или прошло достаточно времени)
-    if has_participants and is_initialized:
-        # Если Peer и Media еще не готовы, ждем немного (таймаут 10 секунд)
-        current_time = time.time()
-        init_time = status.get('initialization_time', current_time)
-        
-        # Если прошло больше 10 секунд, считаем комнату готовой даже без сигналов
-        if current_time - init_time > 10:
-            print(f"⚠️ Таймаут готовности для комнаты {room_id}, принудительно помечаем как готовую")
-            room_initialization_status[room_id].update({
-                'peer_ready': True,
-                'media_ready': True
-            })
-        
-        # Отправляем событие полной готовности всем участникам комнаты
-        print(f"🎉 Комната {room_id} полностью готова! Отправка события...")
-        
-        # Отправляем событие всем участникам комнаты
-        emit('room_fully_ready', {
-            'room_id': room_id,
-            'message': 'Room is fully initialized and ready for interaction',
-            'timestamp': time.time(),
-            'status': room_initialization_status[room_id]
-        }, room=room_id)
-        
-        return True
-    
-    return False
-
-def delayed_room_ready_check(room_id, delay=2):
-    """Отложенная проверка готовности комнаты"""
-    time.sleep(delay)
-    try:
-        if room_id in room_participants and len(room_participants[room_id]) > 0:
-            print(f"🔍 Проверка готовности комнаты {room_id}...")
-            check_and_emit_room_ready(room_id)
-    except Exception as e:
-        print(f"❌ Ошибка проверки готовности комнаты {room_id}: {e}")
-
-def cleanup_inactive_rooms():
-    """Очистка неактивных комнат"""
-    while True:
-        try:
-            current_time = time.time()
-            inactive_rooms = []
-            
-            for room_id, participants in room_participants.items():
-                # Комната считается неактивной если нет участников 
-                # и прошло больше 5 минут
-                if (not participants and 
-                    room_id in room_initialization_status and
-                    current_time - room_initialization_status[room_id]['initialization_time'] > 300):
-                    inactive_rooms.append(room_id)
-            
-            for room_id in inactive_rooms:
-                print(f"🧹 Очистка неактивной комнаты {room_id}")
-                reset_room_state(room_id)
-                
-            time.sleep(60)  # Проверка каждую минуту
-            
-        except Exception as e:
-            print(f"❌ Ошибка очистки комнат: {e}")
-            time.sleep(60)
-
-# Запуск очистки в отдельном потоке
-cleanup_thread = threading.Thread(target=cleanup_inactive_rooms, daemon=True)
-cleanup_thread.start()
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -704,70 +508,6 @@ def create_student_rooms(student_data):
         print(f"❌ Ошибка создания комнат для ученика: {e}")
         return False
 
-# Новые обработчики для сигналов готовности
-@socketio.on('peer_ready_signal')
-def handle_peer_ready_signal(data):
-    """Обработчик сигнала о готовности PeerJS от клиента"""
-    room_id = data.get('room_id')
-    sid = request.sid
-    
-    print(f"🔧 [Peer Ready] Получен сигнал от {sid} для комнаты {room_id}")
-    
-    # Проверяем, что клиент действительно в этой комнате
-    if room_id in room_participants and sid in room_participants[room_id]:
-        room_initialization_status[room_id]['peer_ready'] = True
-        print(f"✅ Peer готов для комнаты {room_id}")
-        
-        # Отправляем подтверждение клиенту
-        emit('server_acknowledged_peer_ready', {
-            'room_id': room_id,
-            'timestamp': time.time()
-        }, to=sid)
-        
-        # Проверяем полную готовность комнаты
-        check_and_emit_room_ready(room_id)
-    else:
-        print(f"⚠️ Клиент {sid} сообщил о готовности Peer, но не находится в комнате {room_id}")
-
-@socketio.on('media_ready_signal')
-def handle_media_ready_signal(data):
-    """Обработчик сигнала о готовности медиа от клиента"""
-    room_id = data.get('room_id')
-    sid = request.sid
-    
-    print(f"🔧 [Media Ready] Получен сигнал от {sid} для комнаты {room_id}")
-    
-    if room_id in room_participants and sid in room_participants[room_id]:
-        room_initialization_status[room_id]['media_ready'] = True
-        print(f"✅ Media готовы для комнаты {room_id}")
-        
-        # Отправляем подтверждение клиенту
-        emit('server_acknowledged_media_ready', {
-            'room_id': room_id,
-            'timestamp': time.time()
-        }, to=sid)
-        
-        # Проверяем полную готовность комнаты
-        check_and_emit_room_ready(room_id)
-    else:
-        print(f"⚠️ Клиент {sid} сообщил о готовности Media, но не находится в комнате {room_id}")
-
-@socketio.on('request_init_status')
-def handle_request_init_status(data):
-    """Обработчик запроса статуса инициализации от клиента"""
-    room_id = data.get('room_id')
-    sid = request.sid
-    
-    status = room_initialization_status.get(room_id, {})
-    print(f"📊 [Status Request] Отправка статуса для {room_id} клиенту {sid}: {status}")
-    
-    # Отправляем клиенту актуальный статус
-    emit('init_status_response', {
-        'room_id': room_id,
-        'status': status,
-        'timestamp': time.time()
-    }, to=sid)
-
 @socketio.on('connect')
 def handle_connect():
     print(f'✅ Client connected: {request.sid}')
@@ -786,10 +526,10 @@ def handle_join_room(data):
     room_id = data['room_id']
     peer_id = data.get('peer_id')
     
-    print(f"🔧 [Join Room] Попытка присоединения к комнате {room_id}, peer_id: {peer_id}, sid: {request.sid}")
+    print(f"🔧 Попытка присоединения к комнате {room_id}, peer_id: {peer_id}")
     
     try:
-        # Присоединяем к комнате
+        # Присоединяем к комнате - ВСЕГДА РАБОТАЕТ
         join_room(room_id)
         room_participants[room_id].add(request.sid)
         
@@ -799,32 +539,8 @@ def handle_join_room(data):
                 room_peer_ids[room_id] = {}
             room_peer_ids[room_id][request.sid] = peer_id
         
-        # 🔥 БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ С ПРИОРИТЕТОМ
-        init_success = safe_room_initialization(room_id)
-        
-        if not init_success:
-            print(f"❌ Не удалось безопасно инициализировать комнату {room_id}")
-            emit('room_error', {
-                'room_id': room_id,
-                'error': 'Room initialization failed',
-                'details': 'Server could not set up the room correctly'
-            }, to=request.sid)
-            return
-        
-        # Устанавливаем начальные статусы
-        room_initialization_status[room_id].update({
-            'room_joined': True,
-            'socket_ready': True,
-            'initialization_time': time.time()
-        })
-        
-        # 🔥 НЕМЕДЛЕННОЕ ПОДТВЕРЖДЕНИЕ ПРИСОЕДИНЕНИЯ
-        emit('connection_established', {
-            'room_id': room_id,
-            'message': 'Successfully joined room',
-            'sid': request.sid,
-            'peer_id': peer_id
-        }, to=request.sid)
+        # 🔥 ВАЖНОЕ ИЗМЕНЕНИЕ: БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ БЕЗ БЛОКИРОВКИ
+        _fast_room_initialization(room_id)
         
         # Уведомляем других участников
         if peer_id:
@@ -849,12 +565,10 @@ def handle_join_room(data):
         # Обновляем счетчик участников
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
-        # 🔥 ЗАПУСКАЕМ ПРОВЕРКУ ГОТОВНОСТИ С ЗАДЕРЖКОЙ
-        socketio.start_background_task(delayed_room_ready_check, room_id)
-        
         # Автоматическая активация для комнат учеников
         if '_' in room_id and room_id != 'default' and len(room_participants[room_id]) == 1:
             print(f"🎓 Запланирована автоматическая активация AI для комнаты ученика {room_id}")
+            # Используем отложенную активацию
             socketio.start_background_task(delayed_auto_activation, room_id)
         
         # Приветствие для обычных комнат
@@ -874,18 +588,20 @@ def handle_join_room(data):
         except:
             print("⚠️ Не удалось отправить ошибку - клиент уже отключен")
 
-def delayed_auto_activation(room_id, delay=3):
-    """Отложенная автоматическая активация с защитой"""
+def delayed_auto_activation(room_id, delay=2):
+    """Упрощенная отложенная автоматическая активация"""
     time.sleep(delay)
     try:
+        # ПРОСТАЯ ПРОВЕРКА: комната существует и есть участники
         if (room_id in room_participants and 
             len(room_participants[room_id]) > 0 and 
             not room_ai_activated.get(room_id, False)):
             
-            print(f"🔄 Запуск отложенной автоматической активации для {room_id}")
+            print(f"🔄 Запуск автоматической активации для {room_id}")
+            # Используем упрощенную активацию
             handle_activate_ai_teacher({'room_id': room_id})
     except Exception as e:
-        print(f"❌ Ошибка отложенной автоматической активации {room_id}: {e}")
+        print(f"⚠️ Ошибка автоматической активации {room_id}: {e}")
 
 def _extract_subject_from_room(room_id: str) -> Optional[str]:
     """Извлекает предмет из названия комнаты для режима ученика"""
@@ -1213,7 +929,7 @@ def handle_activate_ai_teacher(data):
     print(f"🔧 Запрос активации AI-учителя для комнаты {room_id} от {sid}")
     
     try:
-        # Проверяем что комната существует и есть участники
+        # 🔥 ВАЖНОЕ ИЗМЕНЕНИЕ: ПРОСТАЯ ПРОВЕРКА - КОМНАТА СУЩЕСТВУЕТ
         if room_id not in room_participants:
             print(f"❌ Комната {room_id} не существует")
             emit('activate_ai_error', {
@@ -1222,10 +938,10 @@ def handle_activate_ai_teacher(data):
             }, to=sid)
             return
         
-        # Безопасная инициализация если нужно
-        safe_room_initialization(room_id)
+        # 🔥 БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ ЕСЛИ НУЖНО
+        _fast_room_initialization(room_id)
         
-        # Активируем AI-учителя
+        # Активируем AI-учителя - ВСЕГДА РАБОТАЕТ
         room_ai_activated[room_id] = True
         
         # Убеждаемся что диалог менеджер инициализирован
@@ -3007,20 +2723,18 @@ def force_room_initialization():
         if not room_id:
             return jsonify({"success": False, "error": "Room ID is required"})
         
-        success = safe_room_initialization(room_id)
+        success = _fast_room_initialization(room_id)
         
         if success:
             return jsonify({
                 "success": True,
                 "message": f"Комната {room_id} инициализирована",
-                "ready": check_room_ready(room_id),
-                "retry_count": room_initialization_status[room_id]['retry_count']
+                "ready": room_id in room_dialogue and room_dialogue[room_id] is not None
             })
         else:
             return jsonify({
                 "success": False,
-                "error": f"Не удалось инициализировать комнату {room_id}",
-                "retry_count": room_initialization_status[room_id]['retry_count']
+                "error": f"Не удалось инициализировать комнату {room_id}"
             })
             
     except Exception as e:
@@ -3035,23 +2749,10 @@ def get_room_status(room_id):
             "initialized": room_id in room_dialogue and room_dialogue[room_id] is not None,
             "participants": len(room_participants.get(room_id, [])),
             "ai_activated": room_ai_activated.get(room_id, False),
-            "initialization_status": room_initialization_status.get(room_id, {}),
-            "ready": check_room_ready(room_id)
+            "ready": room_id in room_dialogue and room_dialogue[room_id] is not None
         }
         
         return jsonify({"success": True, "status": status})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/room/reset/<room_id>', methods=['POST'])
-def reset_room(room_id):
-    """Сброс состояния комнаты"""
-    try:
-        success = reset_room_state(room_id)
-        return jsonify({
-            "success": success,
-            "message": f"Состояние комнаты {room_id} сброшено" if success else f"Ошибка сброса комнаты {room_id}"
-        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3061,11 +2762,10 @@ def room_health(room_id):
     try:
         health_status = {
             'room_id': room_id,
-            'exists': room_id in room_initialization_status,
+            'exists': room_id in room_participants,
             'participants': len(room_participants.get(room_id, [])),
             'ai_activated': room_ai_activated.get(room_id, False),
             'dialogue_manager': room_id in room_dialogue and room_dialogue[room_id] is not None,
-            'initialization_status': room_initialization_status.get(room_id, {}),
             'timestamp': datetime.now().isoformat()
         }
         
@@ -3151,7 +2851,7 @@ if __name__ == '__main__':
     print("🔧 Предварительная инициализация системных комнат...")
     system_rooms = ['default']
     for room in system_rooms:
-        safe_room_initialization(room)
+        _fast_room_initialization(room)
     
     # Запускаем сервер
     socketio.run(
