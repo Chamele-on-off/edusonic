@@ -1246,8 +1246,7 @@
             
             const conferenceId = currentStudentData.conference_id || Date.now().toString();
             const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
-            // НОВЫЙ ФОРМАТ URL: student_предмет_имястудента_idконференции
-            const roomName = `student_${subjectId}_${studentName}_${conferenceId}`;
+            const roomName = `${subjectId}_${studentName}_${conferenceId}`;
             
             return `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}`;
         }
