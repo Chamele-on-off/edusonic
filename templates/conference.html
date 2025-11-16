@@ -2335,6 +2335,60 @@
         let thinkingParticlesInstance = null;
         let thinkingIndicatorTimeout = null;
 
+        // Новые переменные состояния готовности
+        let serverRoomReady = false;
+        let peerReady = false;
+        let mediaReady = false;
+        let socketRoomJoined = false;
+
+        // Функция проверки полной готовности
+        function checkAndProceed() {
+            console.log('🔧 Проверка готовности:', {
+                serverRoomReady, 
+                peerReady, 
+                mediaReady, 
+                socketRoomJoined
+            });
+            
+            if (serverRoomReady && peerReady && mediaReady) {
+                console.log("✅ Все компоненты готовы. Комната активирована.");
+                
+                // Скрываем сообщение "ожидание"
+                if (statusDiv) {
+                    statusDiv.textContent = 'Комната готова';
+                }
+                
+                // Показываем кнопку активации AI если нужно
+                updateActivationButton();
+                
+                // Для комнат учеников - автоматическая активация
+                if (roomId.includes('_') && roomId !== 'default') {
+                    console.log("🎓 Комната ученика - автоматическая активация");
+                    setTimeout(() => {
+                        if (socket) {
+                            socket.emit('activate_ai_teacher', { room_id: roomId });
+                        }
+                    }, 2000);
+                }
+            } else {
+                console.log("❌ Компоненты не готовы:", {
+                    serverRoomReady, 
+                    peerReady, 
+                    mediaReady
+                });
+                
+                // Показываем статус ожидания
+                if (statusDiv) {
+                    const waitingFor = [];
+                    if (!serverRoomReady) waitingFor.push('сервер');
+                    if (!peerReady) waitingFor.push('PeerJS');
+                    if (!mediaReady) waitingFor.push('медиа');
+                    
+                    statusDiv.textContent = `Ожидание: ${waitingFor.join(', ')}`;
+                }
+            }
+        }
+
         // Инициализация частиц фона
         function initParticlesBackground() {
             particlesBackground = particlesJS('particles-background', {
@@ -4191,7 +4245,9 @@
                 devicesEnabled = true;
                 
                 // ОБНОВЛЕНО: Устанавливаем состояние медиа готовности
+                mediaReady = true;
                 setActivationState('mediaReady', true);
+                checkAndProceed();
                 
                 // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
@@ -4202,7 +4258,9 @@
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
                 cameraPermission.style.display = 'block';
+                mediaReady = false;
                 setActivationState('mediaReady', false);
+                checkAndProceed();
                 
                 if (error.name === 'NotAllowedError') {
                     statusDiv.textContent = 'Доступ к камере/микрофону запрещен';
@@ -4228,7 +4286,9 @@
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
                 // ОБНОВЛЕНО: Устанавливаем состояние socket готовности
+                socketRoomJoined = true;
                 setActivationState('socketReady', true);
+                checkAndProceed();
                 
                 // Ждем инициализации PeerJS перед отправкой room_id
                 if (peerId) {
@@ -4247,11 +4307,44 @@
                 initLlmSystem();
             });
             
+            // 🔥 НОВЫЕ ОБРАБОТЧИКИ ДЛЯ УЛУЧШЕННОЙ СИНХРОНИЗАЦИИ
+            
+            // Обработчик полной готовности от сервера
+            socket.on('room_fully_ready', (data) => {
+                console.log("✅ Сервер сообщил: комната полностью готова!", data);
+                serverRoomReady = true;
+                setActivationState('roomJoined', true);
+                checkAndProceed();
+            });
+
+            // Обработчик ошибки комнаты
+            socket.on('room_error', (data) => {
+                console.error("❌ Ошибка комнаты от сервера:", data);
+                if (statusDiv) {
+                    statusDiv.textContent = `Ошибка: ${data.error}`;
+                }
+            });
+
+            // Обработчик статуса инициализации
+            socket.on('init_status_response', (data) => {
+                console.log("📊 Статус инициализации:", data);
+            });
+
+            // Подтверждения от сервера о готовности компонентов
+            socket.on('server_acknowledged_peer_ready', (data) => {
+                console.log("✅ Сервер подтвердил готовность PeerJS");
+            });
+
+            socket.on('server_acknowledged_media_ready', (data) => {
+                console.log("✅ Сервер подтвердил готовность медиа");
+            });
+            
             // ОБНОВЛЕНО: Добавляем обработчик успешного присоединения к комнате
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 setActivationState('roomJoined', true);
                 participantsCount.textContent = data.count;
+                checkAndProceed();
             });
             
             // Новый обработчик для участников
@@ -4270,15 +4363,19 @@
             // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
+                socketRoomJoined = false;
                 setActivationState('socketReady', false);
                 setAutoContinueEnabled(false);
                 console.log('❌ WebSocket отключен');
+                checkAndProceed();
             });
             
             socket.on('connect_error', (error) => {
                 console.error('❌ WebSocket ошибка подключения:', error);
                 statusDiv.textContent = 'Ошибка подключения: ' + error.message;
+                socketRoomJoined = false;
                 setActivationState('socketReady', false);
+                checkAndProceed();
             });
             
             socket.on('avatar_changed', (data) => {
@@ -4584,19 +4681,25 @@
                 console.log('=== КЛИК ПО КНОПКЕ АКТИВАЦИИ ===');
                 console.log('Room ID:', roomId);
                 console.log('Activation State:', roomActivationState);
+                console.log('Ready States:', {serverRoomReady, peerReady, mediaReady, socketRoomJoined});
                 
                 event.preventDefault();
                 event.stopPropagation();
                 
                 // ПРОВЕРКА ГОТОВНОСТИ ПЕРЕД АКТИВАЦИЕЙ
-                if (!checkRoomActivationReady()) {
-                    console.error('❌ Комната не готова для активации:', roomActivationState);
+                if (!serverRoomReady || !peerReady || !mediaReady) {
+                    console.error('❌ Комната не готова для активации:', {
+                        serverRoomReady, 
+                        peerReady, 
+                        mediaReady
+                    });
                     statusDiv.textContent = 'Ошибка: комната не готова. Проверьте подключение.';
                     
                     // Показываем детали состояния
-                    const states = Object.entries(roomActivationState)
-                        .filter(([_, ready]) => !ready)
-                        .map(([key]) => key);
+                    const states = [];
+                    if (!serverRoomReady) states.push('сервер');
+                    if (!peerReady) states.push('PeerJS');
+                    if (!mediaReady) states.push('медиа');
                     
                     if (states.length > 0) {
                         statusDiv.textContent += ` Ожидание: ${states.join(', ')}`;
@@ -4656,6 +4759,16 @@
             initActivateButton();
         }
 
+        // Функция периодической проверки статуса
+        function startStatusPolling() {
+            setInterval(() => {
+                if (socket && socket.connected && !serverRoomReady) {
+                    console.log('🔍 Запрос статуса инициализации...');
+                    socket.emit('request_init_status', { room_id: roomId });
+                }
+            }, 5000); // Каждые 5 секунд
+        }
+
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             // Инициализация системы состояний активации
@@ -4682,6 +4795,7 @@
             setTimeout(() => {
                 initActivateButton();
                 updateActivationButton();
+                startStatusPolling();
             }, 1000);
             
             textToolBtn.addEventListener('click', () => setTool('text'));
@@ -4807,7 +4921,18 @@
                 statusDiv.textContent = 'Подключение к конференции...';
                 
                 // ОБНОВЛЕНО: Устанавливаем состояние Peer готовности
+                peerReady = true;
                 setActivationState('peerReady', true);
+                
+                // Отправляем сигнал серверу о готовности Peer
+                if (socket) {
+                    socket.emit('peer_ready_signal', { 
+                        room_id: roomId, 
+                        peer_id: id 
+                    });
+                }
+                
+                checkAndProceed();
                 
                 // Сообщаем серверу о нашем peerId
                 if (socket && socket.connected) {
@@ -4849,20 +4974,26 @@
             peer.on('disconnected', () => {
                 console.log('PeerJS отключен');
                 statusDiv.textContent = 'Переподключение...';
+                peerReady = false;
                 setActivationState('peerReady', false);
+                checkAndProceed();
                 peer.reconnect();
             });
 
             peer.on('close', () => {
                 console.log('PeerJS закрыт');
                 statusDiv.textContent = 'Соединение закрыто';
+                peerReady = false;
                 setActivationState('peerReady', false);
+                checkAndProceed();
             });
 
             peer.on('error', (err) => {
                 console.error('PeerJS ошибка:', err);
                 statusDiv.textContent = 'Ошибка соединения: ' + err.type;
+                peerReady = false;
                 setActivationState('peerReady', false);
+                checkAndProceed();
             });
         }
 
