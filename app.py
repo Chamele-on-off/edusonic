@@ -63,7 +63,7 @@ room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
-room_dialogue = defaultdict(lambda: DialogueManager())
+room_dialogue = defaultdict(lambda: None)
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
@@ -187,7 +187,7 @@ def setup_llm_manager():
     print("✅ LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты с поддержкой student_dialogue"""
+    """Быстрая инициализация комнаты с поддержкой student_dialogue и гарантированной инициализацией LLM"""
     try:
         # Определяем тип комнаты по названию
         is_student_room = '_' in room_id and room_id != 'default'
@@ -205,6 +205,21 @@ def _fast_room_initialization(room_id):
                 room_dialogue[room_id] = DialogueManager(socketio)
                 room_dialogue[room_id].room_id = room_id
                 print(f"🔧 Создан DialogueManager для комнаты {room_id}")
+        
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Гарантируем инициализацию LLM
+        if hasattr(room_dialogue[room_id], 'llm'):
+            # Устанавливаем режим LLM
+            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+            
+            # Проверяем, что LLM действительно инициализирован
+            if room_dialogue[room_id].llm is None:
+                print(f"⚠️ LLM не инициализирован для комнаты {room_id}, повторная инициализация")
+                # Принудительно инициализируем LLM
+                from llm import LLMIntegration
+                room_dialogue[room_id].llm = LLMIntegration()
+                room_dialogue[room_id].llm.set_priority(get_llm_priority())
+        else:
+            print(f"❌ У DialogueManager нет атрибута llm для комнаты {room_id}")
         
         # Устанавливаем аватар по умолчанию
         if room_id not in room_current_avatar:
@@ -227,7 +242,16 @@ def _fast_room_initialization(room_id):
         
     except Exception as e:
         print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
-        return False
+        # Fallback: создаем простой DialogueManager
+        try:
+            room_dialogue[room_id] = DialogueManager(socketio)
+            room_dialogue[room_id].room_id = room_id
+            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+            print(f"🔧 Создан fallback DialogueManager для {room_id}")
+            return True
+        except Exception as fallback_error:
+            print(f"❌ Критическая ошибка fallback инициализации: {fallback_error}")
+            return False
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
