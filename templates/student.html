@@ -533,7 +533,6 @@
                         <option value="10">10 класс</option>
                         <option value="11">11 класс</option>
                         <option value="student">Студент</option>
-                        <option value="adult">Взрослый</option>
                     </select>
                 </div>
                 
@@ -541,87 +540,7 @@
                     <label for="studentAge">
                         <i class="fas fa-birthday-cake"></i> Возраст
                     </label>
-                    <select id="studentAge" required>
-                        <option value="">Выберите возраст</option>
-                        <!-- Возраст от 4 до 80 лет -->
-                        <option value="4">4 года</option>
-                        <option value="5">5 лет</option>
-                        <option value="6">6 лет</option>
-                        <option value="7">7 лет</option>
-                        <option value="8">8 лет</option>
-                        <option value="9">9 лет</option>
-                        <option value="10">10 лет</option>
-                        <option value="11">11 лет</option>
-                        <option value="12">12 лет</option>
-                        <option value="13">13 лет</option>
-                        <option value="14">14 лет</option>
-                        <option value="15">15 лет</option>
-                        <option value="16">16 лет</option>
-                        <option value="17">17 лет</option>
-                        <option value="18">18 лет</option>
-                        <option value="19">19 лет</option>
-                        <option value="20">20 лет</option>
-                        <option value="21">21 год</option>
-                        <option value="22">22 года</option>
-                        <option value="23">23 года</option>
-                        <option value="24">24 года</option>
-                        <option value="25">25 лет</option>
-                        <option value="26">26 лет</option>
-                        <option value="27">27 лет</option>
-                        <option value="28">28 лет</option>
-                        <option value="29">29 лет</option>
-                        <option value="30">30 лет</option>
-                        <option value="31">31 год</option>
-                        <option value="32">32 года</option>
-                        <option value="33">33 года</option>
-                        <option value="34">34 года</option>
-                        <option value="35">35 лет</option>
-                        <option value="36">36 лет</option>
-                        <option value="37">37 лет</option>
-                        <option value="38">38 лет</option>
-                        <option value="39">39 лет</option>
-                        <option value="40">40 лет</option>
-                        <option value="41">41 год</option>
-                        <option value="42">42 года</option>
-                        <option value="43">43 года</option>
-                        <option value="44">44 года</option>
-                        <option value="45">45 лет</option>
-                        <option value="46">46 лет</option>
-                        <option value="47">47 лет</option>
-                        <option value="48">48 лет</option>
-                        <option value="49">49 лет</option>
-                        <option value="50">50 лет</option>
-                        <option value="51">51 год</option>
-                        <option value="52">52 года</option>
-                        <option value="53">53 года</option>
-                        <option value="54">54 года</option>
-                        <option value="55">55 лет</option>
-                        <option value="56">56 лет</option>
-                        <option value="57">57 лет</option>
-                        <option value="58">58 лет</option>
-                        <option value="59">59 лет</option>
-                        <option value="60">60 лет</option>
-                        <option value="61">61 год</option>
-                        <option value="62">62 года</option>
-                        <option value="63">63 года</option>
-                        <option value="64">64 года</option>
-                        <option value="65">65 лет</option>
-                        <option value="66">66 лет</option>
-                        <option value="67">67 лет</option>
-                        <option value="68">68 лет</option>
-                        <option value="69">69 лет</option>
-                        <option value="70">70 лет</option>
-                        <option value="71">71 год</option>
-                        <option value="72">72 года</option>
-                        <option value="73">73 года</option>
-                        <option value="74">74 года</option>
-                        <option value="75">75 лет</option>
-                        <option value="76">76 лет</option>
-                        <option value="77">77 лет</option>
-                        <option value="78">78 лет</option>
-                        <option value="79">79 лет</option>
-                        <option value="80">80 лет</option>
-                    </select>
+                    <input type="number" id="studentAge" required min="6" max="18" placeholder="Ваш возраст" autocomplete="age">
                 </div>
                 
                 <button type="submit" class="btn" id="loginButton">
@@ -683,92 +602,11 @@
                         <option value="10">10 класс</option>
                         <option value="11">11 класс</option>
                         <option value="student">Студент</option>
-                        <option value="adult">Взрослый</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label for="editStudentAge">Возраст</label>
-                    <select id="editStudentAge">
-                        <option value="">Выберите возраст</option>
-                        <!-- Возраст от 4 до 80 лет -->
-                        <option value="4">4 года</option>
-                        <option value="5">5 лет</option>
-                        <option value="6">6 лет</option>
-                        <option value="7">7 лет</option>
-                        <option value="8">8 лет</option>
-                        <option value="9">9 лет</option>
-                        <option value="10">10 лет</option>
-                        <option value="11">11 лет</option>
-                        <option value="12">12 лет</option>
-                        <option value="13">13 лет</option>
-                        <option value="14">14 лет</option>
-                        <option value="15">15 лет</option>
-                        <option value="16">16 лет</option>
-                        <option value="17">17 лет</option>
-                        <option value="18">18 лет</option>
-                        <option value="19">19 лет</option>
-                        <option value="20">20 лет</option>
-                        <option value="21">21 год</option>
-                        <option value="22">22 года</option>
-                        <option value="23">23 года</option>
-                        <option value="24">24 года</option>
-                        <option value="25">25 лет</option>
-                        <option value="26">26 лет</option>
-                        <option value="27">27 лет</option>
-                        <option value="28">28 лет</option>
-                        <option value="29">29 лет</option>
-                        <option value="30">30 лет</option>
-                        <option value="31">31 год</option>
-                        <option value="32">32 года</option>
-                        <option value="33">33 года</option>
-                        <option value="34">34 года</option>
-                        <option value="35">35 лет</option>
-                        <option value="36">36 лет</option>
-                        <option value="37">37 лет</option>
-                        <option value="38">38 лет</option>
-                        <option value="39">39 лет</option>
-                        <option value="40">40 лет</option>
-                        <option value="41">41 год</option>
-                        <option value="42">42 года</option>
-                        <option value="43">43 года</option>
-                        <option value="44">44 года</option>
-                        <option value="45">45 лет</option>
-                        <option value="46">46 лет</option>
-                        <option value="47">47 лет</option>
-                        <option value="48">48 лет</option>
-                        <option value="49">49 лет</option>
-                        <option value="50">50 лет</option>
-                        <option value="51">51 год</option>
-                        <option value="52">52 года</option>
-                        <option value="53">53 года</option>
-                        <option value="54">54 года</option>
-                        <option value="55">55 лет</option>
-                        <option value="56">56 лет</option>
-                        <option value="57">57 лет</option>
-                        <option value="58">58 лет</option>
-                        <option value="59">59 лет</option>
-                        <option value="60">60 лет</option>
-                        <option value="61">61 год</option>
-                        <option value="62">62 года</option>
-                        <option value="63">63 года</option>
-                        <option value="64">64 года</option>
-                        <option value="65">65 лет</option>
-                        <option value="66">66 лет</option>
-                        <option value="67">67 лет</option>
-                        <option value="68">68 лет</option>
-                        <option value="69">69 лет</option>
-                        <option value="70">70 лет</option>
-                        <option value="71">71 год</option>
-                        <option value="72">72 года</option>
-                        <option value="73">73 года</option>
-                        <option value="74">74 года</option>
-                        <option value="75">75 лет</option>
-                        <option value="76">76 лет</option>
-                        <option value="77">77 лет</option>
-                        <option value="78">78 лет</option>
-                        <option value="79">79 лет</option>
-                        <option value="80">80 лет</option>
-                    </select>
+                    <input type="number" id="editStudentAge" min="6" max="18" placeholder="Ваш возраст">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" onclick="hideEditForm()">
@@ -1076,8 +914,8 @@
                 return;
             }
             
-            if (!studentAge) {
-                showError('Пожалуйста, выберите ваш возраст');
+            if (!studentAge || studentAge < 6 || studentAge > 18) {
+                showError('Пожалуйста, введите корректный возраст (от 6 до 18 лет)');
                 return;
             }
             
@@ -1296,8 +1134,7 @@
                 '9': '9 класс',
                 '10': '10 класс',
                 '11': '11 класс',
-                'student': 'Студент',
-                'adult': 'Взрослый'
+                'student': 'Студент'
             };
             return levels[level] || level;
         }
@@ -1338,8 +1175,8 @@
                 return;
             }
             
-            if (!newAge) {
-                showError('Пожалуйста, выберите возраст');
+            if (!newAge || newAge < 6 || newAge > 18) {
+                showError('Пожалуйста, введите корректный возраст (от 6 до 18 лет)');
                 return;
             }
             
@@ -1470,9 +1307,19 @@
                 this.value = this.value.replace(/[^a-zA-Zа-яА-ЯёЁ\s]/g, '');
             });
             
+            document.getElementById('studentAge').addEventListener('input', function() {
+                if (this.value < 6) this.value = 6;
+                if (this.value > 18) this.value = 18;
+            });
+            
             // То же самое для формы редактирования
             document.getElementById('editStudentName').addEventListener('input', function() {
                 this.value = this.value.replace(/[^a-zA-Zа-яА-ЯёЁ\s]/g, '');
+            });
+            
+            document.getElementById('editStudentAge').addEventListener('input', function() {
+                if (this.value < 6) this.value = 6;
+                if (this.value > 18) this.value = 18;
             });
             
             // Обработчик изменения выбора аватара
