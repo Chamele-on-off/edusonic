@@ -10,6 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
+from student_dialogue import StudentDialogueManager
 from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_llm_priority, set_llm_priority
 import requests
 import json
@@ -93,6 +94,9 @@ llm_manager = get_llm_manager()
 
 # Менеджер ключей API
 key_manager = get_key_manager()
+
+# Данные учеников для комнат
+room_student_data = defaultdict(dict)
 
 # Обработчики ошибок SocketIO
 @socketio.on_error()
@@ -183,28 +187,40 @@ def setup_llm_manager():
     print("✅ LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты без блокировки"""
+    """Быстрая инициализация комнаты с поддержкой student_dialogue"""
     try:
-        # Создаем диалог менеджер если нужно
+        # Определяем тип комнаты по названию
+        is_student_room = '_' in room_id and room_id != 'default'
+        
+        # Создаем соответствующий диалог менеджер
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            print(f"🔄 Быстрое создание диалог менеджера для {room_id}")
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
+            if is_student_room:
+                # Это комната ученика - используем StudentDialogueManager
+                student_data = room_student_data.get(room_id, {})
+                room_dialogue[room_id] = StudentDialogueManager(socketio, student_data)
+                room_dialogue[room_id].room_id = room_id
+                print(f"🎓 Создан StudentDialogueManager для комнаты ученика {room_id}")
+            else:
+                # Обычная комната - стандартный DialogueManager
+                room_dialogue[room_id] = DialogueManager(socketio)
+                room_dialogue[room_id].room_id = room_id
+                print(f"🔧 Создан DialogueManager для комнаты {room_id}")
         
         # Устанавливаем аватар по умолчанию
         if room_id not in room_current_avatar:
-            if '_' in room_id and room_id != 'default':
+            if is_student_room:
                 room_current_avatar[room_id] = 'woman'
                 print(f"🎓 Установлен аватар 'woman' для комнаты ученика {room_id}")
             else:
                 room_current_avatar[room_id] = 'teacher'
         
         # Для комнат учеников устанавливаем режим
-        if '_' in room_id and room_id != 'default':
-            subject = _extract_subject_from_room(room_id)
-            if subject and room_dialogue[room_id] and not room_dialogue[room_id].is_student_mode:
-                room_dialogue[room_id].set_student_mode(subject)
-                print(f"🎓 Установлен режим ученика для {room_id}: {subject}")
+        if is_student_room and room_dialogue[room_id]:
+            if not getattr(room_dialogue[room_id], 'is_student_mode', False):
+                subject = _extract_subject_from_room(room_id)
+                if subject:
+                    room_dialogue[room_id].set_student_mode(subject)
+                    print(f"🎓 Установлен режим ученика для {room_id}: {subject}")
         
         print(f"✅ Быстрая инициализация завершена для {room_id}")
         return True
@@ -449,7 +465,7 @@ def update_student_data(student_id, updates):
         return False
 
 def create_student_rooms(student_data):
-    """Автоматически создает комнаты для ученика с единым идентификатором"""
+    """Автоматически создает комнаты для ученика с единым идентификатором и StudentDialogueManager"""
     try:
         student_id = student_data.get('student_id')
         student_name = student_data.get('name')
@@ -476,21 +492,31 @@ def create_student_rooms(student_data):
             # ✅ ВАЖНОЕ ИЗМЕНЕНИЕ: Используем единый conference_id
             room_name = f"{subject}_{student_name.replace(' ', '_').lower()}_{conference_id}"
             
+            # Сохраняем данные ученика для этой комнаты
+            room_student_data[room_name] = {
+                'name': student_name,
+                'age': student_data.get('age'),
+                'level': student_data.get('education_level'),
+                'subject': subject,
+                'student_id': student_id,
+                'conference_id': conference_id
+            }
+            
+            # Автоматически создаем StudentDialogueManager для комнаты
+            room_dialogue[room_name] = StudentDialogueManager(socketio, room_student_data[room_name])
+            room_dialogue[room_name].room_id = room_name
+            
             # Автоматически назначаем аватар "woman" для комнаты
             room_current_avatar[room_name] = 'woman'
             
-            # Инициализируем диалог менеджер для комнаты в режиме ученика
-            if room_name not in room_dialogue:
-                room_dialogue[room_name] = DialogueManager(socketio)
-                room_dialogue[room_name].room_id = room_name
-                room_dialogue[room_name].set_student_mode(subject)
-                print(f"🎓 Создана комната {room_name} для ученика {student_name}")
+            print(f"🎓 Создана комната {room_name} для ученика {student_name} с StudentDialogueManager")
             
             created_rooms.append({
                 'subject': subject,
                 'room_name': room_name,
                 'avatar': 'woman',
-                'conference_id': conference_id  # ✅ Сохраняем идентификатор
+                'conference_id': conference_id,  # ✅ Сохраняем идентификатор
+                'student_data': room_student_data[room_name]
             })
         
         # Сохраняем информацию о комнатах в данные ученика
@@ -953,10 +979,11 @@ def handle_activate_ai_teacher(data):
         # Устанавливаем режим LLM
         room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
-        # Генерируем приветствие
-        if room_dialogue[room_id].is_student_mode:
+        # Генерируем приветствие в зависимости от типа комнаты
+        if hasattr(room_dialogue[room_id], 'is_student_mode') and room_dialogue[room_id].is_student_mode:
             subject = room_dialogue[room_id].auto_selected_subject
-            greeting = f"Привет! Я твой AI-репетитор по {subject}. Давайте начнем урок!"
+            student_name = room_dialogue[room_id].student_data.get('name', '')
+            greeting = f"Привет{', ' + student_name if student_name else ''}! Я твой AI-репетитор по {subject}. Давайте начнем урок!"
         else:
             greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
         
@@ -967,7 +994,7 @@ def handle_activate_ai_teacher(data):
         emit('ai_teacher_activated', {
             'room_id': room_id,
             'message': 'AI-учитель успешно активирован',
-            'is_student_mode': room_dialogue[room_id].is_student_mode
+            'is_student_mode': hasattr(room_dialogue[room_id], 'is_student_mode') and room_dialogue[room_id].is_student_mode
         }, room=room_id)
         
         print(f"✅ AI-учитель успешно активирован в комнате {room_id}")
@@ -2493,7 +2520,7 @@ def save_student():
             student_id = save_student_data(student_data)
             student_data['student_id'] = student_id
             
-            # АВТОМАТИЧЕСКИ СОЗДАЕМ КОМНАТЫ ДЛЯ НОВОГО УЧЕНИКА
+            # АВТОМАТИЧЕСКИ СОЗДАЕМ КОМНАТЫ ДЛЯ НОВОГО УЧЕНИКА С StudentDialogueManager
             create_student_rooms(student_data)
             
             # ✅ Загружаем обновленные данные чтобы получить conference_id
