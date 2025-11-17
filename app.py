@@ -63,7 +63,7 @@ room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
-room_dialogue = defaultdict(lambda: DialogueManager(socketio))
+room_dialogue = defaultdict(lambda: None)
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
@@ -555,6 +555,16 @@ def handle_join_room(data):
     print(f"🔧 Попытка присоединения к комнате {room_id}, peer_id: {peer_id}")
     
     try:
+        # ГАРАНТИРУЕМ СУЩЕСТВОВАНИЕ КОМНАТЫ ВО ВСЕХ СЛОВАРЯХ
+        if room_id not in room_participants:
+            room_participants[room_id] = set()
+
+        if room_id not in room_ai_activated:
+            room_ai_activated[room_id] = False
+
+        if room_id not in room_llm_mode:
+            room_llm_mode[room_id] = get_llm_mode()
+
         # Присоединяем к комнате - ВСЕГДА РАБОТАЕТ
         join_room(room_id)
         room_participants[room_id].add(request.sid)
@@ -614,20 +624,54 @@ def handle_join_room(data):
         except:
             print("⚠️ Не удалось отправить ошибку - клиент уже отключен")
 
-def delayed_auto_activation(room_id, delay=2):
-    """Упрощенная отложенная автоматическая активация"""
+def delayed_auto_activation(room_id, delay=3):
+    """Улучшенная отложенная автоматическая активация с повторными попытками"""
     time.sleep(delay)
-    try:
-        # ПРОСТАЯ ПРОВЕРКА: комната существует и есть участники
-        if (room_id in room_participants and 
-            len(room_participants[room_id]) > 0 and 
-            not room_ai_activated.get(room_id, False)):
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Попытка автоматической активации {room_id} (попытка {attempt + 1})")
             
-            print(f"🔄 Запуск автоматической активации для {room_id}")
-            # Используем упрощенную активацию
-            handle_activate_ai_teacher({'room_id': room_id})
-    except Exception as e:
-        print(f"⚠️ Ошибка автоматической активации {room_id}: {e}")
+            # Расширенная проверка существования комнаты
+            room_exists = (
+                room_id in room_participants or 
+                room_id in room_dialogue or 
+                room_id in room_current_avatar
+            )
+            
+            if (room_exists and 
+                room_id in room_participants and 
+                len(room_participants[room_id]) > 0 and 
+                not room_ai_activated.get(room_id, False)):
+                
+                print(f"🚀 Запуск автоматической активации для {room_id}")
+                
+                # Используем упрощенную активацию через прямой вызов
+                room_ai_activated[room_id] = True
+                
+                # Гарантируем инициализацию
+                _fast_room_initialization(room_id)
+                
+                # Отправляем событие активации
+                socketio.emit('ai_teacher_activated', {
+                    'room_id': room_id,
+                    'message': 'AI-учитель автоматически активирован',
+                    'is_student_mode': hasattr(room_dialogue.get(room_id), 'is_student_mode') and room_dialogue[room_id].is_student_mode if room_id in room_dialogue else False
+                }, room=room_id)
+                
+                print(f"✅ Автоматическая активация успешна для {room_id}")
+                break
+                
+            else:
+                print(f"⚠️ Комната {room_id} не готова для автоматической активации (попытка {attempt + 1})")
+                if attempt < max_retries - 1:
+                    time.sleep(2)  # Ждем перед следующей попыткой
+                    
+        except Exception as e:
+            print(f"⚠️ Ошибка автоматической активации {room_id} (попытка {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
 
 def _extract_subject_from_room(room_id: str) -> Optional[str]:
     """Извлекает предмет из названия комнаты для режима ученика"""
@@ -955,19 +999,50 @@ def handle_activate_ai_teacher(data):
     print(f"🔧 Запрос активации AI-учителя для комнаты {room_id} от {sid}")
     
     try:
-        # 🔥 ВАЖНОЕ ИЗМЕНЕНИЕ: ПРОСТАЯ ПРОВЕРКА - КОМНАТА СУЩЕСТВУЕТ
-        if room_id not in room_participants:
-            print(f"❌ Комната {room_id} не существует")
+        # 🔥 УЛУЧШЕННАЯ ПРОВЕРКА: комната может быть в процессе создания
+        # Проверяем различные возможные состояния комнаты
+        
+        # Если комнаты нет в participants, но есть в других словарях - это нормально
+        room_exists = (
+            room_id in room_participants or 
+            room_id in room_dialogue or 
+            room_id in room_current_avatar or
+            room_id in room_ai_activated
+        )
+        
+        if not room_exists:
+            print(f"❌ Комната {room_id} действительно не существует")
             emit('activate_ai_error', {
                 'room_id': room_id,
                 'error': 'Комната не найдена'
             }, to=sid)
             return
         
-        # 🔥 БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ ЕСЛИ НУЖНО
+        # 🔥 ГАРАНТИРОВАННАЯ ИНИЦИАЛИЗАЦИЯ ДАЖЕ ДЛЯ НОВЫХ КОМНАТ
+        print(f"🔄 Принудительная инициализация комнаты {room_id} перед активацией")
+        
+        # Создаем базовые структуры если их нет
+        if room_id not in room_participants:
+            room_participants[room_id] = set()
+            print(f"🔧 Создан room_participants для {room_id}")
+        
+        if room_id not in room_ai_activated:
+            room_ai_activated[room_id] = False
+            print(f"🔧 Создан room_ai_activated для {room_id}")
+        
+        if room_id not in room_llm_mode:
+            room_llm_mode[room_id] = get_llm_mode()
+            print(f"🔧 Создан room_llm_mode для {room_id}")
+        
+        # 🔥 БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ ДИАЛОГ МЕНЕДЖЕРА
         _fast_room_initialization(room_id)
         
-        # Активируем AI-учителя - ВСЕГДА РАБОТАЕТ
+        # ДОБАВЛЯЕМ КЛИЕНТА В КОМНАТУ ЕСЛИ ЕГО ТАМ НЕТ
+        if sid not in room_participants[room_id]:
+            room_participants[room_id].add(sid)
+            print(f"🔧 Добавлен клиент {sid} в комнату {room_id}")
+        
+        # Активируем AI-учителя
         room_ai_activated[room_id] = True
         
         # Убеждаемся что диалог менеджер инициализирован
