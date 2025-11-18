@@ -199,7 +199,11 @@ def _fast_room_initialization(room_id):
                 student_data = room_student_data.get(room_id, {})
                 room_dialogue[room_id] = StudentDialogueManager(socketio, student_data)
                 room_dialogue[room_id].room_id = room_id
+                
+                # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Устанавливаем приоритет LLM для OpenRouter
+                room_dialogue[room_id].llm.set_priority("openrouter_first")
                 print(f"🎓 Создан StudentDialogueManager для комнаты ученика {room_id}")
+                print(f"🔧 Установлен приоритет LLM: openrouter_first")
             else:
                 # Обычная комната - стандартный DialogueManager
                 room_dialogue[room_id] = DialogueManager(socketio)
@@ -505,6 +509,9 @@ def create_student_rooms(student_data):
             # Автоматически создаем StudentDialogueManager для комнаты
             room_dialogue[room_name] = StudentDialogueManager(socketio, room_student_data[room_name])
             room_dialogue[room_name].room_id = room_name
+            
+            # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Устанавливаем приоритет для OpenRouter
+            room_dialogue[room_name].llm.set_priority("openrouter_first")
             
             # Автоматически назначаем аватар "woman" для комнаты
             room_current_avatar[room_name] = 'woman'
@@ -868,6 +875,13 @@ def handle_recognized_speech(data):
     room_id = data['room_id']
     text = data['text']
     user_sid = request.sid
+
+    print(f"🔧 [DEBUG] Распознанная речь в комнате {room_id}: {text}")
+    print(f"🔧 [DEBUG] Тип dialogue manager: {type(room_dialogue.get(room_id))}")
+    
+    if room_id in room_dialogue:
+        print(f"🔧 [DEBUG] Состояние комнаты: ai_activated={room_ai_activated.get(room_id)}, lesson_started={room_dialogue[room_id].is_lesson_started()}")
+        print(f"🔧 [DEBUG] LLM статус: {room_dialogue[room_id].llm.get_llm_status() if hasattr(room_dialogue[room_id].llm, 'get_llm_status') else 'N/A'}")
 
     # ИГНОРИРУЕМ распознанную речь, если учитель говорит
     if room_teacher_speaking[room_id]:
