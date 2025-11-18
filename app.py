@@ -34,7 +34,6 @@ socketio = SocketIO(
     always_connect=True        # Всегда пытаться подключиться
 )
 
-
 # Ручная настройка CORS
 @app.after_request
 def after_request(response):
@@ -66,8 +65,8 @@ room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
 room_current_avatar = defaultdict(lambda: 'teacher')
 
-# PeerJS tracking
-room_peer_ids = defaultdict(dict)  # room_id -> {socket_id: peer_id}
+# WebRTC tracking - замена PeerJS
+room_webrtc_connections = defaultdict(dict)  # room_id -> {socket_id: webrtc_data}
 
 # Кэш для визуализаций
 diagram_cache = {}
@@ -308,12 +307,12 @@ def handle_disconnect():
     print(f'❌ Client disconnected: {request.sid}')
     for room_id in list(room_participants.keys()):
         if request.sid in room_participants[room_id]:
-            # Удаляем peer_id при отключении
-            if room_id in room_peer_ids and request.sid in room_peer_ids[room_id]:
-                peer_id = room_peer_ids[room_id][request.sid]
-                del room_peer_ids[room_id][request.sid]
+            # Удаляем WebRTC данные при отключении
+            if room_id in room_webrtc_connections and request.sid in room_webrtc_connections[room_id]:
+                webrtc_data = room_webrtc_connections[room_id][request.sid]
+                del room_webrtc_connections[room_id][request.sid]
                 # Уведомляем других участников о выходе
-                emit('participant_left', {'peer_id': peer_id}, room=room_id)
+                emit('participant_left', {'socket_id': request.sid}, room=room_id)
             
             room_participants[room_id].remove(request.sid)
             emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
@@ -321,16 +320,17 @@ def handle_disconnect():
 @socketio.on('join_room')
 def handle_join_room(data):
     room_id = data['room_id']
-    peer_id = data.get('peer_id')  # Новое поле для PeerJS
     
     join_room(room_id)
     room_participants[room_id].add(request.sid)
     
-    # Сохраняем peer_id для участника
-    if peer_id:
-        if room_id not in room_peer_ids:
-            room_peer_ids[room_id] = {}
-        room_peer_ids[room_id][request.sid] = peer_id
+    # Сохраняем WebRTC данные для участника
+    if room_id not in room_webrtc_connections:
+        room_webrtc_connections[room_id] = {}
+    room_webrtc_connections[room_id][request.sid] = {
+        'socket_id': request.sid,
+        'joined_at': time.time()
+    }
     
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
@@ -344,11 +344,9 @@ def handle_join_room(data):
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     # Уведомляем других участников о новом подключении
-    if peer_id:
-        emit('participant_joined', {
-            'peer_id': peer_id,
-            'sid': request.sid
-        }, room=room_id, include_self=False)
+    emit('participant_joined', {
+        'socket_id': request.sid
+    }, room=room_id, include_self=False)
     
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
@@ -754,6 +752,50 @@ def handle_visualization_generated(data):
         'svg_code': data.get('svg_code', ''),
         'timestamp': data.get('timestamp', time.time())
     }, room=room_id)
+
+# WebRTC signaling handlers - замена PeerJS
+@socketio.on('webrtc_offer')
+def handle_webrtc_offer(data):
+    """Обработчик WebRTC offer от клиента"""
+    room_id = data['room_id']
+    target_socket_id = data['target_socket_id']
+    offer = data['offer']
+    
+    print(f"📨 WebRTC offer от {request.sid} к {target_socket_id}")
+    
+    # Пересылаем offer целевому клиенту
+    emit('webrtc_offer', {
+        'offer': offer,
+        'from_socket_id': request.sid
+    }, room=target_socket_id)
+
+@socketio.on('webrtc_answer')
+def handle_webrtc_answer(data):
+    """Обработчик WebRTC answer от клиента"""
+    room_id = data['room_id']
+    target_socket_id = data['target_socket_id']
+    answer = data['answer']
+    
+    print(f"📨 WebRTC answer от {request.sid} к {target_socket_id}")
+    
+    # Пересылаем answer целевому клиенту
+    emit('webrtc_answer', {
+        'answer': answer,
+        'from_socket_id': request.sid
+    }, room=target_socket_id)
+
+@socketio.on('webrtc_ice_candidate')
+def handle_webrtc_ice_candidate(data):
+    """Обработчик ICE candidate от клиента"""
+    room_id = data['room_id']
+    target_socket_id = data['target_socket_id']
+    candidate = data['candidate']
+    
+    # Пересылаем ICE candidate целевому клиенту
+    emit('webrtc_ice_candidate', {
+        'candidate': candidate,
+        'from_socket_id': request.sid
+    }, room=target_socket_id)
 
 # НОВЫЕ ФУНКЦИИ ДЛЯ POLLING ВИЗУАЛИЗАЦИИ
 def add_visualization_to_queue(room_id, topic, context):
