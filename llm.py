@@ -49,7 +49,7 @@ class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
-                 model: str = "meta-llama/llama-3.3-8b-instruct:free"):
+                 model: str = "meta-llama/llama-3.2-3b-instruct:free"):
         
         config = load_config()
         openrouter_config = get_model_config("openrouter")
@@ -57,7 +57,7 @@ class LLMIntegration:
         # Используем менеджер ключей вместо одного ключа
         self.key_manager = get_key_manager()
         self.api_url = api_url or openrouter_config.get("api_url", "https://openrouter.ai/api/v1/chat/completions")
-        self.model = model or openrouter_config.get("model", "meta-llama/llama-3.3-8b-instruct:free")
+        self.model = model or openrouter_config.get("model", "meta-llama/llama-3.2-3b-instruct:free")
         self.cache_dir = Path(cache_dir)
         self.cache = self._load_cache()
         self.last_request_time = 0
