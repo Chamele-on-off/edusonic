@@ -3027,8 +3027,5 @@ if __name__ == '__main__':
         host='0.0.0.0', 
         port=5000, 
         debug=True, 
-        allow_unsafe_werkzeug=True,
-        # Исправленные настройки
-        ping_timeout=60,
-        ping_interval=25
+        allow_unsafe_werkzeug=True
     )
