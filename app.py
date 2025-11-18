@@ -19,8 +19,6 @@ import re
 import tempfile
 from local_llm_manager import get_llm_manager
 from key_manager import get_key_manager
-from typing import Optional
-import uuid
 
 # Настройка SocketIO с правильными таймаутами
 app = Flask(__name__, static_folder='static')
@@ -36,6 +34,7 @@ socketio = SocketIO(
     always_connect=True        # Всегда пытаться подключиться
 )
 
+
 # Ручная настройка CORS
 @app.after_request
 def after_request(response):
@@ -49,10 +48,9 @@ FRAMES_DIR = BASE_DIR / 'static' / 'avatar' / 'frames'
 LESSONS_DIR = BASE_DIR / 'lessons'
 MATERIALS_DIR = BASE_DIR / 'materials'
 PRACTICE_DIR = BASE_DIR / 'materials' / 'practice'
-STUDENTS_DIR = BASE_DIR / "students_data"
 
 # Создаем необходимые папки
-for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR]:
+for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Глобальные состояния
@@ -73,7 +71,7 @@ room_peer_ids = defaultdict(dict)  # room_id -> {socket_id: peer_id}
 
 # Кэш для визуализаций
 diagram_cache = {}
-# Очереди визуализаций для каждой комнаты
+# Очередь визуализаций для каждой комнаты
 room_visualization_queue = defaultdict(list)
 # Флаг активной визуализации для каждой комната
 room_visualization_active = defaultdict(bool)
@@ -252,25 +250,11 @@ def teacher():
     """Страница учителя (личный кабинет)"""
     return render_template('teacher.html')
 
-@app.route('/student')
-def student():
-    """Страница ученика (личный кабинет)"""
-    return render_template('student.html')
-
 @app.route('/conference')
 def conference():
     room_id = request.args.get('room', 'default')
     embed = request.args.get('embed', 'false') == 'true'
-    student_mode = request.args.get('student', 'false') == 'true'
-    subject = request.args.get('subject', '')
-    subject_name = request.args.get('subject_name', '')
-    
-    return render_template('conference.html', 
-                         room_id=room_id, 
-                         embed=embed,
-                         student_mode=student_mode,
-                         subject=subject,
-                         subject_name=subject_name)
+    return render_template('conference.html', room_id=room_id, embed=embed)
 
 @app.route('/api/avatars')
 def get_avatars():
@@ -314,123 +298,6 @@ def text_to_speech(text, lang='ru'):
         print(f"Error in text_to_speech: {e}")
         return None
 
-# Функции для работы с данными учеников
-def save_student_data(student_data):
-    """Сохраняет данные ученика в JSON файл"""
-    try:
-        student_id = student_data.get('student_id')
-        if not student_id:
-            student_id = str(uuid.uuid4())
-            student_data['student_id'] = student_id
-        
-        student_data['last_updated'] = datetime.now().isoformat()
-        
-        filename = f"{student_id}.json"
-        filepath = STUDENTS_DIR / filename
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(student_data, f, ensure_ascii=False, indent=2)
-        
-        return student_id
-    except Exception as e:
-        print(f"Error saving student data: {e}")
-        return None
-
-def load_student_data(student_id):
-    """Загружает данные ученика из JSON файла"""
-    try:
-        filename = f"{student_id}.json"
-        filepath = STUDENTS_DIR / filename
-        
-        if not filepath.exists():
-            return None
-        
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading student data: {e}")
-        return None
-
-def find_student_by_name(name):
-    """Находит ученика по имени"""
-    try:
-        for filepath in STUDENTS_DIR.glob("*.json"):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if data.get('name', '').lower() == name.lower():
-                    return data
-        return None
-    except Exception as e:
-        print(f"Error finding student: {e}")
-        return None
-
-def update_student_data(student_id, updates):
-    """Обновляет данные ученика"""
-    try:
-        current_data = load_student_data(student_id)
-        if not current_data:
-            return False
-        
-        current_data.update(updates)
-        current_data['last_updated'] = datetime.now().isoformat()
-        
-        return save_student_data(current_data) is not None
-    except Exception as e:
-        print(f"Error updating student data: {e}")
-        return False
-
-def create_student_rooms(student_data):
-    """Автоматически создает комнаты для ученика и назначает аватар"""
-    try:
-        student_id = student_data.get('student_id')
-        student_name = student_data.get('name')
-        
-        if not student_id or not student_name:
-            return False
-        
-        # Список предметов для создания комнат
-        subjects = [
-            'math', 'physics', 'chemistry', 'biology', 
-            'history', 'social', 'literature', 'russian', 
-            'english', 'geography'
-        ]
-        
-        created_rooms = []
-        
-        for subject in subjects:
-            # Создаем уникальное имя комнаты
-            room_name = f"{subject}_{student_name.replace(' ', '_').lower()}_{student_id}"
-            
-            # Автоматически назначаем аватар "woman" для комнаты
-            room_current_avatar[room_name] = 'woman'
-            
-            # Инициализируем диалог менеджер для комнаты в режиме ученика
-            if room_name not in room_dialogue:
-                room_dialogue[room_name] = DialogueManager(socketio)
-                room_dialogue[room_name].room_id = room_name
-                room_dialogue[room_name].set_student_mode(subject)
-                print(f"🎓 Автоматически создана комната {room_name} для ученика {student_name} с предметом {subject}")
-            
-            created_rooms.append({
-                'subject': subject,
-                'room_name': room_name,
-                'avatar': 'woman'
-            })
-        
-        # Сохраняем информацию о комнатах в данные ученика
-        student_data['rooms'] = created_rooms
-        student_data['default_avatar'] = 'woman'
-        
-        # Сохраняем обновленные данные
-        save_student_data(student_data)
-        
-        print(f"✅ Автоматически создано {len(created_rooms)} комнат для ученика {student_name}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Ошибка создания комнат для ученика: {e}")
-        return False
-
 @socketio.on('connect')
 def handle_connect():
     print(f'✅ Client connected: {request.sid}')
@@ -465,37 +332,15 @@ def handle_join_room(data):
             room_peer_ids[room_id] = {}
         room_peer_ids[room_id][request.sid] = peer_id
     
-    # АВТОМАТИЧЕСКАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ ДЛЯ УЧЕНИКОВ
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
         room_dialogue[room_id].room_id = room_id
-        
-        # Проверяем, является ли это комнатой ученика
-        subject_from_room = _extract_subject_from_room(room_id)
-        if subject_from_room:
-            # Устанавливаем режим ученика
-            room_dialogue[room_id].set_student_mode(subject_from_room)
-            print(f"🎓 Комната {room_id} настроена в режиме ученика с предметом: {subject_from_room}")
-    
-    # АВТОМАТИЧЕСКОЕ НАЗНАЧЕНИЕ АВАТАРА "woman" ДЛЯ КОМНАТ УЧЕНИКОВ
-    if room_id not in room_current_avatar:
-        # Проверяем, содержит ли room_id указание на ученика (есть подчеркивания и не "default")
-        if '_' in room_id and room_id != 'default':
-            room_current_avatar[room_id] = 'woman'
-            print(f"👩 Автоматически назначен аватар 'woman' для комнаты {room_id}")
-        else:
-            room_current_avatar[room_id] = 'teacher'  # дефолтный аватар для других комнат
     
     # Устанавливаем режим LLM для диалог менеджера комнаты
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
     if len(room_participants[room_id]) == 1:
-        # В режиме ученика меняем приветствие
-        if room_dialogue[room_id].is_student_mode:
-            subject = room_dialogue[room_id].auto_selected_subject
-            greeting = f"Привет! Я твой AI-репетитор по {subject}. Давайте познакомимся и начнем интересный урок!"
-        else:
-            greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
+        greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     # Уведомляем других участников о новом подключении
@@ -508,7 +353,7 @@ def handle_join_room(data):
     emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
     emit('new_participant', {'sid': request.sid}, room=room_id)
     
-    # ОТПРАВЛЯЕМ ТЕКУЩИЙ АВАТАР КОМНАТЫ НОВОМУ УЧАСТНИКУ
+    # Отправляем текущий аватар комнаты новому участнику
     emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
     
     if len(room_participants[room_id]) == 2 and not room_ai_activated[room_id]:
@@ -518,26 +363,6 @@ def handle_join_room(data):
     
     if room_speech_data[room_id]:
         emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
-
-def _extract_subject_from_room(room_id: str) -> Optional[str]:
-    """Извлекает предмет из названия комнаты для режима ученика"""
-    if '_' in room_id:
-        subject_part = room_id.split('_')[0].lower()
-        subject_map = {
-            'math': 'математика',
-            'mathematics': 'математика',
-            'physics': 'физика', 
-            'chemistry': 'химия',
-            'biology': 'биология',
-            'history': 'история',
-            'social': 'обществознание',
-            'literature': 'литература',
-            'russian': 'русский язык',
-            'english': 'английский язык',
-            'geography': 'география'
-        }
-        return subject_map.get(subject_part)
-    return None
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
@@ -847,13 +672,7 @@ def handle_activate_ai_teacher(data):
     # Устанавливаем режим LLM для нового диалог менеджера
     room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    # В режиме ученика меняем приветствие
-    if room_dialogue[room_id].is_student_mode:
-        subject = room_dialogue[room_id].auto_selected_subject
-        greeting = f"Привет! Я твой AI-репетитор по {subject}. Давайте познакомимся и начнем интересный урок!"
-    else:
-        greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-    
+    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
     speak_text(room_id, greeting, voice_type='female', is_teacher=True)
     
     emit('ai_teacher_activated', {}, room=room_id)
@@ -2338,275 +2157,6 @@ def add_api_key_route():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# API для работы с данными учеников
-@app.route('/api/student/save', methods=['POST'])
-def save_student():
-    """Сохранение данных ученика с автоматическим созданием комнат"""
-    try:
-        data = request.json
-        student_data = {
-            'name': data.get('name'),
-            'education_level': data.get('level'),
-            'age': data.get('age'),
-            'subjects': data.get('subjects', []),
-            'registration_date': datetime.now().isoformat(),
-            'last_login': datetime.now().isoformat()
-        }
-        
-        # Ищем существующего ученика по имени
-        existing_student = find_student_by_name(student_data['name'])
-        
-        if existing_student:
-            # Обновляем существующего ученика
-            student_id = existing_student['student_id']
-            student_data['student_id'] = student_id
-            student_data['rooms'] = existing_student.get('rooms', [])
-            update_student_data(student_id, {
-                'education_level': student_data['education_level'],
-                'age': student_data['age'],
-                'last_login': student_data['last_login']
-            })
-        else:
-            # Создаем нового ученика
-            student_id = save_student_data(student_data)
-            student_data['student_id'] = student_id
-            
-            # АВТОМАТИЧЕСКИ СОЗДАЕМ КОМНАТЫ ДЛЯ НОВОГО УЧЕНИКА
-            create_student_rooms(student_data)
-        
-        if student_id:
-            return jsonify({
-                "success": True,
-                "student_id": student_id,
-                "message": "Данные ученика сохранены",
-                "rooms_created": not existing_student  # True если созданы новые комнаты
-            })
-        else:
-            return jsonify({"success": False, "error": "Ошибка сохранения данных"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>')
-def get_student(student_id):
-    """Получение данных ученика"""
-    try:
-        student_data = load_student_data(student_id)
-        if student_data:
-            return jsonify({"success": True, "student": student_data})
-        else:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/update', methods=['POST'])
-def update_student(student_id):
-    """Обновление данных ученика"""
-    try:
-        data = request.json
-        if update_student_data(student_id, data):
-            return jsonify({"success": True, "message": "Данные обновлены"})
-        else:
-            return jsonify({"success": False, "error": "Ошибка обновления"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/rooms')
-def get_student_rooms(student_id):
-    """Получение списка комнат ученика"""
-    try:
-        student_data = load_student_data(student_id)
-        if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        rooms = student_data.get('rooms', [])
-        return jsonify({
-            "success": True,
-            "student_id": student_id,
-            "student_name": student_data.get('name'),
-            "rooms": rooms,
-            "default_avatar": student_data.get('default_avatar', 'woman'),
-            "total_rooms": len(rooms)
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/room/<subject>')
-def get_student_room(student_id, subject):
-    """Получение конкретной комнаты ученика по предмету"""
-    try:
-        student_data = load_student_data(student_id)
-        if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        rooms = student_data.get('rooms', [])
-        target_room = None
-        
-        for room in rooms:
-            if room.get('subject') == subject:
-                target_room = room
-                break
-        
-        if target_room:
-            return jsonify({
-                "success": True,
-                "room": target_room,
-                "conference_url": f"/conference?room={target_room['room_name']}&student=true&subject={subject}"
-            })
-        else:
-            return jsonify({"success": False, "error": f"Комната для предмета {subject} не найдена"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/lessons')
-def get_student_lessons(student_id):
-    """Получение истории уроков ученика"""
-    try:
-        student_data = load_student_data(student_id)
-        if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        lessons = student_data.get('lessons', [])
-        return jsonify({
-            "success": True,
-            "student_id": student_id,
-            "lessons": lessons,
-            "total_lessons": len(lessons)
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/add-lesson', methods=['POST'])
-def add_student_lesson(student_id):
-    """Добавление урока в историю ученика"""
-    try:
-        data = request.json
-        student_data = load_student_data(student_id)
-        if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        lesson_data = {
-            'lesson_id': data.get('lesson_id'),
-            'subject': data.get('subject'),
-            'title': data.get('title'),
-            'date': datetime.now().isoformat(),
-            'duration': data.get('duration', 0),
-            'score': data.get('score'),
-            'completed': data.get('completed', False)
-        }
-        
-        if 'lessons' not in student_data:
-            student_data['lessons'] = []
-        
-        student_data['lessons'].append(lesson_data)
-        student_data['last_activity'] = datetime.now().isoformat()
-        
-        if save_student_data(student_data):
-            return jsonify({"success": True, "message": "Урок добавлен в историю"})
-        else:
-            return jsonify({"success": False, "error": "Ошибка сохранения"})
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/admin/create_all_student_rooms')
-def create_all_student_rooms():
-    """Админская функция для создания комнат всем существующим ученикам"""
-    try:
-        created_count = 0
-        error_count = 0
-        
-        # Ищем все файлы учеников
-        for student_file in STUDENTS_DIR.glob("*.json"):
-            try:
-                with open(student_file, 'r', encoding='utf-8') as f:
-                    student_data = json.load(f)
-                
-                # Создаем комнаты если их еще нет
-                if 'rooms' not in student_data or not student_data['rooms']:
-                    if create_student_rooms(student_data):
-                        created_count += 1
-                        print(f"✅ Созданы комнаты для {student_data.get('name')}")
-                    else:
-                        error_count += 1
-                        print(f"❌ Ошибка создания комнат для {student_data.get('name')}")
-                        
-            except Exception as e:
-                print(f"❌ Ошибка обработки файла {student_file}: {e}")
-                error_count += 1
-        
-        return jsonify({
-            "success": True,
-            "message": f"Создано комнат для {created_count} учеников, ошибок: {error_count}",
-            "created": created_count,
-            "errors": error_count
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-# Отладочные маршруты
-@app.route('/debug/routes')
-def debug_routes():
-    """Отладочная информация о маршрутах"""
-    routes = []
-    for rule in app.url_map.iter_rules():
-        routes.append({
-            'endpoint': rule.endpoint,
-            'methods': list(rule.methods),
-            'path': str(rule)
-        })
-    return jsonify({"routes": routes})
-
-@app.route('/test-conference')
-def test_conference():
-    """Тестовый маршрут для проверки открытия конференции"""
-    return render_template('conference.html', 
-                         room_id='test_room', 
-                         embed=False,
-                         student_mode=True,
-                         subject='math',
-                         subject_name='Математика')
-
-@app.route('/test-student-flow')
-def test_student_flow():
-    """Тестовая страница для проверки потока ученика"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Test Student Flow</title>
-    </head>
-    <body>
-        <h1>Тест открытия конференции</h1>
-        <button onclick="testOpenConference()">Тест открытия конференции</button>
-        <button onclick="testOpenInNewTab()">Тест открытия в новой вкладке</button>
-        <button onclick="testOpenInSameTab()">Тест открытия в этой же вкладке</button>
-        
-        <script>
-            function testOpenConference() {
-                const url = '/conference?room=test_room&student=true&subject=math&subject_name=Математика';
-                const newWindow = window.open(url, 'TestConference', 'width=1200,height=800');
-                if (!newWindow) {
-                    alert('Окно заблокировано! Разрешите всплывающие окна.');
-                }
-            }
-            
-            function testOpenInNewTab() {
-                const url = '/conference?room=test_room&student=true&subject=math&subject_name=Математика';
-                window.open(url, '_blank');
-            }
-            
-            function testOpenInSameTab() {
-                const url = '/conference?room=test_room&student=true&subject=math&subject_name=Математика';
-                window.location.href = url;
-            }
-        </script>
-    </body>
-    </html>
-    """
-
 if __name__ == '__main__':
     print("🚀 Запуск AI Teacher системы...")
     
@@ -2626,9 +2176,5 @@ if __name__ == '__main__':
     # Проверяем уроки
     lessons_count = len(list(LESSONS_DIR.glob("*.txt")))
     print(f"📚 Доступно уроков: {lessons_count}")
-    
-    # Проверяем папку учеников
-    students_count = len(list(STUDENTS_DIR.glob("*.json")))
-    print(f"🎓 Зарегистрировано учеников: {students_count}")
     
     socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
