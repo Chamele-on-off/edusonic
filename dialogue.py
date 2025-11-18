@@ -59,17 +59,13 @@ class DialogueManager:
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
         
-        # Поля для визуализации
+        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ
         self.visualization_enabled = True
         self.last_visualization_time = 0
         self.visualization_cooldown = 5
         self.visualization_counter = 0
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
-        
-        # Минимальная поддержка режима ученика
-        self.is_student_mode = False
-        self.auto_selected_subject = None
         
         self._load_lessons()
         
@@ -107,7 +103,7 @@ class DialogueManager:
         return self._get_default_dialogue_patterns()
 
     def _get_default_dialogue_patterns(self) -> Dict:
-        """Возвращает базовые диалоговые шаблонов по умолчанию"""
+        """Возвращает базовые диалоговые шаблоны по умолчанию"""
         return {
             "greeting_patterns": {
                 "привет": ["Привет! Рад тебя видеть!", "Здравствуй! Готов к учебе?"],
@@ -343,21 +339,52 @@ class DialogueManager:
             else:
                 system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
             
-            # ПРОСТОЙ СИНХРОННЫЙ ЗАПРОС К LLM
-            llm_response = self.llm._query_llm_api(
-                prompt=text,
-                context=context,
-                subject=self.current_subject or "общее",
-                system_prompt=system_prompt,
-                max_tokens=150
-            )
-            
-            if llm_response:
-                limited_response = self._limit_response_length(
-                    llm_response, 
-                    self.dialogue_settings.get("max_response_length", 3)
+            # АСИНХРОННЫЙ запрос к локальной модели
+            if room_id and self.socketio:
+                # Используем асинхронный режим с callback
+                def llm_callback(response, r_id):
+                    if response:
+                        limited_response = self._limit_response_length(
+                            response, 
+                            self.dialogue_settings.get("max_response_length", 3)
+                        )
+                        
+                        # Отправляем ответ через WebSocket
+                        self.socketio.emit('llm_dialogue_response', {
+                            'room_id': r_id,
+                            'response': limited_response,
+                            'original_text': text
+                        }, room=r_id)
+                
+                # Асинхронный запрос - не блокируем основной поток
+                self.llm._query_llm_api(
+                    prompt=text,
+                    context=context,
+                    subject=self.current_subject or "общее",
+                    system_prompt=system_prompt,
+                    max_tokens=150,
+                    room_id=room_id,
+                    callback=llm_callback
                 )
-                return limited_response
+                
+                return None  # Ответ придет асинхронно
+                
+            else:
+                # Синхронный режим для обратной совместимости
+                llm_response = self.llm._query_llm_api(
+                    prompt=text,
+                    context=context,
+                    subject=self.current_subject or "общее",
+                    system_prompt=system_prompt,
+                    max_tokens=150
+                )
+                
+                if llm_response:
+                    limited_response = self._limit_response_length(
+                        llm_response, 
+                        self.dialogue_settings.get("max_response_length", 3)
+                    )
+                    return limited_response
                     
         except Exception as e:
             print(f"Ошибка запроса к LLM для диалога: {e}")
@@ -648,7 +675,6 @@ class DialogueManager:
                 print(f"🎨 Генерация визуализации для: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
-                    # Используем улучшенную генерацию через структурированные данные
                     viz_result = self.llm.generate_visualization(text, context)
                     
                     if viz_result and viz_result.get("success"):
@@ -677,10 +703,6 @@ class DialogueManager:
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
-        
-        # 🔥 БЫСТРЫЙ ПЕРЕХОД ДЛЯ РЕЖИМА УЧЕНИКА
-        if self.is_student_mode and self.auto_selected_subject and not self.lesson_started:
-            return self._handle_subject_selection_direct(self.auto_selected_subject)
         
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ - РАБОТАЕТ ЛЮБАЯ ИЗ НИХ В ЛЮБОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
         continue_commands = [
@@ -902,7 +924,7 @@ class DialogueManager:
             return "Практика не активна."
         
         # ПРОВЕРЯЕМ, НЕ ЯВЛЯЕТСЯ ЛИ ОТВЕТ КОМАНДОЙ
-        if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
+        if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий', 'стоп']):
             print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
             next_question = self.practice_manager.get_next_question()
             if next_question:
@@ -1102,8 +1124,6 @@ class DialogueManager:
         self.waiting_for_answer = False
         self.current_question_index = 0
         self.practice_manager.reset()
-        self.is_student_mode = False
-        self.auto_selected_subject = None
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
@@ -1132,12 +1152,6 @@ class DialogueManager:
         """Установка ID комнаты для WebSocket коммуникации"""
         self.room_id = room_id
         print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
-
-    def set_student_mode(self, subject: str):
-        """Устанавливает режим ученика с автоматическим выбором предмета"""
-        self.is_student_mode = True
-        self.auto_selected_subject = subject
-        print(f"🎓 Установлен режим ученика с предметом: {subject}")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -1252,9 +1266,7 @@ class DialogueManager:
             "current_practice_question": self.current_practice_question,
             "room_id": self.room_id,
             "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-            "max_questions": self.max_questions,
-            "is_student_mode": self.is_student_mode,
-            "auto_selected_subject": self.auto_selected_subject
+            "max_questions": self.max_questions
         }
 
     def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
@@ -1358,9 +1370,7 @@ class DialogueManager:
                 "current_subject": self.current_subject,
                 "conversation_history_length": len(self.conversation_history),
                 "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-                "max_questions": self.max_questions,
-                "is_student_mode": self.is_student_mode,
-                "auto_selected_subject": self.auto_selected_subject
+                "max_questions": self.max_questions
             },
             "llm": llm_status,
             "knowledge_base": knowledge_stats,
