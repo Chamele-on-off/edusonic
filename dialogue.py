@@ -567,7 +567,7 @@ class DialogueManager:
     def _check_for_lesson_generation_intent(self, text_lower: str) -> bool:
         """
         Проверяет, хочет ли пользователь сгенерировать новый урок по теме.
-        Возвращает True, если урок был успешно сгенерирован.
+        Возвращает True, если урок был успешно сгенерирован И СОХРАНЕН.
         """
         # Сначала проверяем, не запрашивает ли пользователь существующий предмет
         available_subjects = self.get_available_subjects()
@@ -596,10 +596,25 @@ class DialogueManager:
                 topic = match.group(1).strip()
                 topic = re.sub(r'[.?]$', '', topic)
                 if topic and len(topic) > 2:
-                    print(f"Обнаружен запрос на генерацию урока по теме: '{topic}'")
+                    print(f"🎯 Обнаружен запрос на генерацию урока по теме: '{topic}'")
+                    
+                    # ГЕНЕРИРУЕМ И СОХРАНЯЕМ УРОК
                     generated_lesson = self.generate_lesson_on_demand(topic)
                     if generated_lesson:
-                        print(f"Урок успешно сгенерирован: {generated_lesson['id']}")
+                        print(f"✅ Урок успешно сгенерирован и сохранен: {generated_lesson['id']}")
+                        
+                        # КРИТИЧЕСКИ ВАЖНО: Добавляем урок в список доступных уроков
+                        subject = "общее"  # или определяем предмет из темы
+                        if subject not in self.lessons:
+                            self.lessons[subject] = []
+                        
+                        # Проверяем, нет ли уже такого урока
+                        lesson_exists = any(lesson['id'] == generated_lesson['id'] for lesson in self.lessons[subject])
+                        if not lesson_exists:
+                            self.lessons[subject].append(generated_lesson)
+                            print(f"✅ Урок добавлен в список уроков по предмету: {subject}")
+                        
+                        # НАЧИНАЕМ УРОК - это запускает отображение
                         self._start_generated_lesson(generated_lesson)
                         return True
                     else:
@@ -607,9 +622,9 @@ class DialogueManager:
         return False
 
     def _start_generated_lesson(self, lesson_data: dict):
-        """Начинает сгенерированный урок"""
+        """Начинает сгенерированный урок с гарантированным отображением"""
         try:
-            print(f"🚀 Начинаем сгенерированный урок: {lesson_data['title']}")
+            print(f"🚀 НАЧИНАЕМ сгенерированный урок: {lesson_data['title']}")
             
             self.current_subject = "общее"
             self.selected_lesson = lesson_data
@@ -617,7 +632,7 @@ class DialogueManager:
             self.current_state = "lesson_reading"
             self.current_paragraph = 0
             
-            # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
+            # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ
             self.enable_visualization()
             
             # Загружаем содержание урока
@@ -637,7 +652,17 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
-            print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат!")
+            # КРИТИЧЕСКИ ВАЖНО: Уведомляем клиент о начале урока
+            if self.room_id and self.socketio:
+                self.socketio.emit('lesson_started', {
+                    'lesson_id': lesson_data['id'],
+                    'title': lesson_data['title'],
+                    'subject': self.current_subject,
+                    'is_generated': True
+                }, room=self.room_id)
+                print(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
+            
+            print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат и отображается!")
             
         except Exception as e:
             print(f"❌ Ошибка начала сгенерированного урока: {e}")
