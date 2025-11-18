@@ -10,7 +10,6 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
-from student_dialogue import StudentDialogueManager
 from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_llm_priority, set_llm_priority
 import requests
 import json
@@ -20,7 +19,6 @@ import re
 import tempfile
 from local_llm_manager import get_llm_manager
 from key_manager import get_key_manager
-from typing import Optional
 import uuid
 
 # Настройка SocketIO с правильными таймаутами
@@ -185,53 +183,6 @@ def setup_llm_manager():
     # Регистрируем глобальный callback
     llm_manager.register_room_callback('global', global_llm_callback)
     print("✅ LLM Manager настроен с улучшенным callback")
-
-def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты с поддержкой student_dialogue"""
-    try:
-        # Определяем тип комнаты по названию
-        is_student_room = '_' in room_id and room_id != 'default'
-        
-        # 🔥 ИСПРАВЛЕНИЕ: DialogueManager уже создан автоматически, не пересоздаем
-        # Просто устанавливаем room_id
-        if room_id in room_dialogue and room_dialogue[room_id]:
-            room_dialogue[room_id].room_id = room_id
-        
-        # Устанавливаем аватар по умолчанию
-        if room_id not in room_current_avatar:
-            if is_student_room:
-                room_current_avatar[room_id] = 'woman'
-                print(f"🎓 Установлен аватар 'woman' для комнаты ученика {room_id}")
-            else:
-                room_current_avatar[room_id] = 'teacher'
-        
-        # Для комнат учеников устанавливаем режим
-        if is_student_room and room_id in room_dialogue and room_dialogue[room_id]:
-            if not getattr(room_dialogue[room_id], 'is_student_mode', False):
-                subject = _extract_subject_from_room(room_id)
-                if subject:
-                    room_dialogue[room_id].set_student_mode(subject)
-                    print(f"🎓 Установлен режим ученика для {room_id}: {subject}")
-        
-        print(f"✅ Быстрая инициализация завершена для {room_id}")
-        return True
-        
-    except Exception as e:
-        print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
-        return False
-        
-    except Exception as e:
-        print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
-        # Fallback: создаем простой DialogueManager
-        try:
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-            print(f"🔧 Создан fallback DialogueManager для {room_id}")
-            return True
-        except Exception as fallback_error:
-            print(f"❌ Критическая ошибка fallback инициализации: {fallback_error}")
-            return False
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -406,12 +357,6 @@ def save_student_data(student_data):
             student_id = str(uuid.uuid4())
             student_data['student_id'] = student_id
         
-        # ✅ ДОБАВЛЯЕМ: Создаем уникальный идентификатор конференции
-        if 'conference_id' not in student_data:
-            conference_id = str(int(time.time() * 1000))  # Тот же формат что и сейчас
-            student_data['conference_id'] = conference_id
-            print(f"✅ Создан идентификатор конференции для ученика {student_data.get('name')}: {conference_id}")
-        
         student_data['last_updated'] = datetime.now().isoformat()
         
         filename = f"{student_id}.json"
@@ -468,76 +413,6 @@ def update_student_data(student_id, updates):
         print(f"Error updating student data: {e}")
         return False
 
-def create_student_rooms(student_data):
-    """Автоматически создает комнаты для ученика с единым идентификатором и StudentDialogueManager"""
-    try:
-        student_id = student_data.get('student_id')
-        student_name = student_data.get('name')
-        conference_id = student_data.get('conference_id', str(int(time.time() * 1000)))
-        
-        if not student_id or not student_name:
-            return False
-        
-        # ✅ ОБНОВЛЯЕМ: Используем единый conference_id для всех предметов
-        if not conference_id:
-            conference_id = str(int(time.time() * 1000))
-            student_data['conference_id'] = conference_id
-        
-        # Список предметов для создания комнат
-        subjects = [
-            'math', 'physics', 'chemistry', 'biology', 
-            'history', 'social', 'literature', 'russian', 
-            'english', 'geography'
-        ]
-        
-        created_rooms = []
-        
-        for subject in subjects:
-            # ✅ ВАЖНОЕ ИЗМЕНЕНИЕ: Используем единый conference_id
-            room_name = f"{subject}_{student_name.replace(' ', '_').lower()}_{conference_id}"
-            
-            # Сохраняем данные ученика для этой комнаты
-            room_student_data[room_name] = {
-                'name': student_name,
-                'age': student_data.get('age'),
-                'level': student_data.get('education_level'),
-                'subject': subject,
-                'student_id': student_id,
-                'conference_id': conference_id
-            }
-            
-            # Автоматически создаем StudentDialogueManager для комнаты
-            room_dialogue[room_name] = StudentDialogueManager(socketio, room_student_data[room_name])
-            room_dialogue[room_name].room_id = room_name
-            
-            # Автоматически назначаем аватар "woman" для комнаты
-            room_current_avatar[room_name] = 'woman'
-            
-            print(f"🎓 Создана комната {room_name} для ученика {student_name} с StudentDialogueManager")
-            
-            created_rooms.append({
-                'subject': subject,
-                'room_name': room_name,
-                'avatar': 'woman',
-                'conference_id': conference_id,  # ✅ Сохраняем идентификатор
-                'student_data': room_student_data[room_name]
-            })
-        
-        # Сохраняем информацию о комнатах в данные ученика
-        student_data['rooms'] = created_rooms
-        student_data['default_avatar'] = 'woman'
-        student_data['conference_id'] = conference_id  # ✅ Сохраняем идентификатор
-        
-        # Сохраняем обновленные данные
-        save_student_data(student_data)
-        
-        print(f"✅ Создано {len(created_rooms)} комнат для ученика {student_name} с ID: {conference_id}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Ошибка создания комнат для ученика: {e}")
-        return False
-
 @socketio.on('connect')
 def handle_connect():
     print(f'✅ Client connected: {request.sid}')
@@ -559,17 +434,7 @@ def handle_join_room(data):
     print(f"🔧 Попытка присоединения к комнате {room_id}, peer_id: {peer_id}")
     
     try:
-        # ГАРАНТИРУЕМ СУЩЕСТВОВАНИЕ КОМНАТЫ ВО ВСЕХ СЛОВАРЯХ
-        if room_id not in room_participants:
-            room_participants[room_id] = set()
-
-        if room_id not in room_ai_activated:
-            room_ai_activated[room_id] = False
-
-        if room_id not in room_llm_mode:
-            room_llm_mode[room_id] = get_llm_mode()
-
-        # Присоединяем к комнате - ВСЕГДА РАБОТАЕТ
+        # Присоединяем к комнате
         join_room(room_id)
         room_participants[room_id].add(request.sid)
         
@@ -579,8 +444,9 @@ def handle_join_room(data):
                 room_peer_ids[room_id] = {}
             room_peer_ids[room_id][request.sid] = peer_id
         
-        # 🔥 ВАЖНОЕ ИЗМЕНЕНИЕ: БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ БЕЗ БЛОКИРОВКИ
-        _fast_room_initialization(room_id)
+        # Устанавливаем режим LLM для диалог менеджера комнаты
+        room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+        room_dialogue[room_id].room_id = room_id
         
         # Уведомляем других участников
         if peer_id:
@@ -605,14 +471,8 @@ def handle_join_room(data):
         # Обновляем счетчик участников
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
-        # Автоматическая активация для комнат учеников
-        if '_' in room_id and room_id != 'default' and len(room_participants[room_id]) == 1:
-            print(f"🎓 Запланирована автоматическая активация AI для комнаты ученика {room_id}")
-            # Используем отложенную активацию
-            socketio.start_background_task(delayed_auto_activation, room_id)
-        
         # Приветствие для обычных комнат
-        elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
+        if len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
             greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
             speak_text(room_id, greeting, voice_type='female', is_teacher=True)
         
@@ -627,75 +487,6 @@ def handle_join_room(data):
             }, to=request.sid)
         except:
             print("⚠️ Не удалось отправить ошибку - клиент уже отключен")
-
-def delayed_auto_activation(room_id, delay=3):
-    """Улучшенная отложенная автоматическая активация с повторными попытками"""
-    time.sleep(delay)
-    
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            print(f"🔄 Попытка автоматической активации {room_id} (попытка {attempt + 1})")
-            
-            # Расширенная проверка существования комнаты
-            room_exists = (
-                room_id in room_participants or 
-                room_id in room_dialogue or 
-                room_id in room_current_avatar
-            )
-            
-            if (room_exists and 
-                room_id in room_participants and 
-                len(room_participants[room_id]) > 0 and 
-                not room_ai_activated.get(room_id, False)):
-                
-                print(f"🚀 Запуск автоматической активации для {room_id}")
-                
-                # Используем упрощенную активацию через прямой вызов
-                room_ai_activated[room_id] = True
-                
-                # Гарантируем инициализацию
-                _fast_room_initialization(room_id)
-                
-                # Отправляем событие активации
-                socketio.emit('ai_teacher_activated', {
-                    'room_id': room_id,
-                    'message': 'AI-учитель автоматически активирован',
-                    'is_student_mode': hasattr(room_dialogue.get(room_id), 'is_student_mode') and room_dialogue[room_id].is_student_mode if room_id in room_dialogue else False
-                }, room=room_id)
-                
-                print(f"✅ Автоматическая активация успешна для {room_id}")
-                break
-                
-            else:
-                print(f"⚠️ Комната {room_id} не готова для автоматической активации (попытка {attempt + 1})")
-                if attempt < max_retries - 1:
-                    time.sleep(2)  # Ждем перед следующей попыткой
-                    
-        except Exception as e:
-            print(f"⚠️ Ошибка автоматической активации {room_id} (попытка {attempt + 1}): {e}")
-            if attempt < max_retries - 1:
-                time.sleep(2)
-
-def _extract_subject_from_room(room_id: str) -> Optional[str]:
-    """Извлекает предмет из названия комнаты для режима ученика"""
-    if '_' in room_id:
-        subject_part = room_id.split('_')[0].lower()
-        subject_map = {
-            'math': 'математика',
-            'mathematics': 'математика',
-            'physics': 'физика', 
-            'chemistry': 'химия',
-            'biology': 'биология',
-            'history': 'история',
-            'social': 'обществознание',
-            'literature': 'литература',
-            'russian': 'русский язык',
-            'english': 'английский язык',
-            'geography': 'география'
-        }
-        return subject_map.get(subject_part)
-    return None
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
@@ -727,7 +518,7 @@ def handle_avatar_changed(data):
     # Сохраняем новый аватар для комнаты
     room_current_avatar[room_id] = avatar_name
     
-    # Пересылаем команду всем клиентами в комнате
+    # Пересылаем команду всем клиентам в комнате
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
 
 @socketio.on('generate_speech')
@@ -998,92 +789,16 @@ def handle_recognized_speech(data):
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
     room_id = data['room_id']
-    sid = request.sid
+    room_ai_activated[room_id] = True
     
-    print(f"🔧 Запрос активации AI-учителя для комнаты {room_id} от {sid}")
+    # DialogueManager уже создан автоматически через defaultdict
+    # Устанавливаем режим LLM
+    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
     
-    try:
-        # 🔥 УЛУЧШЕННАЯ ПРОВЕРКА: комната может быть в процессе создания
-        # Проверяем различные возможные состояния комнаты
-        
-        # Если комнаты нет в participants, но есть в других словарях - это нормально
-        room_exists = (
-            room_id in room_participants or 
-            room_id in room_dialogue or 
-            room_id in room_current_avatar or
-            room_id in room_ai_activated
-        )
-        
-        if not room_exists:
-            print(f"❌ Комната {room_id} действительно не существует")
-            emit('activate_ai_error', {
-                'room_id': room_id,
-                'error': 'Комната не найдена'
-            }, to=sid)
-            return
-        
-        # 🔥 ГАРАНТИРОВАННАЯ ИНИЦИАЛИЗАЦИЯ ДАЖЕ ДЛЯ НОВЫХ КОМНАТ
-        print(f"🔄 Принудительная инициализация комнаты {room_id} перед активацией")
-        
-        # Создаем базовые структуры если их нет
-        if room_id not in room_participants:
-            room_participants[room_id] = set()
-            print(f"🔧 Создан room_participants для {room_id}")
-        
-        if room_id not in room_ai_activated:
-            room_ai_activated[room_id] = False
-            print(f"🔧 Создан room_ai_activated для {room_id}")
-        
-        if room_id not in room_llm_mode:
-            room_llm_mode[room_id] = get_llm_mode()
-            print(f"🔧 Создан room_llm_mode для {room_id}")
-        
-        # 🔥 БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ ДИАЛОГ МЕНЕДЖЕРА
-        _fast_room_initialization(room_id)
-        
-        # ДОБАВЛЯЕМ КЛИЕНТА В КОМНАТУ ЕСЛИ ЕГО ТАМ НЕТ
-        if sid not in room_participants[room_id]:
-            room_participants[room_id].add(sid)
-            print(f"🔧 Добавлен клиент {sid} в комнату {room_id}")
-        
-        # Активируем AI-учителя
-        room_ai_activated[room_id] = True
-        
-        # Убеждаемся что диалог менеджер инициализирован
-        if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            print(f"🔄 Экстренное создание диалог менеджера для {room_id}")
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-        
-        # Устанавливаем режим LLM
-        room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-        
-        # Генерируем приветствие в зависимости от типа комнаты
-        if hasattr(room_dialogue[room_id], 'is_student_mode') and room_dialogue[room_id].is_student_mode:
-            subject = room_dialogue[room_id].auto_selected_subject
-            student_name = room_dialogue[room_id].student_data.get('name', '')
-            greeting = f"Привет{', ' + student_name if student_name else ''}! Я твой AI-репетитор по {subject}. Давайте начнем урок!"
-        else:
-            greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-        
-        # Озвучиваем приветствие
-        speak_text(room_id, greeting, voice_type='female', is_teacher=True)
-        
-        # Отправляем подтверждение активации
-        emit('ai_teacher_activated', {
-            'room_id': room_id,
-            'message': 'AI-учитель успешно активирован',
-            'is_student_mode': hasattr(room_dialogue[room_id], 'is_student_mode') and room_dialogue[room_id].is_student_mode
-        }, room=room_id)
-        
-        print(f"✅ AI-учитель успешно активирован в комнате {room_id}")
-        
-    except Exception as e:
-        print(f"❌ Ошибка активации AI-учителя в комнате {room_id}: {e}")
-        emit('activate_ai_error', {
-            'room_id': room_id,
-            'error': f'Ошибка активации: {str(e)}'
-        }, to=sid)
+    greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
+    speak_text(room_id, greeting, voice_type='female', is_teacher=True)
+    
+    emit('ai_teacher_activated', {}, room=room_id)
 
 @socketio.on('set_llm_mode')
 def handle_set_llm_mode(data):
@@ -1154,7 +869,7 @@ def handle_visualization_generated(data):
     
     print(f"🎨 Получена готовая визуализация для комнаты {room_id}: {data['topic'][:100]}...")
     
-    # Пересылаем всем клиентами в комнате
+    # Пересылаем всем клиентам в комнате
     emit('visualization_generated', {
         'room_id': room_id,
         'topic': data['topic'],
@@ -2568,7 +2283,7 @@ def add_api_key_route():
 # API для работы с данными учеников
 @app.route('/api/student/save', methods=['POST'])
 def save_student():
-    """Сохранение данных ученика с автоматическим созданием комнат"""
+    """Сохранение данных ученика"""
     try:
         data = request.json
         student_data = {
@@ -2587,8 +2302,6 @@ def save_student():
             # Обновляем существующего ученика
             student_id = existing_student['student_id']
             student_data['student_id'] = student_id
-            student_data['rooms'] = existing_student.get('rooms', [])
-            student_data['conference_id'] = existing_student.get('conference_id')  # ✅ Сохраняем ID
             update_student_data(student_id, {
                 'education_level': student_data['education_level'],
                 'age': student_data['age'],
@@ -2598,28 +2311,14 @@ def save_student():
             # Создаем нового ученика
             student_id = save_student_data(student_data)
             student_data['student_id'] = student_id
-            
-            # АВТОМАТИЧЕСКИ СОЗДАЕМ КОМНАТЫ ДЛЯ НОВОГО УЧЕНИКА С StudentDialogueManager
-            create_student_rooms(student_data)
-            
-            # ✅ Загружаем обновленные данные чтобы получить conference_id
-            updated_data = load_student_data(student_id)
-            if updated_data and 'conference_id' in updated_data:
-                student_data['conference_id'] = updated_data['conference_id']
         
         if student_id:
-            response_data = {
+            return jsonify({
                 "success": True,
                 "student_id": student_id,
                 "message": "Данные ученика сохранены",
                 "rooms_created": not existing_student
-            }
-            
-            # ✅ ДОБАВЛЯЕМ: Возвращаем conference_id в ответе
-            if 'conference_id' in student_data:
-                response_data['conference_id'] = student_data['conference_id']
-            
-            return jsonify(response_data)
+            })
         else:
             return jsonify({"success": False, "error": "Ошибка сохранения данных"})
             
@@ -2647,54 +2346,6 @@ def update_student(student_id):
             return jsonify({"success": True, "message": "Данные обновлены"})
         else:
             return jsonify({"success": False, "error": "Ошибка обновления"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/rooms')
-def get_student_rooms(student_id):
-    """Получение списка комнат ученика"""
-    try:
-        student_data = load_student_data(student_id)
-        if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        rooms = student_data.get('rooms', [])
-        return jsonify({
-            "success": True,
-            "student_id": student_id,
-            "student_name": student_data.get('name'),
-            "rooms": rooms,
-            "default_avatar": student_data.get('default_avatar', 'woman'),
-            "total_rooms": len(rooms)
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_id>/room/<subject>')
-def get_student_room(student_id, subject):
-    """Получение конкретной комнаты ученика по предмету"""
-    try:
-        student_data = load_student_data(student_id)
-        if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        rooms = student_data.get('rooms', [])
-        target_room = None
-        
-        for room in rooms:
-            if room.get('subject') == subject:
-                target_room = room
-                break
-        
-        if target_room:
-            return jsonify({
-                "success": True,
-                "room": target_room,
-                "conference_url": f"/conference?room={target_room['room_name']}&student=true&subject={subject}"
-            })
-        else:
-            return jsonify({"success": False, "error": f"Комната для предмета {subject} не найдена"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -2746,139 +2397,6 @@ def add_student_lesson(student_id):
         else:
             return jsonify({"success": False, "error": "Ошибка сохранения"})
             
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/admin/create_all_student_rooms')
-def create_all_student_rooms():
-    """Админская функция для создания комнат всем существующим ученикам"""
-    try:
-        created_count = 0
-        error_count = 0
-        
-        # Ищем все файлы учеников
-        for student_file in STUDENTS_DIR.glob("*.json"):
-            try:
-                with open(student_file, 'r', encoding='utf-8') as f:
-                    student_data = json.load(f)
-                
-                # Создаем комнаты если их еще нет
-                if 'rooms' not in student_data or not student_data['rooms']:
-                    if create_student_rooms(student_data):
-                        created_count += 1
-                        print(f"✅ Созданы комнаты для {student_data.get('name')}")
-                    else:
-                        error_count += 1
-                        print(f"❌ Ошибка создания комнат для {student_data.get('name')}")
-                        
-            except Exception as e:
-                print(f"❌ Ошибка обработки файла {student_file}: {e}")
-                error_count += 1
-        
-        return jsonify({
-            "success": True,
-            "message": f"Создано комнат для {created_count} учеников, ошибок: {error_count}",
-            "created": created_count,
-            "errors": error_count
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/admin/update_student_conference_ids')
-def update_student_conference_ids():
-    """Обновляет conference_id для всех существующих учеников"""
-    try:
-        updated_count = 0
-        for student_file in STUDENTS_DIR.glob("*.json"):
-            try:
-                with open(student_file, 'r', encoding='utf-8') as f:
-                    student_data = json.load(f)
-                
-                # Если нет conference_id, создаем его
-                if 'conference_id' not in student_data:
-                    conference_id = str(int(time.time() * 1000) + random.randint(1000, 9999))
-                    student_data['conference_id'] = conference_id
-                    
-                    # Пересоздаем комнаты с новым ID
-                    create_student_rooms(student_data)
-                    
-                    updated_count += 1
-                    print(f"✅ Обновлен ученик {student_data.get('name')}")
-                        
-            except Exception as e:
-                print(f"❌ Ошибка обработки файла {student_file}: {e}")
-        
-        return jsonify({
-            "success": True,
-            "message": f"Обновлено {updated_count} учеников",
-            "updated_count": updated_count
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-# Новые эндпоинты для управления комнатами
-@app.route('/api/room/initialize', methods=['POST'])
-def force_room_initialization():
-    """Принудительная инициализация комнаты"""
-    try:
-        data = request.json
-        room_id = data.get('room_id')
-        
-        if not room_id:
-            return jsonify({"success": False, "error": "Room ID is required"})
-        
-        success = _fast_room_initialization(room_id)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "message": f"Комната {room_id} инициализирована",
-                "ready": room_id in room_dialogue and room_dialogue[room_id] is not None
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": f"Не удалось инициализировать комнату {room_id}"
-            })
-            
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/room/status/<room_id>')
-def get_room_status(room_id):
-    """Получение статуса комнаты"""
-    try:
-        status = {
-            "room_id": room_id,
-            "initialized": room_id in room_dialogue and room_dialogue[room_id] is not None,
-            "participants": len(room_participants.get(room_id, [])),
-            "ai_activated": room_ai_activated.get(room_id, False),
-            "ready": room_id in room_dialogue and room_dialogue[room_id] is not None
-        }
-        
-        return jsonify({"success": True, "status": status})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/room/health/<room_id>')
-def room_health(room_id):
-    """Проверка здоровья комнаты"""
-    try:
-        health_status = {
-            'room_id': room_id,
-            'exists': room_id in room_participants,
-            'participants': len(room_participants.get(room_id, [])),
-            'ai_activated': room_ai_activated.get(room_id, False),
-            'dialogue_manager': room_id in room_dialogue and room_dialogue[room_id] is not None,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        return jsonify({
-            "success": True,
-            "health": health_status
-        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -2952,12 +2470,6 @@ if __name__ == '__main__':
     print("🔧 Проверка конфигурации SocketIO...")
     print(f"🔧 Async mode: {socketio.async_mode}")
     print(f"🔧 Server: {socketio.server}")
-    
-    # Предварительная инициализация
-    print("🔧 Предварительная инициализация системных комнат...")
-    system_rooms = ['default']
-    for room in system_rooms:
-        _fast_room_initialization(room)
     
     # Запускаем сервер
     socketio.run(
