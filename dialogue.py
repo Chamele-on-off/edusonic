@@ -59,14 +59,7 @@ class DialogueManager:
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
         
-        # НОВЫЕ ПОЛЯ ДЛЯ РЕЖИМА УЧЕНИКА
-        self.is_student_mode = False
-        self.auto_selected_subject = None
-        self.student_conversation_count = 0
-        self.student_lesson_started = False
-        self.student_subject_prompted = False
-        
-        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ
+        # Поля для визуализации
         self.visualization_enabled = True
         self.last_visualization_time = 0
         self.visualization_cooldown = 5
@@ -346,56 +339,28 @@ class DialogueManager:
             else:
                 system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
             
-            # АСИНХРОННЫЙ запрос к локальной модели
-            if room_id and self.socketio:
-                # Используем асинхронный режим с callback
-                def llm_callback(response, r_id):
-                    if response:
-                        limited_response = self._limit_response_length(
-                            response, 
-                            self.dialogue_settings.get("max_response_length", 3)
-                        )
-                        
-                        # Отправляем ответ через WebSocket
-                        self.socketio.emit('llm_dialogue_response', {
-                            'room_id': r_id,
-                            'response': limited_response,
-                            'original_text': text
-                        }, room=r_id)
-                
-                # Асинхронный запрос - не блокируем основной поток
-                self.llm._query_llm_api(
-                    prompt=text,
-                    context=context,
-                    subject=self.current_subject or "общее",
-                    system_prompt=system_prompt,
-                    max_tokens=150,
-                    room_id=room_id,
-                    callback=llm_callback
+            # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: ВСЕГДА используем синхронный запрос для диалога
+            llm_response = self.llm._query_llm_api(
+                prompt=text,
+                context=context,
+                subject=self.current_subject or "общее",
+                system_prompt=system_prompt,
+                max_tokens=150
+            )
+            
+            if llm_response:
+                limited_response = self._limit_response_length(
+                    llm_response, 
+                    self.dialogue_settings.get("max_response_length", 3)
                 )
-                
-                return None  # Ответ придет асинхронно
-                
+                return limited_response
             else:
-                # Синхронный режим для обратной совместимости
-                llm_response = self.llm._query_llm_api(
-                    prompt=text,
-                    context=context,
-                    subject=self.current_subject or "общее",
-                    system_prompt=system_prompt,
-                    max_tokens=150
-                )
+                print("⚠️ LLM не вернул ответ для диалога")
                 
-                if llm_response:
-                    limited_response = self._limit_response_length(
-                        llm_response, 
-                        self.dialogue_settings.get("max_response_length", 3)
-                    )
-                    return limited_response
-                    
         except Exception as e:
-            print(f"Ошибка запроса к LLM для диалога: {e}")
+            print(f"❌ Ошибка запроса к LLM для диалога: {e}")
         
+        # Fallback только если LLM полностью не сработал
         return self._get_subject_selection_prompt()
 
     def _get_subject_selection_prompt(self) -> Optional[str]:
@@ -423,10 +388,6 @@ class DialogueManager:
         
         # НИКОГДА не добавляем предложение выбора во время урока
         if self.lesson_started:
-            return original_response
-        
-        # В режиме ученика не предлагаем выбор предмета
-        if self.is_student_mode and self.auto_selected_subject:
             return original_response
         
         # Если ответ уже содержит предложение о выборе предмета, не дублируем
@@ -734,10 +695,6 @@ class DialogueManager:
         
         self._add_to_conversation_history(text, is_user=True)
         
-        # ОСОБАЯ ЛОГИКА ДЛЯ РЕЖИМА УЧЕНИКА
-        if self.is_student_mode and self.auto_selected_subject and not self.lesson_started:
-            return self._handle_student_mode_input(text, text_lower)
-        
         if self.lesson_started:
             handler = self.dialogue_states.get(self.current_state)
             if handler:
@@ -780,83 +737,6 @@ class DialogueManager:
             return fallback_response
         
         return None
-
-    def _handle_student_mode_input(self, text: str, text_lower: str) -> Optional[str]:
-        """Обработка ввода в режиме ученика"""
-        self.student_conversation_count += 1
-        print(f"🎓 Режим ученика: счетчик разговора {self.student_conversation_count}, предмет: {self.auto_selected_subject}")
-        
-        # Проверяем, не хочет ли ученик изучить конкретную тему по выбранному предмету
-        if self._check_for_specific_topic_request(text_lower):
-            print(f"🎯 Ученик запросил конкретную тему по предмету {self.auto_selected_subject}")
-            return None  # Позволяем существующей логике сгенерировать урок
-        
-        # После 2-3 фраз диалога автоматически предлагаем начать урок
-        if self.student_conversation_count >= 2 and not self.student_subject_prompted:
-            self.student_subject_prompted = True
-            prompt = self._get_student_subject_prompt()
-            if prompt:
-                self._add_to_conversation_history(prompt, is_user=False)
-                return prompt
-        
-        # Если ученик соглашается начать урок
-        if any(word in text_lower for word in ['да', 'ага', 'угу', 'ладно', 'хорошо', 'начать', 'начнем', 'поехали']):
-            return self._start_student_lesson()
-        
-        # Обычная обработка диалога
-        dialogue_response = self._get_dialogue_response(text_lower)
-        if dialogue_response:
-            self._add_to_conversation_history(dialogue_response, is_user=False)
-            return dialogue_response
-        
-        return None
-
-    def _check_for_specific_topic_request(self, text_lower: str) -> bool:
-        """Проверяет, запрашивает ли ученик конкретную тему по выбранному предмету"""
-        topic_patterns = [
-            r'хочу изучить (.+)',
-            r'можешь рассказать про (.+)', 
-            r'урок по (.+)',
-            r'изучим (.+)',
-            r'расскажи про (.+)',
-            r'хочу узнать про (.+)',
-            r'объясни тему (.+)'
-        ]
-        
-        for pattern in topic_patterns:
-            match = re.search(pattern, text_lower)
-            if match:
-                topic = match.group(1).strip()
-                if topic and len(topic) > 2:
-                    print(f"🎯 Ученик запросил тему '{topic}' по предмету {self.auto_selected_subject}")
-                    return True
-        return False
-
-    def _get_student_subject_prompt(self) -> str:
-        """Возвращает предложение начать урок по выбранному предмету"""
-        prompts = [
-            f"Отлично! Давайте начнем урок по {self.auto_selected_subject}. Готовы?",
-            f"Прекрасно! Приступаем к уроку по {self.auto_selected_subject}. Начинаем?",
-            f"Замечательно! Начнем наш урок по {self.auto_selected_subject}?",
-            f"Отлично познакомились! Готовы начать урок по {self.auto_selected_subject}?",
-            f"Рад нашему знакомству! Приступим к уроку по {self.auto_selected_subject}?"
-        ]
-        return random.choice(prompts)
-
-    def _start_student_lesson(self) -> str:
-        """Начинает урок для ученика по выбранному предмету"""
-        print(f"🚀 Начинаем урок для ученика по предмету: {self.auto_selected_subject}")
-        
-        # Используем существующую логику выбора предмета
-        response = self._handle_subject_selection_direct(self.auto_selected_subject)
-        
-        if response is None:
-            # Успешно начали урок
-            start_message = f"Отлично! Начинаем урок по {self.auto_selected_subject}. {self._get_next_paragraph()}"
-            self._add_to_conversation_history(start_message, is_user=False)
-            return start_message
-        
-        return response
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """Прямая обработка выбора предмета"""
@@ -1217,13 +1097,6 @@ class DialogueManager:
         self.waiting_for_answer = False
         self.current_question_index = 0
         self.practice_manager.reset()
-        
-        # Сброс режима ученика
-        self.is_student_mode = False
-        self.auto_selected_subject = None
-        self.student_conversation_count = 0
-        self.student_lesson_started = False
-        self.student_subject_prompted = False
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
@@ -1252,15 +1125,6 @@ class DialogueManager:
         """Установка ID комнаты для WebSocket коммуникации"""
         self.room_id = room_id
         print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
-
-    def set_student_mode(self, subject: str):
-        """Устанавливает режим ученика с автоматическим выбором предмета"""
-        self.is_student_mode = True
-        self.auto_selected_subject = subject
-        self.student_conversation_count = 0
-        self.student_lesson_started = False
-        self.student_subject_prompted = False
-        print(f"🎓 Установлен режим ученика с предметом: {subject}")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -1375,13 +1239,7 @@ class DialogueManager:
             "current_practice_question": self.current_practice_question,
             "room_id": self.room_id,
             "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-            "max_questions": self.max_questions,
-            # Информация о режиме ученика
-            "is_student_mode": self.is_student_mode,
-            "auto_selected_subject": self.auto_selected_subject,
-            "student_conversation_count": self.student_conversation_count,
-            "student_lesson_started": self.student_lesson_started,
-            "student_subject_prompted": self.student_subject_prompted
+            "max_questions": self.max_questions
         }
 
     def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
@@ -1485,10 +1343,7 @@ class DialogueManager:
                 "current_subject": self.current_subject,
                 "conversation_history_length": len(self.conversation_history),
                 "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-                "max_questions": self.max_questions,
-                "is_student_mode": self.is_student_mode,
-                "auto_selected_subject": self.auto_selected_subject,
-                "student_conversation_count": self.student_conversation_count
+                "max_questions": self.max_questions
             },
             "llm": llm_status,
             "knowledge_base": knowledge_stats,
