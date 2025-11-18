@@ -63,7 +63,7 @@ room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
 room_speaking = defaultdict(bool)
 room_ai_activated = defaultdict(bool)
-room_dialogue = defaultdict(lambda: None)
+room_dialogue = defaultdict(lambda: DialogueManager(socketio))
 room_lessons = defaultdict(dict)
 room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
@@ -187,39 +187,15 @@ def setup_llm_manager():
     print("✅ LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты с поддержкой student_dialogue и гарантированной инициализацией LLM"""
+    """Быстрая инициализация комнаты с поддержкой student_dialogue"""
     try:
         # Определяем тип комнаты по названию
         is_student_room = '_' in room_id and room_id != 'default'
         
-        # Создаем соответствующий диалог менеджер
-        if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            if is_student_room:
-                # Это комната ученика - используем StudentDialogueManager
-                student_data = room_student_data.get(room_id, {})
-                room_dialogue[room_id] = StudentDialogueManager(socketio, student_data)
-                room_dialogue[room_id].room_id = room_id
-                print(f"🎓 Создан StudentDialogueManager для комнаты ученика {room_id}")
-            else:
-                # Обычная комната - стандартный DialogueManager
-                room_dialogue[room_id] = DialogueManager(socketio)
-                room_dialogue[room_id].room_id = room_id
-                print(f"🔧 Создан DialogueManager для комнаты {room_id}")
-        
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Гарантируем инициализацию LLM
-        if hasattr(room_dialogue[room_id], 'llm'):
-            # Устанавливаем режим LLM
-            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-            
-            # Проверяем, что LLM действительно инициализирован
-            if room_dialogue[room_id].llm is None:
-                print(f"⚠️ LLM не инициализирован для комнаты {room_id}, повторная инициализация")
-                # Принудительно инициализируем LLM
-                from llm import LLMIntegration
-                room_dialogue[room_id].llm = LLMIntegration()
-                room_dialogue[room_id].llm.set_priority(get_llm_priority())
-        else:
-            print(f"❌ У DialogueManager нет атрибута llm для комнаты {room_id}")
+        # 🔥 ИСПРАВЛЕНИЕ: DialogueManager уже создан автоматически, не пересоздаем
+        # Просто устанавливаем room_id
+        if room_id in room_dialogue and room_dialogue[room_id]:
+            room_dialogue[room_id].room_id = room_id
         
         # Устанавливаем аватар по умолчанию
         if room_id not in room_current_avatar:
@@ -230,7 +206,7 @@ def _fast_room_initialization(room_id):
                 room_current_avatar[room_id] = 'teacher'
         
         # Для комнат учеников устанавливаем режим
-        if is_student_room and room_dialogue[room_id]:
+        if is_student_room and room_id in room_dialogue and room_dialogue[room_id]:
             if not getattr(room_dialogue[room_id], 'is_student_mode', False):
                 subject = _extract_subject_from_room(room_id)
                 if subject:
@@ -239,6 +215,10 @@ def _fast_room_initialization(room_id):
         
         print(f"✅ Быстрая инициализация завершена для {room_id}")
         return True
+        
+    except Exception as e:
+        print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
+        return False
         
     except Exception as e:
         print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
