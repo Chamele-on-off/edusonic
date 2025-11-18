@@ -67,6 +67,10 @@ class DialogueManager:
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
         
+        # Минимальная поддержка режима ученика
+        self.is_student_mode = False
+        self.auto_selected_subject = None
+        
         self._load_lessons()
         
         # Расширенные локальные шаблоны
@@ -103,7 +107,7 @@ class DialogueManager:
         return self._get_default_dialogue_patterns()
 
     def _get_default_dialogue_patterns(self) -> Dict:
-        """Возвращает базовые диалоговые шаблоны по умолчанию"""
+        """Возвращает базовые диалоговые шаблонов по умолчанию"""
         return {
             "greeting_patterns": {
                 "привет": ["Привет! Рад тебя видеть!", "Здравствуй! Готов к учебе?"],
@@ -339,7 +343,7 @@ class DialogueManager:
             else:
                 system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
             
-            # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: ВСЕГДА используем синхронный запрос для диалога
+            # ПРОСТОЙ СИНХРОННЫЙ ЗАПРОС К LLM
             llm_response = self.llm._query_llm_api(
                 prompt=text,
                 context=context,
@@ -354,13 +358,10 @@ class DialogueManager:
                     self.dialogue_settings.get("max_response_length", 3)
                 )
                 return limited_response
-            else:
-                print("⚠️ LLM не вернул ответ для диалога")
-                
+                    
         except Exception as e:
-            print(f"❌ Ошибка запроса к LLM для диалога: {e}")
+            print(f"Ошибка запроса к LLM для диалога: {e}")
         
-        # Fallback только если LLM полностью не сработал
         return self._get_subject_selection_prompt()
 
     def _get_subject_selection_prompt(self) -> Optional[str]:
@@ -676,6 +677,10 @@ class DialogueManager:
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
         text_lower = text.lower().strip()
+        
+        # 🔥 БЫСТРЫЙ ПЕРЕХОД ДЛЯ РЕЖИМА УЧЕНИКА
+        if self.is_student_mode and self.auto_selected_subject and not self.lesson_started:
+            return self._handle_subject_selection_direct(self.auto_selected_subject)
         
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ - РАБОТАЕТ ЛЮБАЯ ИЗ НИХ В ЛЮБОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
         continue_commands = [
@@ -1097,6 +1102,8 @@ class DialogueManager:
         self.waiting_for_answer = False
         self.current_question_index = 0
         self.practice_manager.reset()
+        self.is_student_mode = False
+        self.auto_selected_subject = None
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
@@ -1125,6 +1132,12 @@ class DialogueManager:
         """Установка ID комнаты для WebSocket коммуникации"""
         self.room_id = room_id
         print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
+
+    def set_student_mode(self, subject: str):
+        """Устанавливает режим ученика с автоматическим выбором предмета"""
+        self.is_student_mode = True
+        self.auto_selected_subject = subject
+        print(f"🎓 Установлен режим ученика с предметом: {subject}")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -1239,7 +1252,9 @@ class DialogueManager:
             "current_practice_question": self.current_practice_question,
             "room_id": self.room_id,
             "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-            "max_questions": self.max_questions
+            "max_questions": self.max_questions,
+            "is_student_mode": self.is_student_mode,
+            "auto_selected_subject": self.auto_selected_subject
         }
 
     def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
@@ -1343,7 +1358,9 @@ class DialogueManager:
                 "current_subject": self.current_subject,
                 "conversation_history_length": len(self.conversation_history),
                 "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-                "max_questions": self.max_questions
+                "max_questions": self.max_questions,
+                "is_student_mode": self.is_student_mode,
+                "auto_selected_subject": self.auto_selected_subject
             },
             "llm": llm_status,
             "knowledge_base": knowledge_stats,
