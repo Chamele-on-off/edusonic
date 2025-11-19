@@ -1019,7 +1019,7 @@
             font-weight: 500;
         }
 
-        /* Индикатор размышления - Частицы */
+        /* Новый индикатор размышления */
         .thinking-indicator {
             position: absolute;
             top: 50%;
@@ -1032,12 +1032,46 @@
             pointer-events: none;
         }
 
-        #thinking-particles {
+        .orb {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: 
+                radial-gradient(
+                    circle at 30% 30%,
+                    #9c27fe 0%,
+                    #4cc9f0 40%,
+                    #1a1499 70%,
+                    transparent 100%
+                );
+            filter: blur(15px);
+            animation: orb-float 3s ease-in-out infinite;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .orb::after {
+            content: '';
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: 
+                conic-gradient(
+                    from 0deg,
+                    transparent,
+                    #9c27fe,
+                    #4cc9f0,
+                    #1a1499,
+                    transparent
+                );
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            mask: radial-gradient(circle, transparent 45%, black 46%);
+            animation: ring-spin 4s linear infinite;
         }
 
         .thinking-text {
@@ -1045,15 +1079,24 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: var(--primary);
+            color: white;
             font-weight: 600;
-            font-size: 16px;
-            text-align: center;
-            z-index: 16;
-            background: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
             padding: 10px 20px;
             border-radius: 20px;
             backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        @keyframes orb-float {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+        }
+
+        @keyframes ring-spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
         /* LLM Status Indicator */
@@ -1479,9 +1522,9 @@
             <!-- Particles Background -->
             <div id="particles-background"></div>
             
-            <!-- Индикатор размышления - Частицы -->
+            <!-- Новый индикатор размышления -->
             <div class="thinking-indicator" id="thinking-indicator">
-                <div id="thinking-particles"></div>
+                <div class="orb"></div>
                 <div class="thinking-text">Размышляю...</div>
             </div>
             
@@ -2241,7 +2284,6 @@
         const speechDisplay = document.getElementById('speech-display');
         const speechText = document.getElementById('speech-text');
         const thinkingIndicator = document.getElementById('thinking-indicator');
-        const thinkingParticles = document.getElementById('thinking-particles');
 
         // Глобальные переменные
         let userStream = null;
@@ -2332,7 +2374,6 @@
 
         // Particles.js инстансы
         let particlesBackground = null;
-        let thinkingParticlesInstance = null;
         let thinkingIndicatorTimeout = null;
 
         // Инициализация частиц фона
@@ -2441,112 +2482,6 @@
             });
         }
 
-        // Инициализация частиц для индикатора размышления
-        function initThinkingParticles() {
-            thinkingParticlesInstance = particlesJS('thinking-particles', {
-                "particles": {
-                    "number": {
-                        "value": 40,
-                        "density": {
-                            "enable": true,
-                            "value_area": 400
-                        }
-                    },
-                    "color": {
-                        "value": ["#7E76F9", "#6A61E5", "#FF7B9C", "#4cc9f0"]
-                    },
-                    "shape": {
-                        "type": "circle",
-                        "stroke": {
-                            "width": 0,
-                            "color": "#000000"
-                        }
-                    },
-                    "opacity": {
-                        "value": 0.8,
-                        "random": true,
-                        "anim": {
-                            "enable": true,
-                            "speed": 1,
-                            "opacity_min": 0.2,
-                            "sync": false
-                        }
-                    },
-                    "size": {
-                        "value": 4,
-                        "random": true,
-                        "anim": {
-                            "enable": true,
-                            "speed": 4,
-                            "size_min": 1,
-                            "sync": false
-                        }
-                    },
-                    "line_linked": {
-                        "enable": true,
-                        "distance": 100,
-                        "color": "#7E76F9",
-                        "opacity": 0.6,
-                        "width": 2
-                    },
-                    "move": {
-                        "enable": true,
-                        "speed": 2,
-                        "direction": "none",
-                        "random": false,
-                        "straight": false,
-                        "out_mode": "bounce",
-                        "bounce": false,
-                        "attract": {
-                            "enable": true,
-                            "rotateX": 600,
-                            "rotateY": 1200
-                        }
-                    }
-                },
-                "interactivity": {
-                    "detect_on": "canvas",
-                    "events": {
-                        "onhover": {
-                            "enable": true,
-                            "mode": "repulse"
-                        },
-                        "onclick": {
-                            "enable": true,
-                            "mode": "push"
-                        },
-                        "resize": true
-                    },
-                    "modes": {
-                        "grab": {
-                            "distance": 140,
-                            "line_linked": {
-                                "opacity": 0.8
-                            }
-                        },
-                        "bubble": {
-                            "distance": 400,
-                            "size": 40,
-                            "duration": 2,
-                            "opacity": 8,
-                            "speed": 3
-                        },
-                        "repulse": {
-                            "distance": 100,
-                            "duration": 0.4
-                        },
-                        "push": {
-                            "particles_nb": 4
-                        },
-                        "remove": {
-                            "particles_nb": 2
-                        }
-                    }
-                },
-                "retina_detect": true
-            });
-        }
-
         // Функции для индикатора размышления с задержкой
         function showThinkingIndicator() {
             // Очищаем предыдущий таймаут
@@ -2558,7 +2493,6 @@
             thinkingIndicatorTimeout = setTimeout(() => {
                 if (thinkingIndicator) {
                     thinkingIndicator.style.display = 'block';
-                    initThinkingParticles();
                 }
             }, 2000);
         }
@@ -2572,10 +2506,6 @@
             
             if (thinkingIndicator) {
                 thinkingIndicator.style.display = 'none';
-                // Останавливаем частицы
-                if (thinkingParticlesInstance && thinkingParticlesInstance.pJSDom && thinkingParticlesInstance.pJSDom[0]) {
-                    thinkingParticlesInstance.pJSDom[0].pJS.fn.particlesEmpty();
-                }
             }
         }
 
