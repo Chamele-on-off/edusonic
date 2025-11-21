@@ -23,17 +23,24 @@ class StudentDialogueManager(DialogueManager):
         self.auto_selected_subject = student_data.get('subject', 'общее')
         self.current_subject = self.auto_selected_subject  # Устанавливаем предмет сразу
         
+        # 🔥 ВАЖНОЕ ОБНОВЛЕНИЕ: Передаем данные ученика в родительский класс для использования в промтах
+        self.student_data = student_data
+        
         # Специфичные для ученика поля
         self.student_conversation_count = 0
         self.student_lesson_started = False
         self.student_subject_prompted = False
+        
+        # 🔥 ВАЖНОЕ ОБНОВЛЕНИЕ: Передаем данные ученика в менеджер практики
+        if hasattr(self, 'practice_manager'):
+            self.practice_manager.student_data = student_data
         
         # Адаптированные промты для ученика
         self.student_prompts = self._load_student_prompts()
         
         # Переопределяем локальные шаблоны для ученика
         self.local_patterns.update({
-            "привет": self._get_age_appropriate_greeting(),
+            "привет": self._get_personalized_greeting(),
             "как дела": ["Отлично! А у тебя как настроение?", "Супер! Готов к интересному уроку?"],
             "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Ты молодец!"],
             "не понимаю": ["Давай разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
@@ -86,34 +93,41 @@ class StudentDialogueManager(DialogueManager):
         elif age <= 15: return "старшая_школа"
         else: return "студенты"
 
-    def _get_age_appropriate_greeting(self) -> List[str]:
-        """Возвращает приветствия, адаптированные по возрасту"""
+    def _get_personalized_greeting(self) -> List[str]:
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает персонализированные приветствия с именем ученика"""
         age = int(self.student_data.get('age', 12))
+        name = self.student_data.get('name', 'ученик')
+        subject = self.current_subject
         
         if age <= 8:
             return [
-                "Привет! Я твой весёлый учитель. Давай узнаем что-то интересное вместе!",
-                "Здравствуй! Я твой помощник в учёбе. Готов к приключениям?",
-                "Приветик! Я твой цифровой друг-учитель. Давай учиться весело!"
+                f"Привет, {name}! Я твой весёлый учитель по {subject}. Давай узнаем что-то интересное вместе!",
+                f"Здравствуй, {name}! Я твой помощник в учёбе по {subject}. Готов к приключениям?",
+                f"Приветик, {name}! Я твой цифровой друг-учитель по {subject}. Давай учиться весело!"
             ]
         elif age <= 12:
             return [
-                "Привет! Я твой AI-репетитор. Готов к увлекательному уроку?",
-                "Здравствуй! Я твой виртуальный учитель. Начнём наше путешествие в мир знаний?",
-                "Привет! Я твой помощник в учёбе. Давай сделаем этот урок интересным!"
+                f"Привет, {name}! Я твой AI-репетитор по {subject}. Готов к увлекательному уроку?",
+                f"Здравствуй, {name}! Я твой виртуальный учитель по {subject}. Начнём наше путешествие в мир знаний?",
+                f"Привет, {name}! Я твой помощник в учёбе по {subject}. Давай сделаем этот урок интересным!"
             ]
         elif age <= 15:
             return [
-                "Здравствуй! Я твой цифровой преподаватель. Начнём наше занятие?",
-                "Привет! Я твой персональный репетитор. Готов погрузиться в тему?",
-                "Здравствуй! Я твой AI-учитель. Давай начнём наш урок продуктивно!"
+                f"Здравствуй, {name}! Я твой цифровой преподаватель по {subject}. Начнём наше занятие?",
+                f"Привет, {name}! Я твой персональный репетитор по {subject}. Готов погрузиться в тему?",
+                f"Здравствуй, {name}! Я твой AI-учитель по {subject}. Давай начнём наш урок продуктивно!"
             ]
         else:
             return [
-                "Здравствуй! Я твой персональный учитель. Готов углубиться в тему?",
-                "Привет! Я твой цифровой преподаватель. Начнём наше занятие?",
-                "Здравствуй! Я твой AI-репетитор. Готов к продуктивной работе?"
+                f"Здравствуй, {name}! Я твой персональный учитель по {subject}. Готов углубиться в тему?",
+                f"Привет, {name}! Я твой цифровой преподаватель по {subject}. Начнём наше занятие?",
+                f"Здравствуй, {name}! Я твой AI-репетитор по {subject}. Готов к продуктивной работе?"
             ]
+
+    def get_personalized_greeting(self) -> str:
+        """🔥 НОВЫЙ МЕТОД: Возвращает одно персонализированное приветствие"""
+        greetings = self._get_personalized_greeting()
+        return random.choice(greetings)
 
     def _adapt_response_to_student(self, response: str) -> str:
         """Адаптирует ответ под уровень и возраст ученика"""
@@ -121,22 +135,23 @@ class StudentDialogueManager(DialogueManager):
             return response
             
         age = int(self.student_data.get('age', 12))
+        name = self.student_data.get('name', 'ученик')
         
         # Упрощаем язык для младших школьников
         if age <= 10:
-            response = self._simplify_language(response)
+            response = self._simplify_language_for_age(response, age)
             
         # Добавляем персонализированное обращение для младших
-        if age <= 12 and not response.startswith(("Привет", "Здравствуй")):
-            student_name = self.student_data.get('name', '')
-            if student_name and len(response) < 100:
-                response = f"{student_name}, {response.lower()}"
+        if age <= 15 and name and not response.startswith(("Привет", "Здравствуй")):
+            # Добавляем имя в начало ответа для более личного общения
+            if len(response) < 150:  # Только для коротких ответов
+                response = f"{name}, {response[0].lower() + response[1:]}"
         
         return response
 
-    def _simplify_language(self, text: str) -> str:
-        """Упрощает язык для младших школьников"""
-        # Замена сложных слов на простые
+    def _simplify_language_for_age(self, text: str, age: int) -> str:
+        """Упрощает язык в зависимости от возраста"""
+        # Базовые упрощения
         replacements = {
             'осуществлять': 'делать',
             'воспринимать': 'понимать', 
@@ -144,51 +159,81 @@ class StudentDialogueManager(DialogueManager):
             'образовательный': 'учебный',
             'информационный': 'полезный',
             'деятельность': 'работа',
-            'восприятие': 'понимание',
-            'осознавать': 'понимать',
-            'интеллектуальный': 'умный',
-            'познавательный': 'интересный',
-            'анализировать': 'разбирать',
-            'синтезировать': 'собирать',
-            'абстрактный': 'непонятный',
-            'концептуальный': 'главный'
+            'восприятие': 'понимание'
         }
         
         for complex_word, simple_word in replacements.items():
             text = text.replace(complex_word, simple_word)
-            
-        # Упрощаем длинные предложения
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        simplified_sentences = []
         
-        for sentence in sentences:
-            if len(sentence.split()) > 15:  # Если предложение слишком длинное
-                # Разбиваем на более короткие
-                words = sentence.split()
-                mid_point = len(words) // 2
-                part1 = ' '.join(words[:mid_point])
-                part2 = ' '.join(words[mid_point:])
-                simplified_sentences.extend([part1, part2])
-            else:
-                simplified_sentences.append(sentence)
-                
-        return ' '.join(simplified_sentences)
+        # Дополнительные упрощения для самых младших
+        if age <= 8:
+            child_replacements = {
+                'изучать': 'узнавать',
+                'анализировать': 'разбирать',
+                'концепция': 'идея',
+                'процесс': 'действие'
+            }
+            text = self._replace_words(text, child_replacements)
+            
+            # Упрощаем предложения
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            simplified_sentences = []
+            
+            for sentence in sentences:
+                if len(sentence.split()) > 8:  # Очень короткие предложения для малышей
+                    words = sentence.split()
+                    # Разбиваем на части по 3-5 слов
+                    parts = [words[i:i+4] for i in range(0, len(words), 4)]
+                    simplified_sentences.extend([' '.join(part) for part in parts])
+                else:
+                    simplified_sentences.append(sentence)
+                    
+            text = ' '.join(simplified_sentences)
+        
+        return text
+
+    def _replace_words(self, text: str, replacements: Dict[str, str]) -> str:
+        """Заменяет слова в тексте согласно словарю замен"""
+        for old_word, new_word in replacements.items():
+            text = text.replace(old_word, new_word)
+        return text
 
     def _handle_llm_dialogue(self, text: str, room_id: str = None) -> Optional[str]:
-        """Гарантированная обработка диалога через LLM с контекстом ученика"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Гарантированная обработка диалога через LLM с контекстом ученика"""
         try:
             # Собираем контекст диалога
             context = self._get_conversation_context()
             
-            # Формируем промпт с учетом данных ученика
+            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Формируем промпт с учетом данных ученика
             age = self.student_data.get('age', '12')
             level = self.student_data.get('level', '5')
-            subject = self.current_subject
+            name = self.student_data.get('name', 'ученик')
+            subject = self.current_subject or 'не выбран'
             
-            system_prompt = f"""Ты - дружелюбный учитель для ученика {age} лет, {level} класс. 
-Предмет: {subject}. Объясняй {self.student_prompts['explanation_style']}.
-Будь кратким и понятным, максимум 2-3 предложения. Отвечай на русском языке."""
-            
+            system_prompt = f"""Ты - дружелюбный учитель для ученика {age} лет, {level} класс.
+
+ОСОБЕННОСТИ УЧЕНИКА:
+- Имя: {name}
+- Возраст: {age} лет  
+- Уровень: {level} класс
+- Предмет: {subject}
+
+СТИЛЬ ОБЩЕНИЯ:
+- Обращайся на "ты"
+- Используй язык, понятный для {age}-летнего
+- Будь поддерживающим и терпеливым
+- Объясняй сложные вещи простыми словами
+- Используй примеры, релевантные для этого возраста
+- Адаптируй сложность объяснений под возраст ученика
+
+ОТВЕТЫ ДОЛЖНЫ БЫТЬ:
+- Краткими (2-3 предложения максимум)
+- Понятными для {age}-летнего
+- Конкретными и полезными
+- На русском языке
+
+Помоги ученику в обучении, отвечай на вопросы и объясняй материал соответственно возрасту."""
+
             # СИНХРОННЫЙ запрос к LLM
             llm_response = self.llm._query_llm_api(
                 prompt=text,
@@ -225,19 +270,26 @@ class StudentDialogueManager(DialogueManager):
         # После 2-3 фраз диалога предлагаем начать урок
         if self.student_conversation_count >= 2 and not self.student_subject_prompted:
             self.student_subject_prompted = True
+            name = self.student_data.get('name', 'ученик')
             prompts = [
-                f"Отлично! Давайте начнем урок по {self.current_subject}. Готов?",
-                f"Прекрасно! Приступаем к уроку по {self.current_subject}. Начинаем?",
-                f"Замечательно! Начнем наш урок по {self.current_subject}?",
-                f"Отлично познакомились! Готов начать урок по {self.current_subject}?",
-                f"Рад нашему знакомству! Приступим к уроку по {self.current_subject}?"
+                f"Отлично, {name}! Давайте начнем урок по {self.current_subject}. Готов?",
+                f"Прекрасно, {name}! Приступаем к уроку по {self.current_subject}. Начинаем?",
+                f"Замечательно, {name}! Начнем наш урок по {self.current_subject}?",
+                f"Отлично познакомились, {name}! Готов начать урок по {self.current_subject}?",
+                f"Рад нашему знакомству, {name}! Приступим к уроку по {self.current_subject}?"
             ]
             return random.choice(prompts)
         
         return None
 
+    def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
+        """🔥 ПЕРЕОПРЕДЕЛЕННЫЙ МЕТОД: Генерирует урок по запрошенной теме с учетом возраста ученика"""
+        # Убедимся, что данные ученика доступны в родительском классе
+        self.student_data = getattr(self, 'student_data', {})
+        return super().generate_lesson_on_demand(topic)
+
     def process_input(self, text: str) -> Optional[str]:
-        """Обработка входящего текста и генерация ответа для ученика"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Обработка входящего текста и генерация ответа для ученика"""
         text_lower = text.lower().strip()
         
         # Увеличиваем счетчик разговора
@@ -345,83 +397,8 @@ class StudentDialogueManager(DialogueManager):
         
         return response
 
-    def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
-        """Генерирует урок по запрошенной теме с помощью LLM с адаптацией под ученика"""
-        try:
-            print(f"🎯 Генерация урока для ученика по теме: {topic}")
-            
-            # Формируем промпт для генерации урока с учетом возраста
-            age = self.student_data.get('age', '12')
-            level = self.student_data.get('level', '5')
-            
-            system_prompt = f"""Ты - эксперт по созданию образовательных материалов для учеников {age} лет, {level} класс.
-Создай структурированный урок по заданной теме. Урок должен быть:
-1. Информативным и точным, но адаптированным под возраст {age} лет
-2. Разделен на логические абзацы (разделяй пустыми строками)
-3. Использовать простой и понятный язык
-4. Содержать практические примеры если уместно
-5. Быть увлекательным и интересным
-
-ВАЖНО: Разделяй абзацы ДВУМЯ переводами строки (\\n\\n) для правильного отображения.
-Используй {self.student_prompts['explanation_style']}.
-Возвращай только текст урока без дополнительных комментариев."""
-
-            # Запрос к LLM с увеличенным количеством токенов
-            lesson_content = self.llm._query_llm_api(
-                prompt=f"Создай подробный образовательный урок на тему: '{topic}'. Урок должен быть понятным и интересным для ученика.",
-                context="",
-                subject=self.current_subject,
-                system_prompt=system_prompt,
-                max_tokens=2500
-            )
-            
-            if not lesson_content:
-                print("❌ Ошибка: LLM не вернул содержание урока")
-                return None
-            
-            print(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
-            
-            # Убедимся, что есть правильное разделение на абзацы
-            if '\n\n' not in lesson_content:
-                print("⚠️ В ответе нет двойных переводов строк, добавляем...")
-                sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
-                lesson_content = '\n\n'.join(sentences)
-            
-            # Создаем файл урока
-            lesson_id = f"student_{self.student_data.get('student_id', 'unknown')}_{topic.lower().replace(' ', '_')}_{int(time.time())}"
-            filename = f"{lesson_id}.txt"
-            lesson_path = self.lessons_dir / filename
-            
-            # Записываем контент в файл
-            with open(lesson_path, 'w', encoding='utf-8') as f:
-                f.write(f"Урок по теме: {topic}\n\n")
-                f.write(lesson_content)
-            
-            print(f"✅ Файл урока создан: {lesson_path}")
-            
-            # Добавляем в список уроков
-            lesson_data = {
-                'id': lesson_id,
-                'title': f"Урок по теме: {topic}",
-                'file_path': lesson_path,
-                'type': 'text',
-                'is_generated': True,
-                'student_specific': True
-            }
-            
-            if self.current_subject not in self.lessons:
-                self.lessons[self.current_subject] = []
-            self.lessons[self.current_subject].append(lesson_data)
-            
-            print(f"✅ Урок успешно сгенерирован и добавлен в список: {lesson_id}")
-            return lesson_data
-            
-        except Exception as e:
-            print(f"❌ Ошибка генерации урока: {e}")
-            return None
-
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
-        """Оценивает ответ и возвращает следующий вопрос с адаптацией для ученика"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ и возвращает следующий вопрос с адаптацией для ученика"""
         print(f"🔍 Обработка ответа ученика: '{student_answer}'")
         
         if not self.practice_active:
@@ -471,7 +448,7 @@ class StudentDialogueManager(DialogueManager):
             # Упрощаем обратную связь для младших школьников
             age = int(self.student_data.get('age', 12))
             if age <= 10:
-                feedback = self._simplify_language(feedback)
+                feedback = self._simplify_language_for_age(feedback, age)
         
         if next_question:
             # Обновляем текущий вопрос
@@ -491,7 +468,7 @@ class StudentDialogueManager(DialogueManager):
             return f"{feedback}. Практика завершена!"
 
     def handle_question_during_lesson(self, question: str) -> str:
-        """Обработка вопросов ученика во время урока с адаптацией"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Обработка вопросов ученика во время урока с адаптацией"""
         if not question.strip():
             return "Повтори вопрос пожалуйста, я не расслышал."
             
@@ -511,7 +488,7 @@ class StudentDialogueManager(DialogueManager):
         return "Интересный вопрос! Давай обсудим его после завершения текущего материала."
 
     def reset(self):
-        """Полный сброс диалог менеджера"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Полный сброс диалог менеджера"""
         super().reset()
         
         # Сброс счетчиков ученика
@@ -520,7 +497,7 @@ class StudentDialogueManager(DialogueManager):
         self.student_subject_prompted = False
 
     def get_conversation_stats(self) -> Dict:
-        """Возвращает статистику диалога"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает статистику диалога"""
         stats = super().get_conversation_stats()
         stats.update({
             "student_conversation_count": self.student_conversation_count,
@@ -533,7 +510,7 @@ class StudentDialogueManager(DialogueManager):
         return stats
 
     def debug_info(self) -> Dict:
-        """Возвращает отладочную информацию"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает отладочную информацию"""
         info = super().debug_info()
         info.update({
             "student_data": self.student_data,
@@ -545,7 +522,7 @@ class StudentDialogueManager(DialogueManager):
         return info
 
     def get_system_status(self) -> Dict:
-        """Возвращает общий статус системы"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает общий статус системы"""
         status = super().get_system_status()
         status["student_dialogue_manager"] = {
             "student_conversation_count": self.student_conversation_count,
