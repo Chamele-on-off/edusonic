@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduSonic AI - Завершение регистрации</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Стили такие же как в student.html для формы ввода данных */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        :root {
+            --primary: #7E76F9;
+            --secondary: #6A61E5;
+            --dark: #4A5568;
+            --light: #F8FAFC;
+            --accent: #FF7B9C;
+            --text: #2D3748;
+            --text-light: #718096;
+            --success: #48BB78;
+            --warning: #ED8936;
+            --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text);
+        }
+        
+        .auth-container {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .auth-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--gradient);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .logo h1 {
+            color: var(--primary);
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+        
+        .logo p {
+            color: var(--text-light);
+            font-size: 1.1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(126, 118, 249, 0.1);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--gradient);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(126, 118, 249, 0.3);
+        }
+        
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            text-align: center;
+            display: none;
+        }
+        
+        .success-message {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid rgba(72, 187, 120, 0.2);
+            color: #166534;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="logo">
+            <h1><i class="fas fa-user-graduate"></i> Завершение регистрации</h1>
+            <p>Заполните данные для начала обучения</p>
+        </div>
+        
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+        
+        <form id="profileForm">
+            <div class="form-group">
+                <label for="studentName">
+                    <i class="fas fa-user"></i> Имя ученика
+                </label>
+                <input type="text" id="studentName" required placeholder="Введите ваше имя" autocomplete="name">
+            </div>
+            
+            <div class="form-group">
+                <label for="educationLevel">
+                    <i class="fas fa-graduation-cap"></i> Уровень образования
+                </label>
+                <select id="educationLevel" required>
+                    <option value="">Выберите класс</option>
+                    <option value="1">1 класс</option>
+                    <option value="2">2 класс</option>
+                    <option value="3">3 класс</option>
+                    <option value="4">4 класс</option>
+                    <option value="5">5 класс</option>
+                    <option value="6">6 класс</option>
+                    <option value="7">7 класс</option>
+                    <option value="8">8 класс</option>
+                    <option value="9">9 класс</option>
+                    <option value="10">10 класс</option>
+                    <option value="11">11 класс</option>
+                    <option value="student">Студент</option>
+                    <option value="adult">Взрослый</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="studentAge">
+                    <i class="fas fa-birthday-cake"></i> Возраст
+                </label>
+                <input type="number" id="studentAge" required placeholder="Введите ваш возраст" min="4" max="80">
+            </div>
+            
+            <button type="submit" class="btn" id="saveProfileBtn">
+                <i class="fas fa-save"></i> Сохранить и начать обучение
+            </button>
+        </form>
+        
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="/logout" style="color: var(--text-light); text-decoration: none;">
+                <i class="fas fa-sign-out-alt"></i> Выйти из системы
+            </a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('profileForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const name = document.getElementById('studentName').value.trim();
+                const level = document.getElementById('educationLevel').value;
+                const age = document.getElementById('studentAge').value;
+                
+                if (!name) {
+                    showError('Пожалуйста, введите имя');
+                    return;
+                }
+                
+                if (!level) {
+                    showError('Пожалуйста, выберите класс');
+                    return;
+                }
+                
+                if (!age || age < 4 || age > 80) {
+                    showError('Пожалуйста, введите корректный возраст (4-80 лет)');
+                    return;
+                }
+                
+                const saveBtn = document.getElementById('saveProfileBtn');
+                const originalText = saveBtn.innerHTML;
+                saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
+                saveBtn.disabled = true;
+                
+                try {
+                    const response = await fetch('/auth/complete-profile', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            name: name,
+                            level: level,
+                            age: age
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showSuccess('Профиль сохранен! Перенаправление...');
+                        setTimeout(() => {
+                            window.location.href = '/student';
+                        }, 1500);
+                    } else {
+                        showError(result.error || 'Ошибка сохранения профиля');
+                        saveBtn.innerHTML = originalText;
+                        saveBtn.disabled = false;
+                    }
+                } catch (error) {
+                    showError('Ошибка сети: ' + error.message);
+                    saveBtn.innerHTML = originalText;
+                    saveBtn.disabled = false;
+                }
+            });
+            
+            function showError(message) {
+                const errorDiv = document.getElementById('errorMessage');
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+            
+            function showSuccess(message) {
+                const successDiv = document.getElementById('successMessage');
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+            }
+            
+            document.getElementById('studentName').focus();
+        });
+    </script>
+</body>
+</html>
