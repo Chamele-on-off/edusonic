@@ -492,6 +492,29 @@
             border: 1px solid rgba(239, 68, 68, 0.2);
             color: #dc2626;
         }
+
+        /* Кнопка выхода */
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            transform: translateY(-1px);
+        }
     </style>
 </head>
 <body>
@@ -806,8 +829,13 @@
                 <!-- Предметы будут загружены через JavaScript -->
             </div>
             
-            <button class="btn btn-secondary" onclick="showLoginForm()" style="margin-top: 2rem;">
-                <i class="fas fa-sign-out-alt"></i> Выйти
+            <button class="btn btn-secondary" onclick="showLoginForm()" style="margin-top: 1rem;">
+                <i class="fas fa-user-edit"></i> Изменить данные
+            </button>
+
+            <!-- Кнопка выхода -->
+            <button class="logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Выйти из системы
             </button>
         </div>
     </div>
@@ -884,6 +912,60 @@
         let studentRooms = [];
         let availableAvatars = [];
         let selectedAvatar = '';
+
+        // Функция выхода из системы
+        function logout() {
+            // Очищаем локальное хранилище
+            localStorage.removeItem('studentData');
+            
+            // Перенаправляем на страницу входа
+            window.location.href = '/logout';
+        }
+
+        // Проверка авторизации при загрузке
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check');
+                const data = await response.json();
+                
+                if (data.success && data.role === 'student') {
+                    // Пользователь авторизован, загружаем данные
+                    await loadStudentDataFromServer();
+                } else {
+                    // Пользователь не авторизован, показываем форму входа
+                    showLoginForm();
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                // При ошибке проверки показываем форму входа
+                showLoginForm();
+            }
+        }
+
+        // Загрузка данных ученика с сервера
+        async function loadStudentDataFromServer() {
+            try {
+                const response = await fetch('/api/student/profile');
+                const data = await response.json();
+                
+                if (data.success && data.student_data) {
+                    currentStudentData = data.student_data;
+                    currentStudentData.user_id = data.user_id;
+                    
+                    // Загружаем аватары и информацию о комнатах
+                    await loadAvatars();
+                    await loadStudentRooms();
+                    
+                    // Показываем выбор предмета
+                    showSubjectSelection(currentStudentData);
+                } else {
+                    showLoginForm();
+                }
+            } catch (error) {
+                console.error('Error loading student data:', error);
+                showLoginForm();
+            }
+        }
 
         // Инициализация Socket.io
         socket.on('connect', function() {
@@ -1100,7 +1182,7 @@
                 if (result.success) {
                     currentStudentData = {
                         name: studentName,
-                        level: educationLevel,
+                        education_level: educationLevel,
                         age: studentAge,
                         student_id: result.student_id,
                         loginTime: new Date().toISOString()
@@ -1274,12 +1356,12 @@
         function updateStudentInfoDisplay(studentData) {
             document.getElementById('studentGreeting').textContent = studentData.name;
             document.getElementById('infoName').textContent = studentData.name;
-            document.getElementById('infoLevel').textContent = getLevelText(studentData.level);
+            document.getElementById('infoLevel').textContent = getLevelText(studentData.education_level || studentData.level);
             document.getElementById('infoAge').textContent = studentData.age;
             
             // Заполняем форму редактирования
             document.getElementById('editStudentName').value = studentData.name;
-            document.getElementById('editEducationLevel').value = studentData.level;
+            document.getElementById('editEducationLevel').value = studentData.education_level || studentData.level;
             document.getElementById('editStudentAge').value = studentData.age;
         }
         
@@ -1416,8 +1498,12 @@
         
         // Проверяем, есть ли сохраненные данные ученика при загрузке страницы
         window.addEventListener('load', function() {
+            // Сначала проверяем авторизацию через сессию
+            checkAuth();
+            
+            // Также сохраняем fallback на localStorage для обратной совместимости
             const savedData = loadStudentData();
-            if (savedData) {
+            if (savedData && !currentStudentData) {
                 try {
                     // Проверяем, не прошло ли слишком много времени с последнего входа
                     const loginTime = new Date(savedData.loginTime);
