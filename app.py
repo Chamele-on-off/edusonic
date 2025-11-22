@@ -312,6 +312,25 @@ def logout():
     session.clear()
     return redirect('/login')
 
+@app.route('/logout', methods=['POST'])
+def logout_post():
+    """Выход из системы (POST запрос)"""
+    session.clear()
+    return jsonify({"success": True, "message": "Успешный выход"})
+
+@app.route('/api/auth/check')
+def check_auth():
+    """Проверка статуса авторизации"""
+    if 'user_id' in session:
+        user_data = load_user_data(session['user_id'])
+        if user_data:
+            return jsonify({
+                "success": True,
+                "role": user_data.get('role'),
+                "user_id": session['user_id']
+            })
+    return jsonify({"success": False})
+
 @app.route('/investing.html')
 def investing():
     """Страница для инвесторов"""
@@ -427,7 +446,7 @@ def create_user():
             return jsonify({
                 "success": True,
                 "message": f"Пользователь {username} успешно создан",
-                "user_id": user_data['user_id']  # Исправлено: двойные кавычки
+                "user_id": user_data['user_id']
             })
         else:
             return jsonify({"success": False, "error": "Ошибка создания пользователя"})
@@ -531,6 +550,24 @@ def get_student_details(student_user_id):
                 'last_login': user_data.get('last_login'),
                 'rooms': user_data.get('student_data', {}).get('rooms', [])
             }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/profile')
+@student_required
+def get_student_profile():
+    """Получение профиля ученика"""
+    try:
+        user_data = load_user_data(session['user_id'])
+        if not user_data:
+            return jsonify({"success": False, "error": "Пользователь не найден"})
+        
+        return jsonify({
+            "success": True,
+            "student_data": user_data.get('student_data', {}),
+            "profile_complete": user_data.get('profile_complete', False),
+            "user_id": session['user_id']
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -3032,6 +3069,24 @@ def room_health(room_id):
         return jsonify({
             "success": True,
             "health": health_status
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/debug/create-test-users')
+def create_test_users_route():
+    """Создание тестовых пользователей для отладки"""
+    try:
+        # Учитель
+        teacher = create_new_teacher('teacher', '123456')
+        # Ученик  
+        student = create_new_student('student', '123456')
+        
+        return jsonify({
+            "success": True,
+            "message": "Тестовые пользователи созданы",
+            "teacher": {"username": "teacher", "password": "123456"},
+            "student": {"username": "student", "password": "123456"}
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
