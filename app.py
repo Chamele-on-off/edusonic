@@ -427,7 +427,7 @@ def create_user():
             return jsonify({
                 "success": True,
                 "message": f"Пользователь {username} успешно создан",
-                "user_id': user_data['user_id']
+                "user_id": user_data['user_id']  # Исправлено: двойные кавычки
             })
         else:
             return jsonify({"success": False, "error": "Ошибка создания пользователя"})
