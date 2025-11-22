@@ -30,6 +30,124 @@
             line-height: 1.6;
         }
         
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 1000;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 30px rgba(0,0,0,0.1);
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            gap: 2rem;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text);
+            font-weight: 500;
+            transition: all 0.3s ease;
+            padding: 0.5rem 0;
+            position: relative;
+            white-space: nowrap;
+        }
+        
+        .nav-links a:hover {
+            color: var(--primary);
+        }
+        
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary);
+            transition: width 0.3s ease;
+        }
+        
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            font-size: 0.95rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            box-shadow: 0 4px 15px rgba(126, 118, 249, 0.3);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(126, 118, 249, 0.4);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+        
         /* Floating Admin Button */
         .admin-float-btn {
             position: fixed;
@@ -89,6 +207,7 @@
             overflow: hidden;
             background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
+            padding: 80px 20px 20px;
         }
         
         .particles {
@@ -108,7 +227,7 @@
         }
         
         h1 {
-            font-size: 4rem;
+            font-size: clamp(2.5rem, 5vw, 4rem);
             font-weight: 800;
             margin-bottom: 1rem;
             background: linear-gradient(45deg, #fff, #E1BEE7);
@@ -116,14 +235,16 @@
             background-clip: text;
             color: transparent;
             text-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            line-height: 1.2;
         }
         
         .hero p {
-            font-size: 1.5rem;
+            font-size: clamp(1.1rem, 2.5vw, 1.5rem);
             margin-bottom: 2rem;
             color: white;
             opacity: 0.9;
             font-weight: 300;
+            line-height: 1.5;
         }
         
         .cta-buttons {
@@ -133,46 +254,12 @@
             flex-wrap: wrap;
         }
         
-        .btn {
-            padding: 1rem 2rem;
-            border-radius: 50px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
-            font-size: 1rem;
-            text-decoration: none;
-            display: inline-block;
-        }
-        
-        .btn-primary {
-            background-color: white;
-            color: var(--primary);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-        }
-        
-        .btn-secondary {
-            background-color: transparent;
-            color: white;
-            border: 2px solid rgba(255,255,255,0.5);
-            backdrop-filter: blur(5px);
-        }
-        
-        .btn-secondary:hover {
-            background-color: rgba(255,255,255,0.15);
-            border-color: white;
-        }
-        
         .btn-conference {
             background: linear-gradient(135deg, var(--accent), #FF8E9E);
             color: white;
             border: none;
             box-shadow: 0 4px 15px rgba(255, 123, 156, 0.3);
+            padding: 1rem 2rem;
         }
         
         .btn-conference:hover {
@@ -188,11 +275,12 @@
         
         .section-title {
             text-align: center;
-            font-size: 2.5rem;
+            font-size: clamp(2rem, 4vw, 2.5rem);
             margin-bottom: 4rem;
             width: 100%;
             color: var(--text);
             font-weight: 700;
+            line-height: 1.3;
         }
         
         .section-title:after {
@@ -216,13 +304,16 @@
         .feature-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem;
+            padding: 2.5rem 2rem;
             box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             z-index: 1;
             border: 1px solid rgba(0,0,0,0.03);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
         
         .feature-card:hover {
@@ -252,12 +343,14 @@
             margin-bottom: 1rem;
             color: var(--text);
             font-weight: 600;
+            line-height: 1.3;
         }
         
         .feature-card p {
             color: var(--text-light);
             font-size: 1.05rem;
             line-height: 1.6;
+            flex-grow: 1;
         }
         
         /* Demo Section */
@@ -336,6 +429,10 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.08);
             margin-top: 2rem;
             text-align: center;
+            width: 100%;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
         }
         
         .conference-stats {
@@ -348,13 +445,16 @@
         
         .stat-item {
             text-align: center;
+            flex: 1;
+            min-width: 150px;
         }
         
         .stat-number {
-            font-size: 2.5rem;
+            font-size: clamp(2rem, 4vw, 2.5rem);
             font-weight: 700;
             color: var(--primary);
             display: block;
+            line-height: 1;
         }
         
         .stat-label {
@@ -387,6 +487,8 @@
             justify-content: center;
             margin-bottom: 3rem;
             position: relative;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
         
         .pricing-tabs:after {
@@ -409,11 +511,12 @@
             position: relative;
             color: var(--text-light);
             transition: all 0.3s ease;
-            margin: 0 0.5rem;
+            border-radius: 8px;
         }
         
         .tab-btn.active {
             color: var(--primary);
+            background: rgba(126, 118, 249, 0.1);
         }
         
         .tab-btn.active:after {
@@ -439,16 +542,19 @@
         .pricing-card {
             background: white;
             border-radius: 20px;
-            padding: 2rem;
+            padding: 2.5rem 2rem;
             box-shadow: 0 5px 25px rgba(0,0,0,0.04);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.03);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
         }
         
         .pricing-card.popular {
-            border: 1px solid var(--primary);
+            border: 2px solid var(--primary);
             transform: scale(1.02);
             box-shadow: 0 10px 30px rgba(126, 118, 249, 0.1);
         }
@@ -474,10 +580,11 @@
         }
         
         .price {
-            font-size: 3rem;
+            font-size: clamp(2.5rem, 4vw, 3rem);
             font-weight: 700;
             margin-bottom: 1.5rem;
             color: var(--primary);
+            line-height: 1;
         }
         
         .price span {
@@ -489,6 +596,7 @@
         .pricing-features {
             list-style: none;
             margin-bottom: 2rem;
+            flex-grow: 1;
         }
         
         .pricing-features li {
@@ -497,6 +605,7 @@
             padding-left: 1.5rem;
             color: var(--text-light);
             font-size: 0.95rem;
+            line-height: 1.4;
         }
         
         .pricing-features li:before {
@@ -530,13 +639,16 @@
         /* CTA Section */
         .cta-section {
             background: linear-gradient(135deg, var(--accent), #FF8E9E);
+            color: white;
+            text-align: center;
+            padding: 6rem 2rem;
         }
         
         /* Footer */
         footer {
             background: var(--dark);
             color: white;
-            padding: 4rem 2rem;
+            padding: 4rem 2rem 2rem;
             text-align: center;
         }
         
@@ -611,6 +723,7 @@
             font-size: 0.9rem;
             opacity: 0.7;
             color: rgba(255,255,255,0.7);
+            text-align: center;
         }
         
         /* Animations */
@@ -628,7 +741,77 @@
         }
         
         /* Responsive */
+        @media (max-width: 1024px) {
+            .nav {
+                gap: 1rem;
+            }
+            
+            .nav-links {
+                gap: 1.5rem;
+            }
+            
+            .nav-buttons {
+                gap: 0.8rem;
+            }
+            
+            .section {
+                padding: 5rem 1.5rem;
+            }
+        }
+        
         @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+            
+            .nav {
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+            
+            .logo {
+                font-size: 1.3rem;
+            }
+            
+            .nav-links {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                width: 100%;
+                background: white;
+                flex-direction: column;
+                padding: 1rem;
+                box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+                border-radius: 0 0 15px 15px;
+            }
+            
+            .nav-links.active {
+                display: flex;
+            }
+            
+            .nav-buttons {
+                order: 3;
+                width: 100%;
+                justify-content: center;
+                margin-top: 1rem;
+                display: none;
+            }
+            
+            .nav-buttons.active {
+                display: flex;
+            }
+            
+            .mobile-menu-btn {
+                display: block;
+                background: none;
+                border: none;
+                color: var(--text);
+                font-size: 1.5rem;
+                cursor: pointer;
+                padding: 0.5rem;
+            }
+            
             h1 {
                 font-size: 2.5rem;
             }
@@ -640,10 +823,18 @@
             .cta-buttons {
                 flex-direction: column;
                 align-items: center;
+                width: 100%;
+                max-width: 300px;
+                margin: 0 auto;
+            }
+            
+            .cta-buttons .btn {
+                width: 100%;
+                justify-content: center;
             }
             
             .section {
-                padding: 5rem 1rem;
+                padding: 4rem 1rem;
             }
             
             .section-title {
@@ -654,10 +845,13 @@
             .pricing-tabs {
                 flex-direction: column;
                 align-items: center;
+                gap: 0.5rem;
             }
             
             .tab-btn {
                 margin: 0.3rem 0;
+                width: 100%;
+                max-width: 300px;
             }
             
             .tab-btn.active:after {
@@ -686,11 +880,15 @@
                 height: 50px;
                 font-size: 20px;
             }
+            
+            .conference-demo {
+                padding: 2rem 1rem;
+            }
         }
         
         @media (max-width: 480px) {
-            .conference-demo {
-                padding: 2rem 1rem;
+            .hero {
+                padding: 100px 1rem 1rem;
             }
             
             .conference-stats {
@@ -698,16 +896,85 @@
             }
             
             .stat-item {
-                min-width: 100px;
+                min-width: 120px;
+            }
+            
+            .features-grid,
+            .pricing-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .feature-card,
+            .pricing-card {
+                padding: 2rem 1.5rem;
+            }
+            
+            .conference-features {
+                grid-template-columns: 1fr;
+            }
+            
+            .footer-content {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            
+            .footer-column h3:after {
+                left: 50%;
+                transform: translateX(-50%);
+                width: 30%;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+        
+        /* Mobile Menu */
+        .mobile-menu-btn {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile-menu-btn {
+                display: block;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Header -->
+    <header class="header">
+        <nav class="nav">
+            <a href="/" class="logo">
+                <i class="fas fa-robot"></i>
+                EduSonic AI
+            </a>
+            
+            <div class="nav-links" id="navLinks">
+                <a href="/#features">Возможности</a>
+                <a href="/#demo">Демо</a>
+                <a href="/#pricing">Тарифы</a>
+                <a href="/#conference">Попробовать</a>
+            </div>
+            
+            <div class="nav-buttons" id="navButtons">
+                <a href="/login" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Войти в систему
+                </a>
+            </div>
+            
+            <button class="mobile-menu-btn" id="mobileMenuBtn">
+                <i class="fas fa-bars"></i>
+            </button>
+        </nav>
+    </header>
+
     <!-- Floating Admin Button -->
-    <a href="/teacher" class="admin-float-btn">
-        <i class="fas fa-user-cog"></i>
-        <div class="tooltip">Личный кабинет</div>
+    <a href="/login" class="admin-float-btn">
+        <i class="fas fa-sign-in-alt"></i>
+        <div class="tooltip">Войти в систему</div>
     </a>
 
     <!-- Hero Section -->
@@ -717,7 +984,7 @@
             <h1>EduSonic AI</h1>
             <p>Интеллектуальный голосовой репетитор нового поколения</p>
             <div class="cta-buttons">
-                <a href="#conference-demo" class="btn btn-conference">
+                <a href="/login" class="btn btn-conference">
                     <i class="fas fa-robot"></i> Попробовать AI-учителя
                 </a>
                 <a href="#pricing" class="btn btn-secondary">Для учебных заведений →</a>
@@ -763,7 +1030,7 @@
             <div class="demo-visual">
                 <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8;"></i>
             </div>
-            <a href="#conference-demo" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</a>
+            <a href="/login" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</a>
         </div>
     </section>
 
@@ -815,9 +1082,9 @@
                 </div>
                 
                 <div style="margin: 2rem 0;">
-                    <button id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem;">
+                    <a href="/login" id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem; text-decoration: none;">
                         <i class="fas fa-play"></i> Запустить AI-учителя
-                    </button>
+                    </a>
                 </div>
                 
                 <p style="color: var(--text-light); font-size: 0.9rem; margin-top: 1rem;">
@@ -846,7 +1113,7 @@
                     <li>Базовые функции ИИ</li>
                     <li>Ограниченная поддержка</li>
                 </ul>
-                <a href="/conference?room=free" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Начать бесплатно</a>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Начать бесплатно</a>
             </div>
             <div class="pricing-card popular">
                 <h3>Премиум</h3>
@@ -858,7 +1125,7 @@
                     <li>Приоритетная поддержка</li>
                     <li>Доступ к бета-функциям</li>
                 </ul>
-                <a href="/conference?room=premium" class="btn btn-primary" style="width: 100%;" target="_blank">Выбрать тариф</a>
+                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Выбрать тариф</a>
             </div>
             <div class="pricing-card">
                 <h3>Семейный</h3>
@@ -869,7 +1136,7 @@
                     <li>NFT-портфолио</li>
                     <li>Персональный консультант</li>
                 </ul>
-                <a href="/conference?room=family" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Для семьи</a>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Для семьи</a>
             </div>
         </div>
         
@@ -885,7 +1152,7 @@
                     <li>Поддержка 5 языков</li>
                     <li>Отчеты для администрации</li>
                 </ul>
-                <a href="/conference?room=classroom" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Запросить демо</a>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Запросить демо</a>
             </div>
             <div class="pricing-card popular">
                 <h3>Школьный</h3>
@@ -897,7 +1164,7 @@
                     <li>API доступ</li>
                     <li>White-label интерфейс</li>
                 </ul>
-                <a href="/conference?room=school" class="btn btn-primary" style="width: 100%;" target="_blank">Запросить КП</a>
+                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Запросить КП</a>
             </div>
             <div class="pricing-card">
                 <h3>Корпоративный</h3>
@@ -909,7 +1176,7 @@
                     <li>Персональный менеджер</li>
                     <li>Обучение преподавателей</li>
                 </ul>
-                <a href="/conference?room=enterprise" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" target="_blank">Обсудить проект</a>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Обсудить проект</a>
             </div>
         </div>
     </section>
@@ -950,8 +1217,8 @@
                 Первые 50 учебных заведений получат 3 месяца бесплатного тестирования всех возможностей платформы!
             </p>
             <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
-                <a href="/conference?room=school-demo" class="btn btn-primary" style="background: white; color: var(--accent);" target="_blank">Попробовать бесплатно</a>
-                <a href="#contact" class="btn btn-secondary" style="border-color: white; color: white;">Инвестировать в проект</a>
+                <a href="/login" class="btn btn-primary" style="background: white; color: var(--accent); text-decoration: none;">Попробовать бесплатно</a>
+                <a href="#contact" class="btn btn-secondary" style="border-color: white; color: white; text-decoration: none;">Инвестировать в проект</a>
             </div>
         </div>
     </section>
@@ -1133,30 +1400,23 @@
                 });
             });
             
-            // Запуск конференции
-            const startConferenceBtn = document.getElementById('start-conference-btn');
-            if (startConferenceBtn) {
-                startConferenceBtn.addEventListener('click', function() {
-                    // Открываем конференцию в новом окне
-                    const conferenceWindow = window.open('/conference?room=demo', 'EduSonicAI_Conference', 
-                        'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no');
+            // Мобильное меню
+            const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+            const navLinks = document.querySelector('.nav-links');
+            const navButtons = document.querySelector('.nav-buttons');
+            
+            if (mobileMenuBtn) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    const isActive = navLinks.classList.contains('active');
                     
-                    if (conferenceWindow) {
-                        // Фокусируем новое окно
-                        conferenceWindow.focus();
-                        
-                        // Показываем сообщение об успехе
-                        const originalText = startConferenceBtn.innerHTML;
-                        startConferenceBtn.innerHTML = '<i class="fas fa-check"></i> Конференция запускается...';
-                        startConferenceBtn.style.background = 'var(--primary)';
-                        
-                        setTimeout(() => {
-                            startConferenceBtn.innerHTML = originalText;
-                            startConferenceBtn.style.background = '';
-                        }, 2000);
+                    if (isActive) {
+                        navLinks.classList.remove('active');
+                        navButtons.classList.remove('active');
+                        mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
                     } else {
-                        // Если всплывающие окна заблокированы, открываем в новой вкладке
-                        window.open('/conference?room=demo', '_blank');
+                        navLinks.classList.add('active');
+                        navButtons.classList.add('active');
+                        mobileMenuBtn.innerHTML = '<i class="fas fa-times"></i>';
                     }
                 });
             }
@@ -1164,12 +1424,25 @@
             // Плавная прокрутка для якорных ссылок
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
+                    if (this.getAttribute('href') === '#') return;
+                    
                     e.preventDefault();
                     const target = document.querySelector(this.getAttribute('href'));
                     if (target) {
-                        target.scrollIntoView({
+                        const headerHeight = document.querySelector('.header').offsetHeight;
+                        const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+                        
+                        window.scrollTo({
+                            top: targetPosition,
                             behavior: 'smooth'
                         });
+                        
+                        // Закрываем мобильное меню после клика
+                        if (window.innerWidth <= 768) {
+                            navLinks.classList.remove('active');
+                            navButtons.classList.remove('active');
+                            mobileMenuBtn.innerHTML = '<i class="fas fa-bars"></i>';
+                        }
                     }
                 });
             });
