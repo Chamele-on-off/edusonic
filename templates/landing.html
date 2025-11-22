@@ -1337,11 +1337,11 @@
                     <i class="fas fa-coins"></i>
                     Школам/Инвесторам/Web3
                 </a>
-                <a href="/teacher" class="btn btn-secondary" style="background: rgba(255,255,255,0.9); color: var(--primary); border: 2px solid var(--primary);">
-                    <i class="fas fa-user-cog"></i>
-                    Личный кабинет
+                <a href="/login" class="btn btn-secondary" style="background: rgba(255,255,255,0.9); color: var(--primary); border: 2px solid var(--primary);">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Войти в систему
                 </a>
-                <a href="#conference" class="btn btn-primary">
+                <a href="/login" class="btn btn-primary">
                     <i class="fas fa-play"></i>
                     Начать обучение
                 </a>
@@ -1354,9 +1354,9 @@
     </header>
 
     <!-- Floating Admin Button -->
-    <a href="/teacher" class="admin-float-btn">
-        <i class="fas fa-user-cog"></i>
-        <div class="tooltip">Личный кабинет</div>
+    <a href="/login" class="admin-float-btn">
+        <i class="fas fa-sign-in-alt"></i>
+        <div class="tooltip">Войти в систему</div>
     </a>
 
     <!-- Hero Section -->
@@ -1366,9 +1366,9 @@
             <h1>EduSonic AI</h1>
             <p>Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
             <div class="cta-buttons">
-                <button class="btn btn-conference" onclick="openConferenceWindow('demo')">
+                <a href="/login" class="btn btn-conference">
                     <i class="fas fa-robot"></i> Попробовать бесплатно
-                </button>
+                </a>
                 <a href="#features" class="btn btn-secondary">Узнать больше →</a>
             </div>
         </div>
@@ -1449,7 +1449,7 @@
                     <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор. Давай вместе разберем эту интересную тему!"</p>
                 </div>
             </div>
-            <button class="btn btn-primary" style="background: white; color: var(--primary);" onclick="openConferenceWindow('demo')">Попробовать прямо сейчас</button>
+            <a href="/login" class="btn btn-primary" style="background: white; color: var(--primary);">Попробовать прямо сейчас</a>
         </div>
     </section>
 
@@ -1507,7 +1507,7 @@
                         Нажмите на превью ниже, чтобы открыть полноценный виртуальный класс в новом окне
                     </p>
                     
-                    <div class="demo-preview" id="demoPreview" onclick="openConferenceWindow('demo')">
+                    <div class="demo-preview" id="demoPreview" onclick="location.href='/login'">
                         <div class="demo-preview-header">
                             <div style="display: flex; align-items: center; gap: 1rem;">
                                 <i class="fas fa-robot" style="color: white;"></i>
@@ -1580,9 +1580,9 @@
                         <p style="color: var(--text-light); font-size: 0.9rem; margin-bottom: 1rem;">
                             <i class="fas fa-info-circle"></i> Для голосового общения разрешите доступ к микрофону
                         </p>
-                        <button id="openConferenceBtn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;" onclick="openConferenceWindow('demo')">
+                        <a href="/login" id="openConferenceBtn" class="btn btn-conference" style="padding: 1.2rem 2.5rem;">
                             <i class="fas fa-robot"></i> Запустить виртуальный класс
-                        </button>
+                        </a>
                     </div>
                 </div>
             </div>
@@ -1609,7 +1609,7 @@
                     <li>Ограниченная практика</li>
                     <li>Поддержка по email</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferenceWindow('free')">Начать бесплатно</button>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Начать бесплатно</a>
             </div>
             <div class="pricing-card popular">
                 <h3>Индивидуальный</h3>
@@ -1622,7 +1622,7 @@
                     <li>Подробная статистика</li>
                     <li>Приоритетная поддержка</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;" onclick="openConferenceWindow('premium')">Выбрать тариф</button>
+                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Выбрать тариф</a>
             </div>
             <div class="pricing-card">
                 <h3>С углубленным изучением</h3>
@@ -1634,7 +1634,7 @@
                     <li>Углубленные материалы</li>
                     <li>Персональный куратор</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferenceWindow('advanced')">Для отличников</button>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Для отличников</a>
             </div>
         </div>
         
@@ -1650,7 +1650,7 @@
                     <li>Семейные образовательные игры</li>
                     <li>Родительский контроль</li>
                 </ul>
-                <button class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary);" onclick="openConferenceWindow('family')">Для семьи</button>
+                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Для семьи</a>
             </div>
             <div class="pricing-card popular">
                 <h3>Семейный PRO</h3>
@@ -1663,7 +1663,7 @@
                     <li>Персональный семейный куратор</li>
                     <li>Скидка 15% на следующий месяц</li>
                 </ul>
-                <button class="btn btn-primary" style="width: 100%;" onclick="openConferenceWindow('family-pro')">Лучший выбор</button>
+                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Лучший выбор</a>
             </div>
         </div>
     </section>
@@ -1719,13 +1719,13 @@
                 Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Первые 3 занятия - абсолютно бесплатно!
             </p>
             <div class="cta-buttons-large">
-                <button class="btn btn-primary btn-large" style="background: white; color: var(--accent);" onclick="openConferenceWindow('demo')">
+                <a href="/login" class="btn btn-primary btn-large" style="background: white; color: var(--accent); text-decoration: none;">
                     <i class="fas fa-play"></i> Начать бесплатно
-                </button>
-                <a href="/teacher" class="btn btn-secondary btn-large" style="border-color: white; color: white;">
-                    <i class="fas fa-user-cog"></i> Личный кабинет
                 </a>
-                <a href="/investing.html" class="btn-web3 btn-large" style="padding: 1.2rem 2.5rem;">
+                <a href="/login" class="btn btn-secondary btn-large" style="border-color: white; color: white; text-decoration: none;">
+                    <i class="fas fa-sign-in-alt"></i> Войти в систему
+                </a>
+                <a href="/investing.html" class="btn-web3 btn-large" style="padding: 1.2rem 2.5rem; text-decoration: none;">
                     <i class="fas fa-coins"></i> Для школ и инвесторов
                 </a>
             </div>
@@ -1886,18 +1886,6 @@
             "retina_detect": true
         });
 
-        // Функция для открытия конференции в новом окне
-        function openConferenceWindow(room = 'demo') {
-            const width = 1200;
-            const height = 800;
-            const left = (screen.width - width) / 2;
-            const top = (screen.height - height) / 2;
-            
-            const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
-            
-            window.open(`/conference?room=${room}`, 'EduSonicConference', features);
-        }
-
         // Управление вкладками тарифов
         document.addEventListener('DOMContentLoaded', function() {
             const tabButtons = document.querySelectorAll('.tab-btn');
@@ -1998,9 +1986,6 @@
             
             window.addEventListener('scroll', animateOnScroll);
         });
-
-        // Глобальная функция для открытия конференции из кнопок тарифов
-        window.openConference = openConferenceWindow;
     </script>
 </body>
 </html>
