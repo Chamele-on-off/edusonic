@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_from_directory, jsonify, request, send_file
+from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -22,9 +22,12 @@ from local_llm_manager import get_llm_manager
 from key_manager import get_key_manager
 from typing import Optional
 import uuid
+from functools import wraps
 
-# Настройка SocketIO с правильными таймаутами
+# Настройка Flask и SocketIO
 app = Flask(__name__, static_folder='static')
+app.secret_key = 'ai-teacher-secret-key-2024'  # Секретный ключ для сессий
+
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",
@@ -53,9 +56,10 @@ LESSONS_DIR = BASE_DIR / 'lessons'
 MATERIALS_DIR = BASE_DIR / 'materials'
 PRACTICE_DIR = BASE_DIR / 'materials' / 'practice'
 STUDENTS_DIR = BASE_DIR / "students_data"
+USERS_DIR = BASE_DIR / "users_data"
 
 # Создаем необходимые папки
-for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR]:
+for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR, USERS_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Глобальные состояния
@@ -105,28 +109,364 @@ def debug_log(message):
     if DEBUG_LLM:
         print(f"🔧 [LLM_DEBUG] {message}")
 
-# Обработчики ошибок SocketIO
-@socketio.on_error()
-def error_handler(e):
-    print(f"🔴 Global SocketIO error: {e}")
+# =============================================================================
+# СИСТЕМА АУТЕНТИФИКАЦИИ
+# =============================================================================
 
-@socketio.on_error_default
-def default_error_handler(e):
-    print(f"🔴 Default SocketIO error: {e}")
+def login_required(f):
+    """Декоратор для проверки аутентификации"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated_function
+
+def teacher_required(f):
+    """Декоратор для проверки прав учителя"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect('/login')
+        if session.get('role') != 'teacher':
+            return redirect('/student')
+        return f(*args, **kwargs)
+    return decorated_function
+
+def student_required(f):
+    """Декоратор для проверки прав ученика"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect('/login')
+        if session.get('role') != 'student':
+            return redirect('/teacher')
+        return f(*args, **kwargs)
+    return decorated_function
+
+def load_user_data(user_id):
+    """Загрузка данных пользователя"""
+    try:
+        user_file = USERS_DIR / f"{user_id}.json"
+        if user_file.exists():
+            with open(user_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        return None
+    except Exception as e:
+        print(f"Error loading user data: {e}")
+        return None
+
+def save_user_data(user_data):
+    """Сохранение данных пользователя"""
+    try:
+        user_id = user_data['user_id']
+        user_file = USERS_DIR / f"{user_id}.json"
+        
+        with open(user_file, 'w', encoding='utf-8') as f:
+            json.dump(user_data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error saving user data: {e}")
+        return False
+
+def authenticate_user(username, password, role):
+    """Аутентификация пользователя"""
+    try:
+        # Поиск пользователя по username и role
+        for user_file in USERS_DIR.glob("*.json"):
+            with open(user_file, 'r', encoding='utf-8') as f:
+                user_data = json.load(f)
+                
+                if (user_data.get('username') == username and 
+                    user_data.get('role') == role and 
+                    user_data.get('password') == password):
+                    return user_data
+        
+        # Если пользователь не найден, создаем нового (для демо)
+        if role == 'student':
+            return create_new_student(username, password)
+        elif role == 'teacher':
+            return create_new_teacher(username, password)
+            
+        return None
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        return None
+
+def create_new_student(username, password):
+    """Создание нового ученика"""
+    try:
+        user_id = str(uuid.uuid4())
+        user_data = {
+            'user_id': user_id,
+            'username': username,
+            'password': password,
+            'role': 'student',
+            'created_at': datetime.now().isoformat(),
+            'last_login': datetime.now().isoformat(),
+            'profile_complete': False,
+            'student_data': None
+        }
+        
+        if save_user_data(user_data):
+            return user_data
+        return None
+    except Exception as e:
+        print(f"Error creating student: {e}")
+        return None
+
+def create_new_teacher(username, password):
+    """Создание нового учителя"""
+    try:
+        user_id = str(uuid.uuid4())
+        user_data = {
+            'user_id': user_id,
+            'username': username,
+            'password': password,
+            'role': 'teacher',
+            'created_at': datetime.now().isoformat(),
+            'last_login': datetime.now().isoformat(),
+            'profile_complete': True
+        }
+        
+        if save_user_data(user_data):
+            return user_data
+        return None
+    except Exception as e:
+        print(f"Error creating teacher: {e}")
+        return None
+
+def update_student_profile(user_id, student_data):
+    """Обновление профиля ученика"""
+    try:
+        user_data = load_user_data(user_id)
+        if not user_data:
+            return False
+        
+        user_data['student_data'] = student_data
+        user_data['profile_complete'] = True
+        user_data['profile_updated'] = datetime.now().isoformat()
+        
+        # Сохраняем также в отдельный файл ученика
+        student_id = student_data.get('student_id')
+        if student_id:
+            save_student_data(student_data)
+        
+        return save_user_data(user_data)
+    except Exception as e:
+        print(f"Error updating student profile: {e}")
+        return False
+
+# =============================================================================
+# МАРШРУТЫ АУТЕНТИФИКАЦИИ
+# =============================================================================
+
+@app.route('/')
+def home():
+    """Основная страница - лендинг"""
+    return render_template('landing.html')
+
+@app.route('/login')
+def login():
+    """Страница входа"""
+    if 'user_id' in session:
+        if session.get('role') == 'teacher':
+            return redirect('/teacher')
+        else:
+            return redirect('/student')
+    return render_template('login.html')
+
+@app.route('/auth/login', methods=['POST'])
+def auth_login():
+    """Обработка входа"""
+    try:
+        data = request.json
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        role = data.get('role', 'student')
+        
+        if not username or not password:
+            return jsonify({"success": False, "error": "Заполните все поля"})
+        
+        user_data = authenticate_user(username, password, role)
+        
+        if user_data:
+            session['user_id'] = user_data['user_id']
+            session['username'] = user_data['username']
+            session['role'] = user_data['role']
+            
+            user_data['last_login'] = datetime.now().isoformat()
+            save_user_data(user_data)
+            
+            return jsonify({
+                "success": True, 
+                "message": "Успешный вход",
+                "role": user_data['role'],
+                "profile_complete": user_data.get('profile_complete', False)
+            })
+        else:
+            return jsonify({"success": False, "error": "Неверный логин или пароль"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Ошибка входа: {str(e)}"})
+
+@app.route('/logout')
+def logout():
+    """Выход из системы"""
+    session.clear()
+    return redirect('/login')
+
+@app.route('/investing.html')
+def investing():
+    """Страница для инвесторов"""
+    return render_template('investing.html')
+
+# =============================================================================
+# ЛИЧНЫЕ КАБИНЕТЫ
+# =============================================================================
+
+@app.route('/teacher')
+@teacher_required
+def teacher():
+    """Страница учителя (личный кабинет)"""
+    user_data = load_user_data(session['user_id'])
+    return render_template('teacher.html', user=user_data)
+
+@app.route('/student')
+@student_required
+def student():
+    """Страница ученика (личный кабинет)"""
+    user_data = load_user_data(session['user_id'])
+    
+    if not user_data.get('profile_complete', False):
+        return render_template('student_profile.html', user=user_data)
+    
+    student_data = user_data.get('student_data', {})
+    return render_template('student.html', user=user_data, student_data=student_data)
+
+@app.route('/auth/complete-profile', methods=['POST'])
+@student_required
+def complete_profile():
+    """Завершение заполнения профиля ученика"""
+    try:
+        data = request.json
+        user_id = session['user_id']
+        
+        student_data = {
+            'name': data.get('name'),
+            'education_level': data.get('level'),
+            'age': data.get('age'),
+            'student_id': str(uuid.uuid4()),
+            'registration_date': datetime.now().isoformat()
+        }
+        
+        if update_student_profile(user_id, student_data):
+            create_student_rooms(student_data)
+            
+            return jsonify({
+                "success": True,
+                "message": "Профиль успешно сохранен",
+                "student_id": student_data['student_id']
+            })
+        else:
+            return jsonify({"success": False, "error": "Ошибка сохранения профиля"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Ошибка: {str(e)}"})
+
+# =============================================================================
+# API ДЛЯ УПРАВЛЕНИЯ УЧЕНИКАМИ
+# =============================================================================
+
+@app.route('/api/students')
+@teacher_required
+def get_all_students():
+    """Получение списка всех учеников"""
+    try:
+        students = []
+        for user_file in USERS_DIR.glob("*.json"):
+            with open(user_file, 'r', encoding='utf-8') as f:
+                user_data = json.load(f)
+                if user_data.get('role') == 'student' and user_data.get('profile_complete', False):
+                    students.append({
+                        'user_id': user_data['user_id'],
+                        'username': user_data['username'],
+                        'student_data': user_data.get('student_data', {}),
+                        'created_at': user_data.get('created_at'),
+                        'last_login': user_data.get('last_login')
+                    })
+        
+        return jsonify({"success": True, "students": students})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/students/export')
+@teacher_required
+def export_students_data():
+    """Экспорт всех данных учеников"""
+    try:
+        import zipfile
+        import tempfile
+        
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+            for user_file in USERS_DIR.glob("*.json"):
+                with open(user_file, 'r', encoding='utf-8') as f:
+                    user_data = json.load(f)
+                    if user_data.get('role') == 'student':
+                        zipf.write(user_file, f"users/{user_file.name}")
+            
+            for student_file in STUDENTS_DIR.glob("*.json"):
+                zipf.write(student_file, f"students/{student_file.name}")
+        
+        temp_zip.close()
+        
+        return send_file(
+            temp_zip.name,
+            as_attachment=True,
+            download_name=f"students_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mimetype='application/zip'
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/<student_user_id>')
+@teacher_required
+def get_student_details(student_user_id):
+    """Получение детальной информации об ученике"""
+    try:
+        user_data = load_user_data(student_user_id)
+        if not user_data or user_data.get('role') != 'student':
+            return jsonify({"success": False, "error": "Ученик не найден"})
+        
+        return jsonify({
+            "success": True,
+            "student": {
+                'user_id': user_data['user_id'],
+                'username': user_data['username'],
+                'student_data': user_data.get('student_data', {}),
+                'created_at': user_data.get('created_at'),
+                'last_login': user_data.get('last_login'),
+                'rooms': user_data.get('student_data', {}).get('rooms', [])
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# ОСНОВНЫЕ ФУНКЦИИ СИСТЕМЫ
+# =============================================================================
 
 def handle_disconnected_session(sid):
     """Безопасная обработка отключенных сессий"""
     try:
-        # Находим комнату по sid
         for room_id, participants in room_participants.items():
             if sid in participants:
                 participants.remove(sid)
                 print(f"🔧 Удален отключенный участник {sid} из комнаты {room_id}")
-                
-                # Обновляем счетчик
                 emit('participants_update', {'count': len(participants)}, room=room_id)
                 
-        # Очищаем peer_ids
         for room_id, peers in room_peer_ids.items():
             if sid in peers:
                 del peers[sid]
@@ -137,15 +477,12 @@ def handle_disconnected_session(sid):
 
 def setup_llm_manager():
     """Настройка менеджера LLM с улучшенным callback"""
-    # Запускаем менеджер
     llm_manager.start()
     
-    # Регистрируем глобальный callback для обработки ответов
     def global_llm_callback(request_id, response, room_id, original_request_id=None):
         """Глобальный обработчик ответов от LLM с немедленной доставкой"""
         debug_log(f"Получен ответ для комнаты {room_id}: {response[:100]}...")
         
-        # Используем original_request_id если передан, иначе ищем по manager_id
         target_request_id = original_request_id
         if not target_request_id:
             for req_id, req_data in room_llm_pending_requests[room_id].items():
@@ -157,19 +494,16 @@ def setup_llm_manager():
             print(f"⚠️ Не найден исходный request_id для manager_id: {request_id}")
             target_request_id = f"unknown_{int(time.time() * 1000)}"
         
-        # Добавляем ответ в очередь для polling (резервный механизм)
         room_llm_responses[room_id].append({
             'request_id': target_request_id,
             'response': response,
             'timestamp': time.time(),
-            'delivered_via_websocket': False  # Пока еще не доставлено через WS
+            'delivered_via_websocket': False
         })
         
-        # Ограничиваем размер очереди
         if len(room_llm_responses[room_id]) > 10:
             room_llm_responses[room_id].pop(0)
         
-        # НЕМЕДЛЕННАЯ ДОСТАВКА ЧЕРЕЗ WEBSOCKET
         try:
             socketio.emit('llm_async_response', {
                 'request_id': target_request_id,
@@ -180,7 +514,6 @@ def setup_llm_manager():
             }, room=room_id)
             debug_log(f"Ответ немедленно отправлен через WebSocket в комнату {room_id}")
             
-            # Помечаем как доставленное через WS
             for resp in room_llm_responses[room_id]:
                 if resp['request_id'] == target_request_id:
                     resp['delivered_via_websocket'] = True
@@ -189,36 +522,28 @@ def setup_llm_manager():
         except Exception as e:
             print(f"⚠️ Не удалось отправить через WebSocket: {e}. Ответ сохранен для polling.")
     
-    # Регистрируем глобальный callback
     llm_manager.register_room_callback('global', global_llm_callback)
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
     """Быстрая инициализация комнаты с гарантированным созданием DialogueManager"""
     try:
-        # Определяем тип комнаты по названию
         is_student_room = '_' in room_id and room_id != 'default'
         
-        # 🔥 ГАРАНТИРУЕМ СОЗДАНИЕ DIALOGUE MANAGER
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
             if is_student_room:
-                # Это комната ученика - используем StudentDialogueManager
                 student_data = room_student_data.get(room_id, {})
                 room_dialogue[room_id] = StudentDialogueManager(socketio, student_data)
                 debug_log(f"Создан StudentDialogueManager для комнаты ученика {room_id}")
             else:
-                # Обычная комната - стандартный DialogueManager
                 room_dialogue[room_id] = DialogueManager(socketio)
                 debug_log(f"Создан DialogueManager для комнаты {room_id}")
             
-            # Обязательно устанавливаем room_id
             room_dialogue[room_id].room_id = room_id
         
-        # Устанавливаем аватар по умолчанию
         if room_id not in room_current_avatar:
             room_current_avatar[room_id] = 'teacher' if not is_student_room else 'woman'
         
-        # Для комнат учеников устанавливаем режим
         if is_student_room and room_dialogue[room_id]:
             if not getattr(room_dialogue[room_id], 'is_student_mode', False):
                 subject = _extract_subject_from_room(room_id)
@@ -226,7 +551,6 @@ def _fast_room_initialization(room_id):
                     room_dialogue[room_id].set_student_mode(subject)
                     debug_log(f"Установлен режим ученика для {room_id}: {subject}")
         
-        # 🔥 ГАРАНТИРУЕМ НАСТРОЙКУ LLM MODE
         if room_dialogue[room_id]:
             room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
@@ -235,7 +559,6 @@ def _fast_room_initialization(room_id):
         
     except Exception as e:
         print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
-        # 🔥 АВАРИЙНОЕ СОЗДАНИЕ ДИАЛОГ МЕНЕДЖЕРА ПРИ ОШИБКЕ
         try:
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
@@ -270,32 +593,18 @@ def clean_text_for_speech(text: str) -> str:
     if not text:
         return ""
     
-    # Удаляем markdown разметку
     text = re.sub(r'[#\*\_\~`]', '', text)
-    
-    # Удаляем лишние пробелы и переносы
     text = re.sub(r'\n+', ' ', text)
     text = re.sub(r'\s+', ' ', text)
-    
-    # Удаляем технические символы и специальные последовательности
     text = re.sub(r'\\n', ' ', text)
     text = re.sub(r'\\t', ' ', text)
     text = re.sub(r'\\r', ' ', text)
-    
-    # Удаляем английские и китайские символы (оставляем только кириллицу, латиницу, цифры и пунктуацию)
     text = re.sub(r'[^\u0400-\u04FFa-zA-Z0-9\s\.,!?;:()\-—]', '', text)
-    
-    # Удаляем множественные точки и запятые
     text = re.sub(r'[\.\,]{2,}', '.', text)
-    
-    # Восстанавливаем нормальную пунктуацию
     text = re.sub(r'\s+([\.,!?;:)])', r'\1', text)
     text = re.sub(r'([(\-])\s+', r'\1', text)
-    
-    # Удаляем пробелы в начале и конце
     text = text.strip()
     
-    # Обеспечиваем, что предложения начинаются с заглавной буквы
     if text and len(text) > 1:
         text = text[0].upper() + text[1:]
     
@@ -313,14 +622,12 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     if not text.strip():
         return
         
-    # ОЧИСТКА ТЕКСТА ПЕРЕД ОЗВУЧИВАНИЕМ
     cleaned_text = clean_text_for_speech(text)
     
     if not cleaned_text.strip():
         print(f"⚠️ Текст пуст после очистки: {text[:100]}...")
         return
         
-    # Устанавливаем флаг, что учитель начинает говорить
     if is_teacher:
         room_teacher_speaking[room_id] = True
         
@@ -331,7 +638,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     if audio_data:
         emit('speech_audio', {
             'audio': audio_data,
-            'text': cleaned_text,  # Используем очищенный текст
+            'text': cleaned_text,
             'timestamp': time.time(),
             'voice_type': voice_type,
             'is_teacher': is_teacher
@@ -339,7 +646,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
         
         if not skip_history:
             room_speech_data[room_id].append({
-                'text': cleaned_text,  # Сохраняем очищенный текст
+                'text': cleaned_text,
                 'timestamp': time.time(),
                 'type': 'generated',
                 'voice_type': voice_type,
@@ -348,74 +655,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
     
-    # Длительность речи рассчитываем на основе длины текста
     speech_duration = max(2, len(cleaned_text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
-
-@app.route('/')
-def home():
-    """Основная страница - лендинг"""
-    return render_template('landing.html')
-
-@app.route('/investing.html')
-def investing():
-    """Страница для инвесторов"""
-    return render_template('investing.html')
-
-@app.route('/teacher')
-def teacher():
-    """Страница учителя (личный кабинет)"""
-    return render_template('teacher.html')
-
-@app.route('/student')
-def student():
-    """Страница ученика (личный кабинет)"""
-    return render_template('student.html')
-
-@app.route('/conference')
-def conference():
-    room_id = request.args.get('room', 'default')
-    embed = request.args.get('embed', 'false') == 'true'
-    student_mode = request.args.get('student', 'false') == 'true'
-    subject = request.args.get('subject', '')
-    subject_name = request.args.get('subject_name', '')
-    
-    return render_template('conference.html', 
-                         room_id=room_id, 
-                         embed=embed,
-                         student_mode=student_mode,
-                         subject=subject,
-                         subject_name=subject_name)
-
-@app.route('/api/avatars')
-def get_avatars():
-    try:
-        avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
-        return jsonify({"avatars": avatars})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/frames/<avatar_name>')
-def get_frames(avatar_name):
-    try:
-        avatar_dir = FRAMES_DIR / avatar_name
-        if not avatar_dir.exists():
-            return jsonify({"error": "Avatar not found"}), 404
-        
-        # Поддерживаемые форматы изображений
-        supported_formats = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')
-        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(supported_formats)]
-        
-        # Сортируем кадры для правильной последовательности
-        frames.sort()
-        
-        return jsonify({"frames": frames})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/frames/<avatar_name>/<path:filename>')
-def serve_frame(avatar_name, filename):
-    return send_from_directory(FRAMES_DIR / avatar_name, filename)
 
 def text_to_speech(text, lang='ru'):
     """Преобразует текст в аудио (base64)"""
@@ -429,7 +670,6 @@ def text_to_speech(text, lang='ru'):
         print(f"Error in text_to_speech: {e}")
         return None
 
-# Функции для работы с данными учеников
 def save_student_data(student_data):
     """Сохраняет данные ученика в JSON файл"""
     try:
@@ -438,9 +678,8 @@ def save_student_data(student_data):
             student_id = str(uuid.uuid4())
             student_data['student_id'] = student_id
         
-        # ✅ ДОБАВЛЯЕМ: Создаем уникальный идентификатор конференции
         if 'conference_id' not in student_data:
-            conference_id = str(int(time.time() * 1000))  # Тот же формат что и сейчас
+            conference_id = str(int(time.time() * 1000))
             student_data['conference_id'] = conference_id
             debug_log(f"Создан идентификатор конференции для ученика {student_data.get('name')}: {conference_id}")
         
@@ -510,12 +749,10 @@ def create_student_rooms(student_data):
         if not student_id or not student_name:
             return False
         
-        # ✅ ОБНОВЛЯЕМ: Используем единый conference_id для всех предметов
         if not conference_id:
             conference_id = str(int(time.time() * 1000))
             student_data['conference_id'] = conference_id
         
-        # Список предметов для создания комнат
         subjects = [
             'math', 'physics', 'chemistry', 'biology', 
             'history', 'social', 'literature', 'russian', 
@@ -525,10 +762,8 @@ def create_student_rooms(student_data):
         created_rooms = []
         
         for subject in subjects:
-            # ✅ ВАЖНОЕ ИЗМЕНЕНИЕ: Используем единый conference_id
             room_name = f"{subject}_{student_name.replace(' ', '_').lower()}_{conference_id}"
             
-            # Сохраняем данные ученика для этой комнаты
             room_student_data[room_name] = {
                 'name': student_name,
                 'age': student_data.get('age'),
@@ -538,11 +773,8 @@ def create_student_rooms(student_data):
                 'conference_id': conference_id
             }
             
-            # Автоматически создаем StudentDialogueManager для комнаты
             room_dialogue[room_name] = StudentDialogueManager(socketio, room_student_data[room_name])
             room_dialogue[room_name].room_id = room_name
-            
-            # Автоматически назначаем аватар "woman" для комнаты
             room_current_avatar[room_name] = 'woman'
             
             debug_log(f"Создана комната {room_name} для ученика {student_name} с StudentDialogueManager")
@@ -551,16 +783,14 @@ def create_student_rooms(student_data):
                 'subject': subject,
                 'room_name': room_name,
                 'avatar': 'woman',
-                'conference_id': conference_id,  # ✅ Сохраняем идентификатор
+                'conference_id': conference_id,
                 'student_data': room_student_data[room_name]
             })
         
-        # Сохраняем информацию о комнатах в данные ученика
         student_data['rooms'] = created_rooms
         student_data['default_avatar'] = 'woman'
-        student_data['conference_id'] = conference_id  # ✅ Сохраняем идентификатор
+        student_data['conference_id'] = conference_id
         
-        # Сохраняем обновленные данные
         save_student_data(student_data)
         
         debug_log(f"Создано {len(created_rooms)} комнат для ученика {student_name} с ID: {conference_id}")
@@ -569,6 +799,10 @@ def create_student_rooms(student_data):
     except Exception as e:
         print(f"❌ Ошибка создания комнат для ученика: {e}")
         return False
+
+# =============================================================================
+# SOCKET.IO HANDLERS
+# =============================================================================
 
 @socketio.on('connect')
 def handle_connect():
@@ -579,8 +813,6 @@ def handle_connect():
 def handle_disconnect():
     sid = request.sid
     debug_log(f"Client disconnected: {sid}")
-    
-    # Безопасная очистка
     handle_disconnected_session(sid)
 
 @socketio.on('join_room')
@@ -591,7 +823,6 @@ def handle_join_room(data):
     debug_log(f"Попытка присоединения к комнате {room_id}, peer_id: {peer_id}")
     
     try:
-        # ГАРАНТИРУЕМ СУЩЕСТВОВАНИЕ КОМНАТЫ ВО ВСЕХ СЛОВАРЯХ
         if room_id not in room_participants:
             room_participants[room_id] = set()
 
@@ -601,56 +832,45 @@ def handle_join_room(data):
         if room_id not in room_llm_mode:
             room_llm_mode[room_id] = get_llm_mode()
 
-        # 🔥 ПРИОРИТЕТНАЯ ИНИЦИАЛИЗАЦИЯ ПЕРЕД ВСЕМ
         _fast_room_initialization(room_id)
 
-        # Присоединяем к комнате
         join_room(room_id)
         room_participants[room_id].add(request.sid)
         
-        # Сохраняем peer_id
         if peer_id:
             if room_id not in room_peer_ids:
                 room_peer_ids[room_id] = {}
             room_peer_ids[room_id][request.sid] = peer_id
         
-        # 🔥 ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА ПОСЛЕ ПРИСОЕДИНЕНИЯ
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
             debug_log(f"Экстренное создание DialogueManager для {room_id} после join")
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
             room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
-        # Уведомляем других участников
         if peer_id:
             emit('participant_joined', {
                 'peer_id': peer_id,
                 'sid': request.sid
             }, room=room_id, include_self=False)
         
-        # Отправляем текущий аватар
         try:
             emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
         except Exception as e:
             print(f"⚠️ Ошибка отправки аватара: {e}")
         
-        # Отправляем историю речи если есть
         if room_id in room_speech_data and room_speech_data[room_id]:
             try:
                 emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
             except Exception as e:
                 print(f"⚠️ Ошибка отправки истории: {e}")
         
-        # Обновляем счетчик участников
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
-        # Автоматическая активация для комнат учеников
         if '_' in room_id and room_id != 'default' and len(room_participants[room_id]) == 1:
             debug_log(f"Запланирована автоматическая активация AI для комнаты ученика {room_id}")
-            # Используем отложенную активацию
             socketio.start_background_task(delayed_auto_activation, room_id)
         
-        # Приветствие для обычных комнат
         elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
             greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
             speak_text(room_id, greeting, voice_type='female', is_teacher=True)
@@ -676,7 +896,6 @@ def delayed_auto_activation(room_id, delay=3):
         try:
             debug_log(f"Попытка автоматической активации {room_id} (попытка {attempt + 1})")
             
-            # Расширенная проверка существования комнаты
             room_exists = (
                 room_id in room_participants or 
                 room_id in room_dialogue or 
@@ -690,13 +909,9 @@ def delayed_auto_activation(room_id, delay=3):
                 
                 debug_log(f"Запуск автоматической активации для {room_id}")
                 
-                # Используем упрощенную активацию через прямой вызов
                 room_ai_activated[room_id] = True
-                
-                # Гарантируем инициализацию
                 _fast_room_initialization(room_id)
                 
-                # Отправляем событие активации
                 socketio.emit('ai_teacher_activated', {
                     'room_id': room_id,
                     'message': 'AI-учитель автоматически активирован',
@@ -709,7 +924,7 @@ def delayed_auto_activation(room_id, delay=3):
             else:
                 debug_log(f"Комната {room_id} не готова для автоматической активации (попытка {attempt + 1})")
                 if attempt < max_retries - 1:
-                    time.sleep(2)  # Ждем перед следующей попыткой
+                    time.sleep(2)
                     
         except Exception as e:
             print(f"⚠️ Ошибка автоматической активации {room_id} (попытка {attempt + 1}): {e}")
@@ -729,10 +944,7 @@ def handle_client_start_animation(data):
     avatar_name = data['avatar_name']
     debug_log(f"Получена команда запуска анимации для комнаты {room_id}, аватар: {avatar_name}")
     
-    # Сохраняем текущий аватар комнаты
     room_current_avatar[room_id] = avatar_name
-    
-    # Уведомляем всех клиентов в комнате о смене аватара
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
     emit('animation_ready', {'status': 'ready'}, room=room_id)
 
@@ -743,10 +955,7 @@ def handle_avatar_changed(data):
     avatar_name = data['avatar_name']
     debug_log(f"Смена аватара в комнате {room_id} на {avatar_name}")
     
-    # Сохраняем новый аватар для комнаты
     room_current_avatar[room_id] = avatar_name
-    
-    # Пересылаем команду всем клиентами в комнате
     emit('avatar_changed', {'avatar_name': avatar_name}, room=room_id)
 
 @socketio.on('generate_speech')
@@ -766,17 +975,14 @@ def handle_student_answer(data):
     debug_log(f"Получен ответ ученика: {answer}")
     debug_log(f"Состояние комнаты: practice_active={room_practice_active[room_id]}, teacher_speaking={room_teacher_speaking[room_id]}")
 
-    # ИГНОРИРУЕМ ответ, если учитель говорит
     if room_teacher_speaking[room_id]:
         debug_log(f"Игнорирую ответ ученика, так как учитель говорит: {answer}")
         return
 
-    # Проверяем, активна ли практика
     if not room_practice_active[room_id]:
         debug_log(f"Практика не активна, игнорирую ответ: {answer}")
         return
 
-    # ПРОВЕРЯЕМ КОМАНДУ "СТОП" ДЛЯ ЗАВЕРШЕНИЯ ПРАКТИКИ - ВАЖНОЕ ИЗМЕНЕНИЕ
     if any(cmd in answer.lower() for cmd in ['стоп', 'останови', 'хватит', 'закончи']):
         debug_log(f"Команда остановки практики: {answer}")
         if room_id in room_dialogue:
@@ -794,17 +1000,14 @@ def handle_student_answer(data):
             emit('practice_ended', {}, room=room_id)
         return
 
-    # Проверяем, ожидает ли система ответа в диалог менеджере
     if room_id in room_dialogue:
         dialogue = room_dialogue[room_id]
         if not dialogue.waiting_for_answer:
             debug_log(f"Система не ожидает ответа, игнорирую: {answer}")
             return
 
-    # ДОБАВЛЯЕМ ПРОВЕРКУ НА КОМАНДЫ ПРОДОЛЖЕНИЯ
     if any(cmd in answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
         debug_log(f"Игнорирую команду вместо ответа: {answer}")
-        # Вместо игнорирования, генерируем следующий вопрос
         if room_id in room_dialogue:
             response = room_dialogue[room_id]._evaluate_and_generate_next("")
             if response:
@@ -816,7 +1019,6 @@ def handle_student_answer(data):
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         return
 
-    # Добавляем ответ в историю
     room_speech_data[room_id].append({
         'text': f"Ответ ученика: {answer}",
         'timestamp': time.time(),
@@ -824,7 +1026,6 @@ def handle_student_answer(data):
         'sid': user_sid
     })
     
-    # Обрабатываем ответ через диалог менеджер
     if room_id in room_dialogue:
         debug_log(f"Обработка ответа через диалог менеджер...")
         
@@ -833,24 +1034,20 @@ def handle_student_answer(data):
         if response:
             debug_log(f"Ответ учителя: {response}")
             
-            # Отправляем ответ учителя
             emit('speech_text', {
                 'text': f"Учитель: {response}",
                 'sid': 'teacher',
                 'is_teacher': True
             }, room=room_id)
             
-            # Озвучиваем ответ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
             
-            # Проверяем, завершена ли практика
             if not room_dialogue[room_id].practice_active:
                 room_practice_active[room_id] = False
                 room_current_question_index[room_id] = 0
                 emit('practice_ended', {}, room=room_id)
                 debug_log("Практика завершена")
         else:
-            # Если response is None, практика завершена
             room_practice_active[room_id] = False
             room_current_question_index[room_id] = 0
             room_dialogue[room_id].waiting_for_answer = False
@@ -866,21 +1063,16 @@ def handle_student_message(data):
 
     debug_log(f"Получено сообщение от ученика: {message}")
     
-    # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Добавляем ту же проверку, что и для распознанной речи
-    # ИГНОРИРУЕМ сообщение, если учитель говорит
     if room_teacher_speaking[room_id]:
         debug_log(f"Игнорирую сообщение ученика, так как учитель говорит: {message}")
         return
 
-    # Если активна практика, обрабатываем как ответ
     if room_practice_active[room_id]:
         handle_student_answer({
             'room_id': room_id,
             'answer': message
         })
     else:
-        # Иначе обрабатываем как обычную речь - но с той же логикой фильтрации
-        # что и handle_recognized_speech
         handle_recognized_speech({
             'room_id': room_id, 
             'text': message
@@ -892,7 +1084,6 @@ def handle_recognized_speech(data):
     text = data['text']
     user_sid = request.sid
 
-    # 🔥 ПРОВЕРКА ГОТОВНОСТИ СИСТЕМЫ
     if not room_ai_activated.get(room_id, False):
         return
         
@@ -902,12 +1093,10 @@ def handle_recognized_speech(data):
             debug_log(f"Не удалось создать DialogueManager для {room_id}")
             return
 
-    # ИГНОРИРУЕМ распознанную речь, если учитель говорит
     if room_teacher_speaking[room_id]:
         debug_log(f"Игнорирую речь ученика, так как учитель говорит: {text}")
         return
 
-    # Игнорируем распознавание системных сообщений и короткие фразы
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
         len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
         return
@@ -926,31 +1115,23 @@ def handle_recognized_speech(data):
     if room_ai_activated[room_id]:
         dialogue = room_dialogue[room_id]
         
-        # УЛУЧШЕННАЯ ОБРАБОТКА КОМАНД УПРАВЛЕНИЯ - УБИРАЕМ БЛОКИРОВКУ ПОВТОРОВ
-        # Если урок начат и это команда продолжения - ВСЕГДА ОБРАБАТЫВАЕМ ЛЮБОЕ СИСТЕМНОЕ СЛОВО
         if dialogue.is_lesson_started():
-            # Расширенный список команд продолжения
             all_continue_commands = [
                 "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
                 "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
                 "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
             ]
             
-            # Проверяем ЛЮБОЕ системное слово без ограничений
             if any(cmd in text.lower() for cmd in all_continue_commands):
-                # Получаем следующий абзац урока
                 next_paragraph = dialogue._get_next_paragraph()
                 if next_paragraph:
-                    # Отправляем текст
                     emit('speech_text', {
                         'text': f"Учитель: {next_paragraph}",
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    # Озвучиваем следующий абзац
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
                 else:
-                    # Если урок закончился, начинаем практику
                     practice_msg = "Урок завершен. Переходим к практике."
                     emit('speech_text', {
                         'text': f"Учитель: {practice_msg}",
@@ -960,40 +1141,30 @@ def handle_recognized_speech(data):
                     speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
                 return
         
-        # Команды остановки
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
             stop_response = dialogue.process_input(text)
             if stop_response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {stop_response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # Озвучиваем ответ на остановку
                 speak_text(room_id, stop_response, voice_type='female', is_teacher=True)
             return
         
-        # Если урок уже начат, обрабатываем как вопрос/команду
         if dialogue.is_lesson_started():
-            # Обработка вопросов во время чтения урока
             response = dialogue.handle_question_during_lesson(text)
             if response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # ОЗВУЧИВАЕМ ответ на вопрос (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
-            # Обработка диалога выбора урока
             response = dialogue.process_input(text)
             
-            # Если response is None - это значит был выбран предмет и нужно начать урок
             if response is None:
-                # Урок выбран, начинаем чтение
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data:
                     emit('lesson_started', {
@@ -1002,26 +1173,21 @@ def handle_recognized_speech(data):
                         'subject': dialogue.get_current_subject()
                     }, room=room_id)
                     
-                    # Немедленно начинаем чтение первого абзаца урока
                     first_paragraph = dialogue._get_next_paragraph()
                     if first_paragraph:
-                        # Отправляем текст
                         emit('speech_text', {
                             'text': f"Учитель: {first_paragraph}",
                             'sid': 'teacher',
                             'is_teacher': True
                         }, room=room_id)
-                        # Озвучиваем первый абзац
                         speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
             elif response:
-                # Отправляем текст
                 emit('speech_text', {
                     'text': f"Учитель: {response}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
                 
-                # Озвучиваем ответ (всегда!)
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
@@ -1032,19 +1198,15 @@ def handle_activate_ai_teacher(data):
     debug_log(f"Запрос активации AI-учителя для комнаты {room_id} от {sid}")
     
     try:
-        # 🔥 ПРОСТАЯ И ГАРАНТИРОВАННАЯ АКТИВАЦИЯ
         room_ai_activated[room_id] = True
         
-        # ГАРАНТИРУЕМ СУЩЕСТВОВАНИЕ DIALOGUE MANAGER
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
             debug_log(f"Создан DialogueManager при активации для {room_id}")
         
-        # ГАРАНТИРУЕМ НАСТРОЙКУ LLM
         room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
-        # Приветствие
         greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
         speak_text(room_id, greeting, voice_type='female', is_teacher=True)
         
@@ -1088,22 +1250,18 @@ def handle_llm_response_ready(data):
     
     debug_log(f"Получен ответ LLM для комнаты {room_id}: {answer[:100]}...")
     
-    # Сбрасываем состояние речи учителя, чтобы гарантированно озвучить ответ
     reset_speaking_state(room_id, is_teacher=True)
     room_teacher_speaking[room_id] = False
     room_speaking[room_id] = False
     
-    # Небольшая задержка для гарантии сброса состояния
     time.sleep(0.5)
     
-    # Отправляем ответ в комнату
     emit('speech_text', {
         'text': f"Учитель: {answer}",
         'sid': 'teacher',
         'is_teacher': True
     }, room=room_id)
     
-    # Озвучиваем ответ
     speak_text(room_id, answer, voice_type='female', is_teacher=True)
 
 @socketio.on('practice_started')
@@ -1131,7 +1289,6 @@ def handle_visualization_generated(data):
     
     debug_log(f"Получена готовая визуализация для комнаты {room_id}: {data['topic'][:100]}...")
     
-    # Пересылаем всем клиентами в комнате
     emit('visualization_generated', {
         'room_id': room_id,
         'topic': data['topic'],
@@ -1140,13 +1297,196 @@ def handle_visualization_generated(data):
         'timestamp': data.get('timestamp', time.time())
     }, room=room_id)
 
-# НОВЫЕ ФУНКЦИИ ДЛЯ POLLING ВИЗУАЛИЗАЦИИ
+@socketio.on('get_llm_status')
+def handle_get_llm_status(data):
+    """WebSocket обработчик получения статуса LLM"""
+    room_id = data['room_id']
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].llm.get_llm_status()
+        emit('llm_status_update', {
+            'room_id': room_id,
+            'status': status
+        }, room=room_id)
+
+@socketio.on('set_llm_priority')
+def handle_set_llm_priority(data):
+    """WebSocket установка приоритета"""
+    room_id = data['room_id']
+    priority = data['priority']
+    
+    valid_priorities = ["local_first", "openrouter_first", "local_only", "openrouter_only"]
+    
+    if priority not in valid_priorities:
+        emit('llm_priority_error', {
+            'room_id': room_id,
+            'error': f'Invalid priority. Use: {valid_priorities}'
+        })
+        return
+    
+    if room_id in room_dialogue:
+        room_dialogue[room_id].llm.set_priority(priority)
+        status = room_dialogue[room_id].llm.get_priority_status()
+        
+        emit('llm_priority_changed', {
+            'room_id': room_id,
+            'priority': priority,
+            'status': status
+        }, room=room_id)
+        
+        debug_log(f"Приоритет LLM изменен в комнате {room_id}: {priority}")
+
+@socketio.on('get_llm_priority_status')
+def handle_get_llm_priority_status(data):
+    """WebSocket получение статуса приоритета"""
+    room_id = data['room_id']
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].llm.get_priority_status()
+        emit('llm_priority_status', {
+            'room_id': room_id,
+            'status': status
+        })
+
+@socketio.on('async_llm_request')
+def handle_async_llm_request(data):
+    """Обработчик асинхронных запросов к LLM с улучшенным отслеживанием"""
+    room_id = data['room_id']
+    prompt = data['prompt']
+    system_prompt = data.get('system_prompt', '')
+    max_tokens = data.get('max_tokens', 1000)
+    request_type = data.get('type', 'general')
+    client_request_id = data.get('request_id')
+    
+    debug_log(f"Запрос от комнаты {room_id}: {prompt[:100]}...")
+    
+    request_id = client_request_id or f"{room_id}_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+    
+    room_llm_pending_requests[room_id][request_id] = {
+        'prompt': prompt,
+        'system_prompt': system_prompt,
+        'max_tokens': max_tokens,
+        'timestamp': time.time(),
+        'type': request_type
+    }
+    
+    current_time = time.time()
+    for req_id in list(room_llm_pending_requests[room_id].keys()):
+        if current_time - room_llm_pending_requests[room_id][req_id]['timestamp'] > 300:
+            del room_llm_pending_requests[room_id][req_id]
+    
+    llm_request_id = llm_manager.submit_request(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        max_tokens=max_tokens,
+        room_id=room_id,
+        request_id=request_id
+    )
+    
+    room_llm_pending_requests[room_id][request_id]['manager_id'] = llm_request_id
+    
+    emit('llm_request_queued', {
+        'request_id': request_id,
+        'manager_id': llm_request_id,
+        'queue_position': llm_manager.get_queue_size(),
+        'room_id': room_id,
+        'timestamp': time.time()
+    })
+
+@socketio.on('llm_async_response')
+def handle_llm_async_response(data):
+    """Обработчик асинхронных ответов от LLM"""
+    room_id = data['room_id']
+    response = data['response']
+    request_id = data['request_id']
+    
+    debug_log(f"Ответ для комнаты {room_id}: {response[:100]}...")
+    
+    if room_id in room_llm_pending_requests and request_id in room_llm_pending_requests[room_id]:
+        del room_llm_pending_requests[room_id][request_id]
+    
+    if response and room_id in room_dialogue:
+        room_dialogue[room_id].llm.handle_llm_response(request_id, response, room_id)
+        
+        emit('speech_text', {
+            'text': f"Учитель: {response}",
+            'sid': 'teacher',
+            'is_teacher': True
+        }, room=room_id)
+        
+        speak_text(room_id, response, voice_type='female', is_teacher=True)
+
+@socketio.on('generate_visualization')
+def handle_generate_visualization(data):
+    """Обработчик запроса генерации визуализации - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ"""
+    room_id = data['room_id']
+    topic = data.get('topic', '')
+    context = data.get('context', '')
+    
+    if not topic:
+        return
+    
+    debug_log(f"WebSocket генерация визуализации для комнаты {room_id}: {topic[:100]}...")
+    
+    add_visualization_to_queue(room_id, topic, context)
+    
+    emit('visualization_queued', {
+        'room_id': room_id,
+        'topic': topic,
+        'queue_length': len(room_visualization_queue.get(room_id, []))
+    }, room=room_id)
+
+# =============================================================================
+# API ЭНДПОИНТЫ
+# =============================================================================
+
+@app.route('/api/avatars')
+def get_avatars():
+    try:
+        avatars = [d for d in os.listdir(FRAMES_DIR) if (FRAMES_DIR / d).is_dir()]
+        return jsonify({"avatars": avatars})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/frames/<avatar_name>')
+def get_frames(avatar_name):
+    try:
+        avatar_dir = FRAMES_DIR / avatar_name
+        if not avatar_dir.exists():
+            return jsonify({"error": "Avatar not found"}), 404
+        
+        supported_formats = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp')
+        frames = [f for f in os.listdir(avatar_dir) if f.lower().endswith(supported_formats)]
+        frames.sort()
+        
+        return jsonify({"frames": frames})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/frames/<avatar_name>/<path:filename>')
+def serve_frame(avatar_name, filename):
+    return send_from_directory(FRAMES_DIR / avatar_name, filename)
+
+@app.route('/conference')
+def conference():
+    room_id = request.args.get('room', 'default')
+    embed = request.args.get('embed', 'false') == 'true'
+    student_mode = request.args.get('student', 'false') == 'true'
+    subject = request.args.get('subject', '')
+    subject_name = request.args.get('subject_name', '')
+    
+    return render_template('conference.html', 
+                         room_id=room_id, 
+                         embed=embed,
+                         student_mode=student_mode,
+                         subject=subject,
+                         subject_name=subject_name)
+
 def add_visualization_to_queue(room_id, topic, context):
     """Добавляет визуализацию в очередь для комнаты"""
     if room_id not in room_visualization_queue:
         room_visualization_queue[room_id] = []
     
-    # Генерируем визуализации сразу
     mermaid_code = generate_mermaid_code(topic, context)
     svg_code = generate_svg_code(topic, context)
     
@@ -1158,7 +1498,6 @@ def add_visualization_to_queue(room_id, topic, context):
         'timestamp': time.time()
     }
     
-    # Ограничиваем размер очереди
     if len(room_visualization_queue[room_id]) >= 5:
         room_visualization_queue[room_id].pop(0)
     
@@ -1167,7 +1506,6 @@ def add_visualization_to_queue(room_id, topic, context):
     debug_log(f"Визуализация добавлена в очередь для комнаты {room_id}: {topic}")
     return True
 
-# Polling endpoint для визуализации
 @app.route('/api/poll_visualization', methods=['POST', 'GET'])
 def poll_visualization():
     """Endpoint для polling визуализаций"""
@@ -1181,7 +1519,6 @@ def poll_visualization():
         if room_id in room_visualization_queue and room_visualization_queue[room_id]:
             visualization = room_visualization_queue[room_id].pop(0)
             
-            # Отправляем через WebSocket для немедленного отображения
             if socketio and room_id:
                 socketio.emit('visualization_generated', {
                     'room_id': room_id,
@@ -1219,7 +1556,6 @@ def visualization_queue_status():
         "queue": room_visualization_queue.get(room_id, [])
     })
 
-# Новые эндпоинты для визуализации
 @app.route('/api/generate_diagram', methods=['POST'])
 def generate_diagram():
     """Генерация диаграммы через LLM + Mermaid"""
@@ -1232,7 +1568,6 @@ def generate_diagram():
         if not topic:
             return jsonify({"success": False, "error": "Topic is required"})
         
-        # Добавляем в очередь вместо немедленной генерации
         add_visualization_to_queue(room_id, topic, context)
         
         return jsonify({
@@ -1249,7 +1584,6 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     """Генерация Mermaid кода через LLM"""
     debug_log(f"Генерация Mermaid для: {topic[:100]}...")
     
-    # УПРОЩЕННЫЙ ПРОМПТ
     prompt = f"""
     Создай Mermaid.js диаграмму для темы: "{topic}".
     Контекст: {context}
@@ -1272,7 +1606,6 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     """
     
     try:
-        # Используем существующий LLM
         from llm import LLMIntegration
         llm = LLMIntegration()
         
@@ -1281,11 +1614,10 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
             context="",
             subject="general",
             system_prompt="Ты создаешь простые Mermaid диаграммы. Используй только корректный синтаксис Mermaid.",
-            max_tokens=300  # Уменьшаем токены для более простых диаграмм
+            max_tokens=300
         )
         
         if response:
-            # Очищаем и проверяем синтаксис
             cleaned_code = clean_mermaid_code(response)
             debug_log(f"Сгенерирован Mermaid код для: {topic[:50]}...")
             debug_log(f"Код: {cleaned_code[:100]}...")
@@ -1296,7 +1628,6 @@ def generate_mermaid_code(topic: str, context: str = "") -> str:
     except Exception as e:
         print(f"❌ Ошибка генерации Mermaid кода: {e}")
     
-    # Fallback - простая диаграмма по умолчанию
     return f'''flowchart TD
     A["{topic}"] --> B["Аспект 1"]
     A --> C["Аспект 2"]
@@ -1343,12 +1674,10 @@ def generate_svg_code(topic: str, context: str = "") -> str:
         )
         
         if svg_code:
-            # Очищаем SVG код
             svg_code = re.sub(r'```(xml|svg)?\s*', '', svg_code)
             svg_code = re.sub(r'```\s*', '', svg_code)
             svg_code = svg_code.strip()
             
-            # Проверяем валидность SVG
             if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
                 debug_log(f"Сгенерирован SVG код для: {topic[:50]}...")
                 debug_log(f"Длина кода: {len(svg_code)} символов")
@@ -1366,27 +1695,18 @@ def clean_mermaid_code(code: str) -> str:
     if not code:
         return ""
     
-    # Удаляем markdown обратные кавычки и все что между ними
     code = re.sub(r'```[\s\S]*?```', '', code)
     code = re.sub(r'`[^`]*`', '', code)
-    
-    # Удаляем комментарии Mermaid
     code = re.sub(r'%%.*', '', code)
-    
-    # Удаляем лишние пробелы и пустые строки
     code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
     
-    # Проверяем базовый синтаксис
     valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
     
-    # Если код не начинается с правильного типа, добавляем flowchart по умолчанию
     if not any(code.strip().startswith(start) for start in valid_starts):
         code = 'flowchart TD\n' + code
     
-    # Убедимся, что есть базовые элементы
     lines = code.split('\n')
     if len(lines) < 2 or ('-->' not in code and '->' not in code):
-        # Добавляем простую структуру если нет связей
         if len(lines) > 1:
             code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
         else:
@@ -1394,31 +1714,8 @@ def clean_mermaid_code(code: str) -> str:
     
     return code.strip()
 
-@socketio.on('generate_visualization')
-def handle_generate_visualization(data):
-    """Обработчик запроса генерации визуализации - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ"""
-    room_id = data['room_id']
-    topic = data.get('topic', '')
-    context = data.get('context', '')
-    
-    if not topic:
-        return
-    
-    debug_log(f"WebSocket генерация визуализации для комнаты {room_id}: {topic[:100]}...")
-    
-    # Используем polling подход вместо прямой отправки через WebSocket
-    add_visualization_to_queue(room_id, topic, context)
-    
-    # Отправляем подтверждение
-    emit('visualization_queued', {
-        'room_id': room_id,
-        'topic': topic,
-        'queue_length': len(room_visualization_queue.get(room_id, []))
-    }, room=room_id)
-
-# НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЛОКАЛЬНОЙ LLM
 @app.route('/api/llm/priority', methods=['POST'])
-def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
+def set_llm_priority_route():
     """Установка приоритета моделей LLM"""
     try:
         data = request.json
@@ -1427,11 +1724,9 @@ def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИ�
         if not priority:
             return jsonify({"success": False, "error": "Priority not specified"})
         
-        # Сохраняем в конфигурацию
         success = set_llm_priority(priority)
         
         if success:
-            # Обновляем для всех активных комнат
             for room_id in room_dialogue:
                 room_dialogue[room_id].llm.set_priority(priority)
             
@@ -1447,7 +1742,7 @@ def set_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИ�
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['GET'])
-def get_llm_priority_route():  # ИЗМЕНЕНО НАЗВАНИЕ ФУНКЦИИ
+def get_llm_priority_route():
     """Получение текущего приоритета моделей LLM"""
     try:
         priority = get_llm_priority()
@@ -1546,138 +1841,6 @@ def get_llm_manager_status():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@socketio.on('get_llm_status')
-def handle_get_llm_status(data):
-    """WebSocket обработчик получения статуса LLM"""
-    room_id = data['room_id']
-    
-    if room_id in room_dialogue:
-        status = room_dialogue[room_id].llm.get_llm_status()
-        emit('llm_status_update', {
-            'room_id': room_id,
-            'status': status
-        }, room=room_id)
-
-@socketio.on('set_llm_priority')
-def handle_set_llm_priority(data):
-    """WebSocket установка приоритета"""
-    room_id = data['room_id']
-    priority = data['priority']
-    
-    valid_priorities = ["local_first", "openrouter_first", "local_only", "openrouter_only"]
-    
-    if priority not in valid_priorities:
-        emit('llm_priority_error', {
-            'room_id': room_id,
-            'error': f'Invalid priority. Use: {valid_priorities}'
-        })
-        return
-    
-    if room_id in room_dialogue:
-        room_dialogue[room_id].llm.set_priority(priority)
-        status = room_dialogue[room_id].llm.get_priority_status()
-        
-        emit('llm_priority_changed', {
-            'room_id': room_id,
-            'priority': priority,
-            'status': status
-        }, room=room_id)
-        
-        debug_log(f"Приоритет LLM изменен в комнате {room_id}: {priority}")
-
-@socketio.on('get_llm_priority_status')
-def handle_get_llm_priority_status(data):
-    """WebSocket получение статуса приоритета"""
-    room_id = data['room_id']
-    
-    if room_id in room_dialogue:
-        status = room_dialogue[room_id].llm.get_priority_status()
-        emit('llm_priority_status', {
-            'room_id': room_id,
-            'status': status
-        })
-
-# АСИНХРОННЫЕ ЗАПРОСЫ К LLM С УЛУЧШЕННОЙ ЛОГИКОИ
-@socketio.on('async_llm_request')
-def handle_async_llm_request(data):
-    """Обработчик асинхронных запросов к LLM с улучшенным отслеживанием"""
-    room_id = data['room_id']
-    prompt = data['prompt']
-    system_prompt = data.get('system_prompt', '')
-    max_tokens = data.get('max_tokens', 1000)
-    request_type = data.get('type', 'general')
-    client_request_id = data.get('request_id')  # ID от клиента
-    
-    debug_log(f"Запрос от комнаты {room_id}: {prompt[:100]}...")
-    
-    # Генерируем уникальный ID запроса если не передан клиентом
-    request_id = client_request_id or f"{room_id}_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
-    
-    # Сохраняем информацию о запросе
-    room_llm_pending_requests[room_id][request_id] = {
-        'prompt': prompt,
-        'system_prompt': system_prompt,
-        'max_tokens': max_tokens,
-        'timestamp': time.time(),
-        'type': request_type
-    }
-    
-    # Очищаем старые запросы (старше 5 минут)
-    current_time = time.time()
-    for req_id in list(room_llm_pending_requests[room_id].keys()):
-        if current_time - room_llm_pending_requests[room_id][req_id]['timestamp'] > 300:
-            del room_llm_pending_requests[room_id][req_id]
-    
-    # Отправляем запрос в менеджер
-    llm_request_id = llm_manager.submit_request(
-        prompt=prompt,
-        system_prompt=system_prompt,
-        max_tokens=max_tokens,
-        room_id=room_id,
-        request_id=request_id  # Передаем наш request_id
-    )
-    
-    # Связываем ID менеджера с нашим ID
-    room_llm_pending_requests[room_id][request_id]['manager_id'] = llm_request_id
-    
-    # Немедленно подтверждаем получение запроса
-    emit('llm_request_queued', {
-        'request_id': request_id,
-        'manager_id': llm_request_id,
-        'queue_position': llm_manager.get_queue_size(),
-        'room_id': room_id,
-        'timestamp': time.time()
-    })
-
-@socketio.on('llm_async_response')
-def handle_llm_async_response(data):
-    """Обработчик асинхронных ответов от LLM"""
-    room_id = data['room_id']
-    response = data['response']
-    request_id = data['request_id']
-    
-    debug_log(f"Ответ для комнаты {room_id}: {response[:100]}...")
-    
-    # Удаляем из ожидающих запросов
-    if room_id in room_llm_pending_requests and request_id in room_llm_pending_requests[room_id]:
-        del room_llm_pending_requests[room_id][request_id]
-    
-    # Обрабатываем ответ
-    if response and room_id in room_dialogue:
-        # Передаем ответ в диалог менеджер
-        room_dialogue[room_id].llm.handle_llm_response(request_id, response, room_id)
-        
-        # Отправляем ответ учителя
-        emit('speech_text', {
-            'text': f"Учитель: {response}",
-            'sid': 'teacher',
-            'is_teacher': True
-        }, room=room_id)
-        
-        # Озвучиваем ответ
-        speak_text(room_id, response, voice_type='female', is_teacher=True)
-
-# УЛУЧШЕННЫЙ POLLING ДЛЯ LLM ОТВЕТОВ (резервный механизм)
 @app.route('/api/llm/poll_response', methods=['POST'])
 def poll_llm_response():
     """Улучшенный polling endpoint для получения ответов от LLM"""
@@ -1685,25 +1848,21 @@ def poll_llm_response():
         data = request.json
         room_id = data.get('room_id', 'default')
         last_check = data.get('last_check', 0)
-        request_id_filter = data.get('request_id')  # Опциональная фильтрация по request_id
+        request_id_filter = data.get('request_id')
         
         current_time = time.time()
         room_last_poll_time[room_id] = current_time
         
-        # Проверяем новые ответы в очереди
         new_responses = []
         if room_id in room_llm_responses and room_llm_responses[room_id]:
-            # Фильтруем ответы, которые пришли после last_check
             for resp in room_llm_responses[room_id]:
                 if (resp['timestamp'] > last_check and 
                     (not request_id_filter or resp['request_id'] == request_id_filter)):
                     new_responses.append(resp)
         
         if new_responses:
-            # Сортируем по времени (самые свежие первыми)
             new_responses.sort(key=lambda x: x['timestamp'], reverse=True)
             
-            # Возвращаем все новые ответы
             return jsonify({
                 "success": True,
                 "has_response": True,
@@ -1775,22 +1934,6 @@ def get_llm_models():
     ]
     return jsonify({"models": models})
 
-@app.route('/api/llm/status', methods=['GET'])
-def get_llm_status_old():
-    """Получение статуса LLM для комнаты"""
-    room_id = request.args.get('room_id', 'default')
-    
-    if room_id in room_dialogue:
-        stats = room_dialogue[room_id].llm.get_cache_stats()
-        return jsonify({
-            "success": True,
-            "room": room_id,
-            "cache_stats": stats,
-            "model": room_dialogue[room_id].llm.model
-        })
-    
-    return jsonify({"success": False, "error": "Room not found"})
-
 @app.route('/api/config/llm_mode', methods=['GET'])
 def get_llm_mode_api():
     """Получение текущего режима работы LLM"""
@@ -1820,7 +1963,6 @@ def set_llm_mode_api():
         success = set_llm_mode(mode)
         
         if success:
-            # Обновляем режим для всех активных комнат
             for room_id in room_llm_mode:
                 room_llm_mode[room_id] = mode
                 if room_id in room_dialogue:
@@ -1906,41 +2048,31 @@ def get_lesson_content(lesson_id):
         with open(lesson_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Разбиваем на абзацы (улучшенная логика)
         paragraphs = []
         current_paragraph = []
         
-        # Сначала разбиваем по двойным переводам строк
         if '\n\n' in content:
             raw_paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
         else:
-            # Если нет двойных переводов строк, разбиваем по одиночным
             raw_paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
         
-        # Объединяем короткие абзацы в группы по 6 предложений
         for paragraph in raw_paragraphs:
-            # Разбиваем на предложences
             sentences = re.split(r'(?<=[.!?])\s+', paragraph)
             sentences = [s.strip() for s in sentences if s.strip()]
             
-            # Если абзац уже содержит достаточно предложений, добавляем как есть
             if len(sentences) >= 6:
                 paragraphs.append(' '.join(sentences))
                 continue
                 
-            # Добавляем предложения в текущий абзац
             current_paragraph.extend(sentences)
             
-            # Если накопилось достаточно предложений, создаем новый абзац
             if len(current_paragraph) >= 6:
                 paragraphs.append(' '.join(current_paragraph[:6]))
                 current_paragraph = current_paragraph[6:]
         
-        # Добавляем оставшиеся предложения
         if current_paragraph:
             paragraphs.append(' '.join(current_paragraph))
         
-        # Убираем \n\n из текста
         paragraphs = [p.replace('\n\n', ' ').replace('\n', ' ') for p in paragraphs]
         
         return jsonify({
@@ -1978,6 +2110,28 @@ def get_available_lessons():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+def _detect_subject(filename: str) -> str:
+    """Определяет предмет по названию файла"""
+    filename_lower = filename.lower()
+    if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
+        return "математика"
+    elif any(word in filename_lower for word in ['history', 'история', 'истор']):
+        return "история"
+    elif any(word in filename_lower for word in ['physics', 'физика', 'физ']):
+        return "физика"
+    elif any(word in filename_lower for word in ['chemistry', 'химия', 'хим']):
+        return "химия"
+    elif any(word in filename_lower for word in ['social', 'обществознание', 'общество']):
+        return "обществознание"
+    elif any(word in filename_lower for word in ['biology', 'биология', 'био']):
+        return "биология"
+    elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
+        return "литература"
+    elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
+        return "русский язык"
+    else:
+        return "общее"
 
 @app.route('/api/practice_content/<lesson_id>')
 def get_practice_content(lesson_id):
@@ -2084,28 +2238,6 @@ def delete_practice(filename):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-def _detect_subject(filename: str) -> str:
-    """Определяет предмет по названию файла"""
-    filename_lower = filename.lower()
-    if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
-        return "математика"
-    elif any(word in filename_lower for word in ['history', 'история', 'истор']):
-        return "история"
-    elif any(word in filename_lower for word in ['physics', 'физика', 'физ']):
-        return "физика"
-    elif any(word in filename_lower for word in ['chemistry', 'химия', 'хим']):
-        return "химия"
-    elif any(word in filename_lower for word in ['social', 'обществознание', 'общество']):
-        return "обществознание"
-    elif any(word in filename_lower for word in ['biology', 'биология', 'био']):
-        return "биология"
-    elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
-        return "литература"
-    elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
-        return "русский язык"
-    else:
-        return "общее"
-
 @app.route('/api/add_knowledge', methods=['POST'])
 def add_knowledge():
     """Добавление знаний в базу"""
@@ -2117,7 +2249,6 @@ def add_knowledge():
         if not text.strip():
             return jsonify({"success": False, "error": "Text is required"})
         
-        # Создаем базу знаний для предмета если ее нет
         knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
         if knowledge_file.exists():
             with open(knowledge_file, 'r', encoding='utf-8') as f:
@@ -2135,7 +2266,6 @@ def add_knowledge():
                 }
             }
         
-        # Парсим текст и добавляем в базу знаний
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         for line in lines:
             if ' - ' in line:
@@ -2144,12 +2274,10 @@ def add_knowledge():
             elif line.endswith('?'):
                 knowledge_data["questions"][line.strip().lower()] = "Ответ будет добавлен автоматически"
             else:
-                # Просто добавляем как общую информацию
                 if "general_info" not in knowledge_data:
                     knowledge_data["general_info"] = []
                 knowledge_data["general_info"].append(line.strip())
         
-        # Сохраняем обновленную базу знаний
         with open(knowledge_file, 'w', encoding='utf-8') as f:
             json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
         
@@ -2170,7 +2298,6 @@ def add_lesson():
         if not title or not content:
             return jsonify({"success": False, "error": "Title and content are required"})
         
-        # Создаем имя файла
         filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
         lesson_path = LESSONS_DIR / filename
         
@@ -2193,7 +2320,6 @@ def add_practice():
         if not lesson_id or not practice_data:
             return jsonify({"success": False, "error": "Lesson ID and practice data are required"})
         
-        # Создаем файл практики
         practice_file = PRACTICE_DIR / f"{lesson_id}.json"
         
         with open(practice_file, 'w', encoding='utf-8') as f:
@@ -2214,7 +2340,6 @@ def download_knowledge():
     if not knowledge_file.exists() and not llm_answers_file.exists():
         return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
     
-    # Создаем временный файл для скачивания
     import tempfile
     import zipfile
     
@@ -2241,7 +2366,6 @@ def download_lessons():
     if not any(LESSONS_DIR.iterdir()):
         return jsonify({"success": False, "error": "Уроки не найдены"})
     
-    # Создаем временный zip-файл
     import tempfile
     import zipfile
     
@@ -2266,7 +2390,6 @@ def download_practice():
     if not any(PRACTICE_DIR.iterdir()):
         return jsonify({"success": False, "error": "Практические задания не найдены"})
     
-    # Создаем временный zip-файл
     import tempfile
     import zipfile
     
@@ -2289,13 +2412,11 @@ def download_practice():
 def download_practice_txt():
     """Скачивание практических заданий в текстовом формате"""
     try:
-        # Ищем TXT файлы практики
         practice_txt_files = list(PRACTICE_DIR.glob("*.txt"))
         
         if not practice_txt_files:
             return jsonify({"success": False, "error": "TXT файлы практики не найдены"})
         
-        # Создаем временный zip-файл
         import tempfile
         import zipfile
     
@@ -2317,7 +2438,6 @@ def download_practice_txt():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# Новые API эндпоинты для управления API ключами
 @app.route('/api/config/keys', methods=['GET'])
 def get_api_keys():
     """Получение текущих API ключей"""
@@ -2372,7 +2492,6 @@ def test_api_key():
         if not provider or not api_key:
             return jsonify({"success": False, "error": "Provider and API key are required"})
         
-        # Тестируем ключ через простой запрос к OpenRouter
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -2419,7 +2538,6 @@ def test_api_key():
             "valid": False
         })
 
-# Эндпоинт для принудительной генерации визуализации для тестирования
 @app.route('/api/force_visualization', methods=['POST'])
 def force_visualization():
     """Принудительная генерация визуализации для тестирования"""
@@ -2431,7 +2549,6 @@ def force_visualization():
         
         debug_log(f"Принудительная генерация визуализации для комнаты {room_id}")
         
-        # Добавляем в очередь
         add_visualization_to_queue(room_id, topic, context)
         
         return jsonify({
@@ -2444,18 +2561,12 @@ def force_visualization():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# Эндпоинт для проверки здоровья системы
 @app.route('/api/health')
 def health_check():
     """Проверка здоровья системы"""
     try:
-        # Проверяем доступность локальной модели
         local_status = llm_manager.local_llm.get_status()
-        
-        # Проверяем доступность OpenRouter
         openrouter_available = bool(get_api_key('openrouter'))
-        
-        # Проверяем доступность уроков
         lessons_available = any(LESSONS_DIR.iterdir())
         
         return jsonify({
@@ -2476,7 +2587,6 @@ def health_check():
             "timestamp": datetime.now().isoformat()
         }), 500
 
-# ДИАГНОСТИКА OPENROUTER
 @app.route('/api/llm/debug_openrouter')
 def debug_openrouter():
     """Диагностика проблем с OpenRouter"""
@@ -2484,7 +2594,6 @@ def debug_openrouter():
         from llm import LLMIntegration
         llm = LLMIntegration()
         
-        # Проверяем базовые настройки
         config = load_config()
         openrouter_config = config.get('openrouter', {})
         api_key = openrouter_config.get('api_key', '')
@@ -2506,7 +2615,6 @@ def debug_openrouter():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# НОВЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ КЛЮЧАМИ
 @app.route('/api/keys/status', methods=['GET'])
 def get_keys_status():
     """Получение статуса API ключей"""
@@ -2542,7 +2650,6 @@ def add_api_key_route():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# API для работы с данными учеников
 @app.route('/api/student/save', methods=['POST'])
 def save_student():
     """Сохранение данных ученика с автоматическим созданием комнат"""
@@ -2557,29 +2664,24 @@ def save_student():
             'last_login': datetime.now().isoformat()
         }
         
-        # Ищем существующего ученика по имени
         existing_student = find_student_by_name(student_data['name'])
         
         if existing_student:
-            # Обновляем существующего ученика
             student_id = existing_student['student_id']
             student_data['student_id'] = student_id
             student_data['rooms'] = existing_student.get('rooms', [])
-            student_data['conference_id'] = existing_student.get('conference_id')  # ✅ Сохраняем ID
+            student_data['conference_id'] = existing_student.get('conference_id')
             update_student_data(student_id, {
                 'education_level': student_data['education_level'],
                 'age': student_data['age'],
                 'last_login': student_data['last_login']
             })
         else:
-            # Создаем нового ученика
             student_id = save_student_data(student_data)
             student_data['student_id'] = student_id
             
-            # АВТОМАТИЧЕСКИ СОЗДАЕМ КОМНАТЫ ДЛЯ НОВОГО УЧЕНИКА С StudentDialogueManager
             create_student_rooms(student_data)
             
-            # ✅ Загружаем обновленные данные чтобы получить conference_id
             updated_data = load_student_data(student_id)
             if updated_data and 'conference_id' in updated_data:
                 student_data['conference_id'] = updated_data['conference_id']
@@ -2592,7 +2694,6 @@ def save_student():
                 "rooms_created": not existing_student
             }
             
-            # ✅ ДОБАВЛЯЕМ: Возвращаем conference_id в ответе
             if 'conference_id' in student_data:
                 response_data['conference_id'] = student_data['conference_id']
             
@@ -2733,13 +2834,11 @@ def create_all_student_rooms():
         created_count = 0
         error_count = 0
         
-        # Ищем все файлы учеников
         for student_file in STUDENTS_DIR.glob("*.json"):
             try:
                 with open(student_file, 'r', encoding='utf-8') as f:
                     student_data = json.load(f)
                 
-                # Создаем комнаты если их еще нет
                 if 'rooms' not in student_data or not student_data['rooms']:
                     if create_student_rooms(student_data):
                         created_count += 1
@@ -2772,12 +2871,10 @@ def update_student_conference_ids():
                 with open(student_file, 'r', encoding='utf-8') as f:
                     student_data = json.load(f)
                 
-                # Если нет conference_id, создаем его
                 if 'conference_id' not in student_data:
                     conference_id = str(int(time.time() * 1000) + random.randint(1000, 9999))
                     student_data['conference_id'] = conference_id
                     
-                    # Пересоздаем комнаты с новым ID
                     create_student_rooms(student_data)
                     
                     updated_count += 1
@@ -2795,7 +2892,6 @@ def update_student_conference_ids():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# Новые эндпоинты для управления комнатами
 @app.route('/api/room/initialize', methods=['POST'])
 def force_room_initialization():
     """Принудительная инициализация комнаты"""
@@ -2859,7 +2955,6 @@ def room_health(room_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# Отладочные маршруты
 @app.route('/debug/routes')
 def debug_routes():
     """Отладочная информация о маршрутах"""
@@ -2920,23 +3015,24 @@ def test_student_flow():
     </html>
     """
 
+# =============================================================================
+# ЗАПУСК СЕРВЕРА
+# =============================================================================
+
 if __name__ == '__main__':
-    debug_log("Запуск ИСПРАВЛЕННОЙ AI Teacher системы...")
+    debug_log("Запуск ИСПРАВЛЕННОЙ AI Teacher системы с аутентификацией...")
     
-    # Настраиваем менеджер LLM
     setup_llm_manager()
     
     debug_log("Проверка конфигурации SocketIO...")
     debug_log(f"Async mode: {socketio.async_mode}")
     debug_log(f"Server: {socketio.server}")
     
-    # Предварительная инициализация
     debug_log("Предварительная инициализация системных комнат...")
     system_rooms = ['default']
     for room in system_rooms:
         _fast_room_initialization(room)
     
-    # Запускаем сервер
     socketio.run(
         app, 
         host='0.0.0.0', 
