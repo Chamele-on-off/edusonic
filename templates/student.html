@@ -519,148 +519,10 @@
 </head>
 <body>
     <div class="auth-container">
-        <!-- Форма входа -->
-        <div id="loginForm" class="fade-in">
-            <div class="logo">
-                <h1><i class="fas fa-robot"></i> EduSonic AI</h1>
-                <p>Личный кабинет ученика</p>
-            </div>
-            
-            <div class="info-message">
-                <i class="fas fa-info-circle"></i> Введите ваши данные для начала обучения
-            </div>
-            
-            <form id="studentLoginForm">
-                <div class="form-group">
-                    <label for="studentName">
-                        <i class="fas fa-user"></i> Имя ученика
-                    </label>
-                    <input type="text" id="studentName" required placeholder="Введите ваше имя" autocomplete="name">
-                </div>
-                
-                <div class="form-group">
-                    <label for="educationLevel">
-                        <i class="fas fa-graduation-cap"></i> Уровень образования
-                    </label>
-                    <select id="educationLevel" required>
-                        <option value="">Выберите класс</option>
-                        <option value="1">1 класс</option>
-                        <option value="2">2 класс</option>
-                        <option value="3">3 класс</option>
-                        <option value="4">4 класс</option>
-                        <option value="5">5 класс</option>
-                        <option value="6">6 класс</option>
-                        <option value="7">7 класс</option>
-                        <option value="8">8 класс</option>
-                        <option value="9">9 класс</option>
-                        <option value="10">10 класс</option>
-                        <option value="11">11 класс</option>
-                        <option value="student">Студент</option>
-                        <option value="adult">Взрослый</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="studentAge">
-                        <i class="fas fa-birthday-cake"></i> Возраст
-                    </label>
-                    <select id="studentAge" required>
-                        <option value="">Выберите возраст</option>
-                        <!-- Возраст от 4 до 80 лет -->
-                        <option value="4">4 года</option>
-                        <option value="5">5 лет</option>
-                        <option value="6">6 лет</option>
-                        <option value="7">7 лет</option>
-                        <option value="8">8 лет</option>
-                        <option value="9">9 лет</option>
-                        <option value="10">10 лет</option>
-                        <option value="11">11 лет</option>
-                        <option value="12">12 лет</option>
-                        <option value="13">13 лет</option>
-                        <option value="14">14 лет</option>
-                        <option value="15">15 лет</option>
-                        <option value="16">16 лет</option>
-                        <option value="17">17 лет</option>
-                        <option value="18">18 лет</option>
-                        <option value="19">19 лет</option>
-                        <option value="20">20 лет</option>
-                        <option value="21">21 год</option>
-                        <option value="22">22 года</option>
-                        <option value="23">23 года</option>
-                        <option value="24">24 года</option>
-                        <option value="25">25 лет</option>
-                        <option value="26">26 лет</option>
-                        <option value="27">27 лет</option>
-                        <option value="28">28 лет</option>
-                        <option value="29">29 лет</option>
-                        <option value="30">30 лет</option>
-                        <option value="31">31 год</option>
-                        <option value="32">32 года</option>
-                        <option value="33">33 года</option>
-                        <option value="34">34 года</option>
-                        <option value="35">35 лет</option>
-                        <option value="36">36 лет</option>
-                        <option value="37">37 лет</option>
-                        <option value="38">38 лет</option>
-                        <option value="39">39 лет</option>
-                        <option value="40">40 лет</option>
-                        <option value="41">41 год</option>
-                        <option value="42">42 года</option>
-                        <option value="43">43 года</option>
-                        <option value="44">44 года</option>
-                        <option value="45">45 лет</option>
-                        <option value="46">46 лет</option>
-                        <option value="47">47 лет</option>
-                        <option value="48">48 лет</option>
-                        <option value="49">49 лет</option>
-                        <option value="50">50 лет</option>
-                        <option value="51">51 год</option>
-                        <option value="52">52 года</option>
-                        <option value="53">53 года</option>
-                        <option value="54">54 года</option>
-                        <option value="55">55 лет</option>
-                        <option value="56">56 лет</option>
-                        <option value="57">57 лет</option>
-                        <option value="58">58 лет</option>
-                        <option value="59">59 лет</option>
-                        <option value="60">60 лет</option>
-                        <option value="61">61 год</option>
-                        <option value="62">62 года</option>
-                        <option value="63">63 года</option>
-                        <option value="64">64 года</option>
-                        <option value="65">65 лет</option>
-                        <option value="66">66 лет</option>
-                        <option value="67">67 лет</option>
-                        <option value="68">68 лет</option>
-                        <option value="69">69 лет</option>
-                        <option value="70">70 лет</option>
-                        <option value="71">71 год</option>
-                        <option value="72">72 года</option>
-                        <option value="73">73 года</option>
-                        <option value="74">74 года</option>
-                        <option value="75">75 лет</option>
-                        <option value="76">76 лет</option>
-                        <option value="77">77 лет</option>
-                        <option value="78">78 лет</option>
-                        <option value="79">79 лет</option>
-                        <option value="80">80 лет</option>
-                    </select>
-                </div>
-                
-                <button type="submit" class="btn" id="loginButton">
-                    <i class="fas fa-sign-in-alt"></i> Войти в кабинет
-                </button>
-            </form>
-            
-            <div class="register-link">
-                <p>Не зарегистрированы? <a href="https://zindaki-edu.ru" target="_blank">Зарегистрируйтесь, связавшись с нами через контактные данные на сайте zindaki-edu.ru</a></p>
-            </div>
-        </div>
-        
         <!-- Выбор предмета (показывается после входа) -->
-        <div id="subjectSelection" class="hidden fade-in">
-            <button class="back-button" onclick="showLoginForm()">
-                <i class="fas fa-arrow-left"></i> Назад к данным
+        <div id="subjectSelection" class="fade-in">
+            <button class="back-button" onclick="redirectToProfile()">
+                <i class="fas fa-arrow-left"></i> Редактировать профиль
             </button>
             
             <div class="logo">
@@ -677,132 +539,12 @@
                         <p><strong>Класс:</strong> <span id="infoLevel"></span></p>
                         <p><strong>Возраст:</strong> <span id="infoAge"></span> лет</p>
                     </div>
-                    <button class="edit-info-btn" onclick="showEditForm()">
+                    <button class="edit-info-btn" onclick="redirectToProfile()">
                         <i class="fas fa-edit"></i> Изменить
                     </button>
                 </div>
             </div>
             
-            <!-- Форма редактирования (скрыта по умолчанию) -->
-            <div id="editForm" class="edit-form hidden">
-                <h3><i class="fas fa-edit"></i> Редактировать данные</h3>
-                <div class="form-group">
-                    <label for="editStudentName">Имя ученика</label>
-                    <input type="text" id="editStudentName" placeholder="Введите ваше имя">
-                </div>
-                <div class="form-group">
-                    <label for="editEducationLevel">Уровень образования</label>
-                    <select id="editEducationLevel">
-                        <option value="">Выберите класс</option>
-                        <option value="1">1 класс</option>
-                        <option value="2">2 класс</option>
-                        <option value="3">3 класс</option>
-                        <option value="4">4 класс</option>
-                        <option value="5">5 класс</option>
-                        <option value="6">6 класс</option>
-                        <option value="7">7 класс</option>
-                        <option value="8">8 класс</option>
-                        <option value="9">9 класс</option>
-                        <option value="10">10 класс</option>
-                        <option value="11">11 класс</option>
-                        <option value="student">Студент</option>
-                        <option value="adult">Взрослый</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="editStudentAge">Возраст</label>
-                    <select id="editStudentAge">
-                        <option value="">Выберите возраст</option>
-                        <!-- Возраст от 4 до 80 лет -->
-                        <option value="4">4 года</option>
-                        <option value="5">5 лет</option>
-                        <option value="6">6 лет</option>
-                        <option value="7">7 лет</option>
-                        <option value="8">8 лет</option>
-                        <option value="9">9 лет</option>
-                        <option value="10">10 лет</option>
-                        <option value="11">11 лет</option>
-                        <option value="12">12 лет</option>
-                        <option value="13">13 лет</option>
-                        <option value="14">14 лет</option>
-                        <option value="15">15 лет</option>
-                        <option value="16">16 лет</option>
-                        <option value="17">17 лет</option>
-                        <option value="18">18 лет</option>
-                        <option value="19">19 лет</option>
-                        <option value="20">20 лет</option>
-                        <option value="21">21 год</option>
-                        <option value="22">22 года</option>
-                        <option value="23">23 года</option>
-                        <option value="24">24 года</option>
-                        <option value="25">25 лет</option>
-                        <option value="26">26 лет</option>
-                        <option value="27">27 лет</option>
-                        <option value="28">28 лет</option>
-                        <option value="29">29 лет</option>
-                        <option value="30">30 лет</option>
-                        <option value="31">31 год</option>
-                        <option value="32">32 года</option>
-                        <option value="33">33 года</option>
-                        <option value="34">34 года</option>
-                        <option value="35">35 лет</option>
-                        <option value="36">36 лет</option>
-                        <option value="37">37 лет</option>
-                        <option value="38">38 лет</option>
-                        <option value="39">39 лет</option>
-                        <option value="40">40 лет</option>
-                        <option value="41">41 год</option>
-                        <option value="42">42 года</option>
-                        <option value="43">43 года</option>
-                        <option value="44">44 года</option>
-                        <option value="45">45 лет</option>
-                        <option value="46">46 лет</option>
-                        <option value="47">47 лет</option>
-                        <option value="48">48 лет</option>
-                        <option value="49">49 лет</option>
-                        <option value="50">50 лет</option>
-                        <option value="51">51 год</option>
-                        <option value="52">52 года</option>
-                        <option value="53">53 года</option>
-                        <option value="54">54 года</option>
-                        <option value="55">55 лет</option>
-                        <option value="56">56 лет</option>
-                        <option value="57">57 лет</option>
-                        <option value="58">58 лет</option>
-                        <option value="59">59 лет</option>
-                        <option value="60">60 лет</option>
-                        <option value="61">61 год</option>
-                        <option value="62">62 года</option>
-                        <option value="63">63 года</option>
-                        <option value="64">64 года</option>
-                        <option value="65">65 лет</option>
-                        <option value="66">66 лет</option>
-                        <option value="67">67 лет</option>
-                        <option value="68">68 лет</option>
-                        <option value="69">69 лет</option>
-                        <option value="70">70 лет</option>
-                        <option value="71">71 год</option>
-                        <option value="72">72 года</option>
-                        <option value="73">73 года</option>
-                        <option value="74">74 года</option>
-                        <option value="75">75 лет</option>
-                        <option value="76">76 лет</option>
-                        <option value="77">77 лет</option>
-                        <option value="78">78 лет</option>
-                        <option value="79">79 лет</option>
-                        <option value="80">80 лет</option>
-                    </select>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="hideEditForm()">
-                        <i class="fas fa-times"></i> Отмена
-                    </button>
-                    <button type="button" class="btn" onclick="saveStudentInfo()">
-                        <i class="fas fa-save"></i> Сохранить
-                    </button>
-                </div>
-            </div>
-
             <!-- Управление аватаром -->
             <div class="avatar-controls">
                 <h3><i class="fas fa-user-circle"></i> Выбор аватара учителя</h3>
@@ -829,8 +571,8 @@
                 <!-- Предметы будут загружены через JavaScript -->
             </div>
             
-            <button class="btn btn-secondary" onclick="showLoginForm()" style="margin-top: 1rem;">
-                <i class="fas fa-user-edit"></i> Изменить данные
+            <button class="btn btn-secondary" onclick="redirectToProfile()" style="margin-top: 1rem;">
+                <i class="fas fa-user-edit"></i> Изменить данные профиля
             </button>
 
             <!-- Кнопка выхода -->
@@ -915,11 +657,18 @@
 
         // Функция выхода из системы
         function logout() {
-            // Очищаем локальное хранилище
-            localStorage.removeItem('studentData');
-            
-            // Перенаправляем на страницу входа
-            window.location.href = '/logout';
+            fetch('/logout', {
+                method: 'POST'
+            }).then(() => {
+                window.location.href = '/login';
+            }).catch(() => {
+                window.location.href = '/login';
+            });
+        }
+
+        // Перенаправление на страницу профиля
+        function redirectToProfile() {
+            window.location.href = '/student_profile';
         }
 
         // Проверка авторизации при загрузке
@@ -929,16 +678,13 @@
                 const data = await response.json();
                 
                 if (data.success && data.role === 'student') {
-                    // Пользователь авторизован, загружаем данные
                     await loadStudentDataFromServer();
                 } else {
-                    // Пользователь не авторизован, показываем форму входа
-                    showLoginForm();
+                    window.location.href = '/login';
                 }
             } catch (error) {
                 console.error('Auth check failed:', error);
-                // При ошибке проверки показываем форму входа
-                showLoginForm();
+                window.location.href = '/login';
             }
         }
 
@@ -959,11 +705,12 @@
                     // Показываем выбор предмета
                     showSubjectSelection(currentStudentData);
                 } else {
-                    showLoginForm();
+                    // Если профиль не заполнен, перенаправляем на страницу профиля
+                    window.location.href = '/student_profile';
                 }
             } catch (error) {
                 console.error('Error loading student data:', error);
-                showLoginForm();
+                window.location.href = '/student_profile';
             }
         }
 
@@ -1012,7 +759,6 @@
         function updateAvatarPreview(avatarName) {
             const preview = document.getElementById('avatarPreview');
             if (avatarName) {
-                // Загружаем первое изображение аватара для превью
                 fetch(`/api/frames/${avatarName}`)
                     .then(response => response.json())
                     .then(data => {
@@ -1030,7 +776,7 @@
             }
         }
 
-        // Установка аватара для всех комнат (механика как в teacher.html)
+        // Установка аватара для всех комнат
         async function setAvatarForAllRooms() {
             const avatarSelect = document.getElementById('avatarSelect');
             const selectedAvatar = avatarSelect.value;
@@ -1047,11 +793,9 @@
             
             console.log(`🎯 Setting avatar "${selectedAvatar}" for all student rooms`);
             
-            // Показываем статус
             showAvatarStatus(`Устанавливаем аватар "${selectedAvatar}" для всех комнат...`, true);
             
             try {
-                // Загружаем кадры аватара (как в teacher.html)
                 const framesResponse = await fetch(`/api/frames/${selectedAvatar}`);
                 const framesData = await framesResponse.json();
                 
@@ -1062,7 +806,6 @@
                 const frames = framesData.frames;
                 console.log(`Found ${frames.length} frames for avatar ${selectedAvatar}`);
                 
-                // Загружаем информацию о комнатах ученика
                 await loadStudentRooms();
                 
                 if (studentRooms.length === 0) {
@@ -1070,18 +813,15 @@
                     return;
                 }
                 
-                // Устанавливаем аватар для каждой комнаты (механика как в teacher.html)
                 let successCount = 0;
                 
                 for (const room of studentRooms) {
                     try {
-                        // Отправляем команду смены аватара (как в teacher.html)
                         socket.emit('avatar_changed', {
                             room_id: room.room_name,
                             avatar_name: selectedAvatar
                         });
                         
-                        // Также отправляем команду запуска анимации (как в teacher.html)
                         socket.emit('client_start_animation', {
                             room_id: room.room_name,
                             avatar_name: selectedAvatar
@@ -1090,7 +830,6 @@
                         console.log(`✅ Avatar set for room: ${room.room_name}`);
                         successCount++;
                         
-                        // Небольшая задержка между запросами
                         await new Promise(resolve => setTimeout(resolve, 100));
                         
                     } catch (error) {
@@ -1098,7 +837,6 @@
                     }
                 }
                 
-                // Сохраняем выбор аватара на сервере
                 try {
                     const response = await fetch('/api/student/set-avatar', {
                         method: 'POST',
@@ -1119,7 +857,6 @@
                     console.error('Error saving avatar preference:', error);
                 }
                 
-                // Показываем итоговый статус
                 showAvatarStatus(`✅ Аватар "${selectedAvatar}" успешно установлен для всех ${successCount} комнат!`, true);
                 
             } catch (error) {
@@ -1137,116 +874,6 @@
             setTimeout(() => {
                 statusDiv.style.display = 'none';
             }, 5000);
-        }
-
-        // Обработка формы входа
-        document.getElementById('studentLoginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const studentName = document.getElementById('studentName').value.trim();
-            const educationLevel = document.getElementById('educationLevel').value;
-            const studentAge = document.getElementById('studentAge').value;
-            
-            // Валидация данных
-            if (!studentName) {
-                showError('Пожалуйста, введите ваше имя');
-                return;
-            }
-            
-            if (!educationLevel) {
-                showError('Пожалуйста, выберите ваш класс');
-                return;
-            }
-            
-            if (!studentAge) {
-                showError('Пожалуйста, выберите ваш возраст');
-                return;
-            }
-            
-            // Сохраняем данные ученика через API
-            try {
-                const response = await fetch('/api/student/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        name: studentName,
-                        level: educationLevel,
-                        age: studentAge
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentStudentData = {
-                        name: studentName,
-                        education_level: educationLevel,
-                        age: studentAge,
-                        student_id: result.student_id,
-                        loginTime: new Date().toISOString()
-                    };
-                    
-                    // ✅ Сохраняем conference_id если он есть в ответе
-                    if (result.conference_id) {
-                        currentStudentData.conference_id = result.conference_id;
-                    }
-                    
-                    // Сохраняем в localStorage для быстрого доступа
-                    localStorage.setItem('studentData', JSON.stringify(currentStudentData));
-                    
-                    // Загружаем аватары
-                    await loadAvatars();
-                    
-                    // Создаем комнаты для всех предметов
-                    await createStudentRooms();
-                    
-                    // Загружаем информацию о комнатах
-                    await loadStudentRooms();
-                    
-                    // Автоматически устанавливаем аватар по умолчанию
-                    await setDefaultAvatar();
-                    
-                    showSubjectSelection(currentStudentData);
-                } else {
-                    showError('Ошибка сохранения данных: ' + (result.error || 'Неизвестная ошибка'));
-                }
-            } catch (error) {
-                console.error('Error saving student data:', error);
-                // Fallback: сохраняем только в localStorage
-                currentStudentData = {
-                    name: studentName,
-                    level: educationLevel,
-                    age: studentAge,
-                    loginTime: new Date().toISOString()
-                };
-                localStorage.setItem('studentData', JSON.stringify(currentStudentData));
-                
-                // Загружаем аватары и показываем выбор предмета
-                await loadAvatars();
-                await createStudentRooms();
-                await loadStudentRooms();
-                await setDefaultAvatar();
-                showSubjectSelection(currentStudentData);
-            }
-        });
-        
-        // Автоматическая установка аватара по умолчанию
-        async function setDefaultAvatar() {
-            if (!selectedAvatar && availableAvatars.length > 0) {
-                const womanAvatar = availableAvatars.find(avatar => avatar.toLowerCase().includes('woman'));
-                if (womanAvatar) {
-                    selectedAvatar = womanAvatar;
-                    document.getElementById('avatarSelect').value = womanAvatar;
-                    updateAvatarPreview(womanAvatar);
-                    
-                    // Устанавливаем аватар для всех комнат
-                    if (studentRooms.length > 0) {
-                        await setAvatarForAllRooms();
-                    }
-                }
-            }
         }
         
         // Создание комнат для всех предметов
@@ -1303,51 +930,7 @@
             return subject ? subject.name : subjectId;
         }
         
-        function showError(message) {
-            // Создаем или обновляем сообщение об ошибке
-            let errorDiv = document.getElementById('errorMessage');
-            if (!errorDiv) {
-                errorDiv = document.createElement('div');
-                errorDiv.id = 'errorMessage';
-                errorDiv.className = 'error-message';
-                const form = document.getElementById('studentLoginForm');
-                form.parentNode.insertBefore(errorDiv, form);
-            }
-            
-            errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
-            
-            // Автоматически скрываем ошибку через 5 секунд
-            setTimeout(() => {
-                if (errorDiv.parentNode) {
-                    errorDiv.parentNode.removeChild(errorDiv);
-                }
-            }, 5000);
-        }
-        
-        function showSuccessMessage(message) {
-            const successDiv = document.createElement('div');
-            successDiv.className = 'info-message';
-            successDiv.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
-            
-            const subjectSelection = document.getElementById('subjectSelection');
-            subjectSelection.insertBefore(successDiv, subjectSelection.firstChild);
-            
-            setTimeout(() => {
-                if (successDiv.parentNode) {
-                    successDiv.parentNode.removeChild(successDiv);
-                }
-            }, 5000);
-        }
-        
-        function loadStudentData() {
-            const saved = localStorage.getItem('studentData');
-            return saved ? JSON.parse(saved) : null;
-        }
-        
         function showSubjectSelection(studentData) {
-            document.getElementById('loginForm').classList.add('hidden');
-            document.getElementById('subjectSelection').classList.remove('hidden');
-            
             // Заполняем информацию об ученике
             updateStudentInfoDisplay(studentData);
             loadAvailableSubjects();
@@ -1358,11 +941,6 @@
             document.getElementById('infoName').textContent = studentData.name;
             document.getElementById('infoLevel').textContent = getLevelText(studentData.education_level || studentData.level);
             document.getElementById('infoAge').textContent = studentData.age;
-            
-            // Заполняем форму редактирования
-            document.getElementById('editStudentName').value = studentData.name;
-            document.getElementById('editEducationLevel').value = studentData.education_level || studentData.level;
-            document.getElementById('editStudentAge').value = studentData.age;
         }
         
         function getLevelText(level) {
@@ -1382,86 +960,6 @@
                 'adult': 'Взрослый'
             };
             return levels[level] || level;
-        }
-        
-        function showLoginForm() {
-            document.getElementById('subjectSelection').classList.add('hidden');
-            document.getElementById('loginForm').classList.remove('hidden');
-            document.getElementById('editForm').classList.add('hidden');
-            
-            // Удаляем сообщение об ошибке если есть
-            const errorDiv = document.getElementById('errorMessage');
-            if (errorDiv) {
-                errorDiv.parentNode.removeChild(errorDiv);
-            }
-        }
-        
-        function showEditForm() {
-            document.getElementById('editForm').classList.remove('hidden');
-        }
-        
-        function hideEditForm() {
-            document.getElementById('editForm').classList.add('hidden');
-        }
-        
-        async function saveStudentInfo() {
-            const newName = document.getElementById('editStudentName').value.trim();
-            const newLevel = document.getElementById('editEducationLevel').value;
-            const newAge = document.getElementById('editStudentAge').value;
-            
-            // Валидация
-            if (!newName) {
-                showError('Пожалуйста, введите имя');
-                return;
-            }
-            
-            if (!newLevel) {
-                showError('Пожалуйста, выберите класс');
-                return;
-            }
-            
-            if (!newAge) {
-                showError('Пожалуйста, выберите возраст');
-                return;
-            }
-            
-            // Обновляем данные через API
-            if (currentStudentData && currentStudentData.student_id) {
-                try {
-                    const response = await fetch(`/api/student/${currentStudentData.student_id}/update`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            name: newName,
-                            education_level: newLevel,
-                            age: newAge
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (!result.success) {
-                        console.error('Error updating student data:', result.error);
-                    }
-                } catch (error) {
-                    console.error('Error updating student data:', error);
-                }
-            }
-            
-            // Обновляем локальные данные
-            currentStudentData = {
-                ...currentStudentData,
-                name: newName,
-                level: newLevel,
-                age: newAge
-            };
-            
-            localStorage.setItem('studentData', JSON.stringify(currentStudentData));
-            updateStudentInfoDisplay(currentStudentData);
-            hideEditForm();
-            showSuccessMessage('Данные успешно обновлены!');
         }
         
         function loadAvailableSubjects() {
@@ -1501,76 +999,11 @@
             // Сначала проверяем авторизацию через сессию
             checkAuth();
             
-            // Также сохраняем fallback на localStorage для обратной совместимости
-            const savedData = loadStudentData();
-            if (savedData && !currentStudentData) {
-                try {
-                    // Проверяем, не прошло ли слишком много времени с последнего входа
-                    const loginTime = new Date(savedData.loginTime);
-                    const currentTime = new Date();
-                    const hoursDiff = (currentTime - loginTime) / (1000 * 60 * 60);
-                    
-                    // Если прошло меньше 24 часов, автоматически показываем выбор предмета
-                    if (hoursDiff < 24) {
-                        currentStudentData = savedData;
-                        
-                        // Заполняем форму сохраненными данными
-                        document.getElementById('studentName').value = savedData.name;
-                        document.getElementById('educationLevel').value = savedData.level;
-                        document.getElementById('studentAge').value = savedData.age;
-                        
-                        // Загружаем аватары и информацию о комнатах
-                        loadAvatars().then(() => {
-                            loadStudentRooms().then(() => {
-                                showSubjectSelection(savedData);
-                            });
-                        });
-                    } else {
-                        // Удаляем устаревшие данные
-                        localStorage.removeItem('studentData');
-                    }
-                } catch (e) {
-                    console.error('Ошибка при загрузке сохраненных данных:', e);
-                    localStorage.removeItem('studentData');
-                }
-            }
-            
-            // Добавляем обработчики для улучшения UX
-            enhanceFormUX();
-        });
-        
-        function enhanceFormUX() {
-            // Автофокус на поле имени
-            document.getElementById('studentName').focus();
-            
-            // Обработка нажатия Enter в форме
-            document.getElementById('studentLoginForm').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    document.getElementById('loginButton').click();
-                }
-            });
-            
-            // Валидация в реальном времени
-            document.getElementById('studentName').addEventListener('input', function() {
-                this.value = this.value.replace(/[^a-zA-Zа-яА-ЯёЁ\s]/g, '');
-            });
-            
-            // То же самое для формы редактирования
-            document.getElementById('editStudentName').addEventListener('input', function() {
-                this.value = this.value.replace(/[^a-zA-Zа-яА-ЯёЁ\s]/g, '');
-            });
-            
             // Обработчик изменения выбора аватара
             document.getElementById('avatarSelect').addEventListener('change', function() {
                 selectedAvatar = this.value;
                 updateAvatarPreview(this.value);
             });
-        }
-        
-        // Обработка перед закрытием страницы
-        window.addEventListener('beforeunload', function() {
-            // Можно добавить сохранение состояния или предупреждение
         });
     </script>
 </body>
