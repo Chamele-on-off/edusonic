@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель управления AI-учителем</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -12,7 +13,7 @@
             background-color: #f5f5f5;
         }
         #container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             padding: 20px;
@@ -646,6 +647,92 @@
             margin-bottom: 1rem;
             opacity: 0.5;
         }
+
+        /* Стили для управления пользователями */
+        .users-management {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #eee;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .user-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .user-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .user-info {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .user-details {
+            font-size: 0.9rem;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .user-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .user-btn.delete {
+            background: #dc3545;
+            color: white;
+        }
+
+        .user-btn.delete:hover {
+            background: #c82333;
+        }
+
+        .create-user-form {
+            background: white;
+            padding: 20px;
+            border-radius: 6px;
+            border: 2px dashed #ddd;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .create-user-form.dragover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
         
         @media (max-width: 768px) {
             #avatar {
@@ -716,6 +803,17 @@
                 align-self: stretch;
                 justify-content: flex-end;
             }
+
+            .user-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .user-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
         }
         
         @media (max-width: 480px) {
@@ -756,17 +854,59 @@
                 align-self: stretch;
                 justify-content: flex-end;
             }
+
+            .user-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
         }
     </style>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div id="container">
-        <h1 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">Панель управления AI-учителем</h1>
+        <h1 style="text-align: center; color: #2c3e50; margin-bottom: 20px;">
+            <i class="fas fa-chalkboard-teacher"></i> Панель управления AI-учителем
+        </h1>
+
+        <!-- Секция управления пользователями -->
+        <div class="management-panel">
+            <h2><i class="fas fa-users"></i> Управление пользователями</h2>
+            
+            <div class="users-management">
+                <h3>➕ Создать нового пользователя</h3>
+                <div class="create-user-form">
+                    <div style="display: grid; gap: 15px; max-width: 500px; margin: 0 auto;">
+                        <input type="text" id="new-username" placeholder="Логин пользователя" class="api-key-input">
+                        <input type="password" id="new-password" placeholder="Пароль" class="api-key-input">
+                        <select id="new-user-role" class="subject-select">
+                            <option value="student">Ученик</option>
+                            <option value="teacher">Учитель</option>
+                        </select>
+                        <button id="create-user-btn" class="btn" style="background: #27ae60;">
+                            <i class="fas fa-user-plus"></i> Создать пользователя
+                        </button>
+                    </div>
+                    <div id="create-user-status" class="success-message"></div>
+                </div>
+                
+                <h3>📋 Список всех пользователей</h3>
+                <div id="users-list">
+                    <div class="user-item">
+                        <div class="user-info">
+                            <div class="user-name">Загрузка пользователей...</div>
+                        </div>
+                    </div>
+                </div>
+                <button id="refresh-users-btn" style="margin-top: 10px;">
+                    <i class="fas fa-sync-alt"></i> Обновить список
+                </button>
+            </div>
+        </div>
         
         <!-- Новая секция для управления API ключами -->
         <div class="management-panel">
-            <h2>Управление API ключами OpenRouter</h2>
+            <h2><i class="fas fa-key"></i> Управление API ключами OpenRouter</h2>
             
             <div class="keys-management">
                 <h3>📊 Статус ключей</h3>
@@ -774,7 +914,9 @@
                     <div id="keys-stats-info">
                         <p>Загрузка статистики ключей...</p>
                     </div>
-                    <button id="refresh-keys-stats-btn" style="margin-top: 10px;">🔄 Обновить статистику</button>
+                    <button id="refresh-keys-stats-btn" style="margin-top: 10px;">
+                        <i class="fas fa-sync-alt"></i> Обновить статистику
+                    </button>
                 </div>
                 
                 <h3>🔑 Добавить новый ключ</h3>
@@ -783,8 +925,12 @@
                         <input type="text" id="new-key-name" placeholder="Название ключа (например: основной, резервный)" class="api-key-input">
                         <input type="password" id="new-key-value" placeholder="API ключ OpenRouter" class="api-key-input">
                         <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                            <button id="add-key-btn">➕ Добавить ключ</button>
-                            <button id="test-new-key-btn">🧪 Проверить ключ</button>
+                            <button id="add-key-btn" class="btn">
+                                <i class="fas fa-plus"></i> Добавить ключ
+                            </button>
+                            <button id="test-new-key-btn" class="btn" style="background: #17a2b8;">
+                                <i class="fas fa-vial"></i> Проверить ключ
+                            </button>
                         </div>
                     </div>
                     <div id="new-key-status" class="api-status"></div>
@@ -803,7 +949,7 @@
 
         <!-- Секция управления режимом LLM -->
         <div class="management-panel">
-            <h2>Режим работы AI-учителя</h2>
+            <h2><i class="fas fa-robot"></i> Режим работы AI-учителя</h2>
             
             <div class="llm-mode-panel">
                 <div class="form-group">
@@ -814,7 +960,9 @@
                     </select>
                 </div>
                 
-                <button id="set-llm-mode-btn" style="margin-top: 10px;">Применить режим</button>
+                <button id="set-llm-mode-btn" class="btn" style="margin-top: 10px;">
+                    <i class="fas fa-check"></i> Применить режим
+                </button>
                 
                 <div id="llm-mode-status" class="success-message"></div>
                 
@@ -842,7 +990,7 @@
 
         <!-- Секция управления локальной моделью -->
         <div class="management-panel">
-            <h2>Управление локальной моделью</h2>
+            <h2><i class="fas fa-server"></i> Управление локальной моделью</h2>
             
             <div class="llm-mode-panel">
                 <div class="form-group">
@@ -855,7 +1003,9 @@
                     </select>
                 </div>
                 
-                <button id="set-llm-priority-btn" style="margin-top: 10px;">Применить приоритет</button>
+                <button id="set-llm-priority-btn" class="btn" style="margin-top: 10px;">
+                    <i class="fas fa-check"></i> Применить приоритет
+                </button>
                 
                 <div id="llm-priority-status" class="success-message"></div>
                 
@@ -865,16 +1015,20 @@
                     <div id="llm-status-info">
                         <p>Загрузка статуса...</p>
                     </div>
-                    <button id="refresh-llm-status-btn" style="margin-top: 10px;">🔄 Обновить статус</button>
+                    <button id="refresh-llm-status-btn" class="btn" style="margin-top: 10px;">
+                        <i class="fas fa-sync-alt"></i> Обновить статус
+                    </button>
                 </div>
             </div>
         </div>
         
         <div id="room-controls">
-            <h3>Комната: <span id="room-id">default</span></h3>
+            <h3><i class="fas fa-door-open"></i> Комната: <span id="room-id">default</span></h3>
             <div class="controls">
                 <input type="text" id="room-input" placeholder="Имя комнаты">
-                <button id="change-room-btn">Сменить комнату</button>
+                <button id="change-room-btn" class="btn">
+                    <i class="fas fa-exchange-alt"></i> Сменить комнату
+                </button>
             </div>
         </div>
         
@@ -882,7 +1036,9 @@
             <select id="avatar-select">
                 <option value="">Выберите аватар</option>
             </select>
-            <button id="load-btn" disabled>Установить аватар</button>
+            <button id="load-btn" class="btn" disabled>
+                <i class="fas fa-download"></i> Установить аватар
+            </button>
         </div>
         
         <img id="avatar" src="" alt="Аватар">
@@ -893,13 +1049,13 @@
 
         <div id="conference-link">
             <a id="conference-link-a" href="/conference?room=default" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">
-                📹 Перейти в конференцию
+                <i class="fas fa-video"></i> Перейти в конференцию
             </a>
         </div>
         
         <!-- Панель управления базой знаний и уроками -->
         <div class="management-panel">
-            <h2>Управление базой знаний и уроками</h2>
+            <h2><i class="fas fa-graduation-cap"></i> Управление базой знаний и уроками</h2>
             
             <div class="tab-container">
                 <div class="tab active" data-tab="knowledge">База знаний</div>
@@ -927,7 +1083,9 @@
 термин - определение
 вопрос? - ответ
 каждая пара с новой строки"></textarea>
-                    <button id="add-knowledge-btn">Добавить в базу</button>
+                    <button id="add-knowledge-btn" class="btn">
+                        <i class="fas fa-plus"></i> Добавить в базу
+                    </button>
                     <div id="knowledge-status" class="success-message"></div>
                 </div>
             </div>
@@ -948,7 +1106,9 @@
                     </select>
                     <input type="text" id="lesson-title" placeholder="Название урока" style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ddd;">
                     <textarea id="lesson-content" placeholder="Содержание урока (разделяйте абзацы пустыми строками)"></textarea>
-                    <button id="add-lesson-btn">Добавить урок</button>
+                    <button id="add-lesson-btn" class="btn">
+                        <i class="fas fa-plus"></i> Добавить урок
+                    </button>
                     <div id="lesson-status" class="success-message"></div>
                 </div>
             </div>
@@ -961,7 +1121,9 @@
                     <div class="upload-form" id="upload-area">
                         <p>Перетащите JSON файл сюда или</p>
                         <input type="file" id="practice-file" accept=".json" style="display: none;">
-                        <button class="upload-btn" id="select-file-btn">Выбрать файл</button>
+                        <button class="upload-btn" id="select-file-btn">
+                            <i class="fas fa-file-upload"></i> Выбрать файл
+                        </button>
                         <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
                             Поддерживаются только JSON файлы с вопросами для практики
                         </p>
@@ -978,21 +1140,25 @@
                             </div>
                         </div>
                     </div>
-                    <button id="refresh-files-btn" style="margin-top: 10px;">🔄 Обновить список</button>
+                    <button id="refresh-files-btn" class="btn" style="margin-top: 10px;">
+                        <i class="fas fa-sync-alt"></i> Обновить список
+                    </button>
                 </div>
             </div>
 
             <!-- Новая вкладка для управления учениками -->
             <div class="tab-content" id="students-tab">
                 <div class="management-panel">
-                    <h3>👥 Управление учениками</h3>
+                    <h3><i class="fas fa-user-graduate"></i> Управление учениками</h3>
                     
                     <div class="students-stats">
                         <h4>📊 Статистика учеников</h4>
                         <div id="students-stats-info">
                             <p>Загрузка статистики...</p>
                         </div>
-                        <button id="refresh-students-stats-btn" style="margin-top: 10px;">🔄 Обновить статистику</button>
+                        <button id="refresh-students-stats-btn" class="btn" style="margin-top: 10px;">
+                            <i class="fas fa-sync-alt"></i> Обновить статистику
+                        </button>
                     </div>
 
                     <div class="students-list-section">
@@ -1004,7 +1170,9 @@
                                 </div>
                             </div>
                         </div>
-                        <button id="refresh-students-btn" style="margin-top: 10px;">🔄 Обновить список</button>
+                        <button id="refresh-students-btn" class="btn" style="margin-top: 10px;">
+                            <i class="fas fa-sync-alt"></i> Обновить список
+                        </button>
                     </div>
 
                     <div class="students-actions" style="margin-top: 30px; padding: 20px; background: #eef7ff; border-radius: 8px;">
@@ -1022,7 +1190,7 @@
             </div>
             
             <div class="tab-content" id="download-tab">
-                <h3>Скачать материалы</h3>
+                <h3><i class="fas fa-download"></i> Скачать материалы</h3>
                 
                 <div style="margin-bottom: 25px; padding: 15px; background: #f9f9f9; border-radius: 6px;">
                     <h4>📚 Базы знаний</h4>
@@ -1039,7 +1207,9 @@
                         <option value="общее">Общее</option>
                     </select>
                     <div class="download-buttons">
-                        <button class="download-btn" id="download-knowledge-btn">📥 Скачать базу знаний</button>
+                        <button class="download-btn" id="download-knowledge-btn">
+                            <i class="fas fa-download"></i> Скачать базу знаний
+                        </button>
                     </div>
                 </div>
                 
@@ -1047,7 +1217,9 @@
                     <h4>📖 Уроки</h4>
                     <p>Скачать все доступные уроки:</p>
                     <div class="download-buttons">
-                        <button class="download-btn" id="download-lessons-btn">📥 Скачать все уроки</button>
+                        <button class="download-btn" id="download-lessons-btn">
+                            <i class="fas fa-download"></i> Скачать все уроки
+                        </button>
                     </div>
                 </div>
                 
@@ -1055,7 +1227,9 @@
                     <h4>🎯 Практические задания (JSON)</h4>
                     <p>Скачать все практические задания в формате JSON:</p>
                     <div class="download-buttons">
-                        <button class="download-btn" id="download-practice-btn">📥 Скачать практику (JSON)</button>
+                        <button class="download-btn" id="download-practice-btn">
+                            <i class="fas fa-download"></i> Скачать практику (JSON)
+                        </button>
                     </div>
                 </div>
                 
@@ -1063,13 +1237,20 @@
                     <h4>📝 Практика (TXT формат)</h4>
                     <p>Скачать практические задания в формате TXT:</p>
                     <div class="download-buttons">
-                        <button class="download-btn" id="download-practice-txt-btn">📥 Скачать практику (TXT)</button>
+                        <button class="download-btn" id="download-practice-txt-btn">
+                            <i class="fas fa-download"></i> Скачать практику (TXT)
+                        </button>
                     </div>
                 </div>
                 
                 <div id="download-status" class="success-message"></div>
             </div>
         </div>
+    </div>
+
+    <!-- Модальное окно для деталей -->
+    <div id="student-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
+        <div id="student-modal-content" style="background: white; padding: 30px; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative;"></div>
     </div>
 
     <script>
@@ -1086,6 +1267,15 @@
         const roomInput = document.getElementById('room-input');
         const changeRoomBtn = document.getElementById('change-room-btn');
         const conferenceLink = document.getElementById('conference-link-a');
+        
+        // Элементы для управления пользователями
+        const newUsernameInput = document.getElementById('new-username');
+        const newPasswordInput = document.getElementById('new-password');
+        const newUserRoleSelect = document.getElementById('new-user-role');
+        const createUserBtn = document.getElementById('create-user-btn');
+        const createUserStatus = document.getElementById('create-user-status');
+        const usersList = document.getElementById('users-list');
+        const refreshUsersBtn = document.getElementById('refresh-users-btn');
         
         // Новые элементы для управления API ключами
         const keysStatsInfo = document.getElementById('keys-stats-info');
@@ -1142,6 +1332,121 @@
         // Состояние
         let currentAvatar = '';
         let currentRoom = 'default';
+        
+        // Функции для работы с пользователями
+        function loadUsersList() {
+            fetch('/api/users')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayUsersList(data.users);
+                    } else {
+                        usersList.innerHTML = '<div class="user-item"><div class="user-info"><div class="user-name">Ошибка загрузки пользователей</div></div></div>';
+                    }
+                })
+                .catch(error => {
+                    usersList.innerHTML = '<div class="user-item"><div class="user-info"><div class="user-name">Ошибка сети</div></div></div>';
+                });
+        }
+        
+        function displayUsersList(users) {
+            if (users.length === 0) {
+                usersList.innerHTML = '<div class="user-item"><div class="user-info"><div class="user-name">Пользователи не найдены</div></div></div>';
+                return;
+            }
+            
+            let html = '';
+            users.forEach(user => {
+                const created = user.created_at ? new Date(user.created_at).toLocaleDateString('ru-RU') : 'Неизвестно';
+                const lastLogin = user.last_login ? new Date(user.last_login).toLocaleDateString('ru-RU') : 'Никогда';
+                const roleIcon = user.role === 'teacher' ? '👨‍🏫' : '👨‍🎓';
+                const roleText = user.role === 'teacher' ? 'Учитель' : 'Ученик';
+                
+                html += `
+                    <div class="user-item">
+                        <div class="user-info">
+                            <div class="user-name">
+                                ${roleIcon} ${user.username} (${roleText})
+                            </div>
+                            <div class="user-details">
+                                <strong>Создан:</strong> ${created} | 
+                                <strong>Последний вход:</strong> ${lastLogin} |
+                                <strong>ID:</strong> ${user.user_id}
+                            </div>
+                        </div>
+                        <div class="user-actions">
+                            <button class="user-btn delete" data-user-id="${user.user_id}" data-username="${user.username}">
+                                <i class="fas fa-trash"></i> Удалить
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            usersList.innerHTML = html;
+            
+            // Добавляем обработчики для кнопок удаления
+            document.querySelectorAll('.user-btn.delete').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const userId = this.dataset.userId;
+                    const username = this.dataset.username;
+                    deleteUser(userId, username);
+                });
+            });
+        }
+        
+        function createUser(username, password, role) {
+            if (!username.trim() || !password.trim()) {
+                showStatus(createUserStatus, 'Заполните все поля', false);
+                return;
+            }
+            
+            fetch('/api/users/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password,
+                    role: role
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(createUserStatus, data.message, true);
+                    newUsernameInput.value = '';
+                    newPasswordInput.value = '';
+                    loadUsersList();
+                } else {
+                    showStatus(createUserStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showStatus(createUserStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
+        
+        function deleteUser(userId, username) {
+            if (!confirm(`Удалить пользователя "${username}"?`)) return;
+            
+            fetch(`/api/users/${userId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(createUserStatus, data.message, true);
+                    loadUsersList();
+                } else {
+                    showStatus(createUserStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showStatus(createUserStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
         
         // Функции для работы с API ключами
         function loadKeysStats() {
@@ -1285,8 +1590,6 @@
         }
         
         function testSpecificKey(keyName) {
-            // Здесь мы тестируем ключ по его имени
-            // В реальной реализации нужно получить ключ по имени и протестировать его
             showApiStatus(newKeyStatus, `Тестирование ключа "${keyName}"...`, true);
             
             // Имитация тестирования
@@ -1298,10 +1601,8 @@
         function deleteKey(keyName) {
             if (!confirm(`Удалить ключ "${keyName}"?`)) return;
             
-            // В реальной реализации здесь будет вызов API для удаления ключа
             showApiStatus(newKeyStatus, `Функция удаления ключа "${keyName}" будет реализована в следующем обновлении`, true);
             
-            // Временное сообщение
             setTimeout(() => {
                 showApiStatus(newKeyStatus, '', false);
             }, 3000);
@@ -1313,7 +1614,6 @@
                 return;
             }
             
-            // Тестируем ключ через существующий эндпоинт
             fetch('/api/config/test', {
                 method: 'POST',
                 headers: {
@@ -1376,7 +1676,6 @@
                     showStatus(llmModeStatus, data.message);
                     log(data.message);
                     
-                    // Также отправляем сокет-запрос для применения режима ко всем активным комнатам
                     if (socket) {
                         socket.emit('set_llm_mode', { 
                             room_id: currentRoom,
@@ -1399,7 +1698,6 @@
                 .then(data => {
                     if (data.success) {
                         const priority = data.status.current_priority;
-                        // Преобразуем значение для отображения в select
                         let displayPriority = priority;
                         if (priority === 'local_first') displayPriority = 'local_first';
                         if (priority === 'openrouter_first') displayPriority = 'openrouter_first';
@@ -1430,9 +1728,8 @@
                 if (data.success) {
                     showStatus(llmPriorityStatus, data.message);
                     log(data.message);
-                    loadLLMPriority(); // Обновляем статус после изменения
+                    loadLLMPriority();
                     
-                    // Отправляем сокет-запрос для применения приоритета
                     if (socket) {
                         socket.emit('set_llm_priority', {
                             room_id: currentRoom,
@@ -1539,7 +1836,6 @@
                 practiceFilesList.appendChild(fileItem);
             });
             
-            // Добавляем обработчики для кнопок удаления
             document.querySelectorAll('.file-btn.delete').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const filename = this.dataset.filename;
@@ -1716,7 +2012,6 @@
             
             studentsList.innerHTML = studentsHTML;
             
-            // Добавляем обработчики для кнопок
             document.querySelectorAll('.student-btn.details').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const studentId = this.dataset.studentId;
@@ -1759,7 +2054,7 @@
                                 <p><strong>Последний вход:</strong> ${student.last_login ? new Date(student.last_login).toLocaleDateString('ru-RU') : 'Никогда'}</p>
                                 <p><strong>Количество комнат:</strong> ${studentData.rooms ? studentData.rooms.length : 0}</p>
                             </div>
-                            <button onclick="closeModal()" class="btn btn-primary">Закрыть</button>
+                            <button onclick="closeModal()" class="btn" style="background: #3498db;">Закрыть</button>
                         `;
                         
                         showModal(detailsHTML);
@@ -1803,7 +2098,7 @@
                             roomsHTML += `<p style="text-align: center; color: #6c757d; padding: 20px;">Комнаты не найдены</p>`;
                         }
                         
-                        roomsHTML += `</div><button onclick="closeModal()" class="btn btn-primary">Закрыть</button>`;
+                        roomsHTML += `</div><button onclick="closeModal()" class="btn" style="background: #3498db;">Закрыть</button>`;
                         
                         showModal(roomsHTML);
                     } else {
@@ -1828,7 +2123,6 @@
         }
 
         function editStudent(studentId) {
-            // Функция для редактирования ученика
             showStatus(studentsStatus, 'Функция редактирования будет реализована в следующем обновлении', true);
         }
 
@@ -1859,50 +2153,17 @@
 
         // Вспомогательные функции для модальных окон
         function showModal(content) {
-            // Создаем модальное окно если его нет
-            let modal = document.getElementById('student-modal');
-            if (!modal) {
-                modal = document.createElement('div');
-                modal.id = 'student-modal';
-                modal.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0,0,0,0.5);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 10000;
-                `;
-                
-                const modalContent = document.createElement('div');
-                modalContent.id = 'student-modal-content';
-                modalContent.style.cssText = `
-                    background: white;
-                    padding: 30px;
-                    border-radius: 12px;
-                    max-width: 600px;
-                    width: 90%;
-                    max-height: 80vh;
-                    overflow-y: auto;
-                    position: relative;
-                `;
-                
-                modal.appendChild(modalContent);
-                document.body.appendChild(modal);
-                
-                // Закрытие по клику вне модального окна
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
-                        closeModal();
-                    }
-                });
-            }
+            const modal = document.getElementById('student-modal');
+            const modalContent = document.getElementById('student-modal-content');
             
-            document.getElementById('student-modal-content').innerHTML = content;
+            modalContent.innerHTML = content;
             modal.style.display = 'flex';
+            
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
         }
 
         function closeModal() {
@@ -1918,7 +2179,6 @@
             roomIdSpan.textContent = roomId;
             conferenceLink.href = '/conference?room=' + roomId;
             
-            // Сообщаем серверу о смене комнаты
             socket.emit('join_room', { room_id: roomId });
             
             log('Переключено в комнату: ' + roomId);
@@ -1992,14 +2252,12 @@
                     const frames = data.frames;
                     log('Найдено кадров: ' + frames.length);
                     
-                    // Загружаем первое изображение для предпросмотра
                     if (frames.length > 0) {
                         loadImage('/frames/' + avatarName + '/' + frames[0])
                             .then(function(img) {
                                 avatar.src = img.src;
                                 statusDiv.textContent = avatarName + ': загружено 1/' + frames.length;
                                 
-                                // Отправляем команду на смену аватара в конференцию
                                 socket.emit('avatar_changed', {
                                     room_id: currentRoom,
                                     avatar_name: avatarName
@@ -2023,20 +2281,13 @@
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', function() {
-            // Загружаем статистику ключей при загрузке страницы
+            // Загружаем данные при загрузке страницы
+            loadUsersList();
             loadKeysStats();
             loadKeysList();
-            
-            // Загружаем режим LLM при загрузке страницы
             loadLLMMode();
-            
-            // Загружаем статус локальной модели
             loadLLMPriority();
-            
-            // Загружаем файлы практики при загрузке страницы
             loadPracticeFiles();
-
-            // Загружаем данные учеников при загрузке страницы
             loadStudentsStats();
             loadStudentsList();
             
@@ -2045,6 +2296,15 @@
             
             // Загрузка списка аватаров
             loadAvatars();
+            
+            // Обработчики для управления пользователями
+            createUserBtn.addEventListener('click', function() {
+                createUser(newUsernameInput.value, newPasswordInput.value, newUserRoleSelect.value);
+            });
+            
+            refreshUsersBtn.addEventListener('click', function() {
+                loadUsersList();
+            });
             
             // Обработчики для управления ключами
             refreshKeysStatsBtn.addEventListener('click', function() {
