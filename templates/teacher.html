@@ -516,6 +516,137 @@
             background: #f8f9fa;
         }
         
+        /* Стили для управления учениками */
+        .students-stats {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3498db;
+        }
+
+        .student-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .student-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .student-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .student-info {
+            flex: 1;
+        }
+
+        .student-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .student-details {
+            font-size: 0.9rem;
+            color: #6c757d;
+            line-height: 1.4;
+        }
+
+        .student-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .student-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .student-btn.details {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .student-btn.details:hover {
+            background: #138496;
+        }
+
+        .student-btn.rooms {
+            background: #28a745;
+            color: white;
+        }
+
+        .student-btn.rooms:hover {
+            background: #218838;
+        }
+
+        .student-btn.edit {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .student-btn.edit:hover {
+            background: #e0a800;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
+            display: block;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .no-students {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+        }
+
+        .no-students i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -574,6 +705,17 @@
                 align-self: stretch;
                 justify-content: flex-end;
             }
+
+            .student-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .student-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
         }
         
         @media (max-width: 480px) {
@@ -606,6 +748,11 @@
             }
             
             .key-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
+
+            .student-actions {
                 align-self: stretch;
                 justify-content: flex-end;
             }
@@ -758,6 +905,7 @@
                 <div class="tab active" data-tab="knowledge">База знаний</div>
                 <div class="tab" data-tab="lessons">Уроки</div>
                 <div class="tab" data-tab="practice">Практика</div>
+                <div class="tab" data-tab="students">Ученики</div>
                 <div class="tab" data-tab="download">Скачать</div>
             </div>
             
@@ -831,6 +979,45 @@
                         </div>
                     </div>
                     <button id="refresh-files-btn" style="margin-top: 10px;">🔄 Обновить список</button>
+                </div>
+            </div>
+
+            <!-- Новая вкладка для управления учениками -->
+            <div class="tab-content" id="students-tab">
+                <div class="management-panel">
+                    <h3>👥 Управление учениками</h3>
+                    
+                    <div class="students-stats">
+                        <h4>📊 Статистика учеников</h4>
+                        <div id="students-stats-info">
+                            <p>Загрузка статистики...</p>
+                        </div>
+                        <button id="refresh-students-stats-btn" style="margin-top: 10px;">🔄 Обновить статистику</button>
+                    </div>
+
+                    <div class="students-list-section">
+                        <h4>📋 Список всех учеников</h4>
+                        <div id="students-list" class="file-list">
+                            <div class="student-item">
+                                <div class="student-info">
+                                    <div class="student-name">Загрузка списка учеников...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="refresh-students-btn" style="margin-top: 10px;">🔄 Обновить список</button>
+                    </div>
+
+                    <div class="students-actions" style="margin-top: 30px; padding: 20px; background: #eef7ff; border-radius: 8px;">
+                        <h4>📥 Экспорт данных</h4>
+                        <p>Скачайте полную базу данных всех учеников:</p>
+                        <div class="download-buttons">
+                            <button class="download-btn" id="export-students-btn">
+                                <i class="fas fa-download"></i> Скачать базу учеников (ZIP)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="students-status" class="success-message"></div>
                 </div>
             </div>
             
@@ -940,6 +1127,14 @@
         const uploadStatus = document.getElementById('upload-status');
         const practiceFilesList = document.getElementById('practice-files-list');
         const refreshFilesBtn = document.getElementById('refresh-files-btn');
+
+        // Элементы для управления учениками
+        const studentsStatsInfo = document.getElementById('students-stats-info');
+        const refreshStudentsStatsBtn = document.getElementById('refresh-students-stats-btn');
+        const studentsList = document.getElementById('students-list');
+        const refreshStudentsBtn = document.getElementById('refresh-students-btn');
+        const exportStudentsBtn = document.getElementById('export-students-btn');
+        const studentsStatus = document.getElementById('students-status');
         
         // Socket.io
         const socket = io();
@@ -1400,6 +1595,322 @@
                 showStatus(uploadStatus, 'Ошибка сети: ' + error, false);
             });
         }
+
+        // Функции для управления учениками
+        function loadStudentsStats() {
+            fetch('/api/students')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayStudentsStats(data.students);
+                    } else {
+                        studentsStatsInfo.innerHTML = '<p>❌ Ошибка загрузки статистики: ' + data.error + '</p>';
+                    }
+                })
+                .catch(error => {
+                    studentsStatsInfo.innerHTML = '<p>❌ Ошибка сети: ' + error + '</p>';
+                });
+        }
+
+        function displayStudentsStats(students) {
+            const totalStudents = students.length;
+            const activeToday = students.filter(s => {
+                const lastLogin = new Date(s.last_login);
+                const today = new Date();
+                return lastLogin.toDateString() === today.toDateString();
+            }).length;
+            
+            const withProfile = students.filter(s => s.student_data).length;
+            const avgAge = students.reduce((sum, s) => {
+                return sum + (s.student_data?.age || 0);
+            }, 0) / (students.length || 1);
+
+            const statsHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number">${totalStudents}</span>
+                        <div class="stat-label">Всего учеников</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">${activeToday}</span>
+                        <div class="stat-label">Активных сегодня</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">${withProfile}</span>
+                        <div class="stat-label">С заполненным профилем</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">${avgAge.toFixed(1)}</span>
+                        <div class="stat-label">Средний возраст</div>
+                    </div>
+                </div>
+            `;
+            
+            studentsStatsInfo.innerHTML = statsHTML;
+        }
+
+        function loadStudentsList() {
+            fetch('/api/students')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayStudentsList(data.students);
+                    } else {
+                        studentsList.innerHTML = '<div class="student-item"><div class="student-info"><div class="student-name">Ошибка загрузки списка учеников</div></div></div>';
+                    }
+                })
+                .catch(error => {
+                    studentsList.innerHTML = '<div class="student-item"><div class="student-info"><div class="student-name">Ошибка сети</div></div></div>';
+                });
+        }
+
+        function displayStudentsList(students) {
+            if (students.length === 0) {
+                studentsList.innerHTML = `
+                    <div class="no-students">
+                        <i class="fas fa-user-graduate"></i>
+                        <h4>Ученики не найдены</h4>
+                        <p>Пока нет зарегистрированных учеников</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let studentsHTML = '';
+            
+            students.forEach(student => {
+                const studentData = student.student_data || {};
+                const lastLogin = student.last_login ? new Date(student.last_login).toLocaleDateString('ru-RU') : 'Никогда';
+                const created = student.created_at ? new Date(student.created_at).toLocaleDateString('ru-RU') : 'Неизвестно';
+                
+                studentsHTML += `
+                    <div class="student-item">
+                        <div class="student-info">
+                            <div class="student-name">
+                                <i class="fas fa-user-graduate"></i> 
+                                ${studentData.name || 'Имя не указано'} 
+                                (${student.username})
+                            </div>
+                            <div class="student-details">
+                                <strong>Уровень:</strong> ${studentData.education_level || 'Не указан'} | 
+                                <strong>Возраст:</strong> ${studentData.age || 'Не указан'} | 
+                                <strong>Зарегистрирован:</strong> ${created} | 
+                                <strong>Последний вход:</strong> ${lastLogin}
+                                ${studentData.rooms ? ` | <strong>Комнат:</strong> ${studentData.rooms.length}` : ''}
+                            </div>
+                        </div>
+                        <div class="student-actions">
+                            <button class="student-btn details" data-student-id="${student.user_id}">
+                                <i class="fas fa-info-circle"></i> Детали
+                            </button>
+                            <button class="student-btn rooms" data-student-id="${student.user_id}">
+                                <i class="fas fa-door-open"></i> Комнаты
+                            </button>
+                            <button class="student-btn edit" data-student-id="${student.user_id}">
+                                <i class="fas fa-edit"></i> Редактировать
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            studentsList.innerHTML = studentsHTML;
+            
+            // Добавляем обработчики для кнопок
+            document.querySelectorAll('.student-btn.details').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const studentId = this.dataset.studentId;
+                    showStudentDetails(studentId);
+                });
+            });
+            
+            document.querySelectorAll('.student-btn.rooms').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const studentId = this.dataset.studentId;
+                    showStudentRooms(studentId);
+                });
+            });
+            
+            document.querySelectorAll('.student-btn.edit').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const studentId = this.dataset.studentId;
+                    editStudent(studentId);
+                });
+            });
+        }
+
+        function showStudentDetails(studentId) {
+            fetch(`/api/student/${studentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const student = data.student;
+                        const studentData = student.student_data || {};
+                        
+                        const detailsHTML = `
+                            <h3>Детальная информация об ученике</h3>
+                            <div style="background: white; padding: 20px; border-radius: 8px; margin: 15px 0;">
+                                <p><strong>Имя пользователя:</strong> ${student.username}</p>
+                                <p><strong>Имя ученика:</strong> ${studentData.name || 'Не указано'}</p>
+                                <p><strong>Уровень образования:</strong> ${studentData.education_level || 'Не указан'}</p>
+                                <p><strong>Возраст:</strong> ${studentData.age || 'Не указан'}</p>
+                                <p><strong>ID ученика:</strong> ${studentData.student_id || 'Не указан'}</p>
+                                <p><strong>Дата регистрации:</strong> ${student.created_at ? new Date(student.created_at).toLocaleDateString('ru-RU') : 'Неизвестно'}</p>
+                                <p><strong>Последний вход:</strong> ${student.last_login ? new Date(student.last_login).toLocaleDateString('ru-RU') : 'Никогда'}</p>
+                                <p><strong>Количество комнат:</strong> ${studentData.rooms ? studentData.rooms.length : 0}</p>
+                            </div>
+                            <button onclick="closeModal()" class="btn btn-primary">Закрыть</button>
+                        `;
+                        
+                        showModal(detailsHTML);
+                    } else {
+                        showStatus(studentsStatus, 'Ошибка: ' + data.error, false);
+                    }
+                })
+                .catch(error => {
+                    showStatus(studentsStatus, 'Ошибка сети: ' + error, false);
+                });
+        }
+
+        function showStudentRooms(studentId) {
+            fetch(`/api/student/${studentId}/rooms`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const rooms = data.rooms || [];
+                        
+                        let roomsHTML = `
+                            <h3>Комнаты ученика: ${data.student_name}</h3>
+                            <p><strong>Всего комнат:</strong> ${data.total_rooms}</p>
+                            <div style="max-height: 400px; overflow-y: auto; margin: 15px 0;">
+                        `;
+                        
+                        if (rooms.length > 0) {
+                            rooms.forEach(room => {
+                                roomsHTML += `
+                                    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #3498db;">
+                                        <p><strong>Предмет:</strong> ${room.subject}</p>
+                                        <p><strong>Название комнаты:</strong> ${room.room_name}</p>
+                                        <p><strong>Аватар:</strong> ${room.avatar}</p>
+                                        <p><strong>ID конференции:</strong> ${room.conference_id}</p>
+                                        <button onclick="openStudentRoom('${room.room_name}', '${room.subject}')" class="student-btn rooms" style="margin-top: 10px;">
+                                            <i class="fas fa-door-open"></i> Перейти в комнату
+                                        </button>
+                                    </div>
+                                `;
+                            });
+                        } else {
+                            roomsHTML += `<p style="text-align: center; color: #6c757d; padding: 20px;">Комнаты не найдены</p>`;
+                        }
+                        
+                        roomsHTML += `</div><button onclick="closeModal()" class="btn btn-primary">Закрыть</button>`;
+                        
+                        showModal(roomsHTML);
+                    } else {
+                        showStatus(studentsStatus, 'Ошибка: ' + data.error, false);
+                    }
+                })
+                .catch(error => {
+                    showStatus(studentsStatus, 'Ошибка сети: ' + error, false);
+                });
+        }
+
+        function openStudentRoom(roomName, subject) {
+            const width = 1200;
+            const height = 800;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+            
+            const features = `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`;
+            
+            window.open(`/conference?room=${roomName}&student=true&subject=${subject}`, 'StudentConference', features);
+            closeModal();
+        }
+
+        function editStudent(studentId) {
+            // Функция для редактирования ученика
+            showStatus(studentsStatus, 'Функция редактирования будет реализована в следующем обновлении', true);
+        }
+
+        function exportStudentsData() {
+            fetch('/api/students/export')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка экспорта');
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `students_export_${new Date().toISOString().split('T')[0]}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    showStatus(studentsStatus, 'База данных учеников успешно экспортирована!');
+                })
+                .catch(error => {
+                    showStatus(studentsStatus, 'Ошибка при экспорте: ' + error.message, false);
+                });
+        }
+
+        // Вспомогательные функции для модальных окон
+        function showModal(content) {
+            // Создаем модальное окно если его нет
+            let modal = document.getElementById('student-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'student-modal';
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                `;
+                
+                const modalContent = document.createElement('div');
+                modalContent.id = 'student-modal-content';
+                modalContent.style.cssText = `
+                    background: white;
+                    padding: 30px;
+                    border-radius: 12px;
+                    max-width: 600px;
+                    width: 90%;
+                    max-height: 80vh;
+                    overflow-y: auto;
+                    position: relative;
+                `;
+                
+                modal.appendChild(modalContent);
+                document.body.appendChild(modal);
+                
+                // Закрытие по клику вне модального окна
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeModal();
+                    }
+                });
+            }
+            
+            document.getElementById('student-modal-content').innerHTML = content;
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('student-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
         
         // Инициализация комнаты
         function initRoom(roomId) {
@@ -1524,6 +2035,10 @@
             
             // Загружаем файлы практики при загрузке страницы
             loadPracticeFiles();
+
+            // Загружаем данные учеников при загрузке страницы
+            loadStudentsStats();
+            loadStudentsList();
             
             // Инициализация комнаты по умолчанию
             initRoom('default');
@@ -1574,6 +2089,20 @@
             
             refreshFilesBtn.addEventListener('click', function() {
                 loadPracticeFiles();
+            });
+
+            // Обработчики для управления учениками
+            refreshStudentsStatsBtn.addEventListener('click', function() {
+                loadStudentsStats();
+                loadStudentsList();
+            });
+
+            refreshStudentsBtn.addEventListener('click', function() {
+                loadStudentsList();
+            });
+
+            exportStudentsBtn.addEventListener('click', function() {
+                exportStudentsData();
             });
             
             // Drag and drop для загрузки файлов
