@@ -170,7 +170,7 @@ def save_user_data(user_data):
         return False
 
 def authenticate_user(username, password, role):
-    """Аутентификация пользователя"""
+    """Аутентификация пользователя - ТОЛЬКО существующие пользователи"""
     try:
         # Поиск пользователя по username и role
         for user_file in USERS_DIR.glob("*.json"):
@@ -182,13 +182,9 @@ def authenticate_user(username, password, role):
                     user_data.get('password') == password):
                     return user_data
         
-        # Если пользователь не найден, создаем нового (для демо)
-        if role == 'student':
-            return create_new_student(username, password)
-        elif role == 'teacher':
-            return create_new_teacher(username, password)
-            
+        # Если пользователь не найден - ВОЗВРАЩАЕМ None
         return None
+        
     except Exception as e:
         print(f"Authentication error: {e}")
         return None
@@ -373,6 +369,91 @@ def complete_profile():
             
     except Exception as e:
         return jsonify({"success": False, "error": f"Ошибка: {str(e)}"})
+
+# =============================================================================
+# API ДЛЯ УПРАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯМИ
+# =============================================================================
+
+@app.route('/api/users')
+@teacher_required
+def get_all_users():
+    """Получение списка всех пользователей"""
+    try:
+        users = []
+        for user_file in USERS_DIR.glob("*.json"):
+            with open(user_file, 'r', encoding='utf-8') as f:
+                user_data = json.load(f)
+                users.append({
+                    'user_id': user_data['user_id'],
+                    'username': user_data['username'],
+                    'role': user_data.get('role'),
+                    'created_at': user_data.get('created_at'),
+                    'last_login': user_data.get('last_login')
+                })
+        
+        return jsonify({"success": True, "users": users})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/users/create', methods=['POST'])
+@teacher_required
+def create_user():
+    """Создание нового пользователя (только для учителя)"""
+    try:
+        data = request.json
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        role = data.get('role', 'student')
+        
+        if not username or not password:
+            return jsonify({"success": False, "error": "Заполните все поля"})
+        
+        # Проверяем, не существует ли уже пользователь с таким именем
+        for user_file in USERS_DIR.glob("*.json"):
+            with open(user_file, 'r', encoding='utf-8') as f:
+                existing_user = json.load(f)
+                if existing_user.get('username') == username:
+                    return jsonify({"success": False, "error": "Пользователь с таким логином уже существует"})
+        
+        # Создаем пользователя
+        if role == 'student':
+            user_data = create_new_student(username, password)
+        elif role == 'teacher':
+            user_data = create_new_teacher(username, password)
+        else:
+            return jsonify({"success": False, "error": "Неверная роль пользователя"})
+        
+        if user_data:
+            return jsonify({
+                "success": True,
+                "message": f"Пользователь {username} успешно создан",
+                "user_id': user_data['user_id']
+            })
+        else:
+            return jsonify({"success": False, "error": "Ошибка создания пользователя"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Ошибка: {str(e)}"})
+
+@app.route('/api/users/<user_id>', methods=['DELETE'])
+@teacher_required
+def delete_user(user_id):
+    """Удаление пользователя"""
+    try:
+        user_file = USERS_DIR / f"{user_id}.json"
+        
+        if not user_file.exists():
+            return jsonify({"success": False, "error": "Пользователь не найден"})
+        
+        # Не позволяем удалить самого себя
+        if session.get('user_id') == user_id:
+            return jsonify({"success": False, "error": "Нельзя удалить свой собственный аккаунт"})
+        
+        user_file.unlink()
+        return jsonify({"success": True, "message": "Пользователь удален"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
 # API ДЛЯ УПРАВЛЕНИЯ УЧЕНИКАМИ
