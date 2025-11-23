@@ -3152,6 +3152,67 @@ def test_student_flow():
     """
 
 # =============================================================================
+# ТЕСТИРОВАНИЕ MERMAID ДИАГРАММ
+# =============================================================================
+
+@app.route('/test-mermaid')
+def test_mermaid_page():
+    """Страница для тестирования Mermaid промтов"""
+    return render_template('test_mermaid.html')
+
+@app.route('/api/test-mermaid', methods=['POST'])
+def test_mermaid_generation():
+    """API для тестирования генерации Mermaid диаграмм"""
+    try:
+        data = request.json
+        prompt = data.get('prompt', '')
+        add_examples = data.get('addExamples', True)
+        add_constraints = data.get('addConstraints', True)
+        
+        if not prompt:
+            return jsonify({"success": False, "error": "Prompt is required"})
+        
+        # Улучшенный промт с примерами и ограничениями
+        final_prompt = prompt
+        
+        if add_examples:
+            final_prompt += "\n\nПример хорошего формата:\nflowchart TD\n    A[\"Клетка\"] --> B[\"Ядро\"]\n    A --> C[\"Цитоплазма\"]\n    B --> D[\"ДНК\"]\n    C --> E[\"Митохондрии\"]"
+        
+        if add_constraints:
+            final_prompt += "\n\nОГРАНИЧЕНИЯ:\n- Только корректный синтаксис Mermaid\n- Максимум 10 элементов\n- Русские подписи в двойных кавычках\n- Логическая структура\n- Без лишних комментариев"
+        
+        final_prompt += "\n\nВерни ТОЛЬКО код Mermaid без пояснений и без обратных кавычек."
+        
+        # Используем вашу существующую LLM интеграцию
+        from llm import LLMIntegration
+        llm = LLMIntegration()
+        
+        response = llm._query_llm_api(
+            prompt=final_prompt,
+            context="",
+            subject="general", 
+            system_prompt="""Ты создаешь Mermaid диаграммы для образования. 
+            Строго следуй требованиям и возвращай только корректный код Mermaid.
+            Не добавляй пояснений, комментариев или обратных кавычек.""",
+            max_tokens=500
+        )
+        
+        if response:
+            # Очистка ответа
+            mermaid_code = clean_mermaid_code(response)
+            
+            return jsonify({
+                "success": True,
+                "mermaid_code": mermaid_code,
+                "original_prompt": prompt
+            })
+        else:
+            return jsonify({"success": False, "error": "LLM не вернул ответ"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
 # ЗАПУСК СЕРВЕРА
 # =============================================================================
 
