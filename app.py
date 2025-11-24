@@ -1415,6 +1415,33 @@ def handle_visualization_generated(data):
         'timestamp': data.get('timestamp', time.time())
     }, room=room_id)
 
+@socketio.on('lesson_visualization')
+def handle_lesson_visualization(data):
+    """Обработчик визуализации урока (mindmap/slides)"""
+    room_id = data['room_id']
+    
+    debug_log(f"Получена визуализация урока для комнаты {room_id}: {data.get('type')}")
+    
+    emit('lesson_visualization', {
+        'room_id': room_id,
+        'type': data.get('type'),
+        'data': data.get('data'),
+        'lesson_id': data.get('lesson_id'),
+        'lesson_title': data.get('lesson_title')
+    }, room=room_id)
+
+@socketio.on('get_visualization_status')
+def handle_get_visualization_status(data):
+    """Получение статуса визуализации"""
+    room_id = data['room_id']
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].get_visualization_status()
+        emit('visualization_status', {
+            'room_id': room_id,
+            'status': status
+        })
+
 @socketio.on('get_llm_status')
 def handle_get_llm_status(data):
     """WebSocket обработчик получения статуса LLM"""
@@ -2675,6 +2702,54 @@ def force_visualization():
             "topic": topic,
             "queue_length": len(room_visualization_queue.get(room_id, []))
         })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/visualization/status')
+def get_visualization_status():
+    """Получение статуса визуализации для комнаты"""
+    room_id = request.args.get('room_id', 'default')
+    
+    if room_id in room_dialogue:
+        status = room_dialogue[room_id].get_visualization_status()
+        return jsonify({
+            "success": True,
+            "room_id": room_id,
+            "status": status
+        })
+    
+    return jsonify({"success": False, "error": "Room not found"})
+
+@app.route('/api/visualization/force_mindmap', methods=['POST'])
+def force_mindmap_generation():
+    """Принудительная генерация mindmap"""
+    try:
+        data = request.json
+        room_id = data.get('room_id', 'default')
+        lesson_content = data.get('lesson_content', '')
+        lesson_title = data.get('lesson_title', 'Урок')
+        
+        if room_id in room_dialogue:
+            mindmap = room_dialogue[room_id].visualization_manager.generate_lesson_mindmap(
+                lesson_content, lesson_title
+            )
+            
+            if mindmap:
+                # Отправляем через WebSocket
+                socketio.emit('lesson_visualization', {
+                    'room_id': room_id,
+                    'type': 'mindmap',
+                    'data': mindmap,
+                    'lesson_title': lesson_title
+                }, room=room_id)
+                
+                return jsonify({
+                    "success": True,
+                    "message": "Mindmap сгенерирована"
+                })
+        
+        return jsonify({"success": False, "error": "Ошибка генерации"})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
