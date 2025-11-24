@@ -10,35 +10,63 @@ class VisualizationManager:
         self.lessons_dir = Path(lessons_dir)
         self.llm = LLMIntegration()
         
+    def extract_lesson_base_name(self, lesson_id: str) -> str:
+        """Извлекает базовое название урока из lesson_id"""
+        # Убираем расширение .txt если есть
+        base_name = lesson_id.replace('.txt', '')
+        
+        # Если lesson_id это полный путь, берем только имя файла
+        if '/' in base_name or '\\' in base_name:
+            base_name = Path(base_name).stem
+        
+        print(f"🔍 Извлекаем базовое название из '{lesson_id}' -> '{base_name}'")
+        return base_name
+    
     def get_lesson_slides(self, lesson_id: str) -> Optional[List[str]]:
         """Проверяет наличие слайдов для урока и возвращает их список"""
-        lesson_name = lesson_id.lower()
+        base_name = self.extract_lesson_base_name(lesson_id)
         slides_dir = self.lessons_dir / "slides"
         
+        print(f"🔍 Поиск слайдов для урока: {base_name}")
+        
         if not slides_dir.exists():
+            print(f"❌ Папка слайдов не существует: {slides_dir}")
             return None
             
-        # Ищем файлы: названиеурока_01.jpg, названиеурока_02.jpg и т.д.
-        slide_pattern = f"{lesson_name}_*.jpg"
-        slide_files = list(slides_dir.glob(slide_pattern))
+        # Ищем файлы: базовое-название_01.jpg, базовое-название_02.jpg и т.д.
+        found_slides = []
         
-        if not slide_files:
-            # Пробуем другие расширения
-            for ext in ['png', 'jpeg', 'webp']:
-                slide_pattern = f"{lesson_name}_*.{ext}"
-                slide_files.extend(list(slides_dir.glob(slide_pattern)))
+        for ext in ['jpg', 'jpeg', 'png', 'webp']:
+            slide_pattern = f"{base_name}_*.{ext}"
+            slide_files = list(slides_dir.glob(slide_pattern))
+            
+            if slide_files:
+                print(f"✅ Найдены слайды {ext}: {[f.name for f in slide_files]}")
+                found_slides.extend(slide_files)
         
-        if slide_files:
+        if found_slides:
             # Сортируем по номеру
-            slide_files.sort(key=lambda x: self._extract_slide_number(x.name))
-            return [str(slide) for slide in slide_files]
+            found_slides.sort(key=lambda x: self._extract_slide_number(x.name))
+            slide_paths = [f"slides/{slide.name}" for slide in found_slides]
+            print(f"🎯 Итоговый список слайдов: {slide_paths}")
+            return slide_paths
         
+        print(f"❌ Слайды для '{base_name}' не найдены")
         return None
     
     def _extract_slide_number(self, filename: str) -> int:
         """Извлекает номер слайда из имени файла"""
+        # Ищем паттерн: _01, _02, _10 и т.д.
         match = re.search(r'_(\d+)\.', filename)
-        return int(match.group(1)) if match else 0
+        if match:
+            return int(match.group(1))
+        
+        # Альтернативный паттерн: -01, -02 и т.д.
+        match = re.search(r'-(\d+)\.', filename)
+        if match:
+            return int(match.group(1))
+            
+        return 0
     
     def generate_lesson_mindmap(self, lesson_content: str, lesson_title: str) -> Dict:
         """Генерирует mind map всего урока один раз за урок"""
@@ -47,7 +75,7 @@ class VisualizationManager:
             Создай структурную mind map (интеллект-карту) для урока на тему: "{lesson_title}"
 
             СОДЕРЖАНИЕ УРОКА:
-            {lesson_content[:2000]}  # Ограничиваем длину для экономии токенов
+            {lesson_content[:2000]}
 
             ТРЕБОВАНИЯ К MIND MAP:
             1. Основная тема в центре: "{lesson_title}"
@@ -133,11 +161,6 @@ class VisualizationManager:
     C --> H["Факты"]
     D --> I["Задачи"]
     D --> J["Упражнения"]'''
-    
-    def should_generate_visualization(self, lesson_id: str, paragraph_index: int) -> bool:
-        """Определяет, когда генерировать визуализацию"""
-        # Mind map генерируется только один раз за урок - в начале
-        return paragraph_index == 0
     
     def get_visualization_type(self, lesson_id: str) -> str:
         """Определяет тип визуализации: слайды или mindmap"""
