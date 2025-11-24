@@ -10,6 +10,7 @@ from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
 from practice_manager import PracticeManager
+from visualization_manager import visualization_manager
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -76,6 +77,13 @@ class DialogueManager:
         self.visualization_counter = 0
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
+        
+        # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ
+        self.visualization_manager = visualization_manager
+        self.current_visualization_type = None
+        self.generated_mindmap = None
+        self.current_slide_index = 0
+        self.slides = None
         
         self._load_lessons()
         
@@ -737,6 +745,13 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
+            # ИНИЦИАЛИЗАЦИЯ НОВОЙ СИСТЕМЫ ВИЗУАЛИЗАЦИИ
+            self._start_lesson_visualization(
+                lesson_data['id'],
+                lesson_data['title'],
+                self.lesson_content
+            )
+            
             # КРИТИЧЕСКИ ВАЖНО: Уведомляем клиент о начале урока
             if self.room_id and self.socketio:
                 self.socketio.emit('lesson_started', {
@@ -821,6 +836,99 @@ class DialogueManager:
         """Выключение автоматической визуализации"""
         self.visualization_enabled = False
         print("❌ Автоматическая визуализация выключена")
+
+    # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ - МЕТОДЫ
+    def _start_lesson_visualization(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
+        """Запускает систему визуализации для урока"""
+        try:
+            print(f"🎨 Инициализация визуализации для урока: {lesson_id}")
+            
+            # Определяем тип визуализации
+            self.current_visualization_type = self.visualization_manager.get_visualization_type(lesson_id)
+            print(f"🎨 Тип визуализации: {self.current_visualization_type}")
+            
+            if self.current_visualization_type == "slides":
+                # Загружаем слайды
+                self.slides = self.visualization_manager.get_lesson_slides(lesson_id)
+                self.current_slide_index = 0
+                print(f"🎨 Загружены слайды для урока: {len(self.slides)} слайдов")
+                
+                # Отправляем первый слайд
+                if self.slides and self.room_id:
+                    self._send_slide(0)
+                    
+            else:
+                # Генерируем mind map один раз за урок
+                if not self.generated_mindmap:
+                    full_content = " ".join(lesson_content)
+                    self.generated_mindmap = self.visualization_manager.generate_lesson_mindmap(
+                        full_content, 
+                        lesson_title
+                    )
+                    print(f"🎨 Сгенерирована mind map для урока: {lesson_title}")
+                    
+                    # Отправляем mind map
+                    if self.room_id and self.generated_mindmap:
+                        self.socketio.emit('lesson_visualization', {
+                            'room_id': self.room_id,
+                            'type': 'mindmap',
+                            'data': self.generated_mindmap,
+                            'lesson_id': lesson_id,
+                            'lesson_title': lesson_title
+                        }, room=self.room_id)
+                        
+        except Exception as e:
+            print(f"❌ Ошибка инициализации визуализации: {e}")
+    
+    def _handle_paragraph_visualization(self, paragraph_index: int):
+        """Обрабатывает визуализацию для текущего абзаца"""
+        if not self.lesson_started or not self.selected_lesson:
+            return
+            
+        if self.current_visualization_type == "slides":
+            # Показываем следующий слайд для каждого нового абзаца
+            if self.slides and paragraph_index < len(self.slides):
+                self._send_slide(paragraph_index)
+    
+    def _send_slide(self, slide_index: int):
+        """Отправляет слайд в комнату"""
+        if not self.slides or slide_index >= len(self.slides):
+            return
+            
+        self.current_slide_index = slide_index
+        slide_path = self.slides[slide_index]
+        
+        print(f"🖼️ Отправка слайда {slide_index + 1}/{len(self.slides)}: {slide_path}")
+        
+        if self.room_id:
+            self.socketio.emit('lesson_visualization', {
+                'room_id': self.room_id,
+                'type': 'slide',
+                'data': {
+                    'slide_path': slide_path,
+                    'slide_number': slide_index + 1,
+                    'total_slides': len(self.slides),
+                    'timestamp': time.time()
+                },
+                'lesson_id': self.selected_lesson['id'],
+                'lesson_title': self.selected_lesson.get('title', 'Урок')
+            }, room=self.room_id)
+    
+    def send_current_visualization(self):
+        """Принудительно отправляет текущую визуализацию"""
+        if not self.lesson_started or not self.selected_lesson or not self.room_id:
+            return
+            
+        if self.current_visualization_type == "slides" and self.slides:
+            self._send_slide(self.current_slide_index)
+        elif self.current_visualization_type == "mindmap" and self.generated_mindmap:
+            self.socketio.emit('lesson_visualization', {
+                'room_id': self.room_id,
+                'type': 'mindmap',
+                'data': self.generated_mindmap,
+                'lesson_id': self.selected_lesson['id'],
+                'lesson_title': self.selected_lesson.get('title', 'Урок')
+            }, room=self.room_id)
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -969,7 +1077,7 @@ class DialogueManager:
         return response
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """Прямая обработка выбора предмета"""
+        """Прямая обработка выбора предмета с инициализацией визуализации"""
         self.current_subject = subject
         lessons = self.lessons.get(subject, [])
         demo_lessons = [l for l in lessons if l.get('is_demo', False)]
@@ -992,7 +1100,12 @@ class DialogueManager:
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
         
-        self.enable_visualization()
+        # ИНИЦИАЛИЗАЦИЯ ВИЗУАЛИЗАЦИИ ПРИ СТАРТЕ УРОКА
+        self._start_lesson_visualization(
+            self.selected_lesson['id'],
+            self.selected_lesson['title'],
+            self.lesson_content
+        )
         
         self.conversation_history = []
         self.conversation_context = []
@@ -1060,17 +1173,11 @@ class DialogueManager:
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
-            self.current_paragraph += 1
             
-            if (self.visualization_enabled and paragraph and 
-                len(paragraph.strip()) > 10 and self.room_id):
-                
-                def delayed_visualization():
-                    time.sleep(0.5)
-                    context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
-                    self._generate_visualization(paragraph, context)
-                
-                threading.Thread(target=delayed_visualization, daemon=True).start()
+            # ВИЗУАЛИЗАЦИЯ: Обрабатываем отображение для этого абзаца
+            self._handle_paragraph_visualization(self.current_paragraph)
+            
+            self.current_paragraph += 1
             
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
@@ -1339,6 +1446,12 @@ class DialogueManager:
         self.student_lesson_started = False
         self.student_subject_prompted = False
 
+        # Сброс визуализации
+        self.current_visualization_type = None
+        self.generated_mindmap = None
+        self.current_slide_index = 0
+        self.slides = None
+
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
         if "обществознание" not in subjects:
@@ -1435,7 +1548,10 @@ class DialogueManager:
             "visualization_enabled": self.visualization_enabled,
             "visualization_counter": self.visualization_counter,
             "last_visualization_time": self.last_visualization_time,
-            "paragraphs_since_last_viz": self.paragraphs_since_last_viz
+            "paragraphs_since_last_viz": self.paragraphs_since_last_viz,
+            "current_visualization_type": self.current_visualization_type,
+            "current_slide_index": self.current_slide_index,
+            "total_slides": len(self.slides) if self.slides else 0
         }
 
     def force_visualization(self, text: str) -> bool:
@@ -1495,7 +1611,12 @@ class DialogueManager:
             "auto_selected_subject": self.auto_selected_subject,
             "student_conversation_count": self.student_conversation_count,
             "student_lesson_started": self.student_lesson_started,
-            "student_subject_prompted": self.student_subject_prompted
+            "student_subject_prompted": self.student_subject_prompted,
+            # Информация о визуализации
+            "current_visualization_type": self.current_visualization_type,
+            "has_mindmap": self.generated_mindmap is not None,
+            "current_slide": self.current_slide_index,
+            "total_slides": len(self.slides) if self.slides else 0
         }
 
     def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
@@ -1568,6 +1689,13 @@ class DialogueManager:
             
             if not self.lesson_content:
                 return "Ошибка загрузки урока."
+            
+            # Переинициализируем визуализацию
+            self._start_lesson_visualization(
+                self.selected_lesson['id'],
+                self.selected_lesson['title'],
+                self.lesson_content
+            )
             
             first_paragraph = self.lesson_content[0] if self.lesson_content else ""
             return f"Урок перезапущен. {first_paragraph}"
