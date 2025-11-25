@@ -1143,6 +1143,64 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Стили для слайдов */
+        .slide-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+
+        .slide-content {
+            max-width: 100%;
+            max-height: 100%;
+            text-align: center;
+            position: relative;
+        }
+
+        .slide-content img {
+            max-width: 100%;
+            max-height: calc(100% - 30px);
+            object-fit: contain;
+            border: 2px solid var(--board-border);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px var(--board-shadow);
+            background: white;
+        }
+
+        .slide-navigation {
+            margin-top: 10px;
+            color: var(--gray);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .slide-error {
+            text-align: center;
+            color: var(--danger);
+            padding: 20px;
+        }
+
+        .slide-error i {
+            font-size: 48px;
+            margin-bottom: 10px;
+            opacity: 0.7;
+        }
+
+        .slide-error p {
+            margin: 10px 0;
+            font-weight: 500;
+        }
+
+        .slide-error small {
+            color: var(--gray);
+            font-size: 12px;
+        }
+
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -1255,6 +1313,15 @@
             .thinking-indicator {
                 width: 150px;
                 height: 150px;
+            }
+
+            /* Адаптивность для слайдов */
+            .slide-container {
+                padding: 15px;
+            }
+            
+            .slide-content img {
+                max-height: calc(100% - 25px);
             }
         }
         
@@ -1376,6 +1443,14 @@
             .thinking-text {
                 font-size: 14px;
                 padding: 8px 16px;
+            }
+
+            .slide-container {
+                padding: 10px;
+            }
+            
+            .slide-navigation {
+                font-size: 12px;
             }
         }
         
@@ -2808,28 +2883,121 @@
         }
 
         // Функции визуализации
-        function displayMermaidDiagram(mermaidCode) {
+        function displayMermaidDiagram(mermaidCode, title = 'Mindmap урока') {
             if (!mermaidCode || mermaidCode.trim() === '') {
                 console.warn('Пустой Mermaid код');
                 mermaidDiagram.innerHTML = `
                     <div class="visualization-placeholder">
                         <i class="fas fa-project-diagram"></i>
-                        <p>Диаграмма будет сгенерирована автоматически во время урока</p>
+                        <p>Mindmap будет сгенерирована автоматически во время урока</p>
                     </div>
                 `;
                 return;
             }
             
-            console.log('Rendering Mermaid diagram:', mermaidCode.substring(0, 100) + '...');
+            console.log('Rendering Mermaid mindmap:', mermaidCode.substring(0, 100) + '...');
             
             if (window.mermaidFix) {
-                window.mermaidFix.renderDiagram('mermaid-diagram', mermaidCode, 'Визуализация урока');
+                window.mermaidFix.renderDiagram('mermaid-diagram', mermaidCode, title);
             } else {
-                fallbackMermaidRender(mermaidCode);
+                fallbackMermaidRender(mermaidCode, title);
             }
         }
 
-        function fallbackMermaidRender(mermaidCode) {
+        function displaySvgDiagram(svgCode, title = 'SVG Диаграмма') {
+            // Если это слайд, не перезаписываем содержимое
+            const existingSlide = document.querySelector('.slide-container');
+            if (existingSlide) {
+                console.log('Сохраняем существующий слайд');
+                return;
+            }
+            
+            if (!svgCode || svgCode.trim() === '') {
+                console.warn('Пустой SVG код');
+                if (window.svgFix) {
+                    window.svgFix.showFallback('svg-diagram', 'Пустая диаграмма');
+                } else {
+                    svgDiagram.innerHTML = `
+                        <div class="visualization-placeholder">
+                            <i class="fas fa-shapes"></i>
+                            <p>SVG схема будет сгенерирована автоматически</p>
+                        </div>
+                    `;
+                }
+                return;
+            }
+            
+            console.log('Rendering SVG diagram, length:', svgCode.length);
+            
+            if (window.svgFix) {
+                window.svgFix.renderSVG('svg-diagram', svgCode, title);
+            } else {
+                fallbackSvgRender(svgCode, title);
+            }
+        }
+
+        // Функция для отображения слайдов
+        function displaySlide(slidePath, slideNumber, totalSlides) {
+            const svgDiagram = document.getElementById('svg-diagram');
+            if (!svgDiagram) return;
+            
+            // Создаем контейнер для слайда
+            svgDiagram.innerHTML = `
+                <div class="slide-container">
+                    <div class="slide-content">
+                        <img src="${slidePath}" alt="Слайд ${slideNumber}" 
+                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iMjAwIiB5PSIxNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzY2NiI+U2xhZGUgbm90IGZvdW5kPC90ZXh0Pjwvc3ZnPg=='">
+                        <div class="slide-navigation">
+                            Слайд ${slideNumber} из ${totalSlides}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Добавляем стили для слайда
+            const style = document.createElement('style');
+            style.textContent = `
+                .slide-container {
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    background: #f8f9fa;
+                    padding: 20px;
+                }
+                .slide-content {
+                    max-width: 100%;
+                    max-height: 100%;
+                    text-align: center;
+                    position: relative;
+                }
+                .slide-content img {
+                    max-width: 100%;
+                    max-height: calc(100% - 30px);
+                    object-fit: contain;
+                    border: 2px solid #e9ecef;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                }
+                .slide-navigation {
+                    margin-top: 10px;
+                    color: #666;
+                    font-size: 14px;
+                    font-weight: 500;
+                }
+            `;
+            
+            // Удаляем старые стили если есть
+            const oldStyle = document.getElementById('slide-styles');
+            if (oldStyle) oldStyle.remove();
+            
+            style.id = 'slide-styles';
+            document.head.appendChild(style);
+        }
+
+        function fallbackMermaidRender(mermaidCode, title) {
             try {
                 mermaidDiagram.innerHTML = '';
                 const diagramElement = document.createElement('div');
@@ -2849,32 +3017,7 @@
             }
         }
 
-        function displaySvgDiagram(svgCode) {
-            if (!svgCode || svgCode.trim() === '') {
-                console.warn('Пустой SVG код');
-                if (window.svgFix) {
-                    window.svgFix.showFallback('svg-diagram', 'Пустая диаграмма');
-                } else {
-                    svgDiagram.innerHTML = `
-                        <div class="visualization-placeholder">
-                            <i class="fas fa-shapes"></i>
-                            <p>SVG схема будет сгенерирована автоматически</p>
-                        </div>
-                    `;
-                }
-                return;
-            }
-            
-            console.log('Rendering SVG diagram, length:', svgCode.length);
-            
-            if (window.svgFix) {
-                window.svgFix.renderSVG('svg-diagram', svgCode, 'SVG Визуализация');
-            } else {
-                fallbackSvgRender(svgCode);
-            }
-        }
-
-        function fallbackSvgRender(svgCode) {
+        function fallbackSvgRender(svgCode, title) {
             try {
                 let cleaned = svgCode.trim();
                 cleaned = cleaned.replace(/<\?xml[^>]*\?>/g, '');
@@ -2944,6 +3087,12 @@
             } else if (tabName === 'svg') {
                 mermaidTab.style.display = 'none';
                 svgTab.style.display = 'flex';
+                
+                // Если в SVG вкладке показывается слайд, обновляем навигацию
+                const slideContainer = document.querySelector('.slide-container');
+                if (slideContainer) {
+                    console.log('Активирована вкладка SVG со слайдом');
+                }
             }
         }
 
@@ -2998,6 +3147,41 @@
                     console.error('Ошибка polling визуализации:', error);
                 }
             }, 3000);
+        }
+
+        // Обработчики для новых типов визуализации
+        function handleMindmapVisualization(data) {
+            if (!isVisualizationWindowOpen) {
+                setTool('visualization');
+            }
+            
+            const mindmapData = data.data;
+            if (mindmapData && mindmapData.mermaid_code) {
+                console.log('🎨 Отображение mindmap:', mindmapData.lesson_title);
+                displayMermaidDiagram(mindmapData.mermaid_code, mindmapData.lesson_title);
+                
+                // Показываем вкладку mermaid
+                switchVisualizationTab('mermaid');
+            } else {
+                console.error('❌ Некорректные данные mindmap:', mindmapData);
+            }
+        }
+
+        function handleSlideVisualization(data) {
+            if (!isVisualizationWindowOpen) {
+                setTool('visualization');
+            }
+            
+            const slideData = data.data;
+            if (slideData && slideData.slide_path) {
+                console.log('🖼️ Отображение слайда:', slideData.slide_number, '/', slideData.total_slides);
+                displaySlide(slideData.slide_path, slideData.slide_number, slideData.total_slides);
+                
+                // Показываем вкладку SVG для слайдов
+                switchVisualizationTab('svg');
+            } else {
+                console.error('❌ Некорректные данные слайда:', slideData);
+            }
         }
 
         // Улучшенные функции распознавания речи
@@ -4188,6 +4372,19 @@
                 removeRemoteVideo(data.peer_id);
             });
             
+            // Обработчики для новых типов визуализации
+            socket.on('lesson_visualization', (data) => {
+                console.log('📊 Получена визуализация урока:', data.type, data);
+                
+                if (data.type === 'mindmap') {
+                    handleMindmapVisualization(data);
+                } else if (data.type === 'slide') {
+                    handleSlideVisualization(data);
+                } else {
+                    console.warn('Неизвестный тип визуализации:', data.type);
+                }
+            });
+            
             // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
@@ -4833,6 +5030,26 @@
                 removeRemoteVideo(remotePeerId);
             });
         }
+
+        // Глобальный обработчик ошибок загрузки изображений
+        document.addEventListener('error', function(e) {
+            if (e.target.tagName === 'IMG' && e.target.closest('#svg-diagram')) {
+                console.error('Ошибка загрузки слайда:', e.target.src);
+                e.target.style.display = 'none';
+                
+                const container = e.target.closest('.slide-content');
+                if (container) {
+                    const errorMsg = document.createElement('div');
+                    errorMsg.className = 'slide-error';
+                    errorMsg.innerHTML = `
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Не удалось загрузить слайд</p>
+                        <small>${e.target.src.split('/').pop()}</small>
+                    `;
+                    container.appendChild(errorMsg);
+                }
+            }
+        }, true);
     </script>
 </body>
 </html>
