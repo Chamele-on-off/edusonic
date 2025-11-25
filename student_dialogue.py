@@ -881,45 +881,42 @@ class StudentDialogueManager:
         print("❌ Автоматическая визуализация выключена")
 
     # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ - МЕТОДЫ
+    def _start_lesson_visualization_async(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
+        """Асинхронно запускает визуализацию для урока"""
+        try:
+            print(f"🎨 Асинхронная инициализация визуализации для ученика: {lesson_title}")
+            
+            # Запускаем инициализацию визуализации (не блокируем основной поток)
+            visualization_type = self.visualization_manager.initialize_lesson_visualization(
+                lesson_id, 
+                lesson_title, 
+                " ".join(lesson_content), 
+                self.room_id,
+                self.socketio
+            )
+            
+            self.current_visualization_type = visualization_type
+            
+            if visualization_type == "slides":
+                self.slides = self.visualization_manager.get_lesson_slides(lesson_id)
+                self.current_slide_index = 0
+                print(f"🎨 Слайды загружены для ученика: {len(self.slides)} шт.")
+            else:
+                print("🎨 Запущена асинхронная генерация mind map для ученика")
+                
+            print(f"✅ Визуализация инициализирована для ученика (тип: {visualization_type})")
+            
+        except Exception as e:
+            print(f"❌ Ошибка инициализации визуализации для ученика: {e}")
+
     def _start_lesson_visualization(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
         """Запускает систему визуализации для урока"""
         try:
             print(f"🎨 Инициализация визуализации для ученика: {lesson_id}")
             
-            # Определяем тип визуализации
-            self.current_visualization_type = self.visualization_manager.get_visualization_type(lesson_id)
-            print(f"🎨 Тип визуализации для ученика: {self.current_visualization_type}")
+            # ЗАПУСКАЕМ АСИНХРОННО - не блокируем начало урока
+            self._start_lesson_visualization_async(lesson_id, lesson_title, lesson_content)
             
-            if self.current_visualization_type == "slides":
-                # Загружаем слайды
-                self.slides = self.visualization_manager.get_lesson_slides(lesson_id)
-                self.current_slide_index = 0
-                print(f"🎨 Загружены слайды для ученика: {len(self.slides)} слайдов")
-                
-                # Отправляем первый слайд
-                if self.slides and self.room_id:
-                    self._send_slide(0)
-                    
-            else:
-                # Генерируем mind map один раз за урок
-                if not self.generated_mindmap:
-                    full_content = " ".join(lesson_content)
-                    self.generated_mindmap = self.visualization_manager.generate_lesson_mindmap(
-                        full_content, 
-                        lesson_title
-                    )
-                    print(f"🎨 Сгенерирована mind map для ученика: {lesson_title}")
-                    
-                    # Отправляем mind map
-                    if self.room_id and self.generated_mindmap:
-                        self.socketio.emit('lesson_visualization', {
-                            'room_id': self.room_id,
-                            'type': 'mindmap',
-                            'data': self.generated_mindmap,
-                            'lesson_id': lesson_id,
-                            'lesson_title': lesson_title
-                        }, room=self.room_id)
-                        
         except Exception as e:
             print(f"❌ Ошибка инициализации визуализации для ученика: {e}")
     
