@@ -843,6 +843,100 @@ class LLMIntegration:
         
         return concepts
 
+    def generate_lesson_mindmap(self, lesson_content: str, lesson_title: str) -> dict:
+        """Генерация mindmap для всего урока"""
+        try:
+            prompt = f"""
+            Создай структурную mind map (интеллект-карту) для урока на тему: "{lesson_title}"
+
+            СОДЕРЖАНИЕ УРОКА:
+            {lesson_content[:2000]}
+
+            ТРЕБОВАНИЯ К MIND MAP:
+            1. Основная тема в центре: "{lesson_title}"
+            2. 3-5 основных разделов (первого уровня)
+            3. 2-3 подраздела для каждого основного раздела (второго уровня)
+            4. Максимальная глубина: 2 уровня
+            5. Используй четкие и краткие формулировки
+            6. Логическая структура от общего к частному
+
+            Формат Mermaid:
+            flowchart TD
+                A["Основная тема"] --> B["Раздел 1"]
+                A --> C["Раздел 2"] 
+                B --> D["Подраздел 1.1"]
+                B --> E["Подраздел 1.2"]
+                C --> F["Подраздел 2.1"]
+
+            Верни ТОЛЬКО код Mermaid без пояснений.
+            """
+            
+            system_prompt = """Ты создаешь структурные mind maps для образовательных уроков. 
+            Создавай четкие логические структуры с ограниченным количеством элементов для лучшей читаемости."""
+            
+            mermaid_code = self._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject="general",
+                system_prompt=system_prompt,
+                max_tokens=500
+            )
+            
+            if mermaid_code:
+                cleaned_code = self._clean_mermaid_code(mermaid_code, lesson_title)
+                return {
+                    "type": "mindmap",
+                    "mermaid_code": cleaned_code,
+                    "lesson_title": lesson_title,
+                    "timestamp": time.time()
+                }
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации mind map: {e}")
+        
+        # Fallback mind map
+        return {
+            "type": "mindmap",
+            "mermaid_code": self._create_fallback_mindmap(lesson_title),
+            "lesson_title": lesson_title,
+            "timestamp": time.time()
+        }
+
+    def _clean_mermaid_code(self, code: str, lesson_title: str) -> str:
+        """Очистка и валидация Mermaid кода"""
+        if not code:
+            return self._create_fallback_mindmap(lesson_title)
+        
+        # Удаляем markdown обратные кавычки
+        code = re.sub(r'```[\s\S]*?```', '', code)
+        code = re.sub(r'`', '', code)
+        
+        # Убеждаемся, что это корректный Mermaid
+        if not code.strip().startswith(('flowchart', 'graph')):
+            code = 'flowchart TD\n' + code
+        
+        # Добавляем основную тему если ее нет
+        if f'["{lesson_title}"]' not in code and '["Основная тема"]' not in code:
+            lines = code.split('\n')
+            if len(lines) > 1:
+                lines[0] = f'    A["{lesson_title}"]'
+            code = '\n'.join(lines)
+        
+        return code.strip()
+
+    def _create_fallback_mindmap(self, lesson_title: str) -> str:
+        """Создает простую mind map по умолчанию"""
+        return f'''flowchart TD
+    A["{lesson_title}"] --> B["Основные понятия"]
+    A --> C["Ключевые аспекты"]
+    A --> D["Практическое применение"]
+    B --> E["Определения"]
+    B --> F["Примеры"]
+    C --> G["Теория"]
+    C --> H["Факты"]
+    D --> I["Задачи"]
+    D --> J["Упражнения"]'''
+
     def test_connection(self) -> bool:
         """Тестирование подключения к API"""
         try:
@@ -907,5 +1001,16 @@ if __name__ == "__main__":
         print(viz_result['mermaid_code'])
     else:
         print("❌ Не удалось сгенерировать визуализации")
+    
+    # Тестирование генерации mindmap
+    test_lesson_content = "Математика изучает числа, формы, пространственные отношения. Основные разделы: алгебра, геометрия, анализ. Алгебра изучает уравнения и операции, геометрия - фигуры и пространство, анализ - функции и пределы."
+    test_lesson_title = "Введение в математику"
+    print(f"\n🔄 Генерация mindmap для урока: {test_lesson_title}")
+    mindmap_result = llm.generate_lesson_mindmap(test_lesson_content, test_lesson_title)
+    
+    if mindmap_result:
+        print("✅ Mindmap успешно сгенерирована!")
+        print(f"📊 Mermaid код:")
+        print(mindmap_result['mermaid_code'])
     
     print("\n🎉 Тестирование завершено!")
