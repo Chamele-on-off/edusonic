@@ -1402,45 +1402,18 @@ def handle_practice_ended(data):
 
 @socketio.on('visualization_generated')
 def handle_visualization_generated(data):
-    """Обработчик готовых визуализаций"""
+    """Обработчик готовых визуализаций - ТОЛЬКО SVG"""
     room_id = data['room_id']
     
-    debug_log(f"Получена готовая визуализация для комнаты {room_id}: {data['topic'][:100]}...")
+    debug_log(f"Получена SVG инфографика для комнаты {room_id}: {data['topic'][:100]}...")
     
     emit('visualization_generated', {
         'room_id': room_id,
         'topic': data['topic'],
-        'mermaid_code': data.get('mermaid_code', ''),
         'svg_code': data.get('svg_code', ''),
-        'timestamp': data.get('timestamp', time.time())
+        'timestamp': data.get('timestamp', time.time()),
+        'type': data.get('type', 'infographic')
     }, room=room_id)
-
-@socketio.on('lesson_visualization')
-def handle_lesson_visualization(data):
-    """Обработчик визуализации урока (mindmap/slides)"""
-    room_id = data['room_id']
-    
-    debug_log(f"Получена визуализация урока для комнаты {room_id}: {data.get('type')}")
-    
-    emit('lesson_visualization', {
-        'room_id': room_id,
-        'type': data.get('type'),
-        'data': data.get('data'),
-        'lesson_id': data.get('lesson_id'),
-        'lesson_title': data.get('lesson_title')
-    }, room=room_id)
-
-@socketio.on('get_visualization_status')
-def handle_get_visualization_status(data):
-    """Получение статуса визуализации"""
-    room_id = data['room_id']
-    
-    if room_id in room_dialogue:
-        status = room_dialogue[room_id].get_visualization_status()
-        emit('visualization_status', {
-            'room_id': room_id,
-            'status': status
-        })
 
 @socketio.on('get_llm_status')
 def handle_get_llm_status(data):
@@ -1563,7 +1536,7 @@ def handle_llm_async_response(data):
 
 @socketio.on('generate_visualization')
 def handle_generate_visualization(data):
-    """Обработчик запроса генерации визуализации - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ"""
+    """Обработчик запроса генерации инфографики - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ SVG"""
     room_id = data['room_id']
     topic = data.get('topic', '')
     context = data.get('context', '')
@@ -1571,15 +1544,37 @@ def handle_generate_visualization(data):
     if not topic:
         return
     
-    debug_log(f"WebSocket генерация визуализации для комнаты {room_id}: {topic[:100]}...")
+    debug_log(f"WebSocket генерация SVG инфографики для комнаты {room_id}: {topic[:100]}...")
     
-    add_visualization_to_queue(room_id, topic, context)
-    
-    emit('visualization_queued', {
-        'room_id': room_id,
-        'topic': topic,
-        'queue_length': len(room_visualization_queue.get(room_id, []))
-    }, room=room_id)
+    # НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ И ОТПРАВКА SVG
+    try:
+        from llm import LLMIntegration
+        llm = LLMIntegration()
+        
+        result = llm.generate_infographic(topic, context)
+        svg_code = result["svg_code"] if result and result.get("success") else generate_svg_code(topic, context)
+        
+        # НЕМЕДЛЕННО отправляем инфографику
+        emit('visualization_generated', {
+            'room_id': room_id,
+            'topic': topic,
+            'svg_code': svg_code,
+            'timestamp': time.time(),
+            'type': 'infographic'
+        }, room=room_id)
+        
+        debug_log(f"✅ SVG инфографика немедленно отправлена в комнату {room_id}")
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка немедленной генерации SVG инфографики: {e}")
+        # Fallback
+        emit('visualization_generated', {
+            'room_id': room_id,
+            'topic': topic,
+            'svg_code': generate_svg_code(topic, context),
+            'timestamp': time.time(),
+            'type': 'fallback'
+        }, room=room_id)
 
 # =============================================================================
 # API ЭНДПОИНТЫ
@@ -1628,19 +1623,19 @@ def conference():
                          subject_name=subject_name)
 
 def add_visualization_to_queue(room_id, topic, context):
-    """Добавляет визуализацию в очередь для комнаты"""
+    """Добавляет инфографику в очередь для комнаты - ТОЛЬКО SVG"""
     if room_id not in room_visualization_queue:
         room_visualization_queue[room_id] = []
     
-    mermaid_code = generate_mermaid_code(topic, context)
+    # Генерируем только SVG инфографику
     svg_code = generate_svg_code(topic, context)
     
     visualization_data = {
         'topic': topic,
         'context': context,
-        'mermaid_code': mermaid_code,
         'svg_code': svg_code,
-        'timestamp': time.time()
+        'timestamp': time.time(),
+        'type': 'infographic'
     }
     
     if len(room_visualization_queue[room_id]) >= 5:
@@ -1648,12 +1643,12 @@ def add_visualization_to_queue(room_id, topic, context):
     
     room_visualization_queue[room_id].append(visualization_data)
     
-    debug_log(f"Визуализация добавлена в очередь для комнаты {room_id}: {topic}")
+    debug_log(f"SVG инфографика добавлена в очередь для комнаты {room_id}: {topic}")
     return True
 
 @app.route('/api/poll_visualization', methods=['POST', 'GET'])
 def poll_visualization():
-    """Endpoint для polling визуализаций"""
+    """Endpoint для polling визуализаций - ТОЛЬКО SVG"""
     try:
         if request.method == 'POST':
             data = request.json
@@ -1668,9 +1663,9 @@ def poll_visualization():
                 socketio.emit('visualization_generated', {
                     'room_id': room_id,
                     'topic': visualization['topic'],
-                    'mermaid_code': visualization.get('mermaid_code', ''),
                     'svg_code': visualization.get('svg_code', ''),
-                    'timestamp': visualization['timestamp']
+                    'timestamp': visualization['timestamp'],
+                    'type': visualization.get('type', 'infographic')
                 }, room=room_id)
             
             return jsonify({
@@ -1690,7 +1685,7 @@ def poll_visualization():
 
 @app.route('/api/visualization_queue_status', methods=['GET'])
 def visualization_queue_status():
-    """Статус очереди визуализаций"""
+    """Статус очереди визуализаций - ТОЛЬКО SVG"""
     room_id = request.args.get('room_id', 'default')
     
     return jsonify({
@@ -1701,9 +1696,43 @@ def visualization_queue_status():
         "queue": room_visualization_queue.get(room_id, [])
     })
 
+def generate_svg_code(topic: str, context: str = "") -> str:
+    """Генерация SVG инфографики через LLM"""
+    debug_log(f"Генерация SVG инфографики для: {topic[:100]}...")
+    
+    try:
+        from llm import LLMIntegration
+        llm = LLMIntegration()
+        
+        result = llm.generate_infographic(topic, context)
+        
+        if result and result.get("success"):
+            svg_code = result["svg_code"]
+            debug_log(f"✅ Сгенерирована SVG инфографика для: {topic[:50]}...")
+            debug_log(f"Длина SVG кода: {len(svg_code)} символов")
+            return svg_code
+        else:
+            debug_log("❌ LLM не вернул SVG инфографику")
+            
+    except Exception as e:
+        print(f"❌ Ошибка генерации SVG инфографики: {e}")
+    
+    # Fallback - простая SVG схема
+    return f'''
+<svg width="600" height="300" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#f8fafc"/>
+  <rect x="50" y="50" width="500" height="200" rx="10" fill="white" stroke="#e2e8f0" stroke-width="2"/>
+  <text x="300" y="100" text-anchor="middle" font-family="Arial" font-size="20" fill="#1e293b">{topic}</text>
+  <circle cx="200" cy="160" r="30" fill="#3b82f6" opacity="0.7"/>
+  <circle cx="300" cy="160" r="30" fill="#10b981" opacity="0.7"/>
+  <circle cx="400" cy="160" r="30" fill="#f59e0b" opacity="0.7"/>
+  <text x="300" y="230" text-anchor="middle" font-family="Arial" font-size="14" fill="#64748b">Инфографика</text>
+</svg>
+'''
+
 @app.route('/api/generate_diagram', methods=['POST'])
 def generate_diagram():
-    """Генерация диаграммы через LLM + Mermaid"""
+    """Генерация инфографики через LLM - ТОЛЬКО SVG"""
     try:
         data = request.json
         topic = data.get('topic', '')
@@ -1717,147 +1746,13 @@ def generate_diagram():
         
         return jsonify({
             "success": True,
-            "message": "Визуализация добавлена в очередь",
+            "message": "SVG инфографика добавлена в очередь",
             "queue_position": len(room_visualization_queue.get(room_id, [])),
             "topic": topic
         })
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
-
-def generate_mermaid_code(topic: str, context: str = "") -> str:
-    """Генерация Mermaid кода через LLM"""
-    debug_log(f"Генерация Mermaid для: {topic[:100]}...")
-    
-    prompt = f"""
-    Создай Mermaid.js диаграмму для темы: "{topic}".
-    Контекст: {context}
-    
-    Требования:
-    - Только корректный синтаксис Mermaid
-    - Максимум 6-8 элементов
-    - Русские подписи в двойных кавычках
-    - Логическая структура
-    
-    Пример:
-    flowchart TD
-        A["Общее понятие"] --> B["Частный случай"]
-        A --> C["Другой случай"]
-        B --> D["Пример"]
-
-    Тема: {topic}
-    
-    Верни ТОЛЬКО код Mermaid без пояснений.
-    """
-    
-    try:
-        from llm import LLMIntegration
-        llm = LLMIntegration()
-        
-        response = llm._query_llm_api(
-            prompt=prompt,
-            context="",
-            subject="general",
-            system_prompt="Ты создаешь простые Mermaid диаграммы. Используй только корректный синтаксис Mermaid.",
-            max_tokens=300
-        )
-        
-        if response:
-            cleaned_code = clean_mermaid_code(response)
-            debug_log(f"Сгенерирован Mermaid код для: {topic[:50]}...")
-            debug_log(f"Код: {cleaned_code[:100]}...")
-            return cleaned_code
-        else:
-            debug_log("LLM не вернул ответ для Mermaid")
-        
-    except Exception as e:
-        print(f"❌ Ошибка генерации Mermaid кода: {e}")
-    
-    return f'''flowchart TD
-    A["{topic}"] --> B["Аспект 1"]
-    A --> C["Аспект 2"]
-    B --> D["Деталь"]
-    C --> D'''
-
-def generate_svg_code(topic: str, context: str = "") -> str:
-    """Генерация простого SVG через LLM"""
-    debug_log(f"Генерация SVG для: {topic[:100]}...")
-    
-    prompt = f"""
-    Создай простой SVG код для визуализации: "{topic}".
-    
-    Контекст: {context}
-    
-    Используй только базовые элементы:
-    - <rect> для прямоугольников и блоков
-    - <circle> для кругов и узлов
-    - <line> для линий и связей
-    - <text> для текста и подписей
-    - <path> для сложных форм
-    
-    Требования:
-    - Размер: 400x300
-    - Простая и понятная схема
-    - Русские подписи
-    - Минималистичный дизайн
-    - Логическая структура
-    - Цвета для различия элементов
-
-    Верни ТОЛЬКО SVG код без пояснений.
-    """
-    
-    try:
-        from llm import LLMIntegration
-        llm = LLMIntegration()
-        
-        svg_code = llm._query_llm_api(
-            prompt=prompt,
-            context="",
-            subject="general",
-            system_prompt="Ты создаешь простые SVG схемы для образования. Используй минималистичный дизайн и четкую структуру.",
-            max_tokens=1000
-        )
-        
-        if svg_code:
-            svg_code = re.sub(r'```(xml|svg)?\s*', '', svg_code)
-            svg_code = re.sub(r'```\s*', '', svg_code)
-            svg_code = svg_code.strip()
-            
-            if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
-                debug_log(f"Сгенерирован SVG код для: {topic[:50]}...")
-                debug_log(f"Длина кода: {len(svg_code)} символов")
-                return svg_code
-        else:
-            debug_log("LLM не вернул ответ для SVG")
-        
-    except Exception as e:
-        print(f"❌ Ошибка генерации SVG кода: {e}")
-    
-    return ""
-
-def clean_mermaid_code(code: str) -> str:
-    """Очистка Mermaid кода от лишних символов и проверка синтаксиса"""
-    if not code:
-        return ""
-    
-    code = re.sub(r'```[\s\S]*?```', '', code)
-    code = re.sub(r'`[^`]*`', '', code)
-    code = re.sub(r'%%.*', '', code)
-    code = '\n'.join([line.strip() for line in code.split('\n') if line.strip()])
-    
-    valid_starts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt']
-    
-    if not any(code.strip().startswith(start) for start in valid_starts):
-        code = 'flowchart TD\n' + code
-    
-    lines = code.split('\n')
-    if len(lines) < 2 or ('-->' not in code and '->' not in code):
-        if len(lines) > 1:
-            code = lines[0] + '\n' + 'A["Элемент A"] --> B["Элемент B"]'
-        else:
-            code = 'flowchart TD\nA["Элемент A"] --> B["Элемент B"]'
-    
-    return code.strip()
 
 @app.route('/api/llm/priority', methods=['POST'])
 def set_llm_priority_route():
@@ -2685,71 +2580,23 @@ def test_api_key():
 
 @app.route('/api/force_visualization', methods=['POST'])
 def force_visualization():
-    """Принудительная генерация визуализации для тестирования"""
+    """Принудительная генерация SVG инфографики для тестирования"""
     try:
         data = request.json
         room_id = data.get('room_id', 'default')
-        topic = data.get('topic', 'Тестовая визуализация')
+        topic = data.get('topic', 'Тестовая инфографика')
         context = data.get('context', 'Тестовый контекст')
         
-        debug_log(f"Принудительная генерация визуализации для комнаты {room_id}")
+        debug_log(f"Принудительная генерация SVG инфографики для комнаты {room_id}")
         
         add_visualization_to_queue(room_id, topic, context)
         
         return jsonify({
             "success": True,
-            "message": f"Визуализация добавлена в очередь для комнаты {room_id}",
+            "message": f"SVG инфографика добавлена в очередь для комнаты {room_id}",
             "topic": topic,
             "queue_length": len(room_visualization_queue.get(room_id, []))
         })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/visualization/status')
-def get_visualization_status():
-    """Получение статуса визуализации для комнаты"""
-    room_id = request.args.get('room_id', 'default')
-    
-    if room_id in room_dialogue:
-        status = room_dialogue[room_id].get_visualization_status()
-        return jsonify({
-            "success": True,
-            "room_id": room_id,
-            "status": status
-        })
-    
-    return jsonify({"success": False, "error": "Room not found"})
-
-@app.route('/api/visualization/force_mindmap', methods=['POST'])
-def force_mindmap_generation():
-    """Принудительная генерация mindmap"""
-    try:
-        data = request.json
-        room_id = data.get('room_id', 'default')
-        lesson_content = data.get('lesson_content', '')
-        lesson_title = data.get('lesson_title', 'Урок')
-        
-        if room_id in room_dialogue:
-            mindmap = room_dialogue[room_id].visualization_manager.generate_lesson_mindmap(
-                lesson_content, lesson_title
-            )
-            
-            if mindmap:
-                # Отправляем через WebSocket
-                socketio.emit('lesson_visualization', {
-                    'room_id': room_id,
-                    'type': 'mindmap',
-                    'data': mindmap,
-                    'lesson_title': lesson_title
-                }, room=room_id)
-                
-                return jsonify({
-                    "success": True,
-                    "message": "Mindmap сгенерирована"
-                })
-        
-        return jsonify({"success": False, "error": "Ошибка генерации"})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
