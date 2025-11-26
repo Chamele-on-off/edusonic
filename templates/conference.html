@@ -6,7 +6,6 @@
     <title>Виртуальный класс</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
@@ -328,16 +327,6 @@
             overflow: auto;
         }
         
-        #mermaid-diagram {
-            width: 100%;
-            height: 100%;
-            min-height: 300px;
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            overflow: auto;
-        }
-        
         #svg-diagram {
             width: 100%;
             height: 100%;
@@ -374,19 +363,6 @@
         .svg-container svg {
             flex-shrink: 0;
             transition: transform 0.3s ease;
-        }
-        
-        /* Улучшение для Mermaid */
-        #mermaid-diagram .mermaid {
-            max-width: 100%;
-            overflow: auto;
-            display: flex;
-            justify-content: center;
-        }
-        
-        #mermaid-diagram .mermaid svg {
-            max-width: 100%;
-            height: auto;
         }
         
         .visualization-placeholder {
@@ -942,32 +918,6 @@
             background: #e0e0e0;
         }
 
-        /* Улучшения для Mermaid диаграмм */
-        .mermaid {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            overflow: auto;
-            max-width: 100%;
-        }
-
-        .mermaid svg {
-            max-width: 100%;
-            height: auto !important;
-        }
-
-        .diagram-title {
-            text-align: center;
-            font-weight: bold;
-            margin-bottom: 15px;
-            color: #333;
-            font-size: 16px;
-            padding: 10px;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-            border-radius: 8px 8px 0 0;
-        }
-
         /* Контейнер для визуализаций */
         .visualization-container {
             width: 100%;
@@ -976,7 +926,7 @@
             flex-direction: column;
         }
 
-        #mermaid-diagram, #svg-diagram {
+        #svg-diagram {
             flex: 1;
             min-height: 300px;
             background: white;
@@ -1737,24 +1687,19 @@
                 </div>
                 <div class="board-toolbar">
                     <div class="visualization-tabs">
-                        <div class="visualization-tab active" data-tab="mermaid">Mermaid</div>
-                        <div class="visualization-tab" data-tab="svg">SVG</div>
+                        <!-- Только SVG вкладка -->
+                        <div class="visualization-tab active" data-tab="svg">
+                            <i class="fas fa-shapes"></i>
+                            SVG Инфографика
+                        </div>
                     </div>
                 </div>
                 <div id="visualization-content">
-                    <div class="visualization-container" id="mermaid-tab">
-                        <div id="mermaid-diagram">
-                            <div class="visualization-placeholder">
-                                <i class="fas fa-project-diagram"></i>
-                                <p>Диаграмма будет сгенерирована автоматически во время урока</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="visualization-container" id="svg-tab" style="display: none;">
+                    <div class="visualization-container" id="svg-tab">
                         <div id="svg-diagram">
                             <div class="visualization-placeholder">
                                 <i class="fas fa-shapes"></i>
-                                <p>SVG схема будет сгенерирована автоматически во время урока</p>
+                                <p>SVG инфографика будет сгенерирована автоматически во время урока</p>
                             </div>
                         </div>
                     </div>
@@ -1824,175 +1769,6 @@
             <span>Выйти</span>
         </button>
     </div>
-
-    <!-- Mermaid Fix -->
-    <script>
-        class MermaidFix {
-            constructor() {
-                this.initialized = false;
-                this.queue = [];
-                this.init();
-            }
-
-            init() {
-                if (typeof mermaid === 'undefined') {
-                    console.error('Mermaid library not loaded');
-                    return;
-                }
-
-                try {
-                    mermaid.initialize({
-                        startOnLoad: false,
-                        theme: 'default',
-                        securityLevel: 'loose',
-                        flowchart: {
-                            useMaxWidth: true,
-                            htmlLabels: true,
-                            curve: 'basis'
-                        },
-                        fontFamily: 'Arial, sans-serif'
-                    });
-                    this.initialized = true;
-                    console.log('Mermaid initialized successfully');
-                    this.processQueue();
-                } catch (error) {
-                    console.error('Mermaid initialization error:', error);
-                }
-            }
-
-            renderDiagram(containerId, mermaidCode, topic) {
-                if (!this.initialized) {
-                    this.queue.push({ containerId, mermaidCode, topic });
-                    return;
-                }
-
-                this._render(containerId, mermaidCode, topic);
-            }
-
-            _render(containerId, mermaidCode, topic) {
-                const container = document.getElementById(containerId);
-                if (!container) {
-                    console.error(`Container ${containerId} not found`);
-                    return;
-                }
-
-                container.innerHTML = '';
-
-                const diagramElement = document.createElement('div');
-                diagramElement.className = 'mermaid';
-                diagramElement.textContent = this.cleanMermaidCode(mermaidCode);
-                
-                container.appendChild(diagramElement);
-
-                const title = document.createElement('div');
-                title.className = 'diagram-title';
-                title.textContent = topic || 'Диаграмма';
-                title.style.cssText = `
-                    text-align: center;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                    color: #333;
-                    font-size: 16px;
-                `;
-                container.insertBefore(title, diagramElement);
-
-                setTimeout(() => {
-                    try {
-                        mermaid.init(undefined, [diagramElement]).then(() => {
-                            console.log('Diagram rendered successfully:', topic);
-                            this.applyStyles(container);
-                        }).catch(error => {
-                            console.error('Mermaid rendering error:', error);
-                            this.showError(container, error, mermaidCode);
-                        });
-                    } catch (error) {
-                        console.error('Mermaid execution error:', error);
-                        this.showError(container, error, mermaidCode);
-                    }
-                }, 100);
-            }
-
-            cleanMermaidCode(code) {
-                if (!code) return 'graph TD\nA["Пустая диаграмма"]';
-                
-                let cleaned = code.replace(/```[\s\S]*?```/g, '');
-                cleaned = cleaned.replace(/`/g, '');
-                cleaned = cleaned.replace(/%%[^%\n]*/g, '');
-                
-                const validStarts = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'pie', 'gantt'];
-                const hasValidStart = validStarts.some(start => cleaned.trim().startsWith(start));
-                
-                if (!hasValidStart) {
-                    cleaned = 'flowchart TD\n' + cleaned;
-                }
-                
-                if (!cleaned.includes('-->') && !cleaned.includes('->')) {
-                    cleaned += '\nA["Элемент A"] --> B["Элемент B"]';
-                }
-                
-                return cleaned.trim();
-            }
-
-            applyStyles(container) {
-                const svg = container.querySelector('svg');
-                if (svg) {
-                    svg.style.maxWidth = '100%';
-                    svg.style.height = 'auto';
-                    svg.style.display = 'block';
-                    svg.style.margin = '0 auto';
-                    
-                    const textElements = svg.querySelectorAll('text');
-                    textElements.forEach(text => {
-                        text.style.fontFamily = 'Arial, sans-serif';
-                        text.style.fontSize = '14px';
-                    });
-                }
-            }
-
-            showError(container, error, originalCode) {
-                container.innerHTML = `
-                    <div class="visualization-error" style="
-                        padding: 20px;
-                        text-align: center;
-                        color: #d32f2f;
-                        background: #ffebee;
-                        border-radius: 8px;
-                        border: 1px solid #ffcdd2;
-                    ">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
-                        <p><strong>Ошибка отображения диаграммы</strong></p>
-                        <p style="font-size: 12px; margin: 10px 0;">${error.message}</p>
-                        <details style="text-align: left; margin-top: 10px;">
-                            <summary style="cursor: pointer; font-size: 12px;">Исходный код</summary>
-                            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; font-size: 10px; margin-top: 5px;">${originalCode}</pre>
-                        </details>
-                        <button onclick="mermaidFix.retryLast()" style="
-                            margin-top: 10px;
-                            padding: 8px 16px;
-                            background: var(--primary);
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                        ">Повторить</button>
-                    </div>
-                `;
-            }
-
-            processQueue() {
-                while (this.queue.length > 0) {
-                    const item = this.queue.shift();
-                    this._render(item.containerId, item.mermaidCode, item.topic);
-                }
-            }
-
-            retryLast() {
-                console.log('Retry last visualization');
-            }
-        }
-
-        window.mermaidFix = new MermaidFix();
-    </script>
 
     <!-- SVG Fix -->
     <script>
@@ -2347,11 +2123,8 @@
         const animationStatus = document.getElementById('animation-status');
         const speechStatus = document.getElementById('speech-status');
         const autoContinueStatus = document.getElementById('auto-continue-status');
-        const mermaidDiagram = document.getElementById('mermaid-diagram');
         const svgDiagram = document.getElementById('svg-diagram');
         const visualizationTabs = document.querySelectorAll('.visualization-tab');
-        const mermaidTab = document.getElementById('mermaid-tab');
-        const svgTab = document.getElementById('svg-tab');
         const llmStatus = document.getElementById('llm-status');
         const llmStatusText = document.getElementById('llm-status-text');
         const llmPriorityStatus = document.getElementById('llm-priority-status');
@@ -2403,7 +2176,7 @@
         let isDrawingWindowOpen = false;
         
         // Переменные для визуализации
-        let currentVisualizationTab = 'mermaid';
+        let currentVisualizationTab = 'svg';
         let isVisualizationWindowOpen = false;
         let visualizationQueue = [];
         let isProcessingVisualization = false;
@@ -2883,51 +2656,34 @@
         }
 
         // Функции визуализации
-        function displayMermaidDiagram(mermaidCode, title = 'Mindmap урока') {
-            if (!mermaidCode || mermaidCode.trim() === '') {
-                console.warn('Пустой Mermaid код');
-                mermaidDiagram.innerHTML = `
-                    <div class="visualization-placeholder">
-                        <i class="fas fa-project-diagram"></i>
-                        <p>Mindmap будет сгенерирована автоматически во время урока</p>
-                    </div>
-                `;
+        function displaySvgDiagram(svgCode, title = 'SVG Инфографика') {
+            const svgDiagram = document.getElementById('svg-diagram');
+            if (!svgDiagram) {
+                console.error('❌ SVG контейнер не найден');
                 return;
             }
             
-            console.log('Rendering Mermaid mindmap:', mermaidCode.substring(0, 100) + '...');
+            console.log('🖼️ Отображение SVG инфографики:', title);
             
-            if (window.mermaidFix) {
-                window.mermaidFix.renderDiagram('mermaid-diagram', mermaidCode, title);
-            } else {
-                fallbackMermaidRender(mermaidCode, title);
-            }
-        }
-
-        function displaySvgDiagram(svgCode, title = 'SVG Диаграмма') {
-            // Если это слайд, не перезаписываем содержимое
-            const existingSlide = document.querySelector('.slide-container');
-            if (existingSlide) {
-                console.log('Сохраняем существующий слайд');
-                return;
-            }
+            // Показываем вкладку SVG
+            switchVisualizationTab('svg');
             
             if (!svgCode || svgCode.trim() === '') {
-                console.warn('Пустой SVG код');
+                console.warn('⚠️ Пустой SVG код, используется fallback');
                 if (window.svgFix) {
-                    window.svgFix.showFallback('svg-diagram', 'Пустая диаграмма');
+                    window.svgFix.showFallback('svg-diagram', title || 'Инфографика');
                 } else {
                     svgDiagram.innerHTML = `
                         <div class="visualization-placeholder">
                             <i class="fas fa-shapes"></i>
-                            <p>SVG схема будет сгенерирована автоматически</p>
+                            <p>SVG инфографика будет сгенерирована автоматически</p>
                         </div>
                     `;
                 }
                 return;
             }
             
-            console.log('Rendering SVG diagram, length:', svgCode.length);
+            console.log('✅ Отображение SVG, длина кода:', svgCode.length);
             
             if (window.svgFix) {
                 window.svgFix.renderSVG('svg-diagram', svgCode, title);
@@ -2997,26 +2753,6 @@
             document.head.appendChild(style);
         }
 
-        function fallbackMermaidRender(mermaidCode, title) {
-            try {
-                mermaidDiagram.innerHTML = '';
-                const diagramElement = document.createElement('div');
-                diagramElement.className = 'mermaid';
-                diagramElement.textContent = mermaidCode;
-                mermaidDiagram.appendChild(diagramElement);
-                
-                mermaid.init(undefined, [diagramElement]);
-            } catch (error) {
-                console.error('Fallback Mermaid error:', error);
-                mermaidDiagram.innerHTML = `
-                    <div style="padding: 20px; text-align: center; color: #666;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Ошибка отображения диаграммы</p>
-                    </div>
-                `;
-            }
-        }
-
         function fallbackSvgRender(svgCode, title) {
             try {
                 let cleaned = svgCode.trim();
@@ -3081,18 +2817,10 @@
                 }
             });
             
-            if (tabName === 'mermaid') {
-                mermaidTab.style.display = 'flex';
-                svgTab.style.display = 'none';
-            } else if (tabName === 'svg') {
-                mermaidTab.style.display = 'none';
-                svgTab.style.display = 'flex';
-                
-                // Если в SVG вкладке показывается слайд, обновляем навигацию
-                const slideContainer = document.querySelector('.slide-container');
-                if (slideContainer) {
-                    console.log('Активирована вкладка SVG со слайдом');
-                }
+            // ТЕПЕРЬ ТОЛЬКО SVG ВКЛАДКА
+            if (tabName === 'svg') {
+                // Всегда показываем SVG вкладку
+                console.log('Активирована вкладка SVG инфографики');
             }
         }
 
@@ -3110,17 +2838,10 @@
         }
 
         function showVisualizationLoading() {
-            mermaidDiagram.innerHTML = `
-                <div class="visualization-loading">
-                    <div class="spinner"></div>
-                    <p>Генерация визуализации...</p>
-                </div>
-            `;
-            
             svgDiagram.innerHTML = `
                 <div class="visualization-loading">
                     <div class="spinner"></div>
-                    <p>Генерация визуализации...</p>
+                    <p>Генерация SVG инфографики...</p>
                 </div>
             `;
         }
@@ -3150,23 +2871,6 @@
         }
 
         // Обработчики для новых типов визуализации
-        function handleMindmapVisualization(data) {
-            if (!isVisualizationWindowOpen) {
-                setTool('visualization');
-            }
-            
-            const mindmapData = data.data;
-            if (mindmapData && mindmapData.mermaid_code) {
-                console.log('🎨 Отображение mindmap:', mindmapData.lesson_title);
-                displayMermaidDiagram(mindmapData.mermaid_code, mindmapData.lesson_title);
-                
-                // Показываем вкладку mermaid
-                switchVisualizationTab('mermaid');
-            } else {
-                console.error('❌ Некорректные данные mindmap:', mindmapData);
-            }
-        }
-
         function handleSlideVisualization(data) {
             if (!isVisualizationWindowOpen) {
                 setTool('visualization');
@@ -3988,22 +3692,30 @@
             initDragForWindow(visualizationWindow);
         }
 
+        // ИСПРАВЛЕННАЯ ФУНКЦИЯ setTool - ОКНА НЕ ИСЧЕЗАЮТ
         function setTool(tool) {
+            console.log('🛠️ Активация инструмента:', tool);
+            
+            // НЕ скрываем другие окна - они должны оставаться видимыми
+            // lessonContent.style.display = 'none'; // УБИРАЕМ ЭТУ СТРОКУ
+            // drawingWindow.style.display = 'none'; // УБИРАЕМ ЭТУ СТРОКУ  
+            // visualizationWindow.style.display = 'none'; // УБИРАЕМ ЭТУ СТРОКУ
+            
+            // Сбрасываем активность всех кнопок
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
             visualizationToolBtn.classList.remove('active');
             
-            lessonContent.style.display = 'none';
-            drawingWindow.style.display = 'none';
-            visualizationWindow.style.display = 'none';
-            answerInputContainer.style.display = 'none';
+            // answerInputContainer.style.display = 'none'; // УБИРАЕМ ЭТУ СРОКУ
             
             if (tool === 'text') {
                 textToolBtn.classList.add('active');
-                lessonContent.style.display = 'block';
+                // lessonContent.style.display = 'block'; // УБИРАЕМ - окно уже видимо
                 bringWindowToFront(lessonContent);
-            } else if (tool === 'draw') {
+                console.log('📝 Активирована текстовая доска');
+            } 
+            else if (tool === 'draw') {
                 drawToolBtn.classList.add('active');
                 drawingWindow.style.display = 'block';
                 isDrawingWindowOpen = true;
@@ -4014,18 +3726,37 @@
                     drawingCanvas.width = rect.width;
                     drawingCanvas.height = rect.height;
                 }, 50);
-            } else if (tool === 'answer') {
+                console.log('🎨 Активировано окно рисования');
+            } 
+            else if (tool === 'answer') {
                 answerToolBtn.classList.add('active');
-                lessonContent.style.display = 'block';
+                // lessonContent.style.display = 'block'; // УБИРАЕМ - окно уже видимо
                 answerInputContainer.style.display = 'block';
                 answerInput.focus();
                 bringWindowToFront(lessonContent);
-            } else if (tool === 'visualization') {
+                console.log('💬 Активирован ввод ответа');
+            } 
+            else if (tool === 'visualization') {
                 visualizationToolBtn.classList.add('active');
                 visualizationWindow.style.display = 'block';
                 isVisualizationWindowOpen = true;
                 bringWindowToFront(visualizationWindow);
+                console.log('📊 Активировано окно визуализации');
             }
+        }
+
+        // Безопасная активация инструментов
+        function ensureLessonWindowVisible() {
+            // Гарантируем, что окно урока всегда видимо во время урока
+            if (isLessonActive && lessonContent.style.display === 'none') {
+                lessonContent.style.display = 'block';
+                console.log('🔧 Восстановлено окно урока');
+            }
+        }
+
+        function safeToolActivation(tool) {
+            ensureLessonWindowVisible();
+            setTool(tool);
         }
 
         function submitAnswer() {
@@ -4372,13 +4103,35 @@
                 removeRemoteVideo(data.peer_id);
             });
             
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
+            socket.on('visualization_generated', (data) => {
+                console.log('🎨 Получена SVG инфографика:', data.topic);
+                
+                if (!isVisualizationWindowOpen) {
+                    setTool('visualization');
+                }
+                
+                // Показываем индикатор загрузки
+                showVisualizationLoading();
+                
+                setTimeout(() => {
+                    // ОТКЛЮЧАЕМ Mermaid - используем только SVG
+                    if (data.svg_code) {
+                        displaySvgDiagram(data.svg_code, data.topic);
+                        console.log('✅ SVG инфографика отображена');
+                    } else {
+                        // Fallback если SVG код не пришел
+                        displaySvgDiagram('', data.topic);
+                        console.warn('⚠️ SVG код отсутствует, используется fallback');
+                    }
+                }, 500);
+            });
+            
             // Обработчики для новых типов визуализации
             socket.on('lesson_visualization', (data) => {
                 console.log('📊 Получена визуализация урока:', data.type, data);
                 
-                if (data.type === 'mindmap') {
-                    handleMindmapVisualization(data);
-                } else if (data.type === 'slide') {
+                if (data.type === 'slide') {
                     handleSlideVisualization(data);
                 } else {
                     console.warn('Неизвестный тип визуализации:', data.type);
@@ -4513,28 +4266,6 @@
                 if (data.status === 'ready' && neutralFrames.length > 0) {
                     startNeutralAnimation();
                 }
-            });
-
-            socket.on('visualization_generated', (data) => {
-                console.log('Получена визуализация:', data.topic);
-                
-                if (!isVisualizationWindowOpen) {
-                    setTool('visualization');
-                }
-                
-                showVisualizationLoading();
-                
-                setTimeout(() => {
-                    if (data.mermaid_code) {
-                        displayMermaidDiagram(data.mermaid_code);
-                    }
-                    
-                    if (data.svg_code) {
-                        displaySvgDiagram(data.svg_code);
-                    }
-                    
-                    console.log('Визуализации обновлены');
-                }, 500);
             });
 
             socket.on('practice_started', () => {
@@ -4777,10 +4508,11 @@
                 updateActivationButton();
             }, 1000);
             
-            textToolBtn.addEventListener('click', () => setTool('text'));
-            drawToolBtn.addEventListener('click', () => setTool('draw'));
-            answerToolBtn.addEventListener('click', () => setTool('answer'));
-            visualizationToolBtn.addEventListener('click', () => setTool('visualization'));
+            // ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ КНОПОК - ИСПОЛЬЗУЕМ БЕЗОПАСНУЮ АКТИВАЦИЮ
+            textToolBtn.addEventListener('click', () => safeToolActivation('text'));
+            drawToolBtn.addEventListener('click', () => safeToolActivation('draw'));
+            answerToolBtn.addEventListener('click', () => safeToolActivation('answer'));
+            visualizationToolBtn.addEventListener('click', () => safeToolActivation('visualization'));
             
             document.getElementById('drawing-pen').addEventListener('click', () => setDrawingTool('pen'));
             document.getElementById('drawing-eraser').addEventListener('click', () => setDrawingTool('eraser'));
