@@ -10,7 +10,6 @@ from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
 from practice_manager import PracticeManager
-from visualization_manager import visualization_manager
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -70,20 +69,13 @@ class DialogueManager:
         # НОВЫЕ ПОЛЯ ДЛЯ ДАННЫХ УЧЕНИКА (для промтов)
         self.student_data = {}
         
-        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ
+        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
         self.visualization_enabled = True
         self.last_visualization_time = 0
         self.visualization_cooldown = 5
         self.visualization_counter = 0
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
-        
-        # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ
-        self.visualization_manager = visualization_manager
-        self.current_visualization_type = None
-        self.generated_mindmap = None
-        self.current_slide_index = 0
-        self.slides = None
         
         self._load_lessons()
         
@@ -745,13 +737,6 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
-            # ИНИЦИАЛИЗАЦИЯ НОВОЙ СИСТЕМЫ ВИЗУАЛИЗАЦИИ
-            self._start_lesson_visualization(
-                lesson_data['id'],
-                lesson_data['title'],
-                self.lesson_content
-            )
-            
             # КРИТИЧЕСКИ ВАЖНО: Уведомляем клиент о начале урока
             if self.room_id and self.socketio:
                 self.socketio.emit('lesson_started', {
@@ -769,18 +754,20 @@ class DialogueManager:
             self.lesson_started = False
 
     def _has_visualization_triggers(self, text: str) -> bool:
-        """Проверяет наличие триггеров для визуализации"""
+        """Проверяет наличие триггеров для визуализации - ТОЛЬКО SVG"""
         text_lower = text.lower()
         
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
-            'таблица', 'классификация', 'этапы', 'стадии', 'система'
+            'таблица', 'классификация', 'этапы', 'стадии', 'система',
+            'сравнение', 'типы', 'виды', 'формы', 'принципы', 'компоненты'
         ]
         
         structure_indicators = [
             'состоит из', 'включает в себя', 'делится на', 'подразделяется',
-            'можно разделить', 'выделяют', 'различают', 'существуют'
+            'можно разделить', 'выделяют', 'различают', 'существуют',
+            'основные элементы', 'ключевые аспекты'
         ]
         
         has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
@@ -789,7 +776,7 @@ class DialogueManager:
         return has_trigger or has_structure
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация визуализации для текста"""
+        """Генерация SVG инфографики для текста - ТОЛЬКО SVG"""
         if not self.visualization_enabled or not text.strip():
             return
     
@@ -808,124 +795,101 @@ class DialogueManager:
                 self.paragraphs_since_last_viz = 0
                 self.visualization_counter += 1
                 
-                print(f"🎨 Генерация визуализации для: {text[:100]}...")
+                print(f"🎨 Генерация SVG инфографики для: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
-                    # Используем улучшенную генерацию через структурированные данные
-                    viz_result = self.llm.generate_visualization(text, context)
+                    # Генерируем SVG инфографику через LLM
+                    infographic_result = self.llm.generate_infographic(text, context)
                     
-                    if viz_result and viz_result.get("success"):
+                    if infographic_result and infographic_result.get("success"):
                         self.socketio.emit('visualization_generated', {
                             'room_id': self.room_id,
                             'topic': text[:100],
-                            'mermaid_code': viz_result.get('mermaid_code', ''),
-                            'svg_code': viz_result.get('svg_code', ''),
-                            'timestamp': time.time()
+                            'svg_code': infographic_result['svg_code'],
+                            'timestamp': time.time(),
+                            'type': 'infographic'
                         }, room=self.room_id)
-                        print(f"✅ Визуализация отправлена в комнату {self.room_id}")
+                        print(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
+                    else:
+                        # Fallback - простая SVG схема
+                        fallback_svg = self._create_fallback_infographic(text)
+                        self.socketio.emit('visualization_generated', {
+                            'room_id': self.room_id,
+                            'topic': text[:100],
+                            'svg_code': fallback_svg,
+                            'timestamp': time.time(),
+                            'type': 'fallback'
+                        }, room=self.room_id)
+                        print(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
                     
             except Exception as e:
-                print(f"❌ Ошибка генерации визуализации: {e}")
+                print(f"❌ Ошибка генерации SVG инфографики: {e}")
+                # Fallback при ошибке
+                if self.room_id and self.socketio:
+                    fallback_svg = self._create_fallback_infographic(text)
+                    self.socketio.emit('visualization_generated', {
+                        'room_id': self.room_id,
+                        'topic': text[:100],
+                        'svg_code': fallback_svg,
+                        'timestamp': time.time(),
+                        'type': 'error_fallback'
+                    }, room=self.room_id)
+
+    def _create_fallback_infographic(self, text: str) -> str:
+        """Создает простую SVG инфографику как fallback"""
+        topic_short = text[:50] + "..." if len(text) > 50 else text
+        
+        return f'''
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)" opacity="0.1"/>
+  
+  <!-- Основной контейнер -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="50" width="500" height="300" rx="20" fill="white" stroke="#e5e7eb" stroke-width="2"/>
+  </g>
+  
+  <!-- Заголовок -->
+  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">
+    {topic_short}
+  </text>
+  
+  <!-- Иконка -->
+  <circle cx="300" cy="200" r="40" fill="#4f46e5" opacity="0.8"/>
+  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white">?</text>
+  
+  <!-- Подпись -->
+  <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    Инфографика по теме
+  </text>
+  
+  <!-- Декоративные элементы -->
+  <circle cx="100" cy="100" r="15" fill="#10b981" opacity="0.6"/>
+  <circle cx="500" cy="120" r="12" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="80" cy="280" r="10" fill="#ef4444" opacity="0.6"/>
+  <circle cx="520" cy="260" r="8" fill="#8b5cf6" opacity="0.6"/>
+</svg>
+'''
 
     def enable_visualization(self):
-        """Включение автоматической визуализации"""
+        """Включение автоматической визуализации - ТОЛЬКО SVG"""
         self.visualization_enabled = True
-        print("✅ Автоматическая визуализация включена")
+        print("✅ Автоматическая SVG визуализация включена")
 
     def disable_visualization(self):
         """Выключение автоматической визуализации"""
         self.visualization_enabled = False
         print("❌ Автоматическая визуализация выключена")
-
-    # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ - МЕТОДЫ
-    def _start_lesson_visualization_async(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
-        """Асинхронно запускает визуализацию для урока"""
-        try:
-            print(f"🎨 Асинхронная инициализация визуализации для: {lesson_title}")
-            
-            # Запускаем инициализацию визуализации (не блокируем основной поток)
-            visualization_type = self.visualization_manager.initialize_lesson_visualization(
-                lesson_id, 
-                lesson_title, 
-                " ".join(lesson_content), 
-                self.room_id,
-                self.socketio
-            )
-            
-            self.current_visualization_type = visualization_type
-            
-            if visualization_type == "slides":
-                self.slides = self.visualization_manager.get_lesson_slides(lesson_id)
-                self.current_slide_index = 0
-                print(f"🎨 Слайды загружены: {len(self.slides)} шт.")
-            else:
-                print("🎨 Запущена асинхронная генерация mind map")
-                
-            print(f"✅ Визуализация инициализирована (тип: {visualization_type})")
-            
-        except Exception as e:
-            print(f"❌ Ошибка инициализации визуализации: {e}")
-
-    def _start_lesson_visualization(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
-        """Запускает систему визуализации для урока"""
-        try:
-            print(f"🎨 Инициализация визуализации для урока: {lesson_id}")
-            
-            # ЗАПУСКАЕМ АСИНХРОННО - не блокируем начало урока
-            self._start_lesson_visualization_async(lesson_id, lesson_title, lesson_content)
-            
-        except Exception as e:
-            print(f"❌ Ошибка инициализации визуализации: {e}")
-    
-    def _handle_paragraph_visualization(self, paragraph_index: int):
-        """Обрабатывает визуализацию для текущего абзаца"""
-        if not self.lesson_started or not self.selected_lesson:
-            return
-            
-        if self.current_visualization_type == "slides":
-            # Показываем следующий слайд для каждого нового абзаца
-            if self.slides and paragraph_index < len(self.slides):
-                self._send_slide(paragraph_index)
-    
-    def _send_slide(self, slide_index: int):
-        """Отправляет слайд в комнату"""
-        if not self.slides or slide_index >= len(self.slides):
-            return
-            
-        self.current_slide_index = slide_index
-        slide_path = self.slides[slide_index]
-        
-        print(f"🖼️ Отправка слайда {slide_index + 1}/{len(self.slides)}: {slide_path}")
-        
-        if self.room_id:
-            self.socketio.emit('lesson_visualization', {
-                'room_id': self.room_id,
-                'type': 'slide',
-                'data': {
-                    'slide_path': slide_path,
-                    'slide_number': slide_index + 1,
-                    'total_slides': len(self.slides),
-                    'timestamp': time.time()
-                },
-                'lesson_id': self.selected_lesson['id'],
-                'lesson_title': self.selected_lesson.get('title', 'Урок')
-            }, room=self.room_id)
-    
-    def send_current_visualization(self):
-        """Принудительно отправляет текущую визуализацию"""
-        if not self.lesson_started or not self.selected_lesson or not self.room_id:
-            return
-            
-        if self.current_visualization_type == "slides" and self.slides:
-            self._send_slide(self.current_slide_index)
-        elif self.current_visualization_type == "mindmap" and self.generated_mindmap:
-            self.socketio.emit('lesson_visualization', {
-                'room_id': self.room_id,
-                'type': 'mindmap',
-                'data': self.generated_mindmap,
-                'lesson_id': self.selected_lesson['id'],
-                'lesson_title': self.selected_lesson.get('title', 'Урок')
-            }, room=self.room_id)
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -1074,7 +1038,7 @@ class DialogueManager:
         return response
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """Прямая обработка выбора предмета с инициализацией визуализации"""
+        """Прямая обработка выбора предмета"""
         self.current_subject = subject
         lessons = self.lessons.get(subject, [])
         demo_lessons = [l for l in lessons if l.get('is_demo', False)]
@@ -1097,12 +1061,7 @@ class DialogueManager:
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
         
-        # ИНИЦИАЛИЗАЦИЯ ВИЗУАЛИЗАЦИИ ПРИ СТАРТЕ УРОКА
-        self._start_lesson_visualization(
-            self.selected_lesson['id'],
-            self.selected_lesson['title'],
-            self.lesson_content
-        )
+        self.enable_visualization()
         
         self.conversation_history = []
         self.conversation_context = []
@@ -1170,11 +1129,17 @@ class DialogueManager:
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
-            
-            # ВИЗУАЛИЗАЦИЯ: Обрабатываем отображение для этого абзаца
-            self._handle_paragraph_visualization(self.current_paragraph)
-            
             self.current_paragraph += 1
+            
+            if (self.visualization_enabled and paragraph and 
+                len(paragraph.strip()) > 10 and self.room_id):
+                
+                def delayed_visualization():
+                    time.sleep(0.5)
+                    context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
+                    self._generate_visualization(paragraph, context)
+                
+                threading.Thread(target=delayed_visualization, daemon=True).start()
             
             print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
@@ -1443,12 +1408,6 @@ class DialogueManager:
         self.student_lesson_started = False
         self.student_subject_prompted = False
 
-        # Сброс визуализации
-        self.current_visualization_type = None
-        self.generated_mindmap = None
-        self.current_slide_index = 0
-        self.slides = None
-
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
         if "обществознание" not in subjects:
@@ -1540,22 +1499,20 @@ class DialogueManager:
         return practice_message
 
     def get_visualization_status(self) -> Dict:
-        """Возвращает статус визуализации"""
+        """Возвращает статус визуализации - ТОЛЬКО SVG"""
         return {
             "visualization_enabled": self.visualization_enabled,
             "visualization_counter": self.visualization_counter,
             "last_visualization_time": self.last_visualization_time,
             "paragraphs_since_last_viz": self.paragraphs_since_last_viz,
-            "current_visualization_type": self.current_visualization_type,
-            "current_slide_index": self.current_slide_index,
-            "total_slides": len(self.slides) if self.slides else 0
+            "type": "svg_infographic"
         }
 
     def force_visualization(self, text: str) -> bool:
-        """Принудительно генерирует визуализацию для текста"""
+        """Принудительно генерирует SVG инфографику для текста"""
         try:
             if not self.room_id:
-                print("❌ Нет room_id для отправки визуализации")
+                print("❌ Нет room_id для отправки инфографики")
                 return False
             
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph]) if self.lesson_content else ""
@@ -1563,7 +1520,7 @@ class DialogueManager:
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка принудительной генерации визуализации: {e}")
+            print(f"❌ Ошибка принудительной генерации инфографики: {e}")
             return False
 
     def get_conversation_stats(self) -> Dict:
@@ -1608,12 +1565,7 @@ class DialogueManager:
             "auto_selected_subject": self.auto_selected_subject,
             "student_conversation_count": self.student_conversation_count,
             "student_lesson_started": self.student_lesson_started,
-            "student_subject_prompted": self.student_subject_prompted,
-            # Информация о визуализации
-            "current_visualization_type": self.current_visualization_type,
-            "has_mindmap": self.generated_mindmap is not None,
-            "current_slide": self.current_slide_index,
-            "total_slides": len(self.slides) if self.slides else 0
+            "student_subject_prompted": self.student_subject_prompted
         }
 
     def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
@@ -1686,13 +1638,6 @@ class DialogueManager:
             
             if not self.lesson_content:
                 return "Ошибка загрузки урока."
-            
-            # Переинициализируем визуализацию
-            self._start_lesson_visualization(
-                self.selected_lesson['id'],
-                self.selected_lesson['title'],
-                self.lesson_content
-            )
             
             first_paragraph = self.lesson_content[0] if self.lesson_content else ""
             return f"Урок перезапущен. {first_paragraph}"
