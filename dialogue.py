@@ -10,6 +10,7 @@ from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
 from practice_manager import PracticeManager
+from infographic_generator import infographic_generator
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -69,7 +70,7 @@ class DialogueManager:
         # НОВЫЕ ПОЛЯ ДЛЯ ДАННЫХ УЧЕНИКА (для промтов)
         self.student_data = {}
         
-        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
+        # НОВЫЕ ПОЛЯ ДЛЯ ИНФОГРАФИКИ
         self.visualization_enabled = True
         self.last_visualization_time = 0
         self.visualization_cooldown = 5
@@ -754,20 +755,18 @@ class DialogueManager:
             self.lesson_started = False
 
     def _has_visualization_triggers(self, text: str) -> bool:
-        """Проверяет наличие триггеров для визуализации - ТОЛЬКО SVG"""
+        """Проверяет наличие триггеров для инфографики"""
         text_lower = text.lower()
         
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
-            'таблица', 'классификация', 'этапы', 'стадии', 'система',
-            'сравнение', 'типы', 'виды', 'формы', 'принципы', 'компоненты'
+            'таблица', 'классификация', 'этапы', 'стадии', 'система'
         ]
         
         structure_indicators = [
             'состоит из', 'включает в себя', 'делится на', 'подразделяется',
-            'можно разделить', 'выделяют', 'различают', 'существуют',
-            'основные элементы', 'ключевые аспекты'
+            'можно разделить', 'выделяют', 'различают', 'существуют'
         ]
         
         has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
@@ -776,7 +775,7 @@ class DialogueManager:
         return has_trigger or has_structure
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация SVG инфографики для текста - ТОЛЬКО SVG"""
+        """Генерация инфографики для текста"""
         if not self.visualization_enabled or not text.strip():
             return
     
@@ -795,101 +794,34 @@ class DialogueManager:
                 self.paragraphs_since_last_viz = 0
                 self.visualization_counter += 1
                 
-                print(f"🎨 Генерация SVG инфографики для: {text[:100]}...")
+                print(f"🎨 Генерация инфографики для: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
-                    # Генерируем SVG инфографику через LLM
-                    infographic_result = self.llm.generate_infographic(text, context)
+                    # Используем новый генератор инфографики
+                    result = infographic_generator.generate_infographic(text, context)
                     
-                    if infographic_result and infographic_result.get("success"):
-                        self.socketio.emit('visualization_generated', {
+                    if result and result.get("success"):
+                        self.socketio.emit('infographic_generated', {
                             'room_id': self.room_id,
                             'topic': text[:100],
-                            'svg_code': infographic_result['svg_code'],
-                            'timestamp': time.time(),
-                            'type': 'infographic'
+                            'svg_code': result['svg_code'],
+                            'style': result['style'],
+                            'timestamp': time.time()
                         }, room=self.room_id)
-                        print(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
-                    else:
-                        # Fallback - простая SVG схема
-                        fallback_svg = self._create_fallback_infographic(text)
-                        self.socketio.emit('visualization_generated', {
-                            'room_id': self.room_id,
-                            'topic': text[:100],
-                            'svg_code': fallback_svg,
-                            'timestamp': time.time(),
-                            'type': 'fallback'
-                        }, room=self.room_id)
-                        print(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
+                        print(f"✅ Инфографика отправлена в комнату {self.room_id}")
                     
             except Exception as e:
-                print(f"❌ Ошибка генерации SVG инфографики: {e}")
-                # Fallback при ошибке
-                if self.room_id and self.socketio:
-                    fallback_svg = self._create_fallback_infographic(text)
-                    self.socketio.emit('visualization_generated', {
-                        'room_id': self.room_id,
-                        'topic': text[:100],
-                        'svg_code': fallback_svg,
-                        'timestamp': time.time(),
-                        'type': 'error_fallback'
-                    }, room=self.room_id)
-
-    def _create_fallback_infographic(self, text: str) -> str:
-        """Создает простую SVG инфографику как fallback"""
-        topic_short = text[:50] + "..." if len(text) > 50 else text
-        
-        return f'''
-<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4f46e5" />
-      <stop offset="100%" stop-color="#7c3aed" />
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
-    </filter>
-  </defs>
-  
-  <!-- Фон -->
-  <rect width="100%" height="100%" fill="url(#bgGradient)" opacity="0.1"/>
-  
-  <!-- Основной контейнер -->
-  <g filter="url(#shadow)">
-    <rect x="50" y="50" width="500" height="300" rx="20" fill="white" stroke="#e5e7eb" stroke-width="2"/>
-  </g>
-  
-  <!-- Заголовок -->
-  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">
-    {topic_short}
-  </text>
-  
-  <!-- Иконка -->
-  <circle cx="300" cy="200" r="40" fill="#4f46e5" opacity="0.8"/>
-  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white">?</text>
-  
-  <!-- Подпись -->
-  <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
-    Инфографика по теме
-  </text>
-  
-  <!-- Декоративные элементы -->
-  <circle cx="100" cy="100" r="15" fill="#10b981" opacity="0.6"/>
-  <circle cx="500" cy="120" r="12" fill="#f59e0b" opacity="0.6"/>
-  <circle cx="80" cy="280" r="10" fill="#ef4444" opacity="0.6"/>
-  <circle cx="520" cy="260" r="8" fill="#8b5cf6" opacity="0.6"/>
-</svg>
-'''
+                print(f"❌ Ошибка генерации инфографики: {e}")
 
     def enable_visualization(self):
-        """Включение автоматической визуализации - ТОЛЬКО SVG"""
+        """Включение автоматической инфографики"""
         self.visualization_enabled = True
-        print("✅ Автоматическая SVG визуализация включена")
+        print("✅ Автоматическая инфографика включена")
 
     def disable_visualization(self):
-        """Выключение автоматической визуализации"""
+        """Выключение автоматической инфографики"""
         self.visualization_enabled = False
-        print("❌ Автоматическая визуализация выключена")
+        print("❌ Автоматическая инфографика выключена")
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа с гарантированным результатом"""
@@ -1499,17 +1431,16 @@ class DialogueManager:
         return practice_message
 
     def get_visualization_status(self) -> Dict:
-        """Возвращает статус визуализации - ТОЛЬКО SVG"""
+        """Возвращает статус инфографики"""
         return {
             "visualization_enabled": self.visualization_enabled,
             "visualization_counter": self.visualization_counter,
             "last_visualization_time": self.last_visualization_time,
-            "paragraphs_since_last_viz": self.paragraphs_since_last_viz,
-            "type": "svg_infographic"
+            "paragraphs_since_last_viz": self.paragraphs_since_last_viz
         }
 
     def force_visualization(self, text: str) -> bool:
-        """Принудительно генерирует SVG инфографику для текста"""
+        """Принудительно генерирует инфографику для текста"""
         try:
             if not self.room_id:
                 print("❌ Нет room_id для отправки инфографики")
