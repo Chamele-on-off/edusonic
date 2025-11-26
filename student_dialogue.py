@@ -11,7 +11,6 @@ from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
 from practice_manager import PracticeManager
-from visualization_manager import visualization_manager
 
 class StudentDialogueManager:
     def __init__(self, socketio, student_data):
@@ -62,20 +61,13 @@ class StudentDialogueManager:
         self.student_lesson_started = False
         self.student_subject_prompted = False
         
-        # Поля для визуализации
+        # ОБНОВЛЕННЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
         self.visualization_enabled = True
         self.last_visualization_time = 0
         self.visualization_cooldown = 5
         self.visualization_counter = 0
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
-        
-        # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ
-        self.visualization_manager = visualization_manager
-        self.current_visualization_type = None
-        self.generated_mindmap = None
-        self.current_slide_index = 0
-        self.slides = None
         
         # Адаптированные промты для ученика
         self.student_prompts = self._load_student_prompts()
@@ -687,7 +679,7 @@ class StudentDialogueManager:
             
             print(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
             
-            # Убедимся, что есть правильное разделение на абзацы
+            # Убедимся, что есть правильное разделение на абзацев
             if '\n\n' not in lesson_content:
                 print("⚠️ В ответе нет двойных переводов строк, добавляем...")
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
@@ -762,7 +754,7 @@ class StudentDialogueManager:
         return False
 
     def _start_generated_lesson(self, lesson_data: dict):
-        """Начинает сгенерированный урок"""
+        """Начинает сгенерированный урок для ученика"""
         try:
             print(f"🚀 Начинаем сгенерированный урок для ученика: {lesson_data['title']}")
             
@@ -771,7 +763,7 @@ class StudentDialogueManager:
             self.current_state = "lesson_reading"
             self.current_paragraph = 0
             
-            # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
+            # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ SVG ВИЗУАЛИЗАЦИЮ ПРИ СТАРТЕ УРОКА
             self.enable_visualization()
             
             # Загружаем содержание урока
@@ -791,32 +783,37 @@ class StudentDialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
-            # ИНИЦИАЛИЗАЦИЯ НОВОЙ СИСТЕМЫ ВИЗУАЛИЗАЦИИ
-            self._start_lesson_visualization(
-                lesson_data['id'],
-                lesson_data['title'],
-                self.lesson_content
-            )
+            # КРИТИЧЕСКИ ВАЖНО: Уведомляем клиент о начале урока
+            if self.room_id and self.socketio:
+                self.socketio.emit('lesson_started', {
+                    'lesson_id': lesson_data['id'],
+                    'title': lesson_data['title'],
+                    'subject': self.current_subject,
+                    'is_generated': True
+                }, room=self.room_id)
+                print(f"📢 Уведомление о начале урока отправлено ученику в комнату {self.room_id}")
             
-            print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат!")
+            print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат для ученика!")
             
         except Exception as e:
-            print(f"❌ Ошибка начала сгенерированного урока: {e}")
+            print(f"❌ Ошибка начала сгенерированного урока для ученика: {e}")
             self.lesson_started = False
 
     def _has_visualization_triggers(self, text: str) -> bool:
-        """Проверяет наличие триггеров для визуализации"""
+        """Проверяет наличие триггеров для визуализации - ТОЛЬКО SVG"""
         text_lower = text.lower()
         
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
-            'таблица', 'классификация', 'этапы', 'стадии', 'система'
+            'таблица', 'классификация', 'этапы', 'стадии', 'система',
+            'сравнение', 'типы', 'виды', 'формы', 'принципы', 'компоненты'
         ]
         
         structure_indicators = [
             'состоит из', 'включает в себя', 'делится на', 'подразделяется',
-            'можно разделить', 'выделяют', 'различают', 'существуют'
+            'можно разделить', 'выделяют', 'различают', 'существуют',
+            'основные элементы', 'ключевые аспекты'
         ]
         
         has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
@@ -832,7 +829,7 @@ class StudentDialogueManager:
         return (has_trigger or has_structure) and is_long_enough
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация визуализации для текста"""
+        """Генерация SVG инфографики для текста - ТОЛЬКО SVG"""
         if not self.visualization_enabled or not text.strip():
             return
     
@@ -851,124 +848,125 @@ class StudentDialogueManager:
                 self.paragraphs_since_last_viz = 0
                 self.visualization_counter += 1
                 
-                print(f"🎨 Генерация визуализации для ученика: {text[:100]}...")
+                print(f"🎨 Генерация SVG инфографики для ученика: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
-                    # Используем улучшенную генерацию через структурированные данные
-                    viz_result = self.llm.generate_visualization(text, context)
+                    # Генерируем SVG инфографику через LLM
+                    infographic_result = self.llm.generate_infographic(text, context)
                     
-                    if viz_result and viz_result.get("success"):
+                    if infographic_result and infographic_result.get("success"):
                         self.socketio.emit('visualization_generated', {
                             'room_id': self.room_id,
                             'topic': text[:100],
-                            'mermaid_code': viz_result.get('mermaid_code', ''),
-                            'svg_code': viz_result.get('svg_code', ''),
-                            'timestamp': time.time()
+                            'svg_code': infographic_result['svg_code'],
+                            'timestamp': time.time(),
+                            'type': 'infographic'
                         }, room=self.room_id)
-                        print(f"✅ Визуализация отправлена в комнату {self.room_id}")
+                        print(f"✅ SVG инфографика отправлена ученику в комнату {self.room_id}")
+                    else:
+                        # Fallback - простая SVG схема
+                        fallback_svg = self._create_fallback_infographic(text)
+                        self.socketio.emit('visualization_generated', {
+                            'room_id': self.room_id,
+                            'topic': text[:100],
+                            'svg_code': fallback_svg,
+                            'timestamp': time.time(),
+                            'type': 'fallback'
+                        }, room=self.room_id)
+                        print(f"✅ Fallback SVG отправлена ученику в комнату {self.room_id}")
                     
             except Exception as e:
-                print(f"❌ Ошибка генерации визуализации: {e}")
+                print(f"❌ Ошибка генерации SVG инфографики для ученика: {e}")
+                # Fallback при ошибке
+                if self.room_id and self.socketio:
+                    fallback_svg = self._create_fallback_infographic(text)
+                    self.socketio.emit('visualization_generated', {
+                        'room_id': self.room_id,
+                        'topic': text[:100],
+                        'svg_code': fallback_svg,
+                        'timestamp': time.time(),
+                        'type': 'error_fallback'
+                    }, room=self.room_id)
+
+    def _create_fallback_infographic(self, text: str) -> str:
+        """Создает простую SVG инфографику как fallback для ученика"""
+        topic_short = text[:50] + "..." if len(text) > 50 else text
+        age = int(self.student_data.get('age', 12))
+        
+        # Адаптируем стиль под возраст ученика
+        if age <= 10:
+            # Более яркий и простой дизайн для младших школьников
+            colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7"]
+            shapes = ["🔵", "🔺", "⭐", "🟩", "🟧"]
+        else:
+            # Более серьезный дизайн для старших
+            colors = ["#4f46e5", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+            shapes = ["●", "▲", "■", "◆", "★"]
+        
+        main_color = random.choice(colors)
+        shape = random.choice(shapes)
+        
+        return f'''
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="{main_color}" />
+      <stop offset="100%" stop-color="{self._adjust_color_brightness(main_color, -30)}" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)" opacity="0.1"/>
+  
+  <!-- Основной контейнер -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="50" width="500" height="300" rx="20" fill="white" stroke="#e5e7eb" stroke-width="2"/>
+  </g>
+  
+  <!-- Заголовок -->
+  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">
+    {topic_short}
+  </text>
+  
+  <!-- Основная иконка/фигура -->
+  <circle cx="300" cy="200" r="40" fill="{main_color}" opacity="0.8"/>
+  <text x="300" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="white" font-weight="bold">{shape}</text>
+  
+  <!-- Подпись -->
+  <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    Инфографика по теме
+  </text>
+  
+  <!-- Возрастная маркировка -->
+  <text x="300" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#9ca3af">
+    Для {age} лет
+  </text>
+  
+  <!-- Декоративные элементы -->
+  <circle cx="100" cy="100" r="15" fill="{colors[1]}" opacity="0.6"/>
+  <circle cx="500" cy="120" r="12" fill="{colors[2]}" opacity="0.6"/>
+  <circle cx="80" cy="280" r="10" fill="{colors[3]}" opacity="0.6"/>
+  <circle cx="520" cy="260" r="8" fill="{colors[4]}" opacity="0.6"/>
+</svg>
+'''
+
+    def _adjust_color_brightness(self, color_hex: str, percent: int) -> str:
+        """Изменяет яркость цвета"""
+        # Упрощенная реализация - возвращаем исходный цвет
+        return color_hex
 
     def enable_visualization(self):
-        """Включение автоматической визуализации"""
+        """Включение автоматической визуализации - ТОЛЬКО SVG"""
         self.visualization_enabled = True
-        print("✅ Автоматическая визуализация включена для ученика")
+        print("✅ Автоматическая SVG визуализация включена для ученика")
 
     def disable_visualization(self):
         """Выключение автоматической визуализации"""
         self.visualization_enabled = False
-        print("❌ Автоматическая визуализация выключена")
-
-    # НОВАЯ СИСТЕМА ВИЗУАЛИЗАЦИИ - МЕТОДЫ
-    def _start_lesson_visualization_async(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
-        """Асинхронно запускает визуализацию для урока"""
-        try:
-            print(f"🎨 Асинхронная инициализация визуализации для ученика: {lesson_title}")
-            
-            # Запускаем инициализацию визуализации (не блокируем основной поток)
-            visualization_type = self.visualization_manager.initialize_lesson_visualization(
-                lesson_id, 
-                lesson_title, 
-                " ".join(lesson_content), 
-                self.room_id,
-                self.socketio
-            )
-            
-            self.current_visualization_type = visualization_type
-            
-            if visualization_type == "slides":
-                self.slides = self.visualization_manager.get_lesson_slides(lesson_id)
-                self.current_slide_index = 0
-                print(f"🎨 Слайды загружены для ученика: {len(self.slides)} шт.")
-            else:
-                print("🎨 Запущена асинхронная генерация mind map для ученика")
-                
-            print(f"✅ Визуализация инициализирована для ученика (тип: {visualization_type})")
-            
-        except Exception as e:
-            print(f"❌ Ошибка инициализации визуализации для ученика: {e}")
-
-    def _start_lesson_visualization(self, lesson_id: str, lesson_title: str, lesson_content: List[str]):
-        """Запускает систему визуализации для урока"""
-        try:
-            print(f"🎨 Инициализация визуализации для ученика: {lesson_id}")
-            
-            # ЗАПУСКАЕМ АСИНХРОННО - не блокируем начало урока
-            self._start_lesson_visualization_async(lesson_id, lesson_title, lesson_content)
-            
-        except Exception as e:
-            print(f"❌ Ошибка инициализации визуализации для ученика: {e}")
-    
-    def _handle_paragraph_visualization(self, paragraph_index: int):
-        """Обрабатывает визуализацию для текущего абзаца ученика"""
-        if not self.lesson_started or not self.selected_lesson:
-            return
-            
-        if self.current_visualization_type == "slides":
-            # Показываем следующий слайд для каждого нового абзаца
-            if self.slides and paragraph_index < len(self.slides):
-                self._send_slide(paragraph_index)
-    
-    def _send_slide(self, slide_index: int):
-        """Отправляет слайд в комнату ученика"""
-        if not self.slides or slide_index >= len(self.slides):
-            return
-            
-        self.current_slide_index = slide_index
-        slide_path = self.slides[slide_index]
-        
-        print(f"🖼️ Отправка слайда ученику {slide_index + 1}/{len(self.slides)}: {slide_path}")
-        
-        if self.room_id:
-            self.socketio.emit('lesson_visualization', {
-                'room_id': self.room_id,
-                'type': 'slide',
-                'data': {
-                    'slide_path': slide_path,
-                    'slide_number': slide_index + 1,
-                    'total_slides': len(self.slides),
-                    'timestamp': time.time()
-                },
-                'lesson_id': self.selected_lesson['id'],
-                'lesson_title': self.selected_lesson.get('title', 'Урок')
-            }, room=self.room_id)
-    
-    def send_current_visualization(self):
-        """Принудительно отправляет текущую визуализацию ученику"""
-        if not self.lesson_started or not self.selected_lesson or not self.room_id:
-            return
-            
-        if self.current_visualization_type == "slides" and self.slides:
-            self._send_slide(self.current_slide_index)
-        elif self.current_visualization_type == "mindmap" and self.generated_mindmap:
-            self.socketio.emit('lesson_visualization', {
-                'room_id': self.room_id,
-                'type': 'mindmap',
-                'data': self.generated_mindmap,
-                'lesson_id': self.selected_lesson['id'],
-                'lesson_title': self.selected_lesson.get('title', 'Урок')
-            }, room=self.room_id)
+        print("❌ Автоматическая визуализация выключена для ученика")
 
     def process_input(self, text: str) -> Optional[str]:
         """Обработка входящего текста и генерация ответа для ученика"""
@@ -1128,12 +1126,8 @@ class StudentDialogueManager:
         self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
         self.knowledge_base = KnowledgeBase(self.current_subject)
         
-        # ИНИЦИАЛИЗАЦИЯ ВИЗУАЛИЗАЦИИ ПРИ СТАРТЕ УРОКА ДЛЯ УЧЕНИКА
-        self._start_lesson_visualization(
-            self.selected_lesson['id'],
-            self.selected_lesson['title'],
-            self.lesson_content
-        )
+        # ВКЛЮЧАЕМ SVG ВИЗУАЛИЗАЦИЮ ДЛЯ УЧЕНИКА
+        self.enable_visualization()
         
         self.conversation_history = []
         self.conversation_context = []
@@ -1188,11 +1182,18 @@ class StudentDialogueManager:
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
-            
-            # ВИЗУАЛИЗАЦИЯ: Обрабатываем отображение для этого абзаца
-            self._handle_paragraph_visualization(self.current_paragraph)
-            
             self.current_paragraph += 1
+            
+            # SVG ВИЗУАЛИЗАЦИЯ: Генерируем инфографику для абзаца
+            if (self.visualization_enabled and paragraph and 
+                len(paragraph.strip()) > 10 and self.room_id):
+                
+                def delayed_visualization():
+                    time.sleep(0.5)
+                    context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
+                    self._generate_visualization(paragraph, context)
+                
+                threading.Thread(target=delayed_visualization, daemon=True).start()
             
             print(f"✅ Возвращаем абзац ученику {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
@@ -1343,12 +1344,71 @@ class StudentDialogueManager:
         
         print(f"Немедленная обработка вопроса ученика: '{question}'")
         
-        # Используем родительскую логику, но адаптируем ответ
-        parent_response = super().handle_question_during_lesson(question)
-        if parent_response:
-            return self._adapt_response_to_student(parent_response)
+        # Используем базовую логику обработки вопросов
+        final_response = None
         
-        return "Интересный вопрос! Давай обсудим его после завершения текущего материала."
+        if self.llm_query_mode == "llm_first":
+            print(f"🔀 Режим llm_first: Обработка вопроса ученика '{question}'")
+            
+            current_context = ""
+            if self.lesson_content and self.current_paragraph > 0:
+                context_start = max(0, self.current_paragraph - 2)
+                current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+            
+            llm_response = self.llm.query(question, current_context, self.current_subject)
+            if llm_response and not llm_response.startswith("Интересный вопрос!"):
+                self.llm.add_to_cache(question, llm_response, self.current_subject)
+                if self.knowledge_base and self._should_save_to_knowledge_base(question):
+                    self.knowledge_base.add_llm_answer(question, llm_response)
+                    self.knowledge_base.add_knowledge(question=question, answer=llm_response)
+                print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
+                final_response = llm_response
+            
+            if not final_response and self.knowledge_base:
+                answer = self.knowledge_base.find_answer(question, threshold=0.5)
+                if answer and not answer.startswith("Интересный вопрос!"):
+                    print(f"📚 Ответ найден в базе знаний после неудачи LLM: {answer[:100]}...")
+                    final_response = answer
+        
+        else:
+            print(f"🔀 Режим traditional: Обработка вопроса ученика '{question}'")
+            
+            if self.knowledge_base:
+                answer = self.knowledge_base.find_answer(question, threshold=0.5)
+                if answer and not answer.startswith("Интересный вопрос!"):
+                    final_response = answer
+            
+            if not final_response:
+                for pattern, responses in self.local_patterns.items():
+                    if pattern in question_lower:
+                        final_response = random.choice(responses) if isinstance(responses, list) else responses
+                        break
+            
+            if not final_response and self.knowledge_base:
+                llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
+                if llm_answer:
+                    print(f"💾 Использован сохраненный ответ LLM для вопроса ученика: {question}")
+                    final_response = llm_answer
+            
+            if not final_response:
+                current_context = ""
+                if self.lesson_content and self.current_paragraph > 0:
+                    context_start = max(0, self.current_paragraph - 2)
+                    current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+                
+                llm_response = self.llm.query(question, current_context, self.current_subject)
+                if llm_response:
+                    self.llm.add_to_cache(question, llm_response, self.current_subject)
+                    if self.knowledge_base and self._should_save_to_knowledge_base(question):
+                        self.knowledge_base.add_llm_answer(question, llm_response)
+                        self.knowledge_base.add_knowledge(question=question, answer=llm_response)
+                    final_response = llm_response
+        
+        if not final_response:
+            final_response = "Интересный вопрос! Давай обсудим его после завершения текущего материала, чтобы не отвлекаться."
+        
+        # Адаптируем ответ для ученика
+        return self._adapt_response_to_student(final_response)
 
     def get_selected_lesson(self) -> Optional[dict]:
         return self.selected_lesson
@@ -1382,12 +1442,6 @@ class StudentDialogueManager:
         self.student_conversation_count = 0
         self.student_lesson_started = False
         self.student_subject_prompted = False
-
-        # Сброс визуализации
-        self.current_visualization_type = None
-        self.generated_mindmap = None
-        self.current_slide_index = 0
-        self.slides = None
 
     def get_available_subjects(self) -> List[str]:
         subjects = list(self.lessons.keys())
@@ -1429,15 +1483,14 @@ class StudentDialogueManager:
         }
 
     def get_visualization_status(self) -> Dict:
-        """Возвращает статус визуализации"""
+        """Возвращает статус визуализации - ТОЛЬКО SVG"""
         return {
             "visualization_enabled": self.visualization_enabled,
             "visualization_counter": self.visualization_counter,
             "last_visualization_time": self.last_visualization_time,
             "paragraphs_since_last_viz": self.paragraphs_since_last_viz,
-            "current_visualization_type": self.current_visualization_type,
-            "current_slide_index": self.current_slide_index,
-            "total_slides": len(self.slides) if self.slides else 0
+            "type": "svg_infographic",
+            "student_age": self.student_data.get('age', '12')
         }
 
     def get_conversation_stats(self) -> Dict:
@@ -1485,10 +1538,7 @@ class StudentDialogueManager:
             "student_subject_prompted": self.student_subject_prompted,
             "age_group": self.student_prompts.get('age_group', 'unknown'),
             # Информация о визуализации
-            "current_visualization_type": self.current_visualization_type,
-            "has_mindmap": self.generated_mindmap is not None,
-            "current_slide": self.current_slide_index,
-            "total_slides": len(self.slides) if self.slides else 0
+            "visualization_status": self.get_visualization_status()
         }
 
     def get_system_status(self) -> Dict:
@@ -1551,6 +1601,21 @@ class StudentDialogueManager:
             "статус": "Показать статус системы",
             "помощь": "Показать эту справку"
         }
+
+    def force_visualization(self, text: str) -> bool:
+        """Принудительно генерирует SVG инфографику для текста ученика"""
+        try:
+            if not self.room_id:
+                print("❌ Нет room_id для отправки инфографики ученику")
+                return False
+            
+            context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph]) if self.lesson_content else ""
+            self._generate_visualization(text, context)
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка принудительной генерации инфографики для ученика: {e}")
+            return False
 
 
 # Создаем глобальный экземпляр для тестирования
