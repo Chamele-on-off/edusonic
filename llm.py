@@ -517,9 +517,11 @@ class LLMIntegration:
                 data = json.loads(json_str)
                 
                 concepts["main_concept"] = data.get("main_concept", "")
+                
                 aspects = data.get("aspects", [])
                 if isinstance(aspects, list):
-                    concepts["aspects"] = [str(aspect) for aspect in aspects if aspect]
+                    # Ограничиваем количество аспектов и очищаем их
+                    concepts["aspects"] = [str(aspect).strip() for aspect in aspects[:4] if aspect]
                 else:
                     concepts["aspects"] = []
                 
@@ -974,6 +976,194 @@ class LLMIntegration:
             {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
             {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
         ]
+
+    def generate_infographic(self, topic: str, context: str = "") -> dict:
+        """Генерация стильной инфографики в SVG формате"""
+        
+        prompt = f"""
+Создай стильную образовательную инфографику в формате SVG на тему: "{topic}"
+
+КОНТЕКСТ: {context}
+
+ТРЕБОВАНИЯ К ИНФОГРАФИКЕ:
+- Только чистый SVG код без пояснений
+- Стильный, современный дизайн
+- Информативная и понятная структура
+- Использование фигур, текста, цветов
+- Максимальная ширина: 600px, высота: 400px
+- Четкая визуальная иерархия
+- Баланс между визуальными элементами и текстом
+
+ЭЛЕМЕНТЫ ДЛЯ ИСПОЛЬЗОВАНИЯ:
+- Прямоугольники с закругленными углами
+- Стрелки для связей
+- Простые геометрические формы (круги, прямоугольники)
+- Текстовые блоки с заголовками
+- Цветовые акценты для выделения ключевых моментов
+
+ЦВЕТОВАЯ ПАЛИТРА:
+- Основные цвета: #4f46e5, #10b981, #f59e0b, #ef4444, #8b5cf6
+- Фон: светлые оттенки (#f8fafc, #f1f5f9)
+- Текст: темные оттенки (#1f2937, #374151)
+
+СТРУКТУРА ИНФОГРАФИКИ:
+1. Заголовок (тема)
+2. Ключевые элементы/понятия
+3. Связи между элементами
+4. Визуальное представление информации
+
+Верни ТОЛЬКО SVG код без каких-либо пояснений, комментариев или markdown разметки.
+Код должен начинаться с <svg и заканчиваться </svg>.
+"""
+
+        try:
+            response = self._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject="general",
+                system_prompt="""Ты - эксперт по созданию образовательной инфографики. 
+Твоя задача - генерировать чистый, валидный SVG код для визуализации образовательного контента.
+
+ВАЖНЫЕ ПРАВИЛА:
+1. Возвращай ТОЛЬКО SVG код, без каких-либо пояснений
+2. Код должен быть семантически правильным
+3. Используй осмысленные id для элементов
+4. Соблюдай доступность (aria-label где нужно)
+5. Создавай стильную и понятную инфографику
+6. Не добавляй комментарии в код
+
+Пример структуры:
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- твой код здесь -->
+</svg>""",
+                max_tokens=2000
+            )
+            
+            if response:
+                # Очистка ответа - более агрессивная
+                svg_code = self._extract_svg_code(response)
+                if svg_code and self._validate_svg(svg_code):
+                    return {
+                        "success": True,
+                        "svg_code": svg_code,
+                        "topic": topic,
+                        "type": "infographic"
+                    }
+            
+            return {
+                "success": False,
+                "svg_code": self._create_fallback_infographic(topic),
+                "topic": topic,
+                "type": "fallback"
+            }
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации инфографики: {e}")
+            return {
+                "success": False,
+                "svg_code": self._create_fallback_infographic(topic),
+                "topic": topic,
+                "type": "error_fallback"
+            }
+
+    def _extract_svg_code(self, response: str) -> str:
+        """Извлекает чистый SVG код из ответа LLM"""
+        # Удаляем все markdown обрамление
+        response = re.sub(r'```(xml|svg)?\s*', '', response)
+        response = re.sub(r'```\s*', '', response)
+        response = response.strip()
+        
+        # Ищем SVG теги в тексте
+        svg_match = re.search(r'<svg[\s\S]*?</svg>', response, re.IGNORECASE | re.DOTALL)
+        if svg_match:
+            svg_code = svg_match.group(0)
+            # Базовая валидация
+            if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
+                return svg_code
+        
+        return ""
+
+    def _validate_svg(self, svg_code: str) -> bool:
+        """Базовая валидация SVG кода"""
+        if not svg_code:
+            return False
+        
+        # Проверяем базовую структуру
+        has_svg_open = '<svg' in svg_code.lower()
+        has_svg_close = '</svg>' in svg_code.lower()
+        has_xmlns = 'xmlns=' in svg_code
+        
+        return has_svg_open and has_svg_close and has_xmlns
+
+    def _create_fallback_infographic(self, topic: str) -> str:
+        """Создает простую SVG инфографику как fallback"""
+        topic_short = topic[:50] + "..." if len(topic) > 50 else topic
+        
+        return f'''
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)" opacity="0.1"/>
+  
+  <!-- Основной контейнер -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="50" width="500" height="300" rx="20" fill="white" stroke="#e5e7eb" stroke-width="2"/>
+  </g>
+  
+  <!-- Заголовок -->
+  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">
+    {topic_short}
+  </text>
+  
+  <!-- Иконка -->
+  <circle cx="300" cy="200" r="40" fill="#4f46e5" opacity="0.8"/>
+  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white">?</text>
+  
+  <!-- Подпись -->
+  <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    Инфографика по теме
+  </text>
+  
+  <!-- Декоративные элементы -->
+  <circle cx="100" cy="100" r="15" fill="#10b981" opacity="0.6"/>
+  <circle cx="500" cy="120" r="12" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="80" cy="280" r="10" fill="#ef4444" opacity="0.6"/>
+  <circle cx="520" cy="260" r="8" fill="#8b5cf6" opacity="0.6"/>
+</svg>
+'''
+
+    def debug_infographic_generation(self, topic: str):
+        """Отладочный метод для тестирования генерации инфографики"""
+        print(f"🔧 DEBUG: Генерация инфографики для: {topic}")
+        
+        test_prompt = f"Создай простую SVG инфографику на тему: {topic}"
+        
+        response = self._query_llm_api(
+            prompt=test_prompt,
+            context="",
+            subject="general", 
+            system_prompt="Верни только SVG код без пояснений",
+            max_tokens=1000
+        )
+        
+        print(f"🔧 DEBUG: Ответ LLM: {response}")
+        
+        if response:
+            svg_code = self._extract_svg_code(response)
+            print(f"🔧 DEBUG: Извлеченный SVG: {svg_code[:200]}...")
+            
+            return svg_code
+        
+        return None
 
 # Создаем глобальный экземпляр для использования в других модулях
 llm_integration = LLMIntegration()
