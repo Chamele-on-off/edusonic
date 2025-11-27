@@ -124,44 +124,45 @@ class LLMIntegration:
         """Обработка ответа LLM в зависимости от типа"""
         if is_svg:
             # Для SVG - минимальная очистка, сохраняем структуру
+            print(f"🔧 [LLM] Обработка SVG ответа (без очистки речи)")
             return response.strip()
         else:
             # Для речи - полная очистка
+            print(f"🔧 [LLM] Обработка текстового ответа (с очисткой речи)")
             clean1 = clean_text_for_speech(response)
             return self._clean_llm_response(clean1)
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000, 
-                       room_id: str = "default", callback: Callable = None) -> Optional[str]:
+                       room_id: str = "default", callback: Callable = None,
+                       is_svg: bool = False) -> Optional[str]:
         """УМНАЯ ЛОГИКА ПРИОРИТЕТОВ С FALLBACK"""
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
-        
-        # Определяем тип запроса (SVG или обычный текст)
-        is_svg_request = "Создай стильную образовательную инфографику в формате SVG" in prompt
+        print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
         
         # ЛОГИКА ВЫБОРА МОДЕЛИ ПО ПРИОРИТЕТУ
         if self.priority_mode == "local_only":
-            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg_request)
+            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg)
             
         elif self.priority_mode == "openrouter_only":
-            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg_request)
+            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg)
             
         elif self.priority_mode == "openrouter_first":
             # Сначала пробуем OpenRouter
-            response = self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg_request)
+            response = self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg)
             if response or (callback is None and response is not None):
                 return response
             # Fallback на локальную модель
-            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg_request)
+            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg)
             
         else:  # local_first (по умолчанию)
             # Сначала пробуем локальную модель
-            response = self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg_request)
+            response = self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg)
             if response or (callback is None and response is not None):
                 return response
             # Fallback на OpenRouter
-            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg_request)
+            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg)
     
     def _handle_local_request(self, prompt: str, system_prompt: str, max_tokens: int,
                              room_id: str, callback: Callable, is_svg: bool = False) -> Optional[str]:
@@ -963,15 +964,19 @@ class LLMIntegration:
         if not response:
             return ""
         
+        print(f"🔧 [DEBUG] Извлечение SVG из ответа длиной: {len(response)}")
+        
         # 1. Удаляем всё до первого <svg (включая пояснения)
         svg_start = response.find('<svg')
         if svg_start == -1:
+            print("❌ [DEBUG] Не найден тег <svg в ответе")
             return ""
         response = response[svg_start:]
         
         # 2. Удаляем всё после последнего </svg>
         svg_end = response.rfind('</svg>')
         if svg_end == -1:
+            print("❌ [DEBUG] Не найден закрывающий тег </svg> в ответе")
             return ""
         response = response[:svg_end + len('</svg>')]
         
@@ -983,21 +988,26 @@ class LLMIntegration:
         # 4. Убеждаемся, что есть xmlns (добавляем если нет)
         if 'xmlns=' not in response:
             response = response.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+            print("🔧 [DEBUG] Добавлен xmlns в SVG")
         
         # 5. Удаляем лишние пробелы и переносы внутри тега
         response = re.sub(r'<svg\s+', '<svg ', response)
         
+        print(f"✅ [DEBUG] SVG успешно извлечен, длина: {len(response)}")
         return response
 
     def _validate_svg(self, svg_code: str) -> bool:
         """Упрощенная валидация SVG - только базовые проверки"""
         if not svg_code or len(svg_code.strip()) < 50:  # Минимальная длина
+            print(f"❌ [DEBUG] SVG слишком короткий: {len(svg_code)} символов")
             return False
         
         # Проверяем базовую структуру
         has_svg_open = '<svg' in svg_code
         has_svg_close = '</svg>' in svg_code
-        has_proper_tags = any(tag in svg_code for tag in ['<rect', '<text', '<circle', '<path'])
+        has_proper_tags = any(tag in svg_code for tag in ['<rect', '<text', '<circle', '<path', '<line'])
+        
+        print(f"🔧 [DEBUG] Валидация SVG: open={has_svg_open}, close={has_svg_close}, tags={has_proper_tags}")
         
         return has_svg_open and has_svg_close and has_proper_tags
 
@@ -1041,7 +1051,9 @@ class LLMIntegration:
 """
 
         try:
-            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Указываем что это SVG запрос
+            print(f"🎨 Генерация SVG инфографики для: {topic}")
+            
+            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Явно указываем что это SVG запрос
             response = self._query_llm_api(
                 prompt=prompt,
                 context="",
@@ -1059,7 +1071,7 @@ class LLMIntegration:
 
 Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ.""",
                 max_tokens=2000,
-                is_svg=True  # 🔥 Указываем что это SVG запрос
+                is_svg=True  # 🔥 Явно указываем что это SVG запрос
             )
             
             # 🔧 ДОБАВЛЕНО ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ
@@ -1085,8 +1097,12 @@ class LLMIntegration:
                     }
                 else:
                     print(f"❌ [DEBUG] Не удалось извлечь валидный SVG")
-                    print(f"🔧 [DEBUG] Extracted code: '{svg_code[:200]}...'")
+                    if svg_code:
+                        print(f"🔧 [DEBUG] Extracted code (первые 500 символов): '{svg_code[:500]}...'")
+                    else:
+                        print(f"🔧 [DEBUG] SVG код пустой")
             
+            print("❌ [DEBUG] Используем fallback SVG")
             return {
                 "success": False,
                 "svg_code": self._create_fallback_infographic(topic),
@@ -1107,8 +1123,7 @@ class LLMIntegration:
         """Создает простую SVG инфографику как fallback"""
         topic_short = topic[:50] + "..." if len(topic) > 50 else topic
         
-        return f'''
-<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+        return f'''<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#4f46e5" />
@@ -1146,8 +1161,7 @@ class LLMIntegration:
   <circle cx="500" cy="120" r="12" fill="#f59e0b" opacity="0.6"/>
   <circle cx="80" cy="280" r="10" fill="#ef4444" opacity="0.6"/>
   <circle cx="520" cy="260" r="8" fill="#8b5cf6" opacity="0.6"/>
-</svg>
-'''
+</svg>'''
 
     def test_connection(self) -> bool:
         """Тестирование подключения к API"""
