@@ -120,6 +120,16 @@ class LLMIntegration:
         
         return content.strip()
 
+    def _process_llm_response(self, response: str, is_svg: bool = False) -> str:
+        """Обработка ответа LLM в зависимости от типа"""
+        if is_svg:
+            # Для SVG - минимальная очистка, сохраняем структуру
+            return response.strip()
+        else:
+            # Для речи - полная очистка
+            clean1 = clean_text_for_speech(response)
+            return self._clean_llm_response(clean1)
+
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000, 
                        room_id: str = "default", callback: Callable = None) -> Optional[str]:
@@ -127,31 +137,34 @@ class LLMIntegration:
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
         
+        # Определяем тип запроса (SVG или обычный текст)
+        is_svg_request = "Создай стильную образовательную инфографику в формате SVG" in prompt
+        
         # ЛОГИКА ВЫБОРА МОДЕЛИ ПО ПРИОРИТЕТУ
         if self.priority_mode == "local_only":
-            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback)
+            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg_request)
             
         elif self.priority_mode == "openrouter_only":
-            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback)
+            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg_request)
             
         elif self.priority_mode == "openrouter_first":
             # Сначала пробуем OpenRouter
-            response = self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback)
+            response = self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg_request)
             if response or (callback is None and response is not None):
                 return response
             # Fallback на локальную модель
-            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback)
+            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg_request)
             
         else:  # local_first (по умолчанию)
             # Сначала пробуем локальную модель
-            response = self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback)
+            response = self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg_request)
             if response or (callback is None and response is not None):
                 return response
             # Fallback на OpenRouter
-            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback)
+            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg_request)
     
     def _handle_local_request(self, prompt: str, system_prompt: str, max_tokens: int,
-                             room_id: str, callback: Callable) -> Optional[str]:
+                             room_id: str, callback: Callable, is_svg: bool = False) -> Optional[str]:
         """Обработка запроса через локальную модель"""
         if not self.llm_manager.local_llm.is_available():
             print("❌ [LLM] Локальная модель недоступна")
@@ -167,7 +180,7 @@ class LLMIntegration:
                 max_tokens=max_tokens,
                 room_id=room_id
             )
-            self.pending_requests[request_id] = callback
+            self.pending_requests[request_id] = (callback, is_svg)
             return None
             
         # Синхронный режим с увеличенным таймаутом
@@ -190,7 +203,11 @@ class LLMIntegration:
                 # УВЕЛИЧИВАЕМ ТАЙМАУТ ДО 120 СЕКУНД
                 response = response_queue.get(timeout=120)
                 self.llm_manager.unregister_room_callback(room_id)
-                return response
+                
+                # Обрабатываем ответ в зависимости от типа
+                processed_response = self._process_llm_response(response, is_svg)
+                return processed_response
+                
             except queue.Empty:
                 print(f"❌ [LLM] Таймаут локальной модели для комнаты {room_id}")
                 self.llm_manager.unregister_room_callback(room_id)
@@ -198,7 +215,7 @@ class LLMIntegration:
     
     def _handle_openrouter_request(self, prompt: str, context: str, subject: str,
                                   system_prompt: str, max_tokens: int,
-                                  room_id: str, callback: Callable) -> Optional[str]:
+                                  room_id: str, callback: Callable, is_svg: bool = False) -> Optional[str]:
         """Обработка запроса через OpenRouter с использованием менеджера ключей"""
         try:
             # Получаем следующий доступный ключ
@@ -267,11 +284,11 @@ class LLMIntegration:
                         
                         if 'choices' in result and len(result['choices']) > 0:
                             answer = result['choices'][0]['message']['content']
-                            # ОЧИСТКА ТЕКСТА ПЕРЕД ВОЗВРАТОМ
-                            answer = clean_text_for_speech(answer)
-                            processed_answer = self._clean_llm_response(answer)
                             
-                            print(f"✅ [LLM] Ответ от OpenRouter получен и очищен: {processed_answer[:100]}...")
+                            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Обрабатываем ответ в зависимости от типа
+                            processed_answer = self._process_llm_response(answer, is_svg)
+                            
+                            print(f"✅ [LLM] Ответ от OpenRouter получен: {processed_answer[:100]}...")
                             
                             # Если есть callback, вызываем его
                             if callback:
@@ -496,9 +513,11 @@ class LLMIntegration:
     def handle_llm_response(self, request_id: str, response: str, room_id: str):
         """Обработчик ответов от локальной LLM"""
         if request_id in self.pending_requests:
-            callback = self.pending_requests.pop(request_id)
+            callback, is_svg = self.pending_requests.pop(request_id)
             try:
-                callback(response, room_id)
+                # Обрабатываем ответ в зависимости от типа
+                processed_response = self._process_llm_response(response, is_svg)
+                callback(processed_response, room_id)
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
@@ -972,14 +991,15 @@ class LLMIntegration:
 
     def _validate_svg(self, svg_code: str) -> bool:
         """Упрощенная валидация SVG - только базовые проверки"""
-        if not svg_code or len(svg_code.strip()) < 10:
+        if not svg_code or len(svg_code.strip()) < 50:  # Минимальная длина
             return False
         
-        # Проверяем только базовую структуру
-        has_svg_open = '<svg' in svg_code.lower()
-        has_svg_close = '</svg>' in svg_code.lower()
+        # Проверяем базовую структуру
+        has_svg_open = '<svg' in svg_code
+        has_svg_close = '</svg>' in svg_code
+        has_proper_tags = any(tag in svg_code for tag in ['<rect', '<text', '<circle', '<path'])
         
-        return has_svg_open and has_svg_close
+        return has_svg_open and has_svg_close and has_proper_tags
 
     def generate_infographic(self, topic: str, context: str = "") -> dict:
         """Генерация стильной инфографики в SVG формате"""
@@ -1021,6 +1041,7 @@ class LLMIntegration:
 """
 
         try:
+            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Указываем что это SVG запрос
             response = self._query_llm_api(
                 prompt=prompt,
                 context="",
@@ -1037,7 +1058,8 @@ class LLMIntegration:
 6. Создавай стильную и понятную инфографику
 
 Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ.""",
-                max_tokens=2000
+                max_tokens=2000,
+                is_svg=True  # 🔥 Указываем что это SVG запрос
             )
             
             # 🔧 ДОБАВЛЕНО ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ
@@ -1046,7 +1068,7 @@ class LLMIntegration:
             print(f"🔧 [DEBUG] Response length: {len(response) if response else 0}")
             
             if response:
-                # Очистка ответа
+                # Очистка ответа (для SVG минимальная очистка)
                 svg_code = self._extract_svg_code(response)
                 
                 # 🔧 ДОБАВЛЕНО ЛОГИ ДЛЯ ОТЛАДКИ
@@ -1176,7 +1198,8 @@ class LLMIntegration:
             context="",
             subject="general", 
             system_prompt="Верни только SVG код без пояснений",
-            max_tokens=1000
+            max_tokens=1000,
+            is_svg=True
         )
         
         print(f"🔧 DEBUG: Ответ LLM: {response}")
