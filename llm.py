@@ -114,7 +114,7 @@ class LLMIntegration:
             if content.startswith(prefix):
                 content = content[len(prefix):].strip()
         
-        # Удаляем лишние пробелы и переносы строк
+        # Удаляем лишние пробелы и переносы
         content = re.sub(r'\s+', ' ', content)
         content = re.sub(r'\n+', '\n', content)
         
@@ -939,43 +939,47 @@ class LLMIntegration:
     D --> I["Задачи"]
     D --> J["Упражнения"]'''
 
-    def test_connection(self) -> bool:
-        """Тестирование подключения к API"""
-        try:
-            # Получаем ключ для тестирования
-            api_key = self.key_manager.get_next_key()
-            
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            test_data = {
-                "model": self.model,
-                "messages": [{"role": "user", "content": "test"}],
-                "max_tokens": 10
-            }
-            
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=test_data,
-                timeout=10
-            )
-            
-            return response.status_code == 200
-            
-        except Exception as e:
-            print(f"❌ Ошибка тестирования подключения: {e}")
-            return False
+    def _extract_svg_code(self, response: str) -> str:
+        """Извлекает чистый SVG код из ответа LLM - устойчиво к обёрткам"""
+        if not response:
+            return ""
+        
+        # 1. Удаляем всё до первого <svg (включая пояснения)
+        svg_start = response.find('<svg')
+        if svg_start == -1:
+            return ""
+        response = response[svg_start:]
+        
+        # 2. Удаляем всё после последнего </svg>
+        svg_end = response.rfind('</svg>')
+        if svg_end == -1:
+            return ""
+        response = response[:svg_end + len('</svg>')]
+        
+        # 3. Удаляем возможные markdown-блоки (```xml, ```svg, ```)
+        response = re.sub(r'^```(xml|svg)?\s*', '', response, flags=re.MULTILINE)
+        response = re.sub(r'```\s*$', '', response, flags=re.MULTILINE)
+        response = response.strip()
+        
+        # 4. Убеждаемся, что есть xmlns (добавляем если нет)
+        if 'xmlns=' not in response:
+            response = response.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"', 1)
+        
+        # 5. Удаляем лишние пробелы и переносы внутри тега
+        response = re.sub(r'<svg\s+', '<svg ', response)
+        
+        return response
 
-    def get_available_models(self) -> list:
-        """Получение списка доступных моделей"""
-        return [
-            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
-            {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
-            {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
-        ]
+    def _validate_svg(self, svg_code: str) -> bool:
+        """Упрощенная валидация SVG - только базовые проверки"""
+        if not svg_code or len(svg_code.strip()) < 10:
+            return False
+        
+        # Проверяем только базовую структуру
+        has_svg_open = '<svg' in svg_code.lower()
+        has_svg_close = '</svg>' in svg_code.lower()
+        
+        return has_svg_open and has_svg_close
 
     def generate_infographic(self, topic: str, context: str = "") -> dict:
         """Генерация стильной инфографики в SVG формате"""
@@ -1024,29 +1028,42 @@ class LLMIntegration:
                 system_prompt="""Ты - эксперт по созданию образовательной инфографики. 
 Твоя задача - генерировать чистый, валидный SVG код для визуализации образовательного контента.
 
-ВАЖНЫЕ ПРАВИЛА:
+ОЧЕНЬ ВАЖНЫЕ ПРАВИЛА:
 1. Возвращай ТОЛЬКО SVG код, без каких-либо пояснений
-2. Код должен быть семантически правильным
-3. Используй осмысленные id для элементов
-4. Соблюдай доступность (aria-label где нужно)
-5. Создавай стильную и понятную инфографику
-6. Не добавляй комментарии в код
+2. НЕ ИСПОЛЬЗУЙ markdown разметку (```xml, ```svg, ```)
+3. НЕ добавляй комментарии, пояснения или текст вокруг SVG
+4. Код должен начинаться с <svg и заканчиваться </svg>
+5. Всегда включай xmlns="http://www.w3.org/2000/svg"
+6. Создавай стильную и понятную инфографику
 
-Верни ТОЛЬКО SVG код без каких-либо пояснений, комментариев или markdown разметки.
-Код должен начинаться с <svg и заканчиваться </svg>.""",
+Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ.""",
                 max_tokens=2000
             )
             
+            # 🔧 ДОБАВЛЕНО ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ
+            print(f"🔧 [DEBUG] RAW LLM RESPONSE:")
+            print(f"'{response}'")
+            print(f"🔧 [DEBUG] Response length: {len(response) if response else 0}")
+            
             if response:
-                # Очистка ответа - более агрессивная
+                # Очистка ответа
                 svg_code = self._extract_svg_code(response)
+                
+                # 🔧 ДОБАВЛЕНО ЛОГИ ДЛЯ ОТЛАДКИ
+                print(f"🔧 [DEBUG] Extracted SVG code length: {len(svg_code)}")
+                print(f"🔧 [DEBUG] SVG validation: {self._validate_svg(svg_code)}")
+                
                 if svg_code and self._validate_svg(svg_code):
+                    print(f"✅ [DEBUG] SVG успешно извлечен и валидирован!")
                     return {
                         "success": True,
                         "svg_code": svg_code,
                         "topic": topic,
                         "type": "infographic"
                     }
+                else:
+                    print(f"❌ [DEBUG] Не удалось извлечь валидный SVG")
+                    print(f"🔧 [DEBUG] Extracted code: '{svg_code[:200]}...'")
             
             return {
                 "success": False,
@@ -1063,35 +1080,6 @@ class LLMIntegration:
                 "topic": topic,
                 "type": "error_fallback"
             }
-
-    def _extract_svg_code(self, response: str) -> str:
-        """Извлекает чистый SVG код из ответа LLM"""
-        # Удаляем все markdown обрамление
-        response = re.sub(r'```(xml|svg)?\s*', '', response)
-        response = re.sub(r'```\s*', '', response)
-        response = response.strip()
-        
-        # Ищем SVG теги в тексте
-        svg_match = re.search(r'<svg[\s\S]*?</svg>', response, re.IGNORECASE | re.DOTALL)
-        if svg_match:
-            svg_code = svg_match.group(0)
-            # Базовая валидация
-            if svg_code.startswith('<svg') and svg_code.endswith('</svg>'):
-                return svg_code
-        
-        return ""
-
-    def _validate_svg(self, svg_code: str) -> bool:
-        """Базовая валидация SVG кода"""
-        if not svg_code:
-            return False
-        
-        # Проверяем базовую структуру
-        has_svg_open = '<svg' in svg_code.lower()
-        has_svg_close = '</svg>' in svg_code.lower()
-        has_xmlns = 'xmlns=' in svg_code
-        
-        return has_svg_open and has_svg_close and has_xmlns
 
     def _create_fallback_infographic(self, topic: str) -> str:
         """Создает простую SVG инфографику как fallback"""
@@ -1139,6 +1127,44 @@ class LLMIntegration:
 </svg>
 '''
 
+    def test_connection(self) -> bool:
+        """Тестирование подключения к API"""
+        try:
+            # Получаем ключ для тестирования
+            api_key = self.key_manager.get_next_key()
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            test_data = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 10
+            }
+            
+            response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=test_data,
+                timeout=10
+            )
+            
+            return response.status_code == 200
+            
+        except Exception as e:
+            print(f"❌ Ошибка тестирования подключения: {e}")
+            return False
+
+    def get_available_models(self) -> list:
+        """Получение списка доступных моделей"""
+        return [
+            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
+            {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
+            {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
+        ]
+
     def debug_infographic_generation(self, topic: str):
         """Отладочный метод для тестирования генерации инфографики"""
         print(f"🔧 DEBUG: Генерация инфографики для: {topic}")
@@ -1176,29 +1202,16 @@ if __name__ == "__main__":
     
     print("🔧 Тестирование улучшенного LLM модуля...")
     
-    # Тестирование генерации визуализации
+    # Тестирование генерации инфографики
     test_topic = "Статистика включает описательную статистику и индуктивную статистику"
-    print(f"\n🔄 Генерация визуализации для: {test_topic}")
-    viz_result = llm.generate_visualization(test_topic)
+    print(f"\n🔄 Генерация инфографики для: {test_topic}")
+    infographic_result = llm.generate_infographic(test_topic)
     
-    if viz_result["success"]:
-        print("✅ Визуализации успешно сгенерированы!")
-        print(f"📊 Основное понятие: {viz_result['concepts'].get('main_concept', 'unknown')}")
-        print(f"📊 Аспекты: {viz_result['concepts'].get('aspects', [])}")
-        print(f"📊 Mermaid код:")
-        print(viz_result['mermaid_code'])
+    if infographic_result["success"]:
+        print("✅ Инфографика успешно сгенерирована!")
+        print(f"📊 SVG код (первые 200 символов): {infographic_result['svg_code'][:200]}...")
     else:
-        print("❌ Не удалось сгенерировать визуализации")
-    
-    # Тестирование генерации mindmap
-    test_lesson_content = "Математика изучает числа, формы, пространственные отношения. Основные разделы: алгебра, геометрия, анализ. Алгебра изучает уравнения и операции, геометрия - фигуры и пространство, анализ - функции и пределы."
-    test_lesson_title = "Введение в математику"
-    print(f"\n🔄 Генерация mindmap для урока: {test_lesson_title}")
-    mindmap_result = llm.generate_lesson_mindmap(test_lesson_content, test_lesson_title)
-    
-    if mindmap_result:
-        print("✅ Mindmap успешно сгенерирована!")
-        print(f"📊 Mermaid код:")
-        print(mindmap_result['mermaid_code'])
+        print("❌ Не удалось сгенерировать инфографику")
+        print(f"📊 Использован fallback")
     
     print("\n🎉 Тестирование завершено!")
