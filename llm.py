@@ -522,443 +522,6 @@ class LLMIntegration:
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
-    def _parse_concepts_from_response(self, response: str) -> Dict:
-        """Парсит концепты из ответа LLM - УПРОЩЕННАЯ ВЕРСИЯ ТОЛЬКО ДЛЯ JSON"""
-        concepts = {
-            "main_concept": "",
-            "aspects": []
-        }
-        
-        try:
-            # Пытаемся найти JSON в ответе
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                data = json.loads(json_str)
-                
-                concepts["main_concept"] = data.get("main_concept", "")
-                
-                aspects = data.get("aspects", [])
-                if isinstance(aspects, list):
-                    # Ограничиваем количество аспектов и очищаем их
-                    concepts["aspects"] = [str(aspect).strip() for aspect in aspects[:4] if aspect]
-                else:
-                    concepts["aspects"] = []
-                
-                print(f"✅ Извлечены концепты из JSON: {concepts}")
-                return concepts
-            
-            # Fallback: если JSON не найден, используем старый метод
-            lines = response.split('\n')
-            for line in lines:
-                line = line.strip()
-                if line.startswith('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:'):
-                    concepts["main_concept"] = line.replace('ЦЕНТРАЛЬНОЕ ПОНЯТИЕ:', '').strip()
-                elif line.startswith('АСПЕКТ1:') or line.startswith('1.'):
-                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
-                    concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ2:') or line.startswith('2.'):
-                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
-                    concepts["aspects"].append(aspect)
-                elif line.startswith('АСПЕКТ3:') or line.startswith('3.'):
-                    aspect = line.split(':', 1)[1].split('-')[0].strip() if ':' in line else line.split('.', 1)[1].split('-')[0].strip()
-                    concepts["aspects"].append(aspect)
-            
-            # Если не нашли в строгом формате, пытаемся извлечь иначе
-            if not concepts["main_concept"]:
-                # Ищем самое длинное/важное слово как основное понятие
-                words = re.findall(r'\b[А-Яа-я]{5,}\b', response)
-                if words:
-                    concepts["main_concept"] = words[0]
-                    
-            if not concepts["aspects"]:
-                # Ищем другие значимые слова как аспекты
-                words = re.findall(r'\b[А-Яа-я]{4,}\b', response)
-                concepts["aspects"] = [w for w in words[1:4] if w != concepts["main_concept"]]
-                
-            # Заполняем если недостаточно аспектов
-            while len(concepts["aspects"]) < 3:
-                concepts["aspects"].append(f"Аспект {len(concepts['aspects']) + 1}")
-                
-        except Exception as e:
-            print(f"❌ Ошибка парсинга концептов: {e}")
-            concepts = {
-                "main_concept": "Основное понятие",
-                "aspects": ["Аспект 1", "Аспект 2", "Аспект 3"]
-            }
-        
-        return concepts
-
-    def _generate_mermaid_from_concepts(self, concepts: Dict) -> str:
-        """Генерация Mermaid из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
-        main_concept = concepts["main_concept"] or "Основное понятие"
-        aspects = concepts["aspects"][:4]  # Берем до 4 аспектов
-        
-        # Очищаем названия от лишних символов
-        main_concept_clean = re.sub(r'[^\w\s]', '', main_concept)
-        
-        mermaid_lines = ['flowchart TD']
-        mermaid_lines.append(f'    A["{main_concept_clean}"]')
-        
-        for i, aspect in enumerate(aspects):
-            node_id = chr(66 + i)  # B, C, D, E
-            aspect_clean = re.sub(r'[^\w\s]', '', str(aspect))
-            mermaid_lines.append(f'    A --> {node_id}["{aspect_clean}"]')
-        
-        # Стили для лучшего отображения
-        mermaid_lines.extend([
-            '',
-            '    style A fill:#4263EB,color:#fff,stroke-width:2px',
-            '    style B fill:#4cc9f0,color:#333,stroke-width:2px',
-            '    style C fill:#3a0ca3,color:#fff,stroke-width:2px',
-            '    style D fill:#f72585,color:#fff,stroke-width:2px',
-            '    style E fill:#7209b7,color:#fff,stroke-width:2px'
-        ])
-        
-        return '\n'.join(mermaid_lines)
-
-    def _generate_svg_from_concepts(self, concepts: Dict) -> str:
-        """Генерация SVG из концептов - УПРОЩЕННАЯ ВЕРСИЯ"""
-        main_concept = concepts["main_concept"] or "Основное понятие"
-        aspects = [str(aspect) for aspect in concepts["aspects"][:4]]  # Берем до 4 аспектов
-        
-        # Ограничиваем длину текста
-        main_concept_display = main_concept[:20]
-        aspects_display = [aspect[:15] for aspect in aspects]
-        
-        # Заполняем недостающие аспекты
-        while len(aspects_display) < 4:
-            aspects_display.append(f"Аспект {len(aspects_display) + 1}")
-        
-        return f'''
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
-            <defs>
-                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#f8f9fa"/>
-                    <stop offset="100%" stop-color="#e9ecef"/>
-                </linearGradient>
-            </defs>
-            
-            <!-- Фон -->
-            <rect x="10" y="10" width="380" height="280" fill="url(#bg)" stroke="#dee2e6" stroke-width="2" rx="15"/>
-            
-            <!-- Заголовок -->
-            <text x="200" y="30" text-anchor="middle" font-family="Arial" font-size="16" fill="#333" font-weight="bold">
-                Концептуальная карта
-            </text>
-            
-            <!-- Основное понятие -->
-            <rect x="100" y="60" width="200" height="50" fill="#4263EB" rx="10"/>
-            <text x="200" y="90" text-anchor="middle" font-family="Arial" font-size="14" fill="white" font-weight="bold">
-                {main_concept_display}
-            </text>
-            
-            <!-- Аспекты -->
-            <rect x="50" y="170" width="80" height="35" fill="#4cc9f0" rx="8"/>
-            <text x="90" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="#333">
-                {aspects_display[0]}
-            </text>
-            
-            <rect x="140" y="170" width="80" height="35" fill="#3a0ca3" rx="8"/>
-            <text x="180" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects_display[1]}
-            </text>
-            
-            <rect x="230" y="170" width="80" height="35" fill="#f72585" rx="8"/>
-            <text x="270" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects_display[2]}
-            </text>
-            
-            <rect x="320" y="170" width="60" height="35" fill="#7209b7" rx="8"/>
-            <text x="350" y="192" text-anchor="middle" font-family="Arial" font-size="11" fill="white">
-                {aspects_display[3]}
-            </text>
-            
-            <!-- Связи -->
-            <line x1="200" y1="110" x2="90" y2="170" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="110" x2="180" y2="170" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="110" x2="270" y2="170" stroke="#333" stroke-width="2"/>
-            <line x1="200" y1="110" x2="350" y2="170" stroke="#333" stroke-width="2"/>
-        </svg>
-        '''.strip()
-
-    def _generate_fallback_visualization(self, topic: str) -> dict:
-        """Fallback визуализация"""
-        # Извлекаем ключевые слова из темы для fallback
-        words = re.findall(r'\b[А-Яа-я]{4,}\b', topic)
-        main_concept = words[0] if words else "Тема"
-        aspects = words[1:5] if len(words) > 1 else ["Аспект 1", "Аспект 2", "Аспект 3", "Аспект 4"]
-        
-        concepts = {
-            "main_concept": main_concept,
-            "aspects": aspects
-        }
-        
-        return {
-            "mermaid_code": self._generate_mermaid_from_concepts(concepts),
-            "svg_code": self._generate_svg_from_concepts(concepts),
-            "topic": topic,
-            "concepts": concepts,
-            "success": False
-        }
-
-    def check_visualization_need(self, text: str) -> bool:
-        """Проверяет, нужна ли визуализация для данного текста"""
-        if not text or len(text.strip()) < 10:
-            return False
-            
-        text_lower = text.lower()
-        
-        # Ключевые слова, указывающие на необходимость визуализации
-        visualization_keywords = [
-            'структура', 'схема', 'диаграмма', 'процесс', 
-            'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
-            'таблица', 'классификация', 'этапы', 'стадии', 'система',
-            'модель', 'цепочка', 'последовательность'
-        ]
-        
-        # Структурные индикаторы
-        structure_indicators = [
-            'состоит из', 'включает в себя', 'делится на', 'подразделяется',
-            'можно разделить', 'выделяют', 'различают'
-        ]
-        
-        # Проверяем наличие ключевых слов
-        has_keywords = any(keyword in text_lower for keyword in visualization_keywords)
-        
-        # Проверяем наличие структурных индикаторов
-        has_structure = any(indicator in text_lower for indicator in structure_indicators)
-        
-        # Проверяем длину текста (достаточно информативный)
-        is_long_enough = len(text.split()) > 3
-        
-        return (has_keywords or has_structure) and is_long_enough
-
-    def generate_visualization(self, topic: str, context: str = "") -> dict:
-        """Генерация УПРОЩЕННОЙ концептуальной карты на основе темы"""
-        try:
-            print(f"🎨 Генерация упрощенной концептуальной карты для: {topic[:100]}...")
-            
-            # УПРОЩЕННЫЙ ПРОМПТ для получения только основного понятия и аспектов в JSON формате
-            prompt = f"""
-На основе темы урока создай простую концептуальную карту с одним центральным понятием и связанными аспектами.
-
-ТЕМА УРОКА: {topic}
-КОНТЕКСТ: {context}
-
-ТРЕБОВАНИЯ:
-1. Выдели ОДНО центральное понятие (самый важный термин)
-2. Определи 3-4 расширяющих текст понятия или словосочетания для слайда презентации
-3. Каждое понятие не должно быть продолжением предыдущего. Это должны быть отдельные смысловые понятия или словосочетания или фразы.
-4. Верни ответ ТОЛЬКО в формате JSON
-
-Формат JSON:
-{{
-    "main_concept": "основное понятие",
-    "aspects": ["понятие 1 или словосочетание 1", "понятие 2 или словосочетание 2", "понятие 3 или словосочетание 3"]
-}}
-
-Пример для "Экономика как наука":
-{{
-    "main_concept": "Экономика как наука",
-    "aspects": ["Изучает хозяйство", "Решает вопросы распределения благ", "Решает вопросы производства благ", "Изучает экономическую политику"]
-}}
-
-Тема: {topic}
-
-Верни ТОЛЬКО JSON без дополнительного текста.
-"""
-            
-            response = self._query_llm_api(
-                prompt=prompt,
-                context="",
-                subject="general",
-                system_prompt="""Ты создаешь простые концептуальные карты для обучения.
-                Возвращай ответ ТОЛЬКО в формате JSON с полями main_concept и aspects.
-                Не добавляй пояснений или дополнительного текста.""",
-                max_tokens=500
-            )
-            
-            if response:
-                print(f"🔧 Получен ответ от LLM: {response[:200]}...")
-                
-                # Очищаем ответ от возможного лишнего текста
-                cleaned_response = self._clean_json_response(response)
-                
-                # Парсим JSON ответ
-                concepts = self._parse_json_concepts(cleaned_response)
-                
-                if concepts and concepts["main_concept"]:
-                    print(f"✅ Извлечены концепты: {concepts}")
-                    
-                    # Генерируем визуализацию
-                    mermaid_code = self._generate_mermaid_from_concepts(concepts)
-                    svg_code = self._generate_svg_from_concepts(concepts)
-                    
-                    return {
-                        "mermaid_code": mermaid_code,
-                        "svg_code": svg_code,
-                        "topic": topic,
-                        "concepts": concepts,
-                        "success": True
-                    }
-            
-            # Fallback - если не удалось получить от LLM
-            return self._generate_fallback_visualization(topic)
-            
-        except Exception as e:
-            print(f"❌ Ошибка генерации визуализации: {e}")
-            return self._generate_fallback_visualization(topic)
-
-    def _clean_json_response(self, response: str) -> str:
-        """Очистка JSON ответа от лишнего текста"""
-        if not response:
-            return ""
-        
-        # Удаляем markdown обратные кавычки
-        response = re.sub(r'```json\s*', '', response)
-        response = re.sub(r'```\s*', '', response)
-        
-        # Ищем JSON объект
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if json_match:
-            return json_match.group()
-        
-        return response.strip()
-
-    def _parse_json_concepts(self, json_response: str) -> Dict:
-        """Парсинг концептов из JSON ответа"""
-        concepts = {
-            "main_concept": "",
-            "aspects": []
-        }
-        
-        try:
-            if not json_response:
-                return concepts
-                
-            data = json.loads(json_response)
-            
-            concepts["main_concept"] = data.get("main_concept", "")
-            
-            aspects = data.get("aspects", [])
-            if isinstance(aspects, list):
-                # Ограничиваем количество аспектов и очищаем их
-                concepts["aspects"] = [str(aspect).strip() for aspect in aspects[:4] if aspect]
-            else:
-                concepts["aspects"] = []
-                
-            # Заполняем если недостаточно аспектов
-            while len(concepts["aspects"]) < 3:
-                concepts["aspects"].append(f"Аспект {len(concepts['aspects']) + 1}")
-                
-        except json.JSONDecodeError as e:
-            print(f"❌ Ошибка парсинга JSON: {e}")
-            # Пробуем извлечь концепты текстовым методом
-            concepts = self._parse_concepts_from_response(json_response)
-        except Exception as e:
-            print(f"❌ Ошибка обработки JSON концептов: {e}")
-            concepts = {
-                "main_concept": "Основное понятие",
-                "aspects": ["Аспект 1", "Аспект 2", "Аспект 3"]
-            }
-        
-        return concepts
-
-    def generate_lesson_mindmap(self, lesson_content: str, lesson_title: str) -> dict:
-        """Генерация mindmap для всего урока"""
-        try:
-            prompt = f"""
-            Создай структурную mind map (интеллект-карту) для урока на тему: "{lesson_title}"
-
-            СОДЕРЖАНИЕ УРОКА:
-            {lesson_content[:2000]}
-
-            ТРЕБОВАНИЯ К MIND MAP:
-            1. Основная тема в центре: "{lesson_title}"
-            2. 3-5 основных разделов (первого уровня)
-            3. 2-3 подраздела для каждого основного раздела (второго уровня)
-            4. Максимальная глубина: 2 уровня
-            5. Используй четкие и краткие формулировки
-            6. Логическая структура от общего к частному
-
-            Формат Mermaid:
-            flowchart TD
-                A["Основная тема"] --> B["Раздел 1"]
-                A --> C["Раздел 2"] 
-                B --> D["Подраздел 1.1"]
-                B --> E["Подраздел 1.2"]
-                C --> F["Подраздел 2.1"]
-
-            Верни ТОЛЬКО код Mermaid без пояснений.
-            """
-            
-            system_prompt = """Ты создаешь структурные mind maps для образовательных уроков. 
-            Создавай четкие логические структуры с ограниченным количеством элементов для лучшей читаемости."""
-            
-            mermaid_code = self._query_llm_api(
-                prompt=prompt,
-                context="",
-                subject="general",
-                system_prompt=system_prompt,
-                max_tokens=500
-            )
-            
-            if mermaid_code:
-                cleaned_code = self._clean_mermaid_code(mermaid_code, lesson_title)
-                return {
-                    "type": "mindmap",
-                    "mermaid_code": cleaned_code,
-                    "lesson_title": lesson_title,
-                    "timestamp": time.time()
-                }
-            
-        except Exception as e:
-            print(f"❌ Ошибка генерации mind map: {e}")
-        
-        # Fallback mind map
-        return {
-            "type": "mindmap",
-            "mermaid_code": self._create_fallback_mindmap(lesson_title),
-            "lesson_title": lesson_title,
-            "timestamp": time.time()
-        }
-
-    def _clean_mermaid_code(self, code: str, lesson_title: str) -> str:
-        """Очистка и валидация Mermaid кода"""
-        if not code:
-            return self._create_fallback_mindmap(lesson_title)
-        
-        # Удаляем markdown обратные кавычки
-        code = re.sub(r'```[\s\S]*?```', '', code)
-        code = re.sub(r'`', '', code)
-        
-        # Убеждаемся, что это корректный Mermaid
-        if not code.strip().startswith(('flowchart', 'graph')):
-            code = 'flowchart TD\n' + code
-        
-        # Добавляем основную тему если ее нет
-        if f'["{lesson_title}"]' not in code and '["Основная тема"]' not in code:
-            lines = code.split('\n')
-            if len(lines) > 1:
-                lines[0] = f'    A["{lesson_title}"]'
-            code = '\n'.join(lines)
-        
-        return code.strip()
-
-    def _create_fallback_mindmap(self, lesson_title: str) -> str:
-        """Создает простую mind map по умолчанию"""
-        return f'''flowchart TD
-    A["{lesson_title}"] --> B["Основные понятия"]
-    A --> C["Ключевые аспекты"]
-    A --> D["Практическое применение"]
-    B --> E["Определения"]
-    B --> F["Примеры"]
-    C --> G["Теория"]
-    C --> H["Факты"]
-    D --> I["Задачи"]
-    D --> J["Упражнения"]'''
-
     def _extract_svg_code(self, response: str) -> str:
         """Извлекает чистый SVG код из ответа LLM - устойчиво к обёрткам"""
         if not response:
@@ -1014,52 +577,64 @@ class LLMIntegration:
     def generate_infographic(self, topic: str, context: str = "") -> dict:
         """Генерация стильной инфографики в SVG формате"""
         
+        # 🔥 УЛУЧШЕННЫЙ ПРОМПТ: Больше разнообразия и креативности
         prompt = f"""
-Создай стильную образовательную инфографику в формате SVG на тему: "{topic}"
-
-КОНТЕКСТ: {context}
+Создай УНИКАЛЬНУЮ и КРЕАТИВНУЮ образовательную инфографику в формате SVG на тему: "{topic}"
 
 ТРЕБОВАНИЯ К ИНФОГРАФИКЕ:
 - Только чистый SVG код без пояснений
-- Стильный, современный дизайн
-- Информативная и понятная структура
-- Использование фигур, текста, цветов
+- УНИКАЛЬНЫЙ дизайн для каждой темы
+- Информативная и понятная структура  
+- Использование разнообразных фигур, текста, цветов
 - Максимальная ширина: 600px, высота: 400px
 - Четкая визуальная иерархия
 - Баланс между визуальными элементами и текстом
 
-ЭЛЕМЕНТЫ ДЛЯ ИСПОЛЬЗОВАНИЯ:
-- Прямоугольники с закругленными углами
-- Стрелки для связей
-- Простые геометрические формы (круги, прямоугольники)
-- Текстовые блоки с заголовками
-- Цветовые акценты для выделения ключевых моментов
+ВАРИАНТЫ СТРУКТУРЫ (выбери наиболее подходящую):
+1. Иерархическая схема - для процессов и структур
+2. Сравнительная таблица - для сравнения понятий  
+3. Временная шкала - для исторических событий
+4. Круговая диаграмма - для пропорций и соотношений
+5. Блок-схема - для алгоритмов и процессов
+6. Концептуальная карта - для связей между понятиями
+7. Инфографика с иконками - для визуального представления
 
-ЦВЕТОВАЯ ПАЛИТРА:
-- Основные цвета: #4f46e5, #10b981, #f59e0b, #ef4444, #8b5cf6
-- Фон: светлые оттенки (#f8fafc, #f1f5f9)
-- Текст: темные оттенки (#1f2937, #374151)
+ЭЛЕМЕНТЫ ДЛЯ ИСПОЛЬЗОВАНИЯ:
+- Прямоугольники, круги, треугольники, стрелки
+- Линии, кривые, пути
+- Градиенты, тени, фильтры
+- Текстовые блоки с заголовками
+- Иконки и символы (если уместно)
+
+ЦВЕТОВАЯ ПАЛИТРА (используй разные комбинации):
+- Основные цвета: #4f46e5, #10b981, #f59e0b, #ef4444, #8b5cf6, #06b6d4, #84cc16, #f97316
+- Фон: светлые оттенки (#f8fafc, #f1f5f9, #fef7ed, #f0fdf4)
+- Текст: темные оттенки (#1f2937, #374151, #4b5563)
 
 СТРУКТУРА ИНФОГРАФИКИ:
-1. Заголовок (тема)
-2. Ключевые элементы/понятия
-3. Связи между элементами
-4. Визуальное представление информации
+1. Привлекательный заголовок
+2. Ключевые элементы/понятия  
+3. Визуальные связи между элементами
+4. Подписи и пояснения (если нужны)
+
+ТЕМА: "{topic}"
+
+Создай УНИКАЛЬНЫЙ дизайн, который лучше всего подходит для этой темы.
+Не используй шаблонные решения - будь креативным!
 
 Верни ТОЛЬКО SVG код без каких-либо пояснений, комментариев или markdown разметки.
 Код должен начинаться с <svg и заканчиваться </svg>.
 """
 
         try:
-            print(f"🎨 Генерация SVG инфографики для: {topic}")
+            print(f"🎨 Генерация УНИКАЛЬНОЙ SVG инфографики для: {topic}")
             
-            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Явно указываем что это SVG запрос
             response = self._query_llm_api(
                 prompt=prompt,
-                context="",
+                context="",  # 🔥 УБИРАЕМ КОНТЕКСТ УРОКА - это решит проблему с передачей текста
                 subject="general",
-                system_prompt="""Ты - эксперт по созданию образовательной инфографики. 
-Твоя задача - генерировать чистый, валидный SVG код для визуализации образовательного контента.
+                system_prompt="""Ты - креативный дизайнер образовательной инфографики. 
+Твоя задача - создавать УНИКАЛЬНЫЕ и РАЗНООБРАЗНЫЕ SVG инфографики для разных тем.
 
 ОЧЕНЬ ВАЖНЫЕ ПРАВИЛА:
 1. Возвращай ТОЛЬКО SVG код, без каких-либо пояснений
@@ -1067,11 +642,20 @@ class LLMIntegration:
 3. НЕ добавляй комментарии, пояснения или текст вокруг SVG
 4. Код должен начинаться с <svg и заканчиваться </svg>
 5. Всегда включай xmlns="http://www.w3.org/2000/svg"
-6. Создавай стильную и понятную инфографику
+6. Создавай РАЗНЫЕ типы инфографик для разных тем
+7. Будь КРЕАТИВНЫМ - избегай шаблонных решений
+8. Используй разнообразные цвета, формы и структуры
+
+Примеры разных типов инфографик:
+- Иерархические схемы для структур
+- Временные шкалы для процессов  
+- Сравнительные таблицы для анализа
+- Концептуальные карты для связей
+- Круговые диаграммы для пропорций
 
 Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ.""",
-                max_tokens=2000,
-                is_svg=True  # 🔥 Явно указываем что это SVG запрос
+                max_tokens=2500,  # Увеличили для более сложных дизайнов
+                is_svg=True
             )
             
             # 🔧 ДОБАВЛЕНО ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ
