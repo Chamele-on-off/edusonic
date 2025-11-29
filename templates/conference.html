@@ -2211,6 +2211,7 @@
         let autoContinueEnabled = false;
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
+        let autoContinuePaused = false; // НОВАЯ ПЕРЕМЕННАЯ: флаг приостановки автопродолжения
 
         // Упрощенная система активации AI-учителя
         let roomActivationState = {
@@ -2408,13 +2409,14 @@
                 autoContinueTimer = null;
             }
             
-            if (isLessonActive && !isPracticeActive && autoContinueEnabled) {
+            // ИСПРАВЛЕНИЕ: Убираем проверку autoContinueEnabled из условия
+            if (isLessonActive && !isPracticeActive && !autoContinuePaused) {
                 autoContinueTimer = setTimeout(() => {
                     console.log('Автоматическое продолжение: таймер сработал');
                     simulateContinueCommand();
-                }, 25000);
+                }, 60000); // УВЕЛИЧЕННО ДО 1 МИНУТЫ (60000 мс)
                 
-                updateAutoContinueStatus('активен (25с)');
+                updateAutoContinueStatus('активен (60с)');
             }
         }
 
@@ -2438,10 +2440,17 @@
         }
 
         function setAutoContinueEnabled(enabled) {
+            // Если урок приостановлен вручную — не включаем
+            if (autoContinuePaused && enabled) {
+                return;
+            }
+            
+            // ИСПРАВЛЕНИЕ: Сначала устанавливаем значение, потом вызываем resetAutoContinueTimer
             autoContinueEnabled = enabled;
+            
             if (enabled && isLessonActive && !isPracticeActive) {
                 resetAutoContinueTimer();
-                updateAutoContinueStatus('активен (25с)');
+                updateAutoContinueStatus('активен (60с)');
             } else {
                 if (autoContinueTimer) {
                     clearTimeout(autoContinueTimer);
@@ -2932,8 +2941,14 @@
                             return;
                         }
                         
-                        if (cleanText === lastFinalResult) {
-                            console.log('Повторяющаяся фраза:', cleanText);
+                        // РЕШЕНИЕ ПРОБЛЕМЫ №1: Добавляем список исключений для повторяющихся команд
+                        const repeatableCommands = ['продолжай', 'записал', 'готов', 'ещё раз', 'повтори', 'понял', 'да', 'нет'];
+                        const isRepeatable = repeatableCommands.some(cmd => 
+                            cleanText.toLowerCase().includes(cmd.toLowerCase())
+                        );
+                        
+                        if (cleanText === lastFinalResult && !isRepeatable) {
+                            console.log('Повторяющаяся фраза (проигнорирована):', cleanText);
                             return;
                         }
                         
@@ -2957,9 +2972,7 @@
                         // Показываем финальный результат
                         showSpeechDisplay(cleanText);
                         
-                        handleStudentActivity();
-                        
-                        // Отправляем на сервер
+                        // РЕШЕНИЕ ПРОБЛЕМЫ №3: Умная обработка активности ученика
                         handleRecognizedSpeech(cleanText);
                     }
                     
@@ -3074,14 +3087,31 @@
             
             console.log('Отправка речи на сервер:', text);
             
-            // Отправляем на сервер
+            // РЕШЕНИЕ ПРОБЛЕМЫ №3: Умная логика управления автопродолжением
+            const isContinueCommand = /продолж(ай|и|ение|ать)/i.test(text.trim());
+            
+            if (isContinueCommand) {
+                // Команда "продолжай" — разрешаем автопродолжение
+                autoContinuePaused = false;
+                setAutoContinueEnabled(true); // ← это запустит таймер
+            } else {
+                // Любая другая фраза — приостанавливаем урок
+                autoContinuePaused = true;
+                setAutoContinueEnabled(false); // ← останавливаем таймер
+            }
+            
+            // Отправляем на сервер в любом случае
             socket.emit('recognized_speech', {
                 room_id: roomId,
                 text: text
             });
             
             showStudentSpeech(text, 'me');
-            handleStudentActivity();
+            
+            // Сбрасываем таймер активности только для команд продолжения
+            if (isContinueCommand) {
+                handleStudentActivity();
+            }
             
             // Индикатор скроется когда учитель начнет отвечать (в speakText)
         }
@@ -3762,7 +3792,9 @@
         function submitAnswer() {
             const answer = answerInput.value.trim();
             if (answer) {
-                handleStudentActivity();
+                // РЕШЕНИЕ ПРОБЛЕМЫ №3: При отправке ответа приостанавливаем автопродолжение
+                autoContinuePaused = true;
+                setAutoContinueEnabled(false);
                 
                 if (socket) {
                     socket.emit('student_message', {
@@ -4169,6 +4201,10 @@
                     // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
                     hideThinkingIndicator();
                     
+                    // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
+                    autoContinuePaused = true;
+                    setAutoContinueEnabled(false);
+                    
                     startSpeechAnimation(data.text);
                     playAudio(data.audio);
                     
@@ -4191,6 +4227,10 @@
                 if (data.is_teacher) {
                     // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
                     hideThinkingIndicator();
+                    
+                    // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
+                    autoContinuePaused = true;
+                    setAutoContinueEnabled(false);
                     
                     const teacherText = data.text.replace('Учитель: ', '');
                     startSpeechAnimation(teacherText);
@@ -4256,7 +4296,9 @@
                 currentLesson = data;
                 currentParagraph = 0;
                 
-                setAutoContinueEnabled(true);
+                // РЕШЕНИЕ ПРОБЛЕМЫ №3: При старте урока не включаем автопродолжение автоматически
+                autoContinuePaused = true;
+                setAutoContinueEnabled(false);
                 
                 loadLessonContent(data.lesson_id);
             });
@@ -4279,7 +4321,9 @@
                 console.log('Практика завершена');
                 isPracticeActive = false;
                 if (isLessonActive) {
-                    setAutoContinueEnabled(true);
+                    // РЕШЕНИЕ ПРОБЛЕМЫ №3: После практики не включаем автопродолжение автоматически
+                    autoContinuePaused = true;
+                    setAutoContinueEnabled(false);
                 }
                 setTool('text');
             });
@@ -4327,7 +4371,7 @@
             currentLessonContent = [
                 "Добро пожаловать на урок!",
                 "Сегодня мы изучим основы работы с виртуальным классом.",
-                "Вы можете использовать текстовую доску для заметок и отдельное окно для рисования."
+                "Вы можете использовать текстовую доска для заметок и отдельное окно для рисования."
             ];
             displayLessonParagraph(0);
         }
