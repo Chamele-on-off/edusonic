@@ -10,6 +10,7 @@ import threading
 from collections import defaultdict
 import random
 from dialogue import DialogueManager
+from student_dialogue import StudentDialogueManager
 from config import update_api_key, get_api_key, load_config, get_model_config, get_llm_mode, set_llm_mode, get_llm_priority, set_llm_priority
 import requests
 import json
@@ -648,19 +649,15 @@ def _fast_room_initialization(room_id):
         is_student_room = '_' in room_id and room_id != 'default'
         
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            # ВСЕГДА используем единый DialogueManager
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            
-            # Настраиваем режим ученика если нужно
             if is_student_room:
                 student_data = room_student_data.get(room_id, {})
-                subject = _extract_subject_from_room(room_id)
-                if subject:
-                    room_dialogue[room_id].set_student_mode(subject, student_data)
-                    debug_log(f"Установлен режим ученика для комнаты {room_id}: {subject}")
+                room_dialogue[room_id] = StudentDialogueManager(socketio, student_data)
+                debug_log(f"Создан StudentDialogueManager для комнаты ученика {room_id}")
+            else:
+                room_dialogue[room_id] = DialogueManager(socketio)
+                debug_log(f"Создан DialogueManager для комнаты {room_id}")
             
-            debug_log(f"Создан DialogueManager для комнаты {room_id}")
+            room_dialogue[room_id].room_id = room_id
         
         if room_id not in room_current_avatar:
             room_current_avatar[room_id] = 'teacher' if not is_student_room else 'woman'
@@ -669,8 +666,7 @@ def _fast_room_initialization(room_id):
             if not getattr(room_dialogue[room_id], 'is_student_mode', False):
                 subject = _extract_subject_from_room(room_id)
                 if subject:
-                    student_data = room_student_data.get(room_id, {})
-                    room_dialogue[room_id].set_student_mode(subject, student_data)
+                    room_dialogue[room_id].set_student_mode(subject)
                     debug_log(f"Установлен режим ученика для {room_id}: {subject}")
         
         if room_dialogue[room_id]:
@@ -862,7 +858,7 @@ def update_student_data(student_id, updates):
         return False
 
 def create_student_rooms(student_data):
-    """Автоматически создает комнаты для ученика с единым идентификатором"""
+    """Автоматически создает комнаты для ученика с единым идентификатором и StudentDialogueManager"""
     try:
         student_id = student_data.get('student_id')
         student_name = student_data.get('name')
@@ -895,10 +891,11 @@ def create_student_rooms(student_data):
                 'conference_id': conference_id
             }
             
-            # Инициализируем DialogueManager для комнаты
-            _fast_room_initialization(room_name)
+            room_dialogue[room_name] = StudentDialogueManager(socketio, room_student_data[room_name])
+            room_dialogue[room_name].room_id = room_name
+            room_current_avatar[room_name] = 'woman'
             
-            debug_log(f"Создана комната {room_name} для ученика {student_name}")
+            debug_log(f"Создана комната {room_name} для ученика {student_name} с StudentDialogueManager")
             
             created_rooms.append({
                 'subject': subject,
