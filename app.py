@@ -665,6 +665,7 @@ def _fast_room_initialization(room_id):
         if room_id not in room_current_avatar:
             room_current_avatar[room_id] = 'teacher' if not is_student_room else 'woman'
         
+        # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Убедимся, что режим ученика установлен правильно
         if is_student_room and room_dialogue[room_id]:
             if not getattr(room_dialogue[room_id], 'is_student_mode', False):
                 subject = _extract_subject_from_room(room_id)
