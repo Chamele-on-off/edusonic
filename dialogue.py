@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, Tuple
 from difflib import SequenceMatcher
 import random
 import re
-from knowledge.knowledge_base import KnowledgeBaserrr
+from knowledge.knowledge_base import KnowledgeBase
 from llm import LLMIntegration
 from config import get_llm_mode, get_dialogue_settings
 import time
