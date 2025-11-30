@@ -2213,6 +2213,9 @@
         let lastTeacherSpeechTime = 0;
         let autoContinuePaused = false; // НОВАЯ ПЕРЕМЕННАЯ: флаг приостановки автопродолжения
 
+        // НОВАЯ ПЕРЕМЕННАЯ: флаг ожидания ответа на команду продолжения
+        let awaitingContinueResponse = false;
+
         // Упрощенная система активации AI-учителя
         let roomActivationState = {
             peerReady: false,
@@ -3094,10 +3097,12 @@
                 // Команда "продолжай" — разрешаем автопродолжение
                 autoContinuePaused = false;
                 setAutoContinueEnabled(true); // ← это запустит таймер
+                awaitingContinueResponse = true; // ← ЗАПОМНИЛИ: ждём ответа-продолжения
             } else {
                 // Любая другая фраза — приостанавливаем урок
                 autoContinuePaused = true;
                 setAutoContinueEnabled(false); // ← останавливаем таймер
+                awaitingContinueResponse = false; // ← это был вопрос — не ждём продолжения
             }
             
             // Отправляем на сервер в любом случае
@@ -3352,9 +3357,14 @@
                 
                 startNeutralAnimation();
                 
-                if (isLessonActive && !isPracticeActive) {
-                    resetAutoContinueTimer();
+                // ИСПРАВЛЕНИЕ: Включаем автопродолжение только если это был ответ на команду "продолжай"
+                if (isLessonActive && !isPracticeActive && awaitingContinueResponse) {
+                    // Это был ответ на "продолжай" — можно включать автопродолжение
+                    awaitingContinueResponse = false;
+                    autoContinuePaused = false;
+                    setAutoContinueEnabled(true); // ← ТАЙМЕР ЗАПУСТИТСЯ!
                 }
+                // Если это был ответ на вопрос — таймер остаётся выключенным
             }, duration);
         }
 
@@ -3863,7 +3873,7 @@
         // Демонстрация экрана
         async function shareScreen() {
             try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                const screenStream = await navig.mediaDevices.getDisplayMedia({
                     video: true,
                     audio: true
                 });
@@ -4203,7 +4213,8 @@
                     
                     // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
                     autoContinuePaused = true;
-                    setAutoContinueEnabled(false);
+                    // НЕ вызываем setAutoContinueEnabled(false) здесь!
+                    // Состояние включения таймера мы восстановим позже
                     
                     startSpeechAnimation(data.text);
                     playAudio(data.audio);
@@ -4230,7 +4241,8 @@
                     
                     // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
                     autoContinuePaused = true;
-                    setAutoContinueEnabled(false);
+                    // НЕ вызываем setAutoContinueEnabled(false) здесь!
+                    // Состояние включения таймера мы восстановим позже
                     
                     const teacherText = data.text.replace('Учитель: ', '');
                     startSpeechAnimation(teacherText);
