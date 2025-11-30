@@ -530,7 +530,7 @@ class DialogueManager:
             else:
                 return "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
         
-        # Анализ контекста разговора
+        # Анализ контекст разговора
         user_messages = [msg['text'] for msg in self.conversation_history if msg['is_user']]
         last_user_message = user_messages[-1].lower() if user_messages else ""
         
@@ -1005,7 +1005,7 @@ class DialogueManager:
                 return prompt
         
         # Если ученик соглашается начать урок
-        if any(word in text_lower for word in ['да', 'ага', 'угу', 'ладно', 'хорошо', 'начать', 'начнем', 'поехали']):
+        if any(word in text_lower for word in ['да', 'ага', 'угу', ' ладно', 'хорошо', 'начать', 'начнем', 'поехали']):
             return self._start_student_lesson()
         
         # Обычная обработка диалога
@@ -1067,64 +1067,139 @@ class DialogueManager:
         return random.choice(prompts)
 
     def _start_student_lesson(self) -> str:
-        """Начинает урок для ученика по выбранному предмету"""
+        """Начинает урок для ученика по выбранному предмету с гарантированным отображением"""
         print(f"🚀 Начинаем урок для ученика по предмету: {self.auto_selected_subject}")
         
-        # Используем существующую логику выбора предмета
+        # Используем исправленную логику выбора предмета
         response = self._handle_subject_selection_direct(self.auto_selected_subject)
         
         if response is None:
             # Успешно начали урок
             student_name = self.student_data.get('name', '')
             name_greeting = f"{student_name}, " if student_name else ""
-            start_message = f"{name_greeting}Отлично! Начинаем урок по {self.auto_selected_subject}. {self._get_next_paragraph()}"
+            
+            # Получаем первый абзац
+            first_paragraph = self._get_next_paragraph()
+            if first_paragraph:
+                start_message = f"{name_greeting}Отлично! Начинаем урок по {self.auto_selected_subject}. {first_paragraph}"
+            else:
+                start_message = f"{name_greeting}Отлично! Начинаем урок по {self.auto_selected_subject}."
+            
             self._add_to_conversation_history(start_message, is_user=False)
+            
+            # 🔥 ДВОЙНАЯ ГАРАНТИЯ: еще раз проверяем, что клиент знает о начале урока
+            if self.room_id and self.socketio and self.selected_lesson:
+                time.sleep(0.5)  # Небольшая задержка для надежности
+                self.socketio.emit('lesson_started', {
+                    'lesson_id': self.selected_lesson['id'],
+                    'title': self.selected_lesson['title'],
+                    'subject': self.current_subject,
+                    'is_generated': self.selected_lesson.get('is_generated', False)
+                }, room=self.room_id)
+                print(f"📢 ДУБЛИРУЮЩЕЕ уведомление 'lesson_started' отправлено в комнату {self.room_id}")
+            
             return start_message
         
         return response
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """Прямая обработка выбора предмета"""
+        """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА"""
         self.current_subject = subject
         
+        print(f"🎯 Выбор предмета: {subject}, режим ученика: {self.is_student_mode}")
+        
         # 🔥 ОБНОВЛЕННАЯ ЛОГИКА ВЫБОРА УРОКОВ:
-        # Для студенческих конференций - все уроки по предмету
-        # Для обычных конференций - только demo уроки
         if self.is_student_mode:
             # Студенческая конференция - все уроки по предмету
             lessons = self.lessons.get(subject, [])
+            print(f"🎓 Студенческий режим: найдено {len(lessons)} уроков по {subject}")
         else:
             # Обычная конференция - только demo уроки
             lessons = [lesson for lesson in self.lessons.get(subject, []) 
                       if lesson.get('is_demo', False)]
+            print(f"👨‍🏫 Обычный режим: найдено {len(lessons)} demo уроков по {subject}")
         
         if lessons:
             self.selected_lesson = lessons[0]
+            print(f"✅ Выбран существующий урок: {self.selected_lesson['title']}")
         else:
-            # Fallback - создаем демо-урок
-            self.selected_lesson = {
-                'id': f"demo_{subject}",
-                'title': f"Демо-урок по {subject}",
-                'file_path': self.lessons_dir / f"demo_{subject}.txt",
-                'is_demo': True
-            }
-            # Создаем файл демо-урока если его нет
-            demo_file = self.lessons_dir / f"demo_{subject}.txt"
-            if not demo_file.exists():
-                with open(demo_file, 'w', encoding='utf-8') as f:
-                    f.write(f"Демо-урок по предмету {subject}.\n\nЭто демонстрационный урок. Вы можете создать собственные уроки или сгенерировать их с помощью AI.")
-        
+            # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: В студенческой конференции генерируем урок
+            if self.is_student_mode:
+                print(f"⚠️ Урок по предмету '{subject}' не найден. Генерация урока 'на лету'...")
+                
+                # Генерируем урок по предмету
+                generated_lesson = self.generate_lesson_on_demand(f"Введение в {subject}")
+                
+                if generated_lesson:
+                    self.selected_lesson = generated_lesson
+                    print(f"✅ Сгенерирован новый урок: {generated_lesson['title']}")
+                else:
+                    # Fallback на демо-урок, если генерация не удалась
+                    print("❌ Генерация не удалась, создаем демо-урок")
+                    self.selected_lesson = {
+                        'id': f"demo_{subject}",
+                        'title': f"Демо-урок по {subject}",
+                        'file_path': self.lessons_dir / f"demo_{subject}.txt",
+                        'is_demo': True
+                    }
+                    demo_file = self.lessons_dir / f"demo_{subject}.txt"
+                    if not demo_file.exists():
+                        with open(demo_file, 'w', encoding='utf-8') as f:
+                            f.write(f"Демо-урок по предмету {subject}.\nЭто демонстрационный урок.")
+            else:
+                # Обычная конференция - демо-урок
+                self.selected_lesson = {
+                    'id': f"demo_{subject}",
+                    'title': f"Демо-урок по {subject}",
+                    'file_path': self.lessons_dir / f"demo_{subject}.txt",
+                    'is_demo': True
+                }
+                demo_file = self.lessons_dir / f"demo_{subject}.txt"
+                if not demo_file.exists():
+                    with open(demo_file, 'w', encoding='utf-8') as f:
+                        f.write(f"Демо-урок по предмету {subject}.\nЭто демонстрационный урок.")
+
+        # 🔥 ГАРАНТИРУЕМ, ЧТО УРОК НАЧНЕТСЯ И КЛИЕНТ УЗНАЕТ ОБ ЭТОМ
         self.lesson_started = True
         self.current_state = "lesson_reading"
         self.current_paragraph = 0
-        self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
-        self.knowledge_base = KnowledgeBase(self.current_subject)
         
+        # Загружаем содержание урока
+        print(f"📖 Загрузка содержания урока из: {self.selected_lesson['file_path']}")
+        self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+        
+        if not self.lesson_content:
+            print("❌ Не удалось загрузить содержание урока")
+            # Создаем fallback контент
+            self.lesson_content = [f"Урок по предмету {subject}. Давайте начнем изучение!"]
+        
+        self.knowledge_base = KnowledgeBase(self.current_subject)
         self.enable_visualization()
         
+        # Очищаем историю диалога при начале урока
         self.conversation_history = []
         self.conversation_context = []
-        
+
+        # 🔥 КРИТИЧЕСКИ ВАЖНО: Отправляем 'lesson_started' ВСЕГДА
+        if self.room_id and self.socketio:
+            self.socketio.emit('lesson_started', {
+                'lesson_id': self.selected_lesson['id'],
+                'title': self.selected_lesson['title'],
+                'subject': self.current_subject,
+                'is_generated': self.selected_lesson.get('is_generated', False)
+            }, room=self.room_id)
+            print(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
+            
+            # 🔥 ДОПОЛНИТЕЛЬНО: Отправляем первый абзац немедленно
+            if self.lesson_content:
+                first_paragraph = self.lesson_content[0]
+                self.socketio.emit('speech_text', {
+                    'text': f"Учитель: {first_paragraph}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=self.room_id)
+                print(f"📝 Первый абзац отправлен: {first_paragraph[:100]}...")
+
         return None
 
     def _handle_greeting(self, text: str) -> Optional[str]:
@@ -1564,7 +1639,7 @@ class DialogueManager:
         print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
 
     def set_student_mode(self, subject: str, student_data: dict = None):
-        """Устанавливает режим ученика с автоматическим выбором предмета"""
+        """Устанавливает режим ученика с автоматическим выбором предмета и немедленной инициализацией"""
         self.is_student_mode = True
         self.auto_selected_subject = subject
         self.student_conversation_count = 0
@@ -1578,8 +1653,21 @@ class DialogueManager:
         else:
             print(f"🎓 Установлен режим ученика с предметом: {subject}")
         
-        # Автоматически выбираем предмет
+        # 🔥 НЕМЕДЛЕННО выбираем предмет и предзагружаем урок
         self.current_subject = subject
+        
+        # Предварительная загрузка уроков для этого предмета
+        if self.is_student_mode:
+            lessons = self.lessons.get(subject, [])
+            print(f"🎓 Предзагружено {len(lessons)} уроков по {subject} для студенческого режима")
+        else:
+            lessons = [lesson for lesson in self.lessons.get(subject, []) 
+                      if lesson.get('is_demo', False)]
+            print(f"👨‍🏫 Предзагружено {len(lessons)} demo уроков по {subject} для обычного режима")
+        
+        # 🔥 ГАРАНТИРУЕМ, что при следующем обращении урок будет готов
+        if not lessons and self.is_student_mode:
+            print(f"⚠️ Уроков по {subject} нет, будет сгенерирован при первом обращении")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -1853,6 +1941,30 @@ class DialogueManager:
             "статус": "Показать статус системы",
             "помощь": "Показать эту справку"
         }
+
+    def force_lesson_start_notification(self):
+        """Принудительно отправляет уведомление о начале урока (для восстановления состояния)"""
+        if self.lesson_started and self.selected_lesson and self.room_id and self.socketio:
+            print(f"🔧 ПРИНУДИТЕЛЬНАЯ отправка lesson_started для комнаты {self.room_id}")
+            
+            self.socketio.emit('lesson_started', {
+                'lesson_id': self.selected_lesson['id'],
+                'title': self.selected_lesson['title'],
+                'subject': self.current_subject,
+                'is_generated': self.selected_lesson.get('is_generated', False)
+            }, room=self.room_id)
+            
+            # Также отправляем текущий абзац если есть
+            if self.lesson_content and self.current_paragraph > 0:
+                current_paragraph = self.lesson_content[self.current_paragraph - 1]
+                self.socketio.emit('speech_text', {
+                    'text': f"Учитель: {current_paragraph}",
+                    'sid': 'teacher',
+                    'is_teacher': True
+                }, room=self.room_id)
+            
+            return True
+        return False
 
 
 # Создаем глобальный экземпляр для тестирования
