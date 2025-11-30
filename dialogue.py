@@ -26,7 +26,17 @@ class DialogueManager:
         self.lesson_started = False
         self.lesson_content = []
         self.current_paragraph = 0
+        
+        # 🔥 НОВАЯ СТРУКТУРА ПАПОК
         self.lessons_dir = Path("lessons")
+        self.demo_lessons_dir = self.lessons_dir / "demo"
+        self.student_lessons_dir = self.lessons_dir / "students"
+        self.generated_lessons_dir = self.lessons_dir / "generated"
+        
+        # Создаем папки если их нет
+        for folder in [self.demo_lessons_dir, self.student_lessons_dir, self.generated_lessons_dir]:
+            folder.mkdir(parents=True, exist_ok=True)
+        
         self.knowledge_base = None
         self.llm = LLMIntegration()
         self.conversation_counter = 0
@@ -59,15 +69,9 @@ class DialogueManager:
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
         
-        # НОВЫЕ ПОЛЯ ДЛЯ РЕЖИМА УЧЕНИКА
-        self.is_student_mode = False
-        self.auto_selected_subject = None
-        self.student_conversation_count = 0
-        self.student_lesson_started = False
-        self.student_subject_prompted = False
-        
-        # НОВЫЕ ПОЛЯ ДЛЯ ДАННЫХ УЧЕНИКА (для персонализации)
+        # 🔥 ПРОСТЫЕ ДАННЫЕ УЧЕНИКА (без сложных режимов)
         self.student_data = {}
+        self.has_student_data = False
         
         # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
         self.visualization_enabled = True
@@ -135,67 +139,97 @@ class DialogueManager:
         }
 
     def _load_lessons(self):
-        """Загружает список доступных уроков"""
+        """🔥 ИСПРАВЛЕННАЯ ЗАГРУЗКА УРОКОВ ИЗ НОВОЙ СТРУКТУРЫ ПАПОК"""
         self.lessons = {}
         try:
-            if not self.lessons_dir.exists():
-                self.lessons_dir.mkdir(parents=True)
-                # Создаем демо-урок по обществознанию, если его нет
-                demo_lesson = self.lessons_dir / "social_general.txt"
-                if not demo_lesson.exists():
-                    with open(demo_lesson, 'w', encoding='utf-8') as f:
-                        f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - это форма правления, при которой народ является источником власти.\n\nЭкономика - это хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - это совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - это система общеобязательных норм, охраняемых государством.\n\nСоциализация - это процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - это человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - это система норм и принципов, регулирующих поведение людей.\n\nГлобализация - это процесс всемирной экономической, политической и культурной интеграции.")
-                return
-                
-            # Загрузка текстовых файлов уроков
-            for lesson_file in self.lessons_dir.glob("*.txt"):
-                try:
-                    subject = self._detect_subject(lesson_file.stem)
+            # Загружаем уроки из всех папок
+            lesson_dirs = [
+                (self.demo_lessons_dir, "demo"),
+                (self.student_lessons_dir, "student"), 
+                (self.generated_lessons_dir, "generated"),
+                (self.lessons_dir, "legacy")  # Для обратной совместимости
+            ]
+            
+            for lesson_dir, lesson_type in lesson_dirs:
+                if not lesson_dir.exists():
+                    continue
                     
-                    if subject not in self.lessons:
-                        self.lessons[subject] = []
-                    
-                    self.lessons[subject].append({
-                        'id': lesson_file.stem,
-                        'title': lesson_file.stem.replace('_', ' ').title(),
-                        'description': f"Интересный урок по {subject}",
-                        'file_path': lesson_file,
-                        'type': 'text',
-                        'is_demo': self._is_demo_lesson(lesson_file.stem)
-                    })
-                except Exception as e:
-                    print(f"Ошибка загрузки урока {lesson_file}: {e}")
+                for lesson_file in lesson_dir.glob("*.txt"):
+                    try:
+                        self._add_lesson_to_dict(lesson_file, lesson_type)
+                    except Exception as e:
+                        print(f"Ошибка загрузки урока {lesson_file}: {e}")
+                        
+            # Создаем демо-урок по обществознанию, если его нет
+            demo_lesson = self.demo_lessons_dir / "social_general.txt"
+            if not demo_lesson.exists():
+                with open(demo_lesson, 'w', encoding='utf-8') as f:
+                    f.write("Основы обществознания: подготовка к ЕГЭ.\n\nДобро пожаловать на демо-урок! Сегодня мы разберем фундаментальные понятия обществознания.\n\nОбщество - это сложная динамическая система, объединяющая людей, которые связаны совместной деятельностью, общими интересами и ценностями.\n\nГосударство - это политическая организация общества, обладающая суверенитетом и аппаратом управления.\n\nДемократия - это форма правления, при которой народ является источником власти.\n\nЭкономика - это хозяйственная деятельность общества, система производства и распределения товаров.\n\nКультура - это совокупность достижений человечества в духовной и материальной жизни.\n\nПраво - это система общеобязательных норм, охраняемых государством.\n\nСоциализация - это процесс усвоения индивидом социальных норм и ценностей.\n\nЛичность - это человек как носитель социальных качеств и сознательной деятельности.\n\nМораль - это система норм и принципов, регулирующих поведение людей.\n\nГлобализация - это процесс всемирной экономической, политической и культурной интеграции.")
+                # Перезагружаем демо-урок
+                self._add_lesson_to_dict(demo_lesson, "demo")
                     
         except Exception as e:
             print(f"Ошибка доступа к папке уроков: {e}")
 
-    def _is_demo_lesson(self, lesson_id: str) -> bool:
-        """Определяет, является ли урок демо-уроком"""
-        lesson_lower = lesson_id.lower()
-        return any(word in lesson_lower for word in ['demo', 'general', 'общее', 'введение'])
+    def _add_lesson_to_dict(self, lesson_file: Path, lesson_type: str):
+        """Добавляет урок в словарь"""
+        try:
+            subject = self._detect_subject(lesson_file.stem)
+            
+            if subject not in self.lessons:
+                self.lessons[subject] = []
+            
+            self.lessons[subject].append({
+                'id': f"{lesson_type}_{lesson_file.stem}",
+                'title': lesson_file.stem.replace('_', ' ').title(),
+                'file_path': lesson_file,
+                'type': lesson_type,
+                'subject': subject
+            })
+        except Exception as e:
+            print(f"Ошибка загрузки урока {lesson_file}: {e}")
 
     def _detect_subject(self, filename: str) -> str:
         """Определяет предмет по названию файла"""
         filename_lower = filename.lower()
-        if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
+        subject_map = {
+            'math': 'математика',
+            'mathematics': 'математика',
+            'physics': 'физика', 
+            'chemistry': 'химия',
+            'biology': 'биология',
+            'history': 'история',
+            'social': 'обществознание',
+            'literature': 'литература',
+            'russian': 'русский язык',
+            'english': 'английский язык',
+            'geography': 'география'
+        }
+        
+        for eng, rus in subject_map.items():
+            if eng in filename_lower:
+                return rus
+        
+        # Дополнительные проверки для русского языка
+        if any(word in filename_lower for word in ['математика', 'алгебра', 'геометрия']):
             return "математика"
-        elif any(word in filename_lower for word in ['history', 'история', 'истор']):
+        elif any(word in filename_lower for word in ['история', 'истор']):
             return "история"
-        elif any(word in filename_lower for word in ['physics', 'физика', 'физ']):
+        elif any(word in filename_lower for word in ['физика', 'физ']):
             return "физика"
-        elif any(word in filename_lower for word in ['chemistry', 'химия', 'хим']):
+        elif any(word in filename_lower for word in ['химия', 'хим']):
             return "химия"
-        elif any(word in filename_lower for word in ['social', 'обществознание', 'общество']):
+        elif any(word in filename_lower for word in ['обществознание', 'общество']):
             return "обществознание"
-        elif any(word in filename_lower for word in ['biology', 'биология', 'био']):
+        elif any(word in filename_lower for word in ['биология', 'био']):
             return "биология"
-        elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
+        elif any(word in filename_lower for word in ['литература', 'лит']):
             return "литература"
-        elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
+        elif any(word in filename_lower for word in ['русский', 'язык']):
             return "русский язык"
-        elif any(word in filename_lower for word in ['english', 'английский']):
+        elif any(word in filename_lower for word in ['английский']):
             return "английский язык"
-        elif any(word in filename_lower for word in ['geography', 'география']):
+        elif any(word in filename_lower for word in ['география']):
             return "география"
         else:
             return "общее"
@@ -353,12 +387,12 @@ class DialogueManager:
             
             # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Добавляем данные ученика если есть
             age = self.student_data.get('age', '12')
-            level = self.student_data.get('level', '5')
+            level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
             # Формируем промпт в зависимости от состояния и наличия данных ученика
             if self.current_state == "greeting":
-                if self.student_data:
+                if self.has_student_data:
                     # Персонализированный промпт для ученика
                     system_prompt = f"""Ты - дружелюбный учитель для ученика {age} лет, {level} класс.
 
@@ -387,7 +421,7 @@ class DialogueManager:
                     system_prompt = self.dialogue_settings.get("subject_selection_prompt", 
                         "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным. Отвечай на русском языке.")
             else:
-                if self.student_data:
+                if self.has_student_data:
                     # Персонализированный промпт для урока
                     system_prompt = f"""Ты - учитель по предмету {self.current_subject} для ученика {age} лет, {level} класс.
 
@@ -490,8 +524,8 @@ class DialogueManager:
         if self.lesson_started:
             return original_response
         
-        # В режиме ученика не предлагаем выбор предмета
-        if self.is_student_mode and self.auto_selected_subject:
+        # Если есть данные ученика, не предлагаем выбор предмета (уже выбран)
+        if self.has_student_data and self.current_subject:
             return original_response
         
         # Если ответ уже содержит предложение о выборе предмета, не дублируем
@@ -514,11 +548,11 @@ class DialogueManager:
     def _get_contextual_fallback(self) -> str:
         """Возвращает контекстно-зависимый ответ когда ничего не найдено"""
         if not self.conversation_history:
-            if self.student_data:
+            if self.has_student_data:
                 name = self.student_data.get('name', 'ученик')
                 # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ ДЛЯ УЧЕНИКА
                 age = self.student_data.get('age', '12')
-                level = self.student_data.get('level', '5')
+                level = self.student_data.get('education_level', '5')
                 
                 greeting_variants = [
                     f"Привет, {name}! Я твой виртуальный учитель. Рад видеть тебя! Давай начнем интересный урок вместе!",
@@ -536,7 +570,7 @@ class DialogueManager:
         
         # Определяем тему разговора по последним сообщениям
         if any(word in last_user_message for word in ['имя', 'зовут', 'меня']):
-            if self.student_data:
+            if self.has_student_data:
                 name = self.student_data.get('name', 'ученик')
                 return f"Приятно познакомиться, {name}! Теперь давайте выберем предмет для изучения. Что вас интересует?"
             else:
@@ -583,7 +617,7 @@ class DialogueManager:
             
             # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Добавляем данные ученика для адаптации сложности
             age = self.student_data.get('age', '12')
-            level = self.student_data.get('level', '5')
+            level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
             # Формируем промпт для генерации урока с учетом возраста
@@ -639,10 +673,10 @@ class DialogueManager:
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
                 lesson_content = '\n\n'.join(sentences)
             
-            # Создаем файл урока
+            # Создаем файл урока в папке generated
             lesson_id = f"generated_{topic.lower().replace(' ', '_')}_{int(time.time())}"
             filename = f"{lesson_id}.txt"
-            lesson_path = self.lessons_dir / filename
+            lesson_path = self.generated_lessons_dir / filename
             
             # Записываем контент в файл
             with open(lesson_path, 'w', encoding='utf-8') as f:
@@ -657,8 +691,8 @@ class DialogueManager:
                 'id': lesson_id,
                 'title': f"Урок по теме: {topic}",
                 'file_path': lesson_path,
-                'type': 'text',
-                'is_generated': True
+                'type': 'generated',
+                'subject': subject
             }
             
             if subject not in self.lessons:
@@ -915,7 +949,7 @@ class DialogueManager:
         print("❌ Автоматическая визуализация выключена")
 
     def process_input(self, text: str) -> Optional[str]:
-        """Обработка входящего текста и генерация ответа с гарантированным результатом"""
+        """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         text_lower = text.lower().strip()
         
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ - РАБОТАЕТ ЛЮБАЯ ИЗ НИХ В ЛЮБОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
@@ -936,18 +970,17 @@ class DialogueManager:
         
         self._add_to_conversation_history(text, is_user=True)
         
-        # ОСОБАЯ ЛОГИКА ДЛЯ РЕЖИМА УЧЕНИКА
-        if self.is_student_mode and self.auto_selected_subject and not self.lesson_started:
-            return self._handle_student_mode_input(text, text_lower)
-        
-        if self.lesson_started:
-            handler = self.dialogue_states.get(self.current_state)
-            if handler:
-                response = handler(text_lower)
-                if response:
-                    self._add_to_conversation_history(response, is_user=False)
-                    return response
-            return None
+        # 🔥 УПРОЩЕННАЯ ЛОГИКА: если есть данные ученика и выбран предмет, начинаем урок
+        if self.has_student_data and self.current_subject and not self.lesson_started:
+            # После 1-2 фраз диалога автоматически предлагаем начать урок
+            user_messages = [msg for msg in self.conversation_history if msg['is_user']]
+            if len(user_messages) >= 1 and not self.lesson_started:
+                student_name = self.student_data.get('name', 'ученик')
+                if any(word in text_lower for word in ['да', 'ага', 'угу', ' ладно', 'хорошо', 'начать', 'начнем', 'поехали']):
+                    return self._start_lesson_for_student()
+                else:
+                    prompt = f"{student_name}, отлично! Давайте начнем урок по {self.current_subject}. Готовы?"
+                    return prompt
         
         generated_lesson = self._check_for_lesson_generation_intent(text_lower)
         if generated_lesson:
@@ -983,95 +1016,12 @@ class DialogueManager:
         
         return None
 
-    def _handle_student_mode_input(self, text: str, text_lower: str) -> Optional[str]:
-        """Обработка ввода в режиме ученика"""
-        self.student_conversation_count += 1
-        print(f"🎓 Режим ученика: счетчик разговора {self.student_conversation_count}, предмет: {self.auto_selected_subject}")
-        
-        # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ ОБРАЩЕНИЕ ПО ИМЕНИ
-        student_name = self.student_data.get('name', 'ученик')
-        
-        # Проверяем, не хочет ли ученик изучить конкретную тему по выбранному предмету
-        if self._check_for_specific_topic_request(text_lower):
-            print(f"🎯 Ученик {student_name} запросил конкретную тему по предмету {self.auto_selected_subject}")
-            return None  # Позволяем существующей логике сгенерировать урок
-        
-        # После 2-3 фраз диалога автоматически предлагаем начать урок
-        if self.student_conversation_count >= 2 and not self.student_subject_prompted:
-            self.student_subject_prompted = True
-            prompt = self._get_student_subject_prompt()
-            if prompt:
-                self._add_to_conversation_history(prompt, is_user=False)
-                return prompt
-        
-        # Если ученик соглашается начать урок
-        if any(word in text_lower for word in ['да', 'ага', 'угу', ' ладно', 'хорошо', 'начать', 'начнем', 'поехали']):
-            return self._start_student_lesson()
-        
-        # Обычная обработка диалога
-        dialogue_response = self._get_dialogue_response(text_lower)
-        if dialogue_response:
-            # 🔥 АДАПТИРУЕМ ОТВЕТ ДЛЯ УЧЕНИКА
-            adapted_response = self._adapt_response_for_student(dialogue_response)
-            self._add_to_conversation_history(adapted_response, is_user=False)
-            return adapted_response
-        
-        return None
-
-    def _adapt_response_for_student(self, response: str) -> str:
-        """Адаптирует ответ для ученика с персонализацией"""
-        if not response:
-            return response
-            
-        student_name = self.student_data.get('name', '')
-        if student_name and len(response) < 100:
-            # Добавляем обращение по имени для коротких ответов
-            if not response.startswith(('Привет', 'Здравствуй', student_name)):
-                return f"{student_name}, {response.lower()}"
-        
-        return response
-
-    def _check_for_specific_topic_request(self, text_lower: str) -> bool:
-        """Проверяет, запрашивает ли ученик конкретную тему по выбранному предмету"""
-        topic_patterns = [
-            r'хочу изучить (.+)',
-            r'можешь рассказать про (.+)', 
-            r'урок по (.+)',
-            r'изучим (.+)',
-            r'расскажи про (.+)',
-            r'хочу узнать про (.+)',
-            r'объясни тему (.+)'
-        ]
-        
-        for pattern in topic_patterns:
-            match = re.search(pattern, text_lower)
-            if match:
-                topic = match.group(1).strip()
-                if topic and len(topic) > 2:
-                    print(f"🎯 Ученик запросил тему '{topic}' по предмету {self.auto_selected_subject}")
-                    return True
-        return False
-
-    def _get_student_subject_prompt(self) -> str:
-        """Возвращает предложение начать урок по выбранному предмету"""
-        student_name = self.student_data.get('name', '')
-        name_prefix = f"{student_name}, " if student_name else ""
-        
-        prompts = [
-            f"{name_prefix}Отлично! Давайте начнем урок по {self.auto_selected_subject}. Готовы?",
-            f"{name_prefix}Прекрасно! Приступаем к уроку по {self.auto_selected_subject}. Начинаем?",
-            f"{name_prefix}Замечательно! Начнем наш урок по {self.auto_selected_subject}?",
-            f"{name_prefix}Отлично познакомились! Готовы начать урок по {self.auto_selected_subject}?",
-            f"{name_prefix}Рад нашему знакомству! Приступим к уроку по {self.auto_selected_subject}?"
-        ]
-        return random.choice(prompts)
-
-    def _start_student_lesson(self) -> str:
-        """Начинает урок для ученика по выбранному предмету с гарантированным отображением"""
-        print(f"🚀 Начинаем урок для ученика по предмету: {self.auto_selected_subject}")
+    def _start_lesson_for_student(self) -> str:
+        """Начинает урок для ученика по выбранному предмету"""
+        print(f"🚀 Начинаем урок для ученика по предмету: {self.current_subject}")
         
         # Используем исправленную логику выбора предмета
-        response = self._handle_subject_selection_direct(self.auto_selected_subject)
+        response = self._handle_subject_selection_direct(self.current_subject)
         
         if response is None:
             # Успешно начали урок
@@ -1081,13 +1031,13 @@ class DialogueManager:
             # Получаем первый абзац
             first_paragraph = self._get_next_paragraph()
             if first_paragraph:
-                start_message = f"{name_greeting}Отлично! Начинаем урок по {self.auto_selected_subject}. {first_paragraph}"
+                start_message = f"{name_greeting}Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
             else:
-                start_message = f"{name_greeting}Отлично! Начинаем урок по {self.auto_selected_subject}."
+                start_message = f"{name_greeting}Отлично! Начинаем урок по {self.current_subject}."
             
             self._add_to_conversation_history(start_message, is_user=False)
             
-            # 🔥 ДВОЙНАЯ ГАРАНТИЯ: еще раз проверяем, что клиент знает о начале урока
+            # 🔥 ГАРАНТИЯ: проверяем, что клиент знает о начале урока
             if self.room_id and self.socketio and self.selected_lesson:
                 time.sleep(0.5)  # Небольшая задержка для надежности
                 self.socketio.emit('lesson_started', {
@@ -1096,35 +1046,27 @@ class DialogueManager:
                     'subject': self.current_subject,
                     'is_generated': self.selected_lesson.get('is_generated', False)
                 }, room=self.room_id)
-                print(f"📢 ДУБЛИРУЮЩЕЕ уведомление 'lesson_started' отправлено в комнату {self.room_id}")
+                print(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
             
             return start_message
         
         return response
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
-        """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА"""
+        """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
         self.current_subject = subject
         
-        print(f"🎯 Выбор предмета: {subject}, режим ученика: {self.is_student_mode}")
+        print(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
         
         # 🔥 ОБНОВЛЕННАЯ ЛОГИКА ВЫБОРА УРОКОВ:
-        if self.is_student_mode:
-            # Студенческая конференция - все уроки по предмету
-            lessons = self.lessons.get(subject, [])
-            print(f"🎓 Студенческий режим: найдено {len(lessons)} уроков по {subject}")
-        else:
-            # Обычная конференция - только demo уроки
-            lessons = [lesson for lesson in self.lessons.get(subject, []) 
-                      if lesson.get('is_demo', False)]
-            print(f"👨‍🏫 Обычный режим: найдено {len(lessons)} demo уроков по {subject}")
+        available_lessons = self._get_available_lessons(subject)
         
-        if lessons:
-            self.selected_lesson = lessons[0]
+        if available_lessons:
+            self.selected_lesson = available_lessons[0]
             print(f"✅ Выбран существующий урок: {self.selected_lesson['title']}")
         else:
-            # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: В студенческой конференции генерируем урок
-            if self.is_student_mode:
+            # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Если уроков нет - создаем новый
+            if self.has_student_data:
                 print(f"⚠️ Урок по предмету '{subject}' не найден. Генерация урока 'на лету'...")
                 
                 # Генерируем урок по предмету
@@ -1136,28 +1078,10 @@ class DialogueManager:
                 else:
                     # Fallback на демо-урок, если генерация не удалась
                     print("❌ Генерация не удалась, создаем демо-урок")
-                    self.selected_lesson = {
-                        'id': f"demo_{subject}",
-                        'title': f"Демо-урок по {subject}",
-                        'file_path': self.lessons_dir / f"demo_{subject}.txt",
-                        'is_demo': True
-                    }
-                    demo_file = self.lessons_dir / f"demo_{subject}.txt"
-                    if not demo_file.exists():
-                        with open(demo_file, 'w', encoding='utf-8') as f:
-                            f.write(f"Демо-урок по предмету {subject}.\nЭто демонстрационный урок.")
+                    self.selected_lesson = self._create_demo_lesson(subject)
             else:
                 # Обычная конференция - демо-урок
-                self.selected_lesson = {
-                    'id': f"demo_{subject}",
-                    'title': f"Демо-урок по {subject}",
-                    'file_path': self.lessons_dir / f"demo_{subject}.txt",
-                    'is_demo': True
-                }
-                demo_file = self.lessons_dir / f"demo_{subject}.txt"
-                if not demo_file.exists():
-                    with open(demo_file, 'w', encoding='utf-8') as f:
-                        f.write(f"Демо-урок по предмету {subject}.\nЭто демонстрационный урок.")
+                self.selected_lesson = self._create_demo_lesson(subject)
 
         # 🔥 ГАРАНТИРУЕМ, ЧТО УРОК НАЧНЕТСЯ И КЛИЕНТ УЗНАЕТ ОБ ЭТОМ
         self.lesson_started = True
@@ -1186,7 +1110,7 @@ class DialogueManager:
                 'lesson_id': self.selected_lesson['id'],
                 'title': self.selected_lesson['title'],
                 'subject': self.current_subject,
-                'is_generated': self.selected_lesson.get('is_generated', False)
+                'is_generated': self.selected_lesson.get('type') == 'generated'
             }, room=self.room_id)
             print(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
             
@@ -1202,16 +1126,57 @@ class DialogueManager:
 
         return None
 
+    def _get_available_lessons(self, subject: str) -> List[dict]:
+        """🔥 ВОЗВРАЩАЕТ УРОКИ В ЗАВИСИМОСТИ ОТ НАЛИЧИЯ ДАННЫХ УЧЕНИКА"""
+        all_lessons = self.lessons.get(subject, [])
+        
+        if self.has_student_data:
+            # Для ученика: студенческие + сгенерированные уроки
+            return [lesson for lesson in all_lessons if lesson['type'] in ['student', 'generated']]
+        else:
+            # Для обычного пользователя: только демо-уроки
+            return [lesson for lesson in all_lessons if lesson['type'] == 'demo']
+
+    def _create_demo_lesson(self, subject: str) -> dict:
+        """Создает демо-урок для обычного пользователя"""
+        lesson_id = f"demo_{subject}"
+        filename = f"{lesson_id}.txt"
+        lesson_path = self.demo_lessons_dir / filename
+        
+        # Простой демо-контент
+        demo_content = f"""Демо-урок по предмету {subject}.
+
+Это демонстрационный урок. В реальной системе здесь был бы полноценный учебный материал.
+
+Для доступа ко всем функциям системы зарегистрируйтесь как ученик!"""
+        
+        with open(lesson_path, 'w', encoding='utf-8') as f:
+            f.write(demo_content)
+        
+        lesson_data = {
+            'id': lesson_id,
+            'title': f"Демо-урок по {subject}",
+            'file_path': lesson_path,
+            'type': 'demo',
+            'subject': subject
+        }
+        
+        if subject not in self.lessons:
+            self.lessons[subject] = []
+        self.lessons[subject].append(lesson_data)
+        
+        return lesson_data
+
     def _handle_greeting(self, text: str) -> Optional[str]:
         greeting_words = ["привет", "здравствуй", 'начать', "старт", " готов", "поехали", "давай", "началом"]
         if any(word in text for word in greeting_words):
             self.current_state = "subject_selection"
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ ДЛЯ УЧЕНИКА
-            if self.is_student_mode and self.student_data:
+            if self.has_student_data:
                 student_name = self.student_data.get('name', 'ученик')
                 age = self.student_data.get('age', '12')
-                level = self.student_data.get('level', '5')
+                level = self.student_data.get('education_level', '5')
                 
                 personalized_greetings = [
                     f"Привет, {student_name}! Я твой виртуальный учитель. Очень рад тебя видеть! Ты в {level} классе, тебе {age} лет - это прекрасный возраст для учебы!",
@@ -1252,7 +1217,7 @@ class DialogueManager:
             self.conversation_context = []
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
-            if self.is_student_mode and self.student_data:
+            if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
                 return f"{name_prefix}Урок остановлен. Скажи 'привет' когда захочешь продолжить."
@@ -1274,7 +1239,7 @@ class DialogueManager:
                 self.socketio.emit('practice_ended', {'room_id': self.room_id})
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
-            if self.is_student_mode and self.student_data:
+            if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
                 return f"{name_prefix}Практика остановлена. Скажи 'привет' когда захочешь продолжить."
@@ -1348,7 +1313,7 @@ class DialogueManager:
             print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
-            if self.is_student_mode and self.student_data:
+            if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
                 return f"{name_prefix}Отлично! Переходим к практике. Первый вопрос: {first_question}"
@@ -1396,7 +1361,7 @@ class DialogueManager:
             self._end_practice_session()
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
-            if self.is_student_mode and self.student_data:
+            if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
                 return f"{name_prefix}Отлично! Ты ответил на все вопросы практики. Урок завершен!"
@@ -1410,7 +1375,7 @@ class DialogueManager:
         )
         
         # 🔥 АДАПТИРУЕМ ОБРАТНУЮ СВЯЗЬ ДЛЯ УЧЕНИКА
-        if self.is_student_mode and self.student_data:
+        if self.has_student_data:
             student_name = self.student_data.get('name', '')
             if student_name and feedback:
                 # Добавляем обращение по имени к фидбеку
@@ -1584,40 +1549,23 @@ class DialogueManager:
         self.current_question_index = 0
         self.practice_manager.reset()
         
-        # Сброс режима ученика
-        self.is_student_mode = False
-        self.auto_selected_subject = None
-        self.student_conversation_count = 0
-        self.student_lesson_started = False
-        self.student_subject_prompted = False
+        # Сброс данных ученика
         self.student_data = {}
+        self.has_student_data = False
 
     def get_available_subjects(self) -> List[str]:
-        """Возвращает доступные предметы с учетом типа конференции"""
-        if self.is_student_mode:
-            # Для студенческих конференций - все предметы
-            subjects = list(self.lessons.keys())
-        else:
-            # Для обычных конференций - только предметы с demo уроками
-            subjects = []
-            for subject, lessons_list in self.lessons.items():
-                demo_lessons = [lesson for lesson in lessons_list if lesson.get('is_demo', False)]
-                if demo_lessons:
-                    subjects.append(subject)
+        """🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
+        subjects = list(self.lessons.keys())
         
+        # Всегда добавляем обществознание
         if "обществознание" not in subjects:
             subjects.append("обществознание")
+            
         return subjects
 
     def get_lessons_for_subject(self, subject: str) -> List[dict]:
-        """Возвращает уроки по предмету с учетом типа конференции"""
-        if self.is_student_mode:
-            # Для студенческих конференций - все уроки
-            return self.lessons.get(subject, [])
-        else:
-            # Для обычных конференций - только demo уроки
-            return [lesson for lesson in self.lessons.get(subject, []) 
-                   if lesson.get('is_demo', False)]
+        """🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает уроки по предмету"""
+        return self._get_available_lessons(subject)
 
     def set_llm_model(self, model: str):
         self.llm.set_model(model)
@@ -1638,36 +1586,11 @@ class DialogueManager:
         self.room_id = room_id
         print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
 
-    def set_student_mode(self, subject: str, student_data: dict = None):
-        """Устанавливает режим ученика с автоматическим выбором предмета и немедленной инициализацией"""
-        self.is_student_mode = True
-        self.auto_selected_subject = subject
-        self.student_conversation_count = 0
-        self.student_lesson_started = False
-        self.student_subject_prompted = False
-        
-        # Сохраняем данные ученика для персонализации
-        if student_data:
-            self.student_data = student_data
-            print(f"🎓 Установлен режим ученика для {student_data.get('name', 'ученика')} с предметом: {subject}")
-        else:
-            print(f"🎓 Установлен режим ученика с предметом: {subject}")
-        
-        # 🔥 НЕМЕДЛЕННО выбираем предмет и предзагружаем урок
-        self.current_subject = subject
-        
-        # Предварительная загрузка уроков для этого предмета
-        if self.is_student_mode:
-            lessons = self.lessons.get(subject, [])
-            print(f"🎓 Предзагружено {len(lessons)} уроков по {subject} для студенческого режима")
-        else:
-            lessons = [lesson for lesson in self.lessons.get(subject, []) 
-                      if lesson.get('is_demo', False)]
-            print(f"👨‍🏫 Предзагружено {len(lessons)} demo уроков по {subject} для обычного режима")
-        
-        # 🔥 ГАРАНТИРУЕМ, что при следующем обращении урок будет готов
-        if not lessons and self.is_student_mode:
-            print(f"⚠️ Уроков по {subject} нет, будет сгенерирован при первом обращении")
+    def set_student_data(self, student_data: dict):
+        """🔥 ПРОСТО УСТАНАВЛИВАЕМ ДАННЫЕ УЧЕНИКА"""
+        self.student_data = student_data
+        self.has_student_data = bool(student_data)
+        print(f"🎓 Установлены данные ученика: {student_data.get('name', 'неизвестно')}")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -1761,7 +1684,7 @@ class DialogueManager:
             "current_paragraph": self.current_paragraph,
             "total_paragraphs": len(self.lesson_content),
             "conversation_context": self.conversation_context,
-            "student_mode": self.is_student_mode,
+            "has_student_data": self.has_student_data,
             "student_name": self.student_data.get('name', 'нет')
         }
 
@@ -1786,12 +1709,8 @@ class DialogueManager:
             "room_id": self.room_id,
             "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
             "max_questions": self.max_questions,
-            # Информация о режиме ученика
-            "is_student_mode": self.is_student_mode,
-            "auto_selected_subject": self.auto_selected_subject,
-            "student_conversation_count": self.student_conversation_count,
-            "student_lesson_started": self.student_lesson_started,
-            "student_subject_prompted": self.student_subject_prompted,
+            # Информация о данных ученика
+            "has_student_data": self.has_student_data,
             "student_data": self.student_data
         }
 
@@ -1800,20 +1719,25 @@ class DialogueManager:
         try:
             # Создаем имя файла
             filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
-            lesson_path = self.lessons_dir / filename
+            
+            # Сохраняем в соответствующую папку
+            if self.has_student_data:
+                lesson_path = self.student_lessons_dir / filename
+            else:
+                lesson_path = self.demo_lessons_dir / filename
             
             # Записываем контент
             with open(lesson_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
             # Добавляем в список уроков
+            lesson_type = "student" if self.has_student_data else "demo"
             lesson_data = {
-                'id': filename.replace('.txt', ''),
+                'id': f"{lesson_type}_{filename.replace('.txt', '')}",
                 'title': title,
                 'file_path': lesson_path,
-                'type': 'text',
-                'is_custom': True,
-                'is_demo': False  # Пользовательские уроки не считаются demo
+                'type': lesson_type,
+                'subject': subject
             }
             
             if subject not in self.lessons:
@@ -1898,9 +1822,7 @@ class DialogueManager:
                 "conversation_history_length": len(self.conversation_history),
                 "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
                 "max_questions": self.max_questions,
-                "is_student_mode": self.is_student_mode,
-                "auto_selected_subject": self.auto_selected_subject,
-                "student_conversation_count": self.student_conversation_count,
+                "has_student_data": self.has_student_data,
                 "student_data": self.student_data
             },
             "llm": llm_status,
@@ -1951,7 +1873,7 @@ class DialogueManager:
                 'lesson_id': self.selected_lesson['id'],
                 'title': self.selected_lesson['title'],
                 'subject': self.current_subject,
-                'is_generated': self.selected_lesson.get('is_generated', False)
+                'is_generated': self.selected_lesson.get('type') == 'generated'
             }, room=self.room_id)
             
             # Также отправляем текущий абзац если есть
