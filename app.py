@@ -643,7 +643,7 @@ def setup_llm_manager():
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты с гарантированным созданием DialogueManager"""
+    """🔥 ИСПРАВЛЕННАЯ БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ"""
     try:
         is_student_room = '_' in room_id and room_id != 'default'
         
@@ -651,32 +651,46 @@ def _fast_room_initialization(room_id):
             # ВСЕГДА используем единый DialogueManager
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
-            
-            # Настраиваем режим ученика если нужно
-            if is_student_room:
-                student_data = room_student_data.get(room_id, {})
-                subject = _extract_subject_from_room(room_id)
-                if subject:
-                    room_dialogue[room_id].set_student_mode(subject, student_data)
-                    debug_log(f"Установлен режим ученика для комнаты {room_id}: {subject}")
-            
             debug_log(f"Создан DialogueManager для комнаты {room_id}")
-        
+
+        # Устанавливаем аватар
         if room_id not in room_current_avatar:
             room_current_avatar[room_id] = 'teacher' if not is_student_room else 'woman'
-        
-        # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Убедимся, что режим ученика установлен правильно
-        if is_student_room and room_dialogue[room_id]:
-            if not getattr(room_dialogue[room_id], 'is_student_mode', False):
-                subject = _extract_subject_from_room(room_id)
-                if subject:
-                    student_data = room_student_data.get(room_id, {})
-                    room_dialogue[room_id].set_student_mode(subject, student_data)
-                    debug_log(f"Установлен режим ученика для {room_id}: {subject}")
-        
+
+        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ВСЕГДА устанавливаем режим ученика для студенческих комнат
+        if is_student_room:
+            student_data = room_student_data.get(room_id, {})
+            if not student_data:
+                # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Пытаемся восстановить данные ученика из глобального хранилища
+                try:
+                    parts = room_id.split('_')
+                    if len(parts) >= 2:
+                        student_name = '_'.join(parts[1:-1]) if len(parts) > 2 else parts[1].rstrip('1234567890')
+                        # Поиск по имени в STUDENTS_DIR
+                        for student_file in STUDENTS_DIR.glob("*.json"):
+                            with open(student_file, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
+                                if data.get('name', '').replace(' ', '_').lower() == student_name:
+                                    student_data = data
+                                    room_student_data[room_id] = student_data
+                                    break
+                except Exception as e:
+                    debug_log(f"Ошибка восстановления данных ученика: {e}")
+            
+            subject = _extract_subject_from_room(room_id)
+            if subject:
+                room_dialogue[room_id].set_student_mode(subject, student_data)
+                debug_log(f"🔥 Установлен режим ученика для комнаты {room_id}: {subject}")
+        else:
+            # Для обычных комнат сбрасываем режим ученика
+            room_dialogue[room_id].is_student_mode = False
+            room_dialogue[room_id].auto_selected_subject = None
+            room_dialogue[room_id].student_data = {}
+
+        # Устанавливаем режим LLM
         if room_dialogue[room_id]:
             room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-        
+
         debug_log(f"Быстрая инициализация завершена для {room_id}")
         return True
         
@@ -1202,6 +1216,7 @@ def handle_student_message(data):
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
+    """🔥 ИСПРАВЛЕННЫЙ ОБРАБОТЧИК РАСПОЗНАННОЙ РЕЧИ"""
     room_id = data['room_id']
     text = data['text']
     user_sid = request.sid
@@ -1311,6 +1326,30 @@ def handle_recognized_speech(data):
                 }, room=room_id)
                 
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
+                
+            # 🔥 КРИТИЧЕСКИ ВАЖНОЕ ИСПРАВЛЕНИЕ: Если урок начался, но клиент не получил lesson_started — отправляем его
+            if dialogue.is_lesson_started():
+                lesson_data = dialogue.get_selected_lesson()
+                if lesson_data and not lesson_data.get('lesson_started_emitted', False):
+                    # Помечаем, что событие отправлено
+                    lesson_data['lesson_started_emitted'] = True
+                    emit('lesson_started', {
+                        'lesson_id': lesson_data['id'],
+                        'title': lesson_data['title'],
+                        'subject': dialogue.get_current_subject(),
+                        'is_generated': lesson_data.get('is_generated', False)
+                    }, room=room_id)
+                    debug_log(f"📢 ДОПОЛНИТЕЛЬНО отправлено 'lesson_started' для комнаты {room_id}")
+                    
+                    # Отправляем первый абзац
+                    first_paragraph = dialogue._get_next_paragraph()
+                    if first_paragraph:
+                        emit('speech_text', {
+                            'text': f"Учитель: {first_paragraph}",
+                            'sid': 'teacher',
+                            'is_teacher': True
+                        }, room=room_id)
+                        speak_text(room_id, first_paragraph, voice_type='female', is_teacher=True)
 
 @socketio.on('activate_ai_teacher')
 def handle_activate_ai_teacher(data):
