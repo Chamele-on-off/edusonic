@@ -61,6 +61,13 @@ USERS_DIR = BASE_DIR / "users_data"
 for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR, USERS_DIR]:
     os.makedirs(folder, exist_ok=True)
 
+# Создаем новую структуру папок для уроков
+LESSONS_DEMO_DIR = LESSONS_DIR / "demo"
+LESSONS_STUDENTS_DIR = LESSONS_DIR / "students" 
+LESSONS_GENERATED_DIR = LESSONS_DIR / "generated"
+for folder in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR]:
+    os.makedirs(folder, exist_ok=True)
+
 # Глобальные состояния
 room_participants = defaultdict(set)
 room_speech_data = defaultdict(list)
@@ -643,87 +650,35 @@ def setup_llm_manager():
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """🔥 ИСПРАВЛЕННАЯ БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ"""
+    """🔥 ИСПРАВЛЕННАЯ БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ - ВСЕ КОМНАТЫ ОДИНАКОВЫЕ"""
     try:
-        is_student_room = '_' in room_id and room_id != 'default'
-        
+        # ВСЕГДА создаем DialogueManager если его нет
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            # ВСЕГДА используем единый DialogueManager
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
             debug_log(f"Создан DialogueManager для комнаты {room_id}")
 
         # Устанавливаем аватар
         if room_id not in room_current_avatar:
-            room_current_avatar[room_id] = 'teacher' if not is_student_room else 'woman'
+            room_current_avatar[room_id] = 'teacher'
 
-        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ВСЕГДА устанавливаем режим ученика для студенческих комнат
-        if is_student_room:
-            student_data = room_student_data.get(room_id, {})
-            if not student_data:
-                # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Пытаемся восстановить данные ученика из глобального хранилища
-                try:
-                    parts = room_id.split('_')
-                    if len(parts) >= 2:
-                        student_name = '_'.join(parts[1:-1]) if len(parts) > 2 else parts[1].rstrip('1234567890')
-                        # Поиск по имени в STUDENTS_DIR
-                        for student_file in STUDENTS_DIR.glob("*.json"):
-                            with open(student_file, 'r', encoding='utf-8') as f:
-                                data = json.load(f)
-                                if data.get('name', '').replace(' ', '_').lower() == student_name:
-                                    student_data = data
-                                    room_student_data[room_id] = student_data
-                                    break
-                except Exception as e:
-                    debug_log(f"Ошибка восстановления данных ученика: {e}")
-            
-            subject = _extract_subject_from_room(room_id)
-            if subject:
-                room_dialogue[room_id].set_student_mode(subject, student_data)
-                debug_log(f"🔥 Установлен режим ученика для комнаты {room_id}: {subject}")
-        else:
-            # Для обычных комнат сбрасываем режим ученика
-            room_dialogue[room_id].is_student_mode = False
-            room_dialogue[room_id].auto_selected_subject = None
-            room_dialogue[room_id].student_data = {}
+        # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: НЕТ РАЗДЕЛЕНИЯ НА РЕЖИМЫ
+        # Просто передаем данные ученика если они есть
+        student_data = room_student_data.get(room_id, {})
+        if student_data:
+            room_dialogue[room_id].set_student_data(student_data)
+            debug_log(f"Установлены данные ученика для комнаты {room_id}: {student_data.get('name')}")
 
         # Устанавливаем режим LLM
         if room_dialogue[room_id]:
             room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
 
-        debug_log(f"Быстрая инициализация завершена для {room_id}")
+        debug_log(f"Инициализация завершена для {room_id}")
         return True
         
     except Exception as e:
-        print(f"⚠️ Ошибка быстрой инициализации {room_id}: {e}")
-        try:
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-            debug_log(f"Аварийно создан DialogueManager для {room_id}")
-            return True
-        except:
-            return False
-
-def _extract_subject_from_room(room_id: str) -> Optional[str]:
-    """Извлекает предмет из названия комнаты для режима ученика"""
-    if '_' in room_id:
-        subject_part = room_id.split('_')[0].lower()
-        subject_map = {
-            'math': 'математика',
-            'mathematics': 'математика',
-            'physics': 'физика', 
-            'chemistry': 'химия',
-            'biology': 'биология',
-            'history': 'история',
-            'social': 'обществознание',
-            'literature': 'литература',
-            'russian': 'русский язык',
-            'english': 'английский язык',
-            'geography': 'география'
-        }
-        return subject_map.get(subject_part)
-    return None
+        print(f"⚠️ Ошибка инициализации {room_id}: {e}")
+        return False
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -875,6 +830,30 @@ def update_student_data(student_id, updates):
     except Exception as e:
         print(f"Error updating student data: {e}")
         return False
+
+def create_student_conference(student_data):
+    """🔥 СОЗДАЕТ ОБЫЧНУЮ КОМНАТУ С ДАННЫМИ УЧЕНИКА"""
+    try:
+        conference_id = str(int(time.time() * 1000))
+        room_id = f"student_{conference_id}"
+        
+        # Сохраняем данные ученика для комнаты
+        room_student_data[room_id] = student_data
+        
+        # Инициализируем комнату (она будет обычной, но с данными ученика)
+        _fast_room_initialization(room_id)
+        
+        debug_log(f"Создана комната {room_id} для ученика {student_data.get('name')}")
+        
+        return {
+            'room_id': room_id,
+            'conference_url': f'/conference?room={room_id}',
+            'student_data': student_data
+        }
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка создания студенческой конференции: {e}")
+        return None
 
 def create_student_rooms(student_data):
     """Автоматически создает комнаты для ученика с единым идентификатором"""
@@ -1051,7 +1030,7 @@ def delayed_auto_activation(room_id, delay=3):
                 socketio.emit('ai_teacher_activated', {
                     'room_id': room_id,
                     'message': 'AI-учитель автоматически активирован',
-                    'is_student_mode': hasattr(room_dialogue.get(room_id), 'is_student_mode') and room_dialogue[room_id].is_student_mode if room_id in room_dialogue else False
+                    'is_student_mode': hasattr(room_dialogue.get(room_id), 'has_student_data') and room_dialogue[room_id].has_student_data if room_id in room_dialogue else False
                 }, room=room_id)
                 
                 debug_log(f"Автоматическая активация успешна для {room_id}")
@@ -2124,8 +2103,21 @@ def get_llm_answers():
 def get_lesson_content(lesson_id):
     """Получение содержания урока"""
     try:
-        lesson_file = LESSONS_DIR / f"{lesson_id}.txt"
-        if not lesson_file.exists():
+        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА ПОИСКА УРОКОВ В НОВОЙ СТРУКТУРЕ ПАПОК
+        possible_paths = [
+            LESSONS_DEMO_DIR / f"{lesson_id}.txt",
+            LESSONS_STUDENTS_DIR / f"{lesson_id}.txt", 
+            LESSONS_GENERATED_DIR / f"{lesson_id}.txt",
+            LESSONS_DIR / f"{lesson_id}.txt"  # Для обратной совместимости
+        ]
+        
+        lesson_file = None
+        for path in possible_paths:
+            if path.exists():
+                lesson_file = path
+                break
+        
+        if not lesson_file:
             return jsonify({"error": "Lesson not found"}), 404
         
         with open(lesson_file, 'r', encoding='utf-8') as f:
@@ -2173,18 +2165,40 @@ def get_available_lessons():
     """Получение списка доступных уроков"""
     try:
         lessons = {}
-        for lesson_file in LESSONS_DIR.glob("*.txt"):
-            subject = _detect_subject(lesson_file.stem)
-            
-            if subject not in lessons:
-                lessons[subject] = []
-            
-            lessons[subject].append({
-                'id': lesson_file.stem,
-                'title': lesson_file.stem.replace('_', ' ').title(),
-                'file_path': lesson_file.name,
-                'type': 'text'
-            })
+        
+        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Загружаем уроки из всех папок
+        lesson_dirs = [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]
+        
+        for lesson_dir in lesson_dirs:
+            if not lesson_dir.exists():
+                continue
+                
+            for lesson_file in lesson_dir.glob("*.txt"):
+                try:
+                    subject = _detect_subject(lesson_file.stem)
+                    
+                    if subject not in lessons:
+                        lessons[subject] = []
+                    
+                    # Определяем тип урока по папке
+                    if lesson_dir == LESSONS_DEMO_DIR:
+                        lesson_type = "demo"
+                    elif lesson_dir == LESSONS_STUDENTS_DIR:
+                        lesson_type = "student" 
+                    elif lesson_dir == LESSONS_GENERATED_DIR:
+                        lesson_type = "generated"
+                    else:
+                        lesson_type = "legacy"
+                    
+                    lessons[subject].append({
+                        'id': lesson_file.stem,
+                        'title': lesson_file.stem.replace('_', ' ').title(),
+                        'file_path': lesson_file.name,
+                        'type': lesson_type,
+                        'full_path': str(lesson_file)
+                    })
+                except Exception as e:
+                    print(f"Ошибка загрузки урока {lesson_file}: {e}")
         
         return jsonify({
             "success": True,
@@ -2381,8 +2395,14 @@ def add_lesson():
         if not title or not content:
             return jsonify({"success": False, "error": "Title and content are required"})
         
+        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Сохраняем в соответствующую папку
+        if subject.lower() == 'demo':
+            lesson_dir = LESSONS_DEMO_DIR
+        else:
+            lesson_dir = LESSONS_STUDENTS_DIR
+            
         filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
-        lesson_path = LESSONS_DIR / filename
+        lesson_path = lesson_dir / filename
         
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -2446,7 +2466,13 @@ def download_knowledge():
 @app.route('/api/download_lessons')
 def download_lessons():
     """Скачивание всех уроков"""
-    if not any(LESSONS_DIR.iterdir()):
+    lesson_files = []
+    for lesson_dir in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]:
+        if lesson_dir.exists():
+            for lesson_file in lesson_dir.glob("*.txt"):
+                lesson_files.append(lesson_file)
+    
+    if not lesson_files:
         return jsonify({"success": False, "error": "Уроки не найдены"})
     
     import tempfile
@@ -2455,8 +2481,17 @@ def download_lessons():
     temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
     
     with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-        for lesson_file in LESSONS_DIR.glob("*.txt"):
-            zipf.write(lesson_file, lesson_file.name)
+        for lesson_file in lesson_files:
+            # Сохраняем с информацией о типе урока в пути
+            if lesson_file.parent == LESSONS_DEMO_DIR:
+                zip_path = f"demo/{lesson_file.name}"
+            elif lesson_file.parent == LESSONS_STUDENTS_DIR:
+                zip_path = f"students/{lesson_file.name}"
+            elif lesson_file.parent == LESSONS_GENERATED_DIR:
+                zip_path = f"generated/{lesson_file.name}"
+            else:
+                zip_path = f"legacy/{lesson_file.name}"
+            zipf.write(lesson_file, zip_path)
     
     temp_zip.close()
     
@@ -2650,7 +2685,11 @@ def health_check():
     try:
         local_status = llm_manager.local_llm.get_status()
         openrouter_available = bool(get_api_key('openrouter'))
-        lessons_available = any(LESSONS_DIR.iterdir())
+        
+        lesson_count = 0
+        for lesson_dir in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]:
+            if lesson_dir.exists():
+                lesson_count += len(list(lesson_dir.glob("*.txt")))
         
         return jsonify({
             "status": "healthy",
@@ -2658,7 +2697,7 @@ def health_check():
             "components": {
                 "local_llm": local_status,
                 "openrouter": {"available": openrouter_available},
-                "lessons": {"available": lessons_available, "count": len(list(LESSONS_DIR.glob("*.txt")))},
+                "lessons": {"available": lesson_count > 0, "count": lesson_count},
                 "practice": {"available": any(PRACTICE_DIR.iterdir()), "count": len(list(PRACTICE_DIR.glob("*.json")))},
                 "llm_manager": llm_manager.get_status()
             }
@@ -2906,6 +2945,27 @@ def add_student_lesson(student_id):
             return jsonify({"success": True, "message": "Урок добавлен в историю"})
         else:
             return jsonify({"success": False, "error": "Ошибка сохранения"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/create-conference', methods=['POST'])
+@student_required  
+def create_student_conference_route():
+    """🔥 СОЗДАЕТ КОНФЕРЕНЦИЮ ДЛЯ УЧЕНИКА - ОБЫЧНУЮ КОМНАТУ С ДАННЫМИ УЧЕНИКА"""
+    try:
+        user_data = load_user_data(session['user_id'])
+        student_data = user_data.get('student_data', {})
+        
+        conference = create_student_conference(student_data)
+        
+        if conference:
+            return jsonify({
+                "success": True,
+                "conference": conference
+            })
+        else:
+            return jsonify({"success": False, "error": "Ошибка создания конференции"})
             
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
