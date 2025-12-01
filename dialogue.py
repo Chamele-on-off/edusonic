@@ -379,22 +379,43 @@ class DialogueManager:
         
         return None
 
+    def _add_personalization(self, response: str) -> str:
+        """Добавляет персонализацию (имя ученика) к ответам"""
+        if not self.has_student_data or not response:
+            return response
+        
+        student_name = self.student_data.get('name', '').strip()
+        if not student_name:
+            return response
+        
+        # 🔥 ПЕРСОНАЛИЗИРУЕМ ТОЛЬКО ПЕРВОЕ ПРЕДЛОЖЕНИЕ В ОТВЕТЕ
+        sentences = re.split(r'(?<=[.!?])\s+', response)
+        if sentences:
+            first_sentence = sentences[0]
+            
+            # Не персонализируем если уже есть обращение
+            if student_name.lower() not in first_sentence.lower():
+                # Добавляем имя в начало первого предложения
+                personalized_first = f"{student_name}, {first_sentence[0].lower() + first_sentence[1:]}"
+                sentences[0] = personalized_first
+                
+                return ' '.join(sentences)
+        
+        return response
+
     def _handle_llm_dialogue(self, text: str, room_id: str = None) -> Optional[str]:
-        """Гарантированная обработка диалога через LLM с контекстом"""
+        """Гарантированная обработка диалога через LLM с ПЕРСОНАЛИЗАЦИЕЙ"""
         try:
             # Собираем контекст диалога
             context = self._get_conversation_context()
             
-            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Добавляем данные ученика если есть
+            # 🔥 УЛУЧШЕННЫЙ ПРОМПТ С ДАННЫМИ УЧЕНИКА
             age = self.student_data.get('age', '12')
             level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
-            # Формируем промпт в зависимости от состояния и наличия данных ученика
-            if self.current_state == "greeting":
-                if self.has_student_data:
-                    # Персонализированный промпт для ученика
-                    system_prompt = f"""Ты - дружелюбный учитель для ученика {age} лет, {level} класс.
+            # ВСЕГДА передаем данные ученика в LLM
+            system_prompt = f"""Ты - дружелюбный учитель для ученика {age} лет, {level} класс.
 
 ОСОБЕННОСТИ УЧЕНИКА:
 - Имя: {name}
@@ -403,7 +424,7 @@ class DialogueManager:
 - Предмет: {self.current_subject or 'не выбран'}
 
 СТИЛЬ ОБЩЕНИЯ:
-- Обращайся на "ты"
+- ОБРАЩАЙСЯ К УЧЕНИКУ ПО ИМЕНИ "{name}"
 - Используй язык, понятный для {age}-летнего
 - Будь поддерживающим и терпеливым
 - Объясняй сложные вещи простыми словами
@@ -414,37 +435,10 @@ class DialogueManager:
 - Понятными для {age}-летнего
 - Конкретными и полезными
 - На русском языке
+- ОБРАЩАЙСЯ К УЧЕНИКУ ПО ИМЕНИ
 
-Помоги ученику выбрать предмет для изучения. Будь кратким и понятным."""
-                else:
-                    # Стандартный промпт для обычного пользователя
-                    system_prompt = self.dialogue_settings.get("subject_selection_prompt", 
-                        "Ты - дружелюбный учитель. Помоги ученику выбрать предмет для изучения. Будь кратким и понятным. Отвечай на русском языке.")
-            else:
-                if self.has_student_data:
-                    # Персонализированный промпт для урока
-                    system_prompt = f"""Ты - учитель по предмету {self.current_subject} для ученика {age} лет, {level} класс.
+Контекст разговора: {context}"""
 
-ОСОБЕННОСТИ УЧЕНИКА:
-- Имя: {name}
-- Возраст: {age} лет
-- Уровень: {level} класс
-
-СТИЛЬ ОБЩЕНИЯ:
-- Обращайся на "ты" 
-- Используй язык, понятный для {age}-летнего
-- Объясняй сложные понятия простыми словами
-- Адаптируй сложность объяснений под возраст ученика
-
-ОТВЕТЫ ДОЛЖНЫ БЫТЬ:
-- Краткими (2-3 предложения максимум)
-- Понятными для {age}-летнего
-- Конкретными и полезными
-- На русском языке"""
-                else:
-                    # Стандартный промпт для урока
-                    system_prompt = f"Ты - учитель по предмету {self.current_subject}. Отвечай кратко и понятно, максимум 2-3 предложения. Отвечай на русском языке."
-            
             # АСИНХРОННЫЙ запрос к локальной модели
             if room_id and self.socketio:
                 # Используем асинхронный режим с callback
@@ -455,10 +449,13 @@ class DialogueManager:
                             self.dialogue_settings.get("max_response_length", 3)
                         )
                         
+                        # 🔥 ПЕРСОНАЛИЗИРУЕМ ОТВЕТ ОТ LLM
+                        personalized_response = self._add_personalization(limited_response)
+                        
                         # Отправляем ответ через WebSocket
                         self.socketio.emit('llm_dialogue_response', {
                             'room_id': r_id,
-                            'response': limited_response,
+                            'response': personalized_response,
                             'original_text': text
                         }, room=r_id)
                 
@@ -490,7 +487,8 @@ class DialogueManager:
                         llm_response, 
                         self.dialogue_settings.get("max_response_length", 3)
                     )
-                    return limited_response
+                    # 🔥 ПЕРСОНАЛИЗИРУЕМ ОТВЕТ
+                    return self._add_personalization(limited_response)
                     
         except Exception as e:
             print(f"Ошибка запроса к LLM для диалога: {e}")
@@ -952,11 +950,11 @@ class DialogueManager:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         text_lower = text.lower().strip()
         
-        # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ - РАБОТАЕТ ЛЮБАЯ ИЗ НИХ В ЛЮБОЙ ПОСЛЕДОВАТЕЛЬНОСТИ
+        # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ
         continue_commands = [
             "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
             "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", " ладно", "ясно",
-            "готов", "можно дальше", "следующая часть", "продолжаем", "всё", "все"
+            "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
         ]
 
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
@@ -970,17 +968,30 @@ class DialogueManager:
         
         self._add_to_conversation_history(text, is_user=True)
         
-        # 🔥 УПРОЩЕННАЯ ЛОГИКА: если есть данные ученика и выбран предмет, начинаем урок
+        # 🔥 ИСПРАВЛЕНИЕ: УСЛОВИЯ ДЛЯ НАЧАЛА УРОКА ТОЛЬКО ПО ЯВНОМУ СОГЛАСИЮ
         if self.has_student_data and self.current_subject and not self.lesson_started:
-            # После 1-2 фраз диалога автоматически предлагаем начать урок
             user_messages = [msg for msg in self.conversation_history if msg['is_user']]
-            if len(user_messages) >= 1 and not self.lesson_started:
+            
+            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Только после 3+ сообщений И явного согласия
+            if len(user_messages) >= 3 and not self.lesson_started:
                 student_name = self.student_data.get('name', 'ученик')
-                if any(word in text_lower for word in ['да', 'ага', 'угу', ' ладно', 'хорошо', 'начать', 'начнем', 'поехали']):
+                
+                # 🔥 ЯВНЫЕ КОМАНДЫ ДЛЯ НАЧАЛА УРОКА
+                explicit_start_commands = [
+                    'начать урок', 'начнем урок', 'поехали', 'готов к уроку', 
+                    'давай начнем', 'приступаем', 'начинаем урок', 'старт урока',
+                    'начни урок', 'запусти урок', 'хочу урок'
+                ]
+                
+                if any(cmd in text_lower for cmd in explicit_start_commands):
                     return self._start_lesson_for_student()
                 else:
-                    prompt = f"{student_name}, отлично! Давайте начнем урок по {self.current_subject}. Готовы?"
-                    return prompt
+                    # 🔥 ТОЛЬКО ЕСЛИ УЧЕНИК ЯВНО ВЫРАЗИЛ ИНТЕРЕС К УРОКУ
+                    lesson_interest_words = ['урок', 'занятие', 'обучение', 'изучение', 'предмет', 'научи']
+                    if any(word in text_lower for word in lesson_interest_words):
+                        prompt = f"{student_name}, я вижу ты интересуешься {self.current_subject}. Хочешь начать урок? Скажи 'начать урок' или 'готов'!"
+                        return prompt
+                    # 🔥 ИНАЧЕ - продолжаем обычный диалог без навязывания урока
         
         generated_lesson = self._check_for_lesson_generation_intent(text_lower)
         if generated_lesson:
@@ -997,13 +1008,16 @@ class DialogueManager:
         
         dialogue_response = self._get_dialogue_response(text_lower)
         if dialogue_response:
-            final_response = self._add_subject_suggestion(dialogue_response)
+            # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
+            personalized_response = self._add_personalization(dialogue_response)
+            final_response = self._add_subject_suggestion(personalized_response)
             if final_response:
                 self._add_to_conversation_history(final_response, is_user=False)
                 return final_response
         
         llm_response = self._handle_llm_dialogue(text)
         if llm_response:
+            # 🔥 ОТВЕТ УЖЕ ПЕРСОНАЛИЗИРОВАН В _handle_llm_dialogue
             final_response = self._add_subject_suggestion(llm_response)
             if final_response:
                 self._add_to_conversation_history(final_response, is_user=False)
@@ -1011,8 +1025,10 @@ class DialogueManager:
         
         fallback_response = self._get_contextual_fallback()
         if fallback_response:
-            self._add_to_conversation_history(fallback_response, is_user=False)
-            return fallback_response
+            # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ FALLBACK
+            personalized_fallback = self._add_personalization(fallback_response)
+            self._add_to_conversation_history(personalized_fallback, is_user=False)
+            return personalized_fallback
         
         return None
 
@@ -1058,73 +1074,50 @@ class DialogueManager:
         
         print(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
         
-        # 🔥 ОБНОВЛЕННАЯ ЛОГИКА ВЫБОРА УРОКОВ:
+        # 🔥 ИСПРАВЛЕНИЕ: НЕ НАЧИНАЕМ УРОК АВТОМАТИЧЕСКИ
+        if self.has_student_data:
+            student_name = self.student_data.get('name', 'ученик')
+            age = self.student_data.get('age', '12')
+            level = self.student_data.get('education_level', '5')
+            
+            # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ О ВЫБОРЕ ПРЕДМЕТА
+            subject_responses = [
+                f"Отлично, {student_name}! {subject} - это интересный предмет. Расскажи, что тебя особенно интересует в {subject}?",
+                f"Прекрасный выбор, {student_name}! {subject} действительно увлекателен. О чем бы ты хотел узнать в первую очередь?",
+                f"Здорово, {student_name}! Я хорошо знаю {subject}. Давай сначала познакомимся - что тебе нравится в этом предмете?",
+                f"Отлично, {student_name}! {subject} подходит для твоего возраста. Прежде чем начать урок, расскажи, что ты уже знаешь о {subject}?"
+            ]
+            
+            return random.choice(subject_responses)
+        
+        # 🔥 ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ: выбираем урок, но не начинаем автоматически
         available_lessons = self._get_available_lessons(subject)
         
         if available_lessons:
             self.selected_lesson = available_lessons[0]
             print(f"✅ Выбран существующий урок: {self.selected_lesson['title']}")
+            
+            # 🔥 НЕ НАЧИНАЕМ УРОК, ПРОСТО ИНФОРМИРУЕМ
+            return f"Отлично! Я выбрал урок '{self.selected_lesson['title']}' по предмету {subject}. Когда будете готовы, скажите 'начать урок'!"
         else:
             # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Если уроков нет - создаем новый
-            if self.has_student_data:
-                print(f"⚠️ Урок по предмету '{subject}' не найден. Генерация урока 'на лету'...")
-                
-                # Генерируем урок по предмету
-                generated_lesson = self.generate_lesson_on_demand(f"Введение в {subject}")
-                
-                if generated_lesson:
-                    self.selected_lesson = generated_lesson
-                    print(f"✅ Сгенерирован новый урок: {generated_lesson['title']}")
-                else:
-                    # Fallback на демо-урок, если генерация не удалась
-                    print("❌ Генерация не удалась, создаем демо-урок")
-                    self.selected_lesson = self._create_demo_lesson(subject)
-            else:
-                # Обычная конференция - демо-урок
-                self.selected_lesson = self._create_demo_lesson(subject)
-
-        # 🔥 ГАРАНТИРУЕМ, ЧТО УРОК НАЧНЕТСЯ И КЛИЕНТ УЗНАЕТ ОБ ЭТОМ
-        self.lesson_started = True
-        self.current_state = "lesson_reading"
-        self.current_paragraph = 0
-        
-        # Загружаем содержание урока
-        print(f"📖 Загрузка содержания урока из: {self.selected_lesson['file_path']}")
-        self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
-        
-        if not self.lesson_content:
-            print("❌ Не удалось загрузить содержание урока")
-            # Создаем fallback контент
-            self.lesson_content = [f"Урок по предмету {subject}. Давайте начнем изучение!"]
-        
-        self.knowledge_base = KnowledgeBase(self.current_subject)
-        self.enable_visualization()
-        
-        # Очищаем историю диалога при начале урока
-        self.conversation_history = []
-        self.conversation_context = []
-
-        # 🔥 КРИТИЧЕСКИ ВАЖНО: Отправляем 'lesson_started' ВСЕГДА
-        if self.room_id and self.socketio:
-            self.socketio.emit('lesson_started', {
-                'lesson_id': self.selected_lesson['id'],
-                'title': self.selected_lesson['title'],
-                'subject': self.current_subject,
-                'is_generated': self.selected_lesson.get('type') == 'generated'
-            }, room=self.room_id)
-            print(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
+            print(f"⚠️ Урок по предмету '{subject}' не найден. Генерация урока 'на лету'...")
             
-            # 🔥 ДОПОЛНИТЕЛЬНО: Отправляем первый абзац немедленно
-            if self.lesson_content:
-                first_paragraph = self.lesson_content[0]
-                self.socketio.emit('speech_text', {
-                    'text': f"Учитель: {first_paragraph}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=self.room_id)
-                print(f"📝 Первый абзац отправлен: {first_paragraph[:100]}...")
-
-        return None
+            # Генерируем урок по предмету
+            generated_lesson = self.generate_lesson_on_demand(f"Введение в {subject}")
+            
+            if generated_lesson:
+                self.selected_lesson = generated_lesson
+                print(f"✅ Сгенерирован новый урок: {generated_lesson['title']}")
+                
+                # 🔥 НЕ НАЧИНАЕМ УРОК, ПРОСТО ИНФОРМИРУЕМ
+                return f"Я создал для вас урок по теме '{subject}'. Когда будете готовы, скажите 'начать урок'!"
+            else:
+                # Fallback на демо-урок, если генерация не удалась
+                print("❌ Генерация не удалась, создаем демо-урок")
+                self.selected_lesson = self._create_demo_lesson(subject)
+                
+                return f"Я подготовил демо-урок по предмету {subject}. Когда будете готовы, скажите 'начать урок'!"
 
     def _get_available_lessons(self, subject: str) -> List[dict]:
         """🔥 ВОЗВРАЩАЕТ УРОКИ В ЗАВИСИМОСТИ ОТ НАЛИЧИЯ ДАННЫХ УЧЕНИКА"""
@@ -1324,6 +1317,10 @@ class DialogueManager:
             self.practice_active = False
             return "Практические задания временно недоступны. Давайте продолжим урок или выберем другую тему."
 
+    def _handle_practice_answer(self, text: str) -> str:
+        """Обработка ответа ученика во время практики"""
+        return self._evaluate_and_generate_next(text)
+
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
         """Оценивает ответ и возвращает следующий вопрос с асинхронной генерацией"""
         print(f"🔍 Обработка ответа: '{student_answer}'")
@@ -1338,7 +1335,12 @@ class DialogueManager:
             print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
             next_question = self.practice_manager.get_next_question()
             if next_question:
-                return f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
+                # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
+                if self.has_student_data:
+                    student_name = self.student_data.get('name', '')
+                    return f"{student_name}, это похоже на команду. Пожалуйста, дай ответ на вопрос. Следующий вопрос: {next_question}"
+                else:
+                    return f"Это похоже на команду. Пожалуйста, дайте ответ на вопрос. Следующий вопрос: {next_question}"
             else:
                 self._end_practice_session()
                 return "Практика завершена."
@@ -1351,11 +1353,11 @@ class DialogueManager:
             self._end_practice_session()
             return "Практика завершена."
         
-        # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ - ВАЖНОЕ ИЗМЕНЕНИЕ
+        # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ
         self.current_question_index += 1
         print(f"📊 Текущий номер вопроса: {self.current_question_index}/{self.max_questions}")
         
-        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ - ВАЖНОЕ ИЗМЕНЕНИЕ
+        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
         if self.current_question_index >= self.max_questions:
             print(f"🏁 Достигнут лимит вопросов: {self.current_question_index}/{self.max_questions}")
             self._end_practice_session()
@@ -1403,10 +1405,6 @@ class DialogueManager:
             print("❌ Не удалось получить следующий вопрос")
             self._end_practice_session()
             return f"{feedback}. Практика завершена!"
-
-    def _handle_practice_answer(self, text: str) -> str:
-        """Обработка ответа ученика во время практики"""
-        return self._evaluate_and_generate_next(text)
 
     def _end_practice_session(self):
         """Завершает сессию практики"""
@@ -1517,6 +1515,10 @@ class DialogueManager:
         
         if not final_response:
             final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
+        
+        # 🔥 ПЕРСОНАЛИЗИРУЕМ ОТВЕТ НА ВОПРОС
+        if self.has_student_data and final_response:
+            final_response = self._add_personalization(final_response)
         
         return final_response
 
