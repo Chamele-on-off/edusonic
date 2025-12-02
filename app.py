@@ -73,25 +73,17 @@ for folder in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR]:
 def create_lessons_structure():
     """Создает структуру папок для уроков по классам"""
     subjects_by_class = {
-        "5": ["математика", "география", "биология", "русский", "литература", 
-              "английский", "французский", "история", "информатика"],
-        "6": ["математика", "география", "биология", "русский", "литература",
-              "английский", "французский", "история", "обществознание", "информатика"],
-        "7": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-              "литература", "математика", "английский", "французский", "история",
-              "обществознание", "информатика"],
-        "8": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-              "литература", "математика", "английский", "французский", "история",
-              "обществознание", "информатика", "химия"],
-        "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-              "литература", "математика", "английский", "французский", "история",
-              "обществознание", "информатика", "химия"],
-        "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-               "литература", "математика", "английский", "французский", "история",
-               "обществознание", "информатика", "химия"],
-        "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-               "литература", "математика", "английский", "французский", "история",
-               "обществознание", "информатика", "химия"]
+        "1": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский", "французский", "информатика"],
+        "2": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский", "французский", "информатика"],
+        "3": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский", "французский", "информатика"],
+        "4": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский", "французский", "информатика"],
+        "5": ["математика", "география", "биология", "русский", "литература", "английский", "французский", "история", "информатика"],
+        "6": ["математика", "география", "биология", "русский", "литература", "английский", "французский", "история", "обществознание", "информатика"],
+        "7": ["алгебра", "геометрия", "физика", "география", "биология", "русский", "литература", "английский", "французский", "история", "обществознание", "информатика"],
+        "8": ["алгебра", "геометрия", "физика", "география", "биология", "русский", "литература", "английский", "французский", "история", "обществознание", "информатика", "химия"],
+        "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский", "литература", "английский", "французский", "история", "обществознание", "информатика", "химия"],
+        "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский", "литература", "английский", "французский", "история", "обществознание", "информатика", "химия"],
+        "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский", "литература", "английский", "французский", "история", "обществознание", "информатика", "химия"]
     }
     
     for class_level, subjects in subjects_by_class.items():
@@ -102,14 +94,16 @@ def create_lessons_structure():
             subject_dir = class_dir / subject
             subject_dir.mkdir(parents=True, exist_ok=True)
             
-            # Создаем примерный урок если папка пуста
+            # Создаем примерные уроки если папка пуста
             if not any(subject_dir.glob("*.txt")):
-                sample_lesson = subject_dir / f"lesson_1_introduction.txt"
-                if not sample_lesson.exists():
-                    with open(sample_lesson, 'w', encoding='utf-8') as f:
-                        f.write(f"""# Введение в {subject}
-                        
-Добро пожаловать на первый урок по предмету {subject}!
+                for i in range(1, 4):  # Создаем 3 примерных урока
+                    lesson_number = f"{i:02d}"
+                    sample_lesson = subject_dir / f"lesson_{lesson_number}_introduction.txt"
+                    if not sample_lesson.exists():
+                        with open(sample_lesson, 'w', encoding='utf-8') as f:
+                            f.write(f"""# Урок {i}: Введение в {subject}
+                            
+Добро пожаловать на урок {i} по предмету {subject}!
 
 Этот урок предназначен для учеников {class_level} класса.
 
@@ -117,6 +111,8 @@ def create_lessons_structure():
 1. Познакомитесь с основными понятиями предмета
 2. Узнаете интересные факты
 3. Научитесь применять знания на практике
+
+Этот урок был создан автоматически для демонстрации работы системы.
 
 Желаем успехов в обучении!
 """)
@@ -445,7 +441,8 @@ def complete_profile():
         }
         
         if update_student_profile(user_id, student_data):
-            create_student_rooms(student_data)
+            # Создаем начальный прогресс для ученика
+            initialize_student_progress(student_data['student_id'], student_data['education_level'])
             
             return jsonify({
                 "success": True,
@@ -588,6 +585,10 @@ def export_students_data():
             
             for student_file in STUDENTS_DIR.glob("*.json"):
                 zipf.write(student_file, f"students/{student_file.name}")
+            
+            # Добавляем прогресс учеников
+            for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
+                zipf.write(progress_file, f"progress/{progress_file.name}")
         
         temp_zip.close()
         
@@ -743,8 +744,7 @@ def _fast_room_initialization(room_id):
         if room_id not in room_current_avatar:
             room_current_avatar[room_id] = 'teacher'
 
-        # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: НЕТ РАЗДЕЛЕНИЯ НА РЕЖИМЫ
-        # Просто передаем данные ученика если они есть
+        # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Передаем данные ученика если они есть
         student_data = room_student_data.get(room_id, {})
         if student_data:
             room_dialogue[room_id].set_student_data(student_data)
@@ -995,6 +995,189 @@ def create_student_rooms(student_data):
     except Exception as e:
         print(f"❌ Ошибка создания комнат для ученика: {e}")
         return False
+
+# =============================================================================
+# НОВЫЕ ФУНКЦИИ ДЛЯ УРОКОВ ПО КЛАССАМ
+# =============================================================================
+
+def initialize_student_progress(student_id, education_level):
+    """Инициализирует прогресс ученика"""
+    try:
+        progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+        
+        # Базовая структура прогресса
+        progress_data = {
+            "student_id": student_id,
+            "education_level": education_level,
+            "created_at": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "subjects": {}
+        }
+        
+        # Загружаем структуру уроков для этого класса
+        class_dir = LESSONS_STUDENTS_DIR / f"{education_level}_class"
+        if class_dir.exists():
+            for subject_dir in class_dir.iterdir():
+                if subject_dir.is_dir():
+                    subject_name = subject_dir.name
+                    lesson_files = list(subject_dir.glob("*.txt"))
+                    
+                    progress_data["subjects"][subject_name] = {
+                        "completed_lessons": [],
+                        "current_lesson": None,
+                        "total_lessons": len(lesson_files),
+                        "last_accessed": None,
+                        "progress_percent": 0
+                    }
+        
+        # Сохраняем прогресс
+        with open(progress_file, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"✅ Инициализирован прогресс для ученика {student_id} ({education_level} класс)")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Ошибка инициализации прогресса: {e}")
+        return False
+
+def update_student_lesson_progress(student_id, subject, lesson_id, completed=True):
+    """Обновляет прогресс ученика по уроку"""
+    try:
+        progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+        
+        if not progress_file.exists():
+            # Создаем новый файл прогресса
+            student_data = load_student_data(student_id)
+            if student_data:
+                initialize_student_progress(student_id, student_data.get('education_level', '5'))
+            else:
+                return False
+        
+        with open(progress_file, 'r', encoding='utf-8') as f:
+            progress_data = json.load(f)
+        
+        # Инициализируем предмет если его нет
+        if subject not in progress_data["subjects"]:
+            progress_data["subjects"][subject] = {
+                "completed_lessons": [],
+                "current_lesson": lesson_id,
+                "total_lessons": 0,
+                "last_accessed": datetime.now().isoformat(),
+                "progress_percent": 0
+            }
+        
+        subject_progress = progress_data["subjects"][subject]
+        
+        if completed and lesson_id not in subject_progress["completed_lessons"]:
+            subject_progress["completed_lessons"].append(lesson_id)
+        
+        subject_progress["current_lesson"] = lesson_id
+        subject_progress["last_accessed"] = datetime.now().isoformat()
+        
+        # Обновляем общее количество уроков
+        class_level = progress_data.get("education_level", "5")
+        class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class" / subject
+        if class_dir.exists():
+            subject_progress["total_lessons"] = len(list(class_dir.glob("*.txt")))
+        
+        # Рассчитываем процент прогресса
+        if subject_progress["total_lessons"] > 0:
+            subject_progress["progress_percent"] = int(
+                (len(subject_progress["completed_lessons"]) / subject_progress["total_lessons"]) * 100
+            )
+        
+        progress_data["last_updated"] = datetime.now().isoformat()
+        
+        # Сохраняем обновленный прогресс
+        with open(progress_file, 'w', encoding='utf-8') as f:
+            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"✅ Обновлен прогресс для ученика {student_id}: {subject} - урок {lesson_id}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Ошибка обновления прогресса: {e}")
+        return False
+
+def get_student_lessons_by_class(student_class):
+    """Получает уроки для конкретного класса"""
+    try:
+        lessons_by_subject = {}
+        class_dir = LESSONS_STUDENTS_DIR / f"{student_class}_class"
+        
+        if not class_dir.exists():
+            return lessons_by_subject
+        
+        for subject_dir in class_dir.iterdir():
+            if subject_dir.is_dir():
+                subject_name = subject_dir.name
+                lessons_by_subject[subject_name] = []
+                
+                for lesson_file in subject_dir.glob("*.txt"):
+                    # Извлекаем информацию об уроке из имени файла
+                    lesson_name = lesson_file.stem
+                    lesson_number = 0
+                    
+                    # Пытаемся извлечь номер урока из имени файла
+                    match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
+                    if match:
+                        lesson_number = int(match.group(1))
+                    
+                    lesson_data = {
+                        'id': f"{student_class}_class_{subject_name}_{lesson_file.stem}",
+                        'title': lesson_file.stem.replace('_', ' ').title(),
+                        'file_path': str(lesson_file.relative_to(LESSONS_DIR)),
+                        'subject': subject_name,
+                        'class_level': student_class,
+                        'lesson_number': lesson_number,
+                        'full_path': f"students/{student_class}_class/{subject_name}/{lesson_file.name}"
+                    }
+                    
+                    lessons_by_subject[subject_name].append(lesson_data)
+                
+                # Сортируем уроки по номеру
+                lessons_by_subject[subject_name].sort(key=lambda x: x['lesson_number'])
+        
+        return lessons_by_subject
+        
+    except Exception as e:
+        print(f"❌ Ошибка получения уроков по классу: {e}")
+        return {}
+
+def get_student_next_lesson(student_id, subject):
+    """Получает следующий урок для ученика по предмету"""
+    try:
+        progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+        
+        if not progress_file.exists():
+            return None
+        
+        with open(progress_file, 'r', encoding='utf-8') as f:
+            progress_data = json.load(f)
+        
+        student_class = progress_data.get("education_level", "5")
+        subject_progress = progress_data.get("subjects", {}).get(subject, {})
+        completed_lessons = subject_progress.get("completed_lessons", [])
+        
+        # Получаем все уроки по предмету
+        lessons_by_subject = get_student_lessons_by_class(student_class)
+        subject_lessons = lessons_by_subject.get(subject, [])
+        
+        if not subject_lessons:
+            return None
+        
+        # Ищем первый незавершенный урок
+        for lesson in subject_lessons:
+            if lesson['id'] not in completed_lessons:
+                return lesson
+        
+        # Если все уроки завершены, возвращаем первый урок
+        return subject_lessons[0] if subject_lessons else None
+        
+    except Exception as e:
+        print(f"❌ Ошибка получения следующего урока: {e}")
+        return None
 
 # =============================================================================
 # SOCKET.IO HANDLERS
@@ -1717,13 +1900,15 @@ def conference():
     student_mode = request.args.get('student', 'false') == 'true'
     subject = request.args.get('subject', '')
     subject_name = request.args.get('subject_name', '')
+    lesson_id = request.args.get('lesson_id', '')
     
     return render_template('conference.html', 
                          room_id=room_id, 
                          embed=embed,
                          student_mode=student_mode,
                          subject=subject,
-                         subject_name=subject_name)
+                         subject_name=subject_name,
+                         lesson_id=lesson_id)
 
 def add_visualization_to_queue(room_id, topic, context):
     """Добавляет инфографику в очередь для комнаты - ТОЛЬКО SVG"""
@@ -2185,12 +2370,27 @@ def get_lesson_content(lesson_id):
     """Получение содержания урока"""
     try:
         # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА ПОИСКА УРОКОВ В НОВОЙ СТРУКТУРЕ ПАПОК
-        possible_paths = [
+        possible_paths = []
+        
+        # Проверяем уроки для всех классов
+        for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
+            lesson_file = class_dir / f"{lesson_id}.txt"
+            if lesson_file.exists():
+                possible_paths.append(lesson_file)
+            
+            # Проверяем в подпапках предметов
+            for subject_dir in class_dir.iterdir():
+                if subject_dir.is_dir():
+                    lesson_file = subject_dir / f"{lesson_id}.txt"
+                    if lesson_file.exists():
+                        possible_paths.append(lesson_file)
+        
+        # Другие папки
+        possible_paths.extend([
             LESSONS_DEMO_DIR / f"{lesson_id}.txt",
-            LESSONS_STUDENTS_DIR / f"{lesson_id}.txt", 
             LESSONS_GENERATED_DIR / f"{lesson_id}.txt",
-            LESSONS_DIR / f"{lesson_id}.txt"  # Для обратной совместимости
-        ]
+            LESSONS_DIR / f"{lesson_id}.txt"
+        ])
         
         lesson_file = None
         for path in possible_paths:
@@ -2235,7 +2435,8 @@ def get_lesson_content(lesson_id):
             "success": True,
             "lesson_id": lesson_id,
             "content": paragraphs,
-            "paragraph_count": len(paragraphs)
+            "paragraph_count": len(paragraphs),
+            "file_path": str(lesson_file.relative_to(LESSONS_DIR))
         })
         
     except Exception as e:
@@ -2472,23 +2673,30 @@ def add_lesson():
         subject = data.get('subject', 'общее')
         title = data.get('title', '')
         content = data.get('content', '')
+        class_level = data.get('class_level', '5')
         
         if not title or not content:
             return jsonify({"success": False, "error": "Title and content are required"})
         
-        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Сохраняем в соответствующую папку
-        if subject.lower() == 'demo':
+        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Сохраняем в соответствующую папку класса
+        if class_level == 'demo':
             lesson_dir = LESSONS_DEMO_DIR
         else:
-            lesson_dir = LESSONS_STUDENTS_DIR
+            # Создаем папку класса и предмета если их нет
+            class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
+            class_dir.mkdir(parents=True, exist_ok=True)
             
-        filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
+            subject_dir = class_dir / subject
+            subject_dir.mkdir(parents=True, exist_ok=True)
+            lesson_dir = subject_dir
+            
+        filename = f"lesson_{title.lower().replace(' ', '_')}.txt"
         lesson_path = lesson_dir / filename
         
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        return jsonify({"success": True, "filename": filename, "subject": subject, "title": title})
+        return jsonify({"success": True, "filename": filename, "subject": subject, "title": title, "class_level": class_level})
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -2567,7 +2775,9 @@ def download_lessons():
             if lesson_file.parent == LESSONS_DEMO_DIR:
                 zip_path = f"demo/{lesson_file.name}"
             elif lesson_file.parent == LESSONS_STUDENTS_DIR:
-                zip_path = f"students/{lesson_file.name}"
+                # Сохраняем структуру классов
+                rel_path = lesson_file.relative_to(LESSONS_STUDENTS_DIR)
+                zip_path = f"students/{rel_path}"
             elif lesson_file.parent == LESSONS_GENERATED_DIR:
                 zip_path = f"generated/{lesson_file.name}"
             else:
@@ -3066,46 +3276,58 @@ def get_lessons_by_class():
         
         student_class = user_data['student_data'].get('education_level', '5')
         
-        # Используем комнату default для получения данных
-        room_id = "default"
-        if room_id not in room_dialogue:
-            room_dialogue[room_id] = DialogueManager(socketio)
+        # Получаем уроки для этого класса
+        lessons_by_subject = get_student_lessons_by_class(student_class)
         
-        dialogue = room_dialogue[room_id]
+        # Получаем прогресс ученика
+        student_id = user_data['student_data'].get('student_id')
+        progress_data = {}
+        if student_id:
+            progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+            if progress_file.exists():
+                with open(progress_file, 'r', encoding='utf-8') as f:
+                    progress_data = json.load(f)
         
-        # Получаем уроки по классам
+        # Формируем ответ с прогрессом
         result = {}
-        if hasattr(dialogue, 'lessons_by_class') and student_class in dialogue.lessons_by_class:
-            for subject, lessons in dialogue.lessons_by_class[student_class].items():
-                # Получаем прогресс ученика по предмету
-                progress = dialogue.get_student_progress(subject)
-                completed_ids = progress.get('completed_lessons', [])
-                
-                # Сортируем уроки по номеру
-                sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
-                
-                # Форматируем уроки для ответа
-                formatted_lessons = []
-                for lesson in sorted_lessons:
-                    is_completed = lesson['id'] in completed_ids
-                    formatted_lessons.append({
-                        'id': lesson['id'],
-                        'title': lesson['title'],
-                        'subject': lesson['subject'],
-                        'class_level': lesson.get('class_level', student_class),
-                        'lesson_number': lesson.get('lesson_number'),
-                        'completed': is_completed,
-                        'file_path': str(lesson.get('file_path', '')),
-                        'type': lesson.get('type', 'student')
-                    })
-                
-                result[subject] = {
-                    'lessons': formatted_lessons,
-                    'total': len(formatted_lessons),
-                    'completed': len([l for l in formatted_lessons if l['completed']]),
-                    'progress_percent': int((len([l for l in formatted_lessons if l['completed']]) / len(formatted_lessons)) * 100) if formatted_lessons else 0,
-                    'next_lesson': dialogue.get_next_lesson_for_student(subject)
-                }
+        for subject, lessons in lessons_by_subject.items():
+            subject_progress = progress_data.get("subjects", {}).get(subject, {})
+            completed_lessons = subject_progress.get("completed_lessons", [])
+            total_lessons = len(lessons)
+            completed_count = len(completed_lessons)
+            
+            # Сортируем уроки по номеру
+            sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+            
+            # Форматируем уроки для ответа
+            formatted_lessons = []
+            for lesson in sorted_lessons:
+                is_completed = lesson['id'] in completed_lessons
+                formatted_lessons.append({
+                    'id': lesson['id'],
+                    'title': lesson['title'],
+                    'subject': lesson['subject'],
+                    'class_level': lesson.get('class_level', student_class),
+                    'lesson_number': lesson.get('lesson_number'),
+                    'completed': is_completed,
+                    'file_path': str(lesson.get('file_path', '')),
+                    'type': 'student'
+                })
+            
+            # Находим следующий урок
+            next_lesson = None
+            for lesson in formatted_lessons:
+                if not lesson['completed']:
+                    next_lesson = lesson
+                    break
+            
+            result[subject] = {
+                'lessons': formatted_lessons,
+                'total': total_lessons,
+                'completed': completed_count,
+                'progress_percent': int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0,
+                'next_lesson': next_lesson
+            }
         
         return jsonify({
             "success": True,
@@ -3131,6 +3353,11 @@ def start_specific_lesson():
             return jsonify({"success": False, "error": "Комната не найдена"})
         
         dialogue = room_dialogue[room_id]
+        
+        # Загружаем данные ученика
+        user_data = load_user_data(session['user_id'])
+        if user_data and user_data.get('student_data'):
+            dialogue.set_student_data(user_data['student_data'])
         
         # Ищем урок во всех предметах
         selected_lesson = None
@@ -3164,6 +3391,16 @@ def start_specific_lesson():
         # Очищаем историю диалога
         dialogue.conversation_history = []
         dialogue.conversation_context = []
+        
+        # Обновляем прогресс ученика
+        student_id = user_data.get('student_data', {}).get('student_id')
+        if student_id:
+            update_student_lesson_progress(
+                student_id, 
+                selected_lesson.get('subject'), 
+                lesson_id, 
+                completed=False
+            )
         
         return jsonify({
             "success": True,
@@ -3199,41 +3436,46 @@ def get_student_progress_api():
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
         
-        # Используем комнату default для получения данных об уроках
-        room_id = "default"
-        if room_id not in room_dialogue:
-            room_dialogue[room_id] = DialogueManager(socketio)
-        
-        dialogue = room_dialogue[room_id]
+        # Получаем уроки для класса
+        lessons_by_subject = get_student_lessons_by_class(student_class)
         
         # Формируем результат с прогрессом по каждому предмету
         result = {
             'student_id': student_id,
             'student_class': student_class,
+            'student_name': user_data['student_data'].get('name', ''),
             'subjects': {}
         }
         
-        if hasattr(dialogue, 'lessons_by_class') and student_class in dialogue.lessons_by_class:
-            for subject, lessons in dialogue.lessons_by_class[student_class].items():
-                # Прогресс из файла
-                subject_progress = progress_data.get(subject, {
-                    "completed_lessons": [],
-                    "current_lesson": None,
-                    "total_lessons": len(lessons),
-                    "last_updated": 0
-                })
-                
-                completed_count = len(subject_progress.get('completed_lessons', []))
-                total_lessons = len(lessons)
-                
-                result['subjects'][subject] = {
-                    'total_lessons': total_lessons,
-                    'completed_lessons': completed_count,
-                    'progress_percent': int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0,
-                    'last_updated': subject_progress.get('last_updated'),
-                    'current_lesson': subject_progress.get('current_lesson'),
-                    'next_lesson': dialogue.get_next_lesson_for_student(subject) if hasattr(dialogue, 'get_next_lesson_for_student') else None
-                }
+        for subject_name in lessons_by_subject.keys():
+            # Прогресс из файла
+            subject_progress = progress_data.get("subjects", {}).get(subject_name, {
+                "completed_lessons": [],
+                "current_lesson": None,
+                "total_lessons": len(lessons_by_subject.get(subject_name, [])),
+                "last_accessed": None,
+                "progress_percent": 0
+            })
+            
+            completed_count = len(subject_progress.get("completed_lessons", []))
+            total_lessons = len(lessons_by_subject.get(subject_name, []))
+            
+            # Находим следующий урок
+            next_lesson = None
+            subject_lessons = lessons_by_subject.get(subject_name, [])
+            for lesson in subject_lessons:
+                if lesson['id'] not in subject_progress.get("completed_lessons", []):
+                    next_lesson = lesson
+                    break
+            
+            result['subjects'][subject_name] = {
+                'total_lessons': total_lessons,
+                'completed_lessons': completed_count,
+                'progress_percent': int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0,
+                'last_updated': subject_progress.get("last_accessed"),
+                'current_lesson': subject_progress.get("current_lesson"),
+                'next_lesson': next_lesson
+            }
         
         # Общая статистика
         total_completed = sum(subj['completed_lessons'] for subj in result['subjects'].values())
@@ -3296,7 +3538,7 @@ def create_sample_lessons():
                         if not any(subject_dir.glob("*.txt")):
                             # Создаем 3 примерных урока
                             for i in range(1, 4):
-                                lesson_file = subject_dir / f"lesson_{i}_introduction.txt"
+                                lesson_file = subject_dir / f"lesson_{i:02d}_introduction.txt"
                                 if not lesson_file.exists():
                                     with open(lesson_file, 'w', encoding='utf-8') as f:
                                         f.write(f"""# Урок {i}: Введение в {subject_dir.name}
@@ -3317,6 +3559,203 @@ def create_sample_lessons():
             "message": f"Создано {created_count} примерных уроков",
             "created_count": created_count
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ АВАТАРОМ И КОМНАТАМИ
+# =============================================================================
+
+@app.route('/api/student/set-avatar', methods=['POST'])
+@student_required
+def set_student_avatar():
+    """Сохранение предпочтения аватара ученика"""
+    try:
+        data = request.json
+        student_id = data.get('student_id')
+        avatar_name = data.get('avatar_name')
+        
+        if not student_id or not avatar_name:
+            return jsonify({"success": False, "error": "Не указаны данные"})
+        
+        # Обновляем данные ученика
+        student_data = load_student_data(student_id)
+        if student_data:
+            student_data['preferred_avatar'] = avatar_name
+            save_student_data(student_data)
+        
+        return jsonify({"success": True, "message": "Аватар сохранен"})
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/get-room/<subject>')
+@student_required
+def get_student_room_for_subject(subject):
+    """Получение комнаты ученика для предмета"""
+    try:
+        user_data = load_user_data(session['user_id'])
+        student_data = user_data.get('student_data', {})
+        
+        # Ищем существующую комнату для этого предмета
+        student_rooms = student_data.get('rooms', [])
+        for room in student_rooms:
+            if room.get('subject') == subject:
+                return jsonify({
+                    "success": True,
+                    "room": room
+                })
+        
+        # Если комнаты нет, создаем новую
+        conference_id = student_data.get('conference_id', str(int(time.time() * 1000)))
+        student_class = student_data.get('education_level', '5')
+        student_name = student_data.get('name', '').replace(' ', '_').lower()
+        room_name = f"{student_class}_class_{subject}_{student_name}_{conference_id}"
+        
+        # Сохраняем данные ученика для комнаты
+        room_student_data[room_name] = student_data
+        
+        return jsonify({
+            "success": True,
+            "room": {
+                'subject': subject,
+                'room_name': room_name,
+                'conference_id': conference_id,
+                'student_name': student_data.get('name', ''),
+                'student_class': student_class
+            },
+            "newly_created": True
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/room/register-student', methods=['POST'])
+@student_required
+def register_student_room():
+    """Регистрация комнаты с данными ученика"""
+    try:
+        data = request.json
+        room_id = data.get('room_id')
+        student_data = data.get('student_data')
+        lesson_id = data.get('lesson_id')
+        subject = data.get('subject')
+        
+        if not room_id or not student_data:
+            return jsonify({"success": False, "error": "Не указаны данные"})
+        
+        # Сохраняем данные ученика для комнаты
+        room_student_data[room_id] = student_data
+        
+        # Инициализируем диалог менеджер с данными ученика
+        _fast_room_initialization(room_id)
+        
+        # Устанавливаем урок если указан
+        if lesson_id and lesson_id != 'next':
+            dialogue = room_dialogue.get(room_id)
+            if dialogue:
+                # Ищем урок
+                selected_lesson = None
+                for subject_lessons in dialogue.lessons.values():
+                    for lesson in subject_lessons:
+                        if lesson.get('id') == lesson_id:
+                            selected_lesson = lesson
+                            break
+                    if selected_lesson:
+                        break
+                
+                if selected_lesson:
+                    dialogue.selected_lesson = selected_lesson
+                    dialogue.current_subject = selected_lesson.get('subject')
+                    dialogue.lesson_started = True
+                    dialogue.current_state = "lesson_reading"
+                    
+                    # Загружаем содержание урока
+                    lesson_content = dialogue._load_lesson_content(selected_lesson.get('file_path'))
+                    dialogue.lesson_content = lesson_content
+                    dialogue.current_paragraph = 0
+        
+        return jsonify({
+            "success": True,
+            "message": "Комната зарегистрирована",
+            "room_id": room_id
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/available-lessons', methods=['GET'])
+@student_required
+def get_student_available_lessons():
+    """Получение доступных уроков для ученика с учетом прогресса"""
+    try:
+        user_data = load_user_data(session['user_id'])
+        student_class = user_data['student_data'].get('education_level', '5')
+        
+        # Используем комнату default для получения данных
+        room_id = "default"
+        if room_id not in room_dialogue:
+            room_dialogue[room_id] = DialogueManager(socketio)
+        
+        dialogue = room_dialogue[room_id]
+        dialogue.set_student_data(user_data['student_data'])
+        
+        # Получаем уроки через метод dialogue
+        lessons_data = dialogue.get_lessons_for_student_api()
+        
+        if lessons_data.get("success", False):
+            return jsonify(lessons_data)
+        else:
+            # Fallback: получаем уроки напрямую
+            lessons_by_subject = get_student_lessons_by_class(student_class)
+            
+            # Получаем прогресс
+            student_id = user_data['student_data'].get('student_id')
+            progress_data = {}
+            if student_id:
+                progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+                if progress_file.exists():
+                    with open(progress_file, 'r', encoding='utf-8') as f:
+                        progress_data = json.load(f)
+            
+            result = {
+                "success": True,
+                "student_name": user_data['student_data'].get('name', ''),
+                "student_class": student_class,
+                "subjects": []
+            }
+            
+            for subject_name, lessons in lessons_by_subject.items():
+                subject_progress = progress_data.get("subjects", {}).get(subject_name, {})
+                completed_ids = subject_progress.get("completed_lessons", [])
+                
+                # Сортируем уроки
+                sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+                
+                subject_lessons = []
+                for lesson in sorted_lessons:
+                    is_completed = lesson['id'] in completed_ids
+                    subject_lessons.append({
+                        'id': lesson['id'],
+                        'title': lesson['title'],
+                        'subject': lesson['subject'],
+                        'class_level': lesson.get('class_level', student_class),
+                        'lesson_number': lesson.get('lesson_number'),
+                        'completed': is_completed,
+                        'file_path': str(lesson.get('file_path', '')),
+                        'type': 'student'
+                    })
+                
+                result["subjects"].append({
+                    'subject': subject_name,
+                    'lessons': subject_lessons,
+                    'total_lessons': len(subject_lessons),
+                    'completed_lessons': len([l for l in subject_lessons if l['completed']]),
+                    'progress_percent': int((len([l for l in subject_lessons if l['completed']]) / len(subject_lessons)) * 100) if subject_lessons else 0
+                })
+            
+            return jsonify(result)
+        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3537,7 +3976,7 @@ def test_student_flow():
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("Запуск ИСПРАВЛЕННОЙ AI Teacher системы с аутентификацией...")
+    debug_log("Запуск ИСПРАВЛЕННОЙ AI Teacher системы с уроками по классам...")
     
     setup_llm_manager()
     
