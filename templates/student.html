@@ -25,6 +25,8 @@
             --success: #48BB78;
             --warning: #ED8936;
             --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
+            --progress-bg: #e2e8f0;
+            --progress-fill: var(--success);
         }
         
         body {
@@ -43,9 +45,10 @@
             padding: 3rem;
             box-shadow: 0 20px 60px rgba(0,0,0,0.1);
             width: 100%;
-            max-width: 500px;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
             position: relative;
-            overflow: hidden;
         }
         
         .auth-container::before {
@@ -75,158 +78,47 @@
             font-size: 1.1rem;
         }
         
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text);
-            font-weight: 500;
-            font-size: 0.95rem;
-        }
-        
-        input, select {
-            width: 100%;
-            padding: 1rem;
-            border: 2px solid #e1e1e1;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: white;
-        }
-        
-        input:focus, select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(126, 118, 249, 0.1);
-        }
-        
-        .btn {
-            width: 100%;
-            padding: 1rem;
-            background: var(--gradient);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .tabs {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(126, 118, 249, 0.3);
-        }
-        
-        .btn:active {
-            transform: translateY(0);
-        }
-        
-        .btn-secondary {
-            background: white;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-        }
-        
-        .btn-secondary:hover {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .register-link {
-            text-align: center;
-            margin-top: 2rem;
-            padding-top: 2rem;
-            border-top: 1px solid #e1e1e1;
-        }
-        
-        .register-link a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.3s ease;
-        }
-        
-        .register-link a:hover {
-            color: var(--secondary);
-            text-decoration: underline;
-        }
-        
-        .subjects-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 1rem;
-            margin-top: 2rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #e1e1e1;
+            padding-bottom: 1rem;
         }
         
-        .subject-card {
-            background: #f8f9fa;
-            border: 2px solid #e9ecef;
-            border-radius: 12px;
-            padding: 1.5rem 1rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            text-decoration: none;
-            color: inherit;
-            display: block;
-        }
-        
-        .subject-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        
-        .subject-card:active {
-            transform: translateY(-1px);
-        }
-        
-        .subject-icon {
-            font-size: 2.5rem;
-            margin-bottom: 0.8rem;
-            color: var(--primary);
-            transition: all 0.3s ease;
-        }
-        
-        .subject-card:hover .subject-icon {
-            transform: scale(1.1);
-        }
-        
-        .subject-name {
-            font-weight: 600;
-            color: var(--text);
-            font-size: 0.95rem;
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
-        .back-button {
+        .tab-btn {
+            padding: 0.8rem 1.5rem;
             background: none;
             border: none;
-            color: var(--text-light);
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            font-size: 0.9rem;
+            color: var(--text-light);
+            transition: all 0.3s ease;
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            margin-bottom: 1rem;
-            transition: color 0.3s ease;
         }
         
-        .back-button:hover {
+        .tab-btn:hover {
             color: var(--primary);
+            background: rgba(126, 118, 249, 0.1);
+        }
+        
+        .tab-btn.active {
+            color: var(--primary);
+            background: rgba(126, 118, 249, 0.1);
+            border-bottom: 3px solid var(--primary);
+        }
+        
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .tab-content.active {
+            display: block;
         }
         
         .student-info {
@@ -241,12 +133,34 @@
             color: var(--primary);
             margin-bottom: 0.5rem;
             font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
-        .student-info p {
+        .student-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        
+        .detail-label {
+            font-size: 0.8rem;
             color: var(--text-light);
-            font-size: 0.9rem;
-            margin-bottom: 0.3rem;
+            font-weight: 500;
+        }
+        
+        .detail-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text);
         }
         
         .edit-info-btn {
@@ -267,31 +181,362 @@
             text-decoration: underline;
         }
         
-        .welcome-message {
-            text-align: center;
+        /* Прогресс по предметам */
+        .subjects-progress {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
             margin-bottom: 2rem;
-            padding: 1rem;
-            background: linear-gradient(135deg, rgba(255, 123, 156, 0.1), rgba(255, 142, 158, 0.05));
+        }
+        
+        .subject-card {
+            background: white;
             border-radius: 12px;
-            border: 1px solid rgba(255, 123, 156, 0.2);
+            padding: 1.5rem;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
         
-        .welcome-message h2 {
-            color: var(--accent);
-            margin-bottom: 0.5rem;
-            font-size: 1.3rem;
+        .subject-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
         
-        .welcome-message p {
+        .subject-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .subject-icon {
+            font-size: 2rem;
+            color: var(--primary);
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(126, 118, 249, 0.1);
+            border-radius: 10px;
+        }
+        
+        .subject-title {
+            flex: 1;
+        }
+        
+        .subject-title h4 {
+            font-size: 1.1rem;
+            color: var(--text);
+            margin-bottom: 0.2rem;
+        }
+        
+        .subject-title p {
+            font-size: 0.85rem;
             color: var(--text-light);
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: var(--progress-bg);
+            border-radius: 4px;
+            margin: 1rem 0;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--progress-fill);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .progress-text {
+            font-size: 0.9rem;
+            color: var(--text);
+        }
+        
+        .progress-percent {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        .subject-actions {
+            display: flex;
+            gap: 0.8rem;
+        }
+        
+        .btn {
+            padding: 0.8rem 1.5rem;
+            background: var(--gradient);
+            color: white;
+            border: none;
+            border-radius: 8px;
             font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            flex: 1;
+            text-decoration: none;
         }
         
-        .subject-description {
-            font-size: 0.8rem;
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(126, 118, 249, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-small {
+            padding: 0.6rem 1rem;
+            font-size: 0.85rem;
+        }
+        
+        /* Список уроков */
+        .lessons-container {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 1rem;
+            border: 1px solid #e1e1e1;
+            border-radius: 10px;
+            padding: 1rem;
+        }
+        
+        .lesson-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #f1f1f1;
+            transition: background 0.3s ease;
+        }
+        
+        .lesson-item:hover {
+            background: rgba(126, 118, 249, 0.05);
+        }
+        
+        .lesson-item:last-child {
+            border-bottom: none;
+        }
+        
+        .lesson-status {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+        }
+        
+        .lesson-status.completed {
+            background: rgba(72, 187, 120, 0.1);
+            color: var(--success);
+        }
+        
+        .lesson-status.current {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+        
+        .lesson-status.pending {
+            background: rgba(203, 213, 225, 0.1);
+            color: #94a3b8;
+        }
+        
+        .lesson-info {
+            flex: 1;
+        }
+        
+        .lesson-info h5 {
+            font-size: 1rem;
+            color: var(--text);
+            margin-bottom: 0.2rem;
+        }
+        
+        .lesson-info p {
+            font-size: 0.85rem;
             color: var(--text-light);
-            margin-top: 0.5rem;
-            line-height: 1.3;
+        }
+        
+        .lesson-number {
+            font-weight: 600;
+            color: var(--primary);
+            margin-right: 0.5rem;
+        }
+        
+        /* Управление аватаром */
+        .avatar-controls {
+            background: rgba(248, 250, 252, 0.8);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(126, 118, 249, 0.2);
+        }
+        
+        .avatar-controls h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .avatar-select-container {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .avatar-select {
+            flex: 1;
+            min-width: 250px;
+            padding: 1rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border 0.3s ease;
+        }
+        
+        .avatar-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(126, 118, 249, 0.1);
+        }
+        
+        .avatar-preview {
+            width: 100px;
+            height: 100px;
+            border: 3px solid #e1e1e1;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            overflow: hidden;
+        }
+        
+        .avatar-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .avatar-status {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.95rem;
+            display: none;
+        }
+        
+        .avatar-status.success {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid rgba(72, 187, 120, 0.2);
+            color: #166534;
+        }
+        
+        .avatar-status.error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+        }
+        
+        /* Кнопка выхода */
+        .logout-btn {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            padding: 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 2rem;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        /* Информационные сообщения */
+        .info-message {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            color: #1e40af;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        /* Загрузка */
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-light);
+        }
+        
+        .loading i {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            animation: spin 1s linear infinite;
         }
         
         /* Анимации */
@@ -300,8 +545,9 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
-        .fade-in {
-            animation: fadeIn 0.5s ease;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         /* Адаптивность */
@@ -315,21 +561,39 @@
                 font-size: 1.7rem;
             }
             
-            .subjects-grid {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-                gap: 0.8rem;
+            .tabs {
+                flex-direction: column;
+                gap: 0.5rem;
             }
             
-            .subject-card {
-                padding: 1.2rem 0.8rem;
+            .tab-btn {
+                width: 100%;
+                justify-content: center;
             }
             
-            .subject-icon {
-                font-size: 2rem;
+            .subjects-progress {
+                grid-template-columns: 1fr;
             }
             
-            .subject-name {
-                font-size: 0.9rem;
+            .avatar-select-container {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .avatar-select {
+                min-width: 100%;
+            }
+            
+            .avatar-preview {
+                align-self: center;
+            }
+            
+            .subject-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
             }
         }
         
@@ -351,201 +615,109 @@
                 font-size: 1rem;
             }
             
-            .subjects-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 0.6rem;
-            }
-            
-            .subject-card {
-                padding: 1rem 0.5rem;
-            }
-            
-            .subject-icon {
-                font-size: 1.8rem;
-                margin-bottom: 0.5rem;
-            }
-            
-            .subject-name {
-                font-size: 0.85rem;
-            }
-            
-            .btn {
-                padding: 0.9rem;
-                font-size: 1rem;
+            .subject-header {
+                flex-direction: column;
+                text-align: center;
             }
         }
         
-        /* Информационные сообщения */
-        .info-message {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            color: #1e40af;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            text-align: center;
+        /* Стили для скроллбара */
+        .lessons-container::-webkit-scrollbar {
+            width: 6px;
         }
         
-        .error-message {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: #dc2626;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            text-align: center;
+        .lessons-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
         }
         
-        /* Стили для формы редактирования */
-        .edit-form {
-            background: rgba(248, 250, 252, 0.8);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            border: 1px solid rgba(126, 118, 249, 0.2);
+        .lessons-container::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 3px;
         }
         
-        .edit-form h3 {
-            color: var(--primary);
-            margin-bottom: 1rem;
-            font-size: 1.1rem;
-        }
-        
-        .form-actions {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-        
-        .form-actions .btn {
-            flex: 1;
-        }
-
-        /* Стили для управления аватаром */
-        .avatar-controls {
-            background: rgba(248, 250, 252, 0.8);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin: 1.5rem 0;
-            border: 1px solid rgba(126, 118, 249, 0.2);
-        }
-
-        .avatar-controls h3 {
-            color: var(--primary);
-            margin-bottom: 1rem;
-            font-size: 1.1rem;
-        }
-
-        .avatar-select-container {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .avatar-select {
-            flex: 1;
-            min-width: 200px;
-            padding: 0.8rem;
-            border: 2px solid #e1e1e1;
-            border-radius: 8px;
-            font-size: 0.95rem;
-        }
-
-        .avatar-preview {
-            width: 80px;
-            height: 80px;
-            border: 2px solid #e1e1e1;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f8f9fa;
-            overflow: hidden;
-        }
-
-        .avatar-preview img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-
-        .avatar-status {
-            margin-top: 1rem;
-            padding: 0.8rem;
-            border-radius: 8px;
-            text-align: center;
-            font-size: 0.9rem;
-            display: none;
-        }
-
-        .avatar-status.success {
-            background: rgba(72, 187, 120, 0.1);
-            border: 1px solid rgba(72, 187, 120, 0.2);
-            color: #166534;
-        }
-
-        .avatar-status.error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: #dc2626;
-        }
-
-        /* Кнопка выхода */
-        .logout-btn {
-            background: rgba(239, 68, 68, 0.1);
-            color: #dc2626;
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            padding: 0.8rem 1.5rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            transition: all 0.3s ease;
-            width: 100%;
-            margin-top: 1rem;
-        }
-
-        .logout-btn:hover {
-            background: rgba(239, 68, 68, 0.2);
-            transform: translateY(-1px);
+        .lessons-container::-webkit-scrollbar-thumb:hover {
+            background: var(--secondary);
         }
     </style>
 </head>
 <body>
     <div class="auth-container">
-        <!-- Выбор предмета (показывается после входа) -->
-        <div id="subjectSelection" class="fade-in">
-            <button class="back-button" onclick="redirectToProfile()">
-                <i class="fas fa-arrow-left"></i> Редактировать профиль
+        <!-- Заголовок -->
+        <div class="logo">
+            <h1>Личный кабинет ученика</h1>
+            <p>Управляйте своим обучением и прогрессом</p>
+        </div>
+        
+        <!-- Информация об ученике -->
+        <div class="student-info">
+            <h3><i class="fas fa-user-graduate"></i> Ваш профиль</h3>
+            <div class="student-details" id="studentDetails">
+                <!-- Данные будут заполнены через JavaScript -->
+            </div>
+            <button class="edit-info-btn" onclick="redirectToProfile()">
+                <i class="fas fa-edit"></i> Изменить данные профиля
             </button>
-            
-            <div class="logo">
-                <h1>Привет, <span id="studentGreeting"></span>!</h1>
-                <p>Выбери предмет для изучения</p>
+        </div>
+        
+        <!-- Вкладки -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('progress')">
+                <i class="fas fa-chart-line"></i> Прогресс
+            </button>
+            <button class="tab-btn" onclick="switchTab('lessons')">
+                <i class="fas fa-book"></i> Все уроки
+            </button>
+            <button class="tab-btn" onclick="switchTab('avatar')">
+                <i class="fas fa-user-circle"></i> Аватар
+            </button>
+        </div>
+        
+        <!-- Вкладка 1: Прогресс по предметам -->
+        <div id="progressTab" class="tab-content active">
+            <div class="info-message" id="progressMessage">
+                <i class="fas fa-info-circle"></i>
+                <span>Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение</span>
             </div>
             
-            <!-- Информация об ученике -->
-            <div class="student-info">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div>
-                        <h3><i class="fas fa-user-graduate"></i> Информация об ученике</h3>
-                        <p><strong>Имя:</strong> <span id="infoName"></span></p>
-                        <p><strong>Класс:</strong> <span id="infoLevel"></span></p>
-                        <p><strong>Возраст:</strong> <span id="infoAge"></span> лет</p>
-                    </div>
-                    <button class="edit-info-btn" onclick="redirectToProfile()">
-                        <i class="fas fa-edit"></i> Изменить
-                    </button>
-                </div>
+            <div id="progressContainer">
+                <!-- Прогресс будет загружен через JavaScript -->
             </div>
             
-            <!-- Управление аватаром -->
+            <div class="loading" id="progressLoading">
+                <i class="fas fa-spinner"></i>
+                <p>Загрузка вашего прогресса...</p>
+            </div>
+        </div>
+        
+        <!-- Вкладка 2: Все уроки -->
+        <div id="lessonsTab" class="tab-content">
+            <div class="info-message" id="lessonsMessage">
+                <i class="fas fa-info-circle"></i>
+                <span>Выберите предмет для просмотра всех доступных уроков</span>
+            </div>
+            
+            <div id="lessonsSubjectSelect" style="margin-bottom: 1.5rem;">
+                <!-- Выбор предмета будет загружен через JavaScript -->
+            </div>
+            
+            <div id="lessonsList">
+                <!-- Список уроков будет загружен через JavaScript -->
+            </div>
+            
+            <div class="loading" id="lessonsLoading">
+                <i class="fas fa-spinner"></i>
+                <p>Загрузка уроков...</p>
+            </div>
+        </div>
+        
+        <!-- Вкладка 3: Управление аватаром -->
+        <div id="avatarTab" class="tab-content">
+            <div class="info-message" id="avatarMessage">
+                <i class="fas fa-info-circle"></i>
+                <span>Выберите аватар для AI-учителя во всех ваших комнатах</span>
+            </div>
+            
             <div class="avatar-controls">
                 <h3><i class="fas fa-user-circle"></i> Выбор аватара учителя</h3>
                 <div class="avatar-select-container">
@@ -553,108 +725,72 @@
                         <option value="">Выберите аватар...</option>
                     </select>
                     <div class="avatar-preview" id="avatarPreview">
-                        <i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>
+                        <i class="fas fa-user" style="font-size: 3rem; color: #6c757d;"></i>
                     </div>
-                    <button class="btn" id="setAvatarBtn" onclick="setAvatarForAllRooms()" style="flex: 0 0 auto;">
-                        <i class="fas fa-check"></i> Установить аватар для всех комнат
-                    </button>
                 </div>
+                <button class="btn" onclick="setAvatarForAllRooms()" style="margin-top: 1rem;">
+                    <i class="fas fa-check"></i> Установить аватар для всех комнат
+                </button>
                 <div id="avatarStatus" class="avatar-status"></div>
             </div>
-            
-            <div class="welcome-message">
-                <h2><i class="fas fa-rocket"></i> Готовы к обучению?</h2>
-                <p>Выберите предмет и начните увлекательное путешествие в мир знаний!</p>
-            </div>
-            
-            <div class="subjects-grid" id="subjectsGrid">
-                <!-- Предметы будут загружены через JavaScript -->
-            </div>
-            
-            <button class="btn btn-secondary" onclick="redirectToProfile()" style="margin-top: 1rem;">
-                <i class="fas fa-user-edit"></i> Изменить данные профиля
-            </button>
-
-            <!-- Кнопка выхода -->
-            <button class="logout-btn" onclick="logout()">
-                <i class="fas fa-sign-out-alt"></i> Выйти из системы
-            </button>
         </div>
+        
+        <!-- Кнопка выхода -->
+        <button class="logout-btn" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i> Выйти из системы
+        </button>
     </div>
 
     <script>
         // Socket.io connection
         const socket = io();
-
-        // Данные о предметах
-        const subjects = [
-            { 
-                id: 'math', 
-                name: 'Математика', 
-                icon: 'fas fa-calculator',
-                description: 'Цифры, формулы и логические задачи'
-            },
-            { 
-                id: 'physics', 
-                name: 'Физика', 
-                icon: 'fas fa-atom',
-                description: 'Законы природы и устройство мира'
-            },
-            { 
-                id: 'chemistry', 
-                name: 'Химия', 
-                icon: 'fas fa-flask',
-                description: 'Вещества, реакции и превращения'
-            },
-            { 
-                id: 'biology', 
-                name: 'Биология', 
-                icon: 'fas fa-dna',
-                description: 'Живые организмы и природа'
-            },
-            { 
-                id: 'history', 
-                name: 'История', 
-                icon: 'fas fa-landmark',
-                description: 'События прошлого и великие личности'
-            },
-            { 
-                id: 'social', 
-                name: 'Обществознание', 
-                icon: 'fas fa-globe',
-                description: 'Общество, право и экономика'
-            },
-            { 
-                id: 'literature', 
-                name: 'Литература', 
-                icon: 'fas fa-book',
-                description: 'Книги, поэзия и писатели'
-            },
-            { 
-                id: 'russian', 
-                name: 'Русский язык', 
-                icon: 'fas fa-language',
-                description: 'Грамматика, орфография и речь'
-            },
-            { 
-                id: 'english', 
-                name: 'Английский язык', 
-                icon: 'fas fa-flag',
-                description: 'Иностранный язык и культура'
-            },
-            { 
-                id: 'geography', 
-                name: 'География', 
-                icon: 'fas fa-map',
-                description: 'Страны, природа и путешествия'
-            }
-        ];
-
+        
+        // Глобальные переменные
         let currentStudentData = null;
-        let studentRooms = [];
         let availableAvatars = [];
-        let selectedAvatar = '';
-
+        let subjectsData = null;
+        
+        // Иконки для предметов
+        const subjectIcons = {
+            'математика': 'fas fa-calculator',
+            'алгебра': 'fas fa-square-root-alt',
+            'геометрия': 'fas fa-shapes',
+            'физика': 'fas fa-atom',
+            'химия': 'fas fa-flask',
+            'биология': 'fas fa-dna',
+            'история': 'fas fa-landmark',
+            'обществознание': 'fas fa-globe',
+            'литература': 'fas fa-book',
+            'русский язык': 'fas fa-language',
+            'английский язык': 'fas fa-flag-usa',
+            'французский язык': 'fas fa-flag',
+            'география': 'fas fa-map',
+            'информатика': 'fas fa-laptop-code',
+            'default': 'fas fa-book-open'
+        };
+        
+        // Описания предметов
+        const subjectDescriptions = {
+            'математика': 'Числа, формулы и логические задачи',
+            'алгебра': 'Уравнения, функции и алгебраические выражения',
+            'геометрия': 'Фигуры, пространство и геометрические построения',
+            'физика': 'Законы природы и устройство мира',
+            'химия': 'Вещества, реакции и превращения',
+            'биология': 'Живые организмы и природа',
+            'история': 'События прошлого и великие личности',
+            'обществознание': 'Общество, право и экономика',
+            'литература': 'Книги, поэзия и писатели',
+            'русский язык': 'Грамматика, орфография и речь',
+            'английский язык': 'Иностранный язык и культура',
+            'французский язык': 'Французский язык и культура',
+            'география': 'Страны, природа и путешествия',
+            'информатика': 'Программирование и компьютерные науки'
+        };
+        
+        // ==============================
+        // ОСНОВНЫЕ ФУНКЦИИ
+        // ==============================
+        
         // Функция выхода из системы
         function logout() {
             fetch('/logout', {
@@ -665,12 +801,40 @@
                 window.location.href = '/login';
             });
         }
-
+        
+        // Переключение вкладок
+        function switchTab(tabName) {
+            // Скрыть все вкладки
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Убрать активный класс у всех кнопок
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Показать выбранную вкладку
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            // Сделать активной кнопку
+            event.target.classList.add('active');
+            
+            // Загрузить данные для вкладки
+            if (tabName === 'progress') {
+                loadProgressData();
+            } else if (tabName === 'lessons') {
+                loadLessonsData();
+            } else if (tabName === 'avatar') {
+                loadAvatars();
+            }
+        }
+        
         // Перенаправление на страницу профиля
         function redirectToProfile() {
             window.location.href = '/student_profile';
         }
-
+        
         // Проверка авторизации при загрузке
         async function checkAuth() {
             try {
@@ -687,7 +851,7 @@
                 window.location.href = '/login';
             }
         }
-
+        
         // Загрузка данных ученика с сервера
         async function loadStudentDataFromServer() {
             try {
@@ -698,14 +862,15 @@
                     currentStudentData = data.student_data;
                     currentStudentData.user_id = data.user_id;
                     
-                    // Загружаем аватары и информацию о комнатах
-                    await loadAvatars();
-                    await loadStudentRooms();
+                    // Обновить отображение данных ученика
+                    updateStudentInfoDisplay();
                     
-                    // Показываем выбор предмета
-                    showSubjectSelection(currentStudentData);
+                    // Загрузить прогресс
+                    loadProgressData();
+                    
+                    // Загрузить аватары
+                    loadAvatars();
                 } else {
-                    // Если профиль не заполнен, перенаправляем на страницу профиля
                     window.location.href = '/student_profile';
                 }
             } catch (error) {
@@ -713,17 +878,351 @@
                 window.location.href = '/student_profile';
             }
         }
-
-        // Инициализация Socket.io
-        socket.on('connect', function() {
-            console.log('✅ Connected to server');
-        });
-
-        socket.on('avatar_changed', function(data) {
-            console.log('✅ Avatar changed in room:', data.room_id, data.avatar_name);
-            showAvatarStatus(`Аватар "${data.avatar_name}" установлен в комнате ${data.room_id}`, true);
-        });
-
+        
+        // Обновление информации об ученике на странице
+        function updateStudentInfoDisplay() {
+            const detailsContainer = document.getElementById('studentDetails');
+            if (!currentStudentData) return;
+            
+            const details = `
+                <div class="detail-item">
+                    <span class="detail-label">Имя</span>
+                    <span class="detail-value">${currentStudentData.name || 'Не указано'}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Класс</span>
+                    <span class="detail-value">${getLevelText(currentStudentData.education_level || currentStudentData.level)}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Возраст</span>
+                    <span class="detail-value">${currentStudentData.age || 'Не указан'} лет</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">ID ученика</span>
+                    <span class="detail-value" style="font-size: 0.85rem;">${currentStudentData.student_id || 'Не указан'}</span>
+                </div>
+            `;
+            
+            detailsContainer.innerHTML = details;
+        }
+        
+        // Получение текстового представления класса
+        function getLevelText(level) {
+            const levels = {
+                '1': '1 класс',
+                '2': '2 класс', 
+                '3': '3 класс',
+                '4': '4 класс',
+                '5': '5 класс',
+                '6': '6 класс',
+                '7': '7 класс',
+                '8': '8 класс',
+                '9': '9 класс',
+                '10': '10 класс',
+                '11': '11 класс',
+                'student': 'Студент',
+                'adult': 'Взрослый'
+            };
+            return levels[level] || level;
+        }
+        
+        // ==============================
+        // ВКЛАДКА ПРОГРЕССА
+        // ==============================
+        
+        // Загрузка данных о прогрессе
+        async function loadProgressData() {
+            try {
+                showLoading('progress');
+                
+                const response = await fetch('/api/student/progress');
+                const data = await response.json();
+                
+                if (data.success && data.progress && data.progress.subjects) {
+                    subjectsData = data.progress.subjects;
+                    renderProgressSubjects(data.progress.subjects);
+                } else {
+                    document.getElementById('progressMessage').className = 'error-message';
+                    document.getElementById('progressMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Не удалось загрузить данные о прогрессе';
+                }
+                
+                hideLoading('progress');
+            } catch (error) {
+                console.error('Error loading progress:', error);
+                document.getElementById('progressMessage').className = 'error-message';
+                document.getElementById('progressMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки данных о прогрессе';
+                hideLoading('progress');
+            }
+        }
+        
+        // Отображение предметов с прогрессом
+        function renderProgressSubjects(subjects) {
+            const container = document.getElementById('progressContainer');
+            
+            if (!subjects || Object.keys(subjects).length === 0) {
+                container.innerHTML = `
+                    <div class="info-message">
+                        <i class="fas fa-info-circle"></i>
+                        <span>У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.</span>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '<div class="subjects-progress">';
+            
+            for (const [subjectName, subjectData] of Object.entries(subjects)) {
+                const progressPercent = subjectData.progress_percent || 0;
+                const totalLessons = subjectData.total_lessons || 0;
+                const completedLessons = subjectData.completed_lessons || 0;
+                const nextLesson = subjectData.next_lesson;
+                
+                html += `
+                    <div class="subject-card">
+                        <div class="subject-header">
+                            <div class="subject-icon">
+                                <i class="${subjectIcons[subjectName] || subjectIcons.default}"></i>
+                            </div>
+                            <div class="subject-title">
+                                <h4>${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</h4>
+                                <p>${subjectDescriptions[subjectName] || 'Изучение предмета'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-info">
+                            <span class="progress-text">Прогресс</span>
+                            <span class="progress-percent">${progressPercent}%</span>
+                        </div>
+                        
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progressPercent}%"></div>
+                        </div>
+                        
+                        <div class="progress-info">
+                            <span class="progress-text">${completedLessons}/${totalLessons} уроков завершено</span>
+                            <span class="progress-text">
+                                ${nextLesson ? `Следующий: Урок ${nextLesson.lesson_number || ''}` : 'Все уроки завершены'}
+                            </span>
+                        </div>
+                        
+                        <div class="subject-actions">
+                            ${nextLesson ? `
+                                <button class="btn btn-small" onclick="continueNextLesson('${subjectName}')">
+                                    <i class="fas fa-play"></i> Продолжить
+                                </button>
+                            ` : ''}
+                            
+                            <button class="btn btn-small btn-secondary" onclick="selectSubjectLessons('${subjectName}')">
+                                <i class="fas fa-list"></i> Все уроки
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        // Продолжить следующий урок
+        async function continueNextLesson(subjectName) {
+            try {
+                // Получаем следующую комнату для этого предмета
+                const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
+                const data = await response.json();
+                
+                if (data.success && data.room) {
+                    openConference(data.room.room_name, subjectName);
+                } else {
+                    // Создаем новую комнату
+                    createAndOpenConference(subjectName);
+                }
+            } catch (error) {
+                console.error('Error getting room:', error);
+                createAndOpenConference(subjectName);
+            }
+        }
+        
+        // Выбрать предмет для просмотра уроков
+        function selectSubjectLessons(subjectName) {
+            // Переключаемся на вкладку уроков
+            switchTab('lessons');
+            
+            // Устанавливаем выбранный предмет в селекторе
+            setTimeout(() => {
+                const select = document.getElementById('subjectSelect');
+                if (select) {
+                    select.value = subjectName;
+                    loadLessonsForSubject(subjectName);
+                }
+            }, 100);
+        }
+        
+        // ==============================
+        // ВКЛАДКА ВСЕХ УРОКОВ
+        // ==============================
+        
+        // Загрузка данных для вкладки уроков
+        async function loadLessonsData() {
+            try {
+                showLoading('lessons');
+                
+                const response = await fetch('/api/student/lessons-by-class');
+                const data = await response.json();
+                
+                if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
+                    subjectsData = data.lessons;
+                    renderSubjectSelect(data.lessons);
+                    
+                    // Загрузить уроки для первого предмета
+                    const firstSubject = Object.keys(data.lessons)[0];
+                    loadLessonsForSubject(firstSubject);
+                } else {
+                    document.getElementById('lessonsMessage').className = 'error-message';
+                    document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Уроки для вашего класса пока не загружены';
+                    hideLoading('lessons');
+                }
+            } catch (error) {
+                console.error('Error loading lessons:', error);
+                document.getElementById('lessonsMessage').className = 'error-message';
+                document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки уроков';
+                hideLoading('lessons');
+            }
+        }
+        
+        // Отображение выбора предмета
+        function renderSubjectSelect(subjects) {
+            const container = document.getElementById('lessonsSubjectSelect');
+            
+            let html = `
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                    <select id="subjectSelect" class="avatar-select" onchange="loadLessonsForSubject(this.value)" style="flex: 1; min-width: 250px;">
+            `;
+            
+            for (const [subjectName, subjectData] of Object.entries(subjects)) {
+                html += `<option value="${subjectName}">${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</option>`;
+            }
+            
+            html += `
+                    </select>
+                    <div style="font-size: 0.9rem; color: var(--text-light);">
+                        Выберите предмет для просмотра уроков
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        // Загрузка уроков для конкретного предмета
+        async function loadLessonsForSubject(subjectName) {
+            try {
+                showLoading('lessons');
+                
+                if (!subjectsData || !subjectsData[subjectName]) {
+                    // Загружаем заново если нет данных
+                    await loadLessonsData();
+                    return;
+                }
+                
+                const subjectData = subjectsData[subjectName];
+                renderLessonsList(subjectName, subjectData.lessons);
+                
+                hideLoading('lessons');
+            } catch (error) {
+                console.error('Error loading lessons for subject:', error);
+                document.getElementById('lessonsList').innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка загрузки уроков для предмета ${subjectName}
+                    </div>
+                `;
+                hideLoading('lessons');
+            }
+        }
+        
+        // Отображение списка уроков
+        function renderLessonsList(subjectName, lessons) {
+            const container = document.getElementById('lessonsList');
+            
+            if (!lessons || lessons.length === 0) {
+                container.innerHTML = `
+                    <div class="info-message">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Для предмета "${subjectName}" уроки пока не загружены</span>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Сортируем уроки по номеру
+            const sortedLessons = [...lessons].sort((a, b) => {
+                return (a.lesson_number || 999) - (b.lesson_number || 999);
+            });
+            
+            let html = `
+                <div class="lessons-container">
+                    <div style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600; color: var(--primary);">
+                        <i class="fas fa-book"></i> Уроки по предмету: ${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
+                    </div>
+            `;
+            
+            sortedLessons.forEach((lesson, index) => {
+                const isCompleted = lesson.completed || false;
+                const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
+                
+                html += `
+                    <div class="lesson-item">
+                        <div class="lesson-status ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}">
+                            ${isCompleted ? '<i class="fas fa-check"></i>' : 
+                              isCurrent ? '<i class="fas fa-play"></i>' : 
+                              '<i class="fas fa-clock"></i>'}
+                        </div>
+                        <div class="lesson-info">
+                            <h5>
+                                <span class="lesson-number">Урок ${lesson.lesson_number || index + 1}:</span>
+                                ${lesson.title}
+                            </h5>
+                            <p>
+                                ${lesson.subject} • ${lesson.class_level || currentStudentData?.education_level || 'Не указан'} класс
+                                ${isCompleted ? '• <span style="color: var(--success);">Завершен</span>' : 
+                                 isCurrent ? '• <span style="color: #3b82f6;">Текущий</span>' : 
+                                 '• <span style="color: var(--text-light);">Ожидает</span>'}
+                            </p>
+                        </div>
+                        <div>
+                            <button class="btn btn-small" onclick="startSpecificLesson('${lesson.id}', '${subjectName}')" 
+                                    ${isCompleted ? 'style="opacity: 0.7;"' : ''}>
+                                <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
+                                ${isCompleted ? 'Повторить' : 'Начать'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        // Начать конкретный урок
+        async function startSpecificLesson(lessonId, subjectName) {
+            try {
+                // Создаем комнату для этого урока
+                const roomName = await createRoomForLesson(lessonId, subjectName);
+                if (roomName) {
+                    openConference(roomName, subjectName, lessonId);
+                }
+            } catch (error) {
+                console.error('Error starting specific lesson:', error);
+                alert('Ошибка запуска урока. Попробуйте снова.');
+            }
+        }
+        
+        // ==============================
+        // ВКЛАДКА АВАТАРА
+        // ==============================
+        
         // Загрузка доступных аватаров
         async function loadAvatars() {
             try {
@@ -746,15 +1245,20 @@
                     const womanAvatar = data.avatars.find(avatar => avatar.toLowerCase().includes('woman'));
                     if (womanAvatar) {
                         avatarSelect.value = womanAvatar;
-                        selectedAvatar = womanAvatar;
                         updateAvatarPreview(womanAvatar);
                     }
+                    
+                    // Слушатель изменения выбора
+                    avatarSelect.addEventListener('change', function() {
+                        updateAvatarPreview(this.value);
+                    });
                 }
             } catch (error) {
                 console.error('Error loading avatars:', error);
+                showAvatarStatus('Ошибка загрузки аватаров', false);
             }
         }
-
+        
         // Обновление превью аватара
         function updateAvatarPreview(avatarName) {
             const preview = document.getElementById('avatarPreview');
@@ -764,18 +1268,19 @@
                     .then(data => {
                         if (data.frames && data.frames.length > 0) {
                             const firstFrame = data.frames[0];
-                            preview.innerHTML = `<img src="/frames/${avatarName}/${firstFrame}" alt="${avatarName}" onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 2rem; color: #6c757d;\\'></i>';">`;
+                            preview.innerHTML = `<img src="/frames/${avatarName}/${firstFrame}" alt="${avatarName}" 
+                                onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 3rem; color: #6c757d;\\'></i>';">`;
                         }
                     })
                     .catch(error => {
                         console.error('Error loading avatar preview:', error);
-                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
+                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 3rem; color: #6c757d;"></i>';
                     });
             } else {
-                preview.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: #6c757d;"></i>';
+                preview.innerHTML = '<i class="fas fa-user" style="font-size: 3rem; color: #6c757d;"></i>';
             }
         }
-
+        
         // Установка аватара для всех комнат
         async function setAvatarForAllRooms() {
             const avatarSelect = document.getElementById('avatarSelect');
@@ -792,10 +1297,10 @@
             }
             
             console.log(`🎯 Setting avatar "${selectedAvatar}" for all student rooms`);
-            
             showAvatarStatus(`Устанавливаем аватар "${selectedAvatar}" для всех комнат...`, true);
             
             try {
+                // Проверяем, что аватар существует
                 const framesResponse = await fetch(`/api/frames/${selectedAvatar}`);
                 const framesData = await framesResponse.json();
                 
@@ -803,19 +1308,18 @@
                     throw new Error(framesData.error);
                 }
                 
-                const frames = framesData.frames;
-                console.log(`Found ${frames.length} frames for avatar ${selectedAvatar}`);
+                // Получаем все комнаты ученика
+                const rooms = await getStudentRooms();
                 
-                await loadStudentRooms();
-                
-                if (studentRooms.length === 0) {
+                if (!rooms || rooms.length === 0) {
                     showAvatarStatus('Комнаты еще не созданы', false);
                     return;
                 }
                 
                 let successCount = 0;
                 
-                for (const room of studentRooms) {
+                // Устанавливаем аватар для каждой комнаты
+                for (const room of rooms) {
                     try {
                         socket.emit('avatar_changed', {
                             room_id: room.room_name,
@@ -830,13 +1334,15 @@
                         console.log(`✅ Avatar set for room: ${room.room_name}`);
                         successCount++;
                         
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        // Небольшая задержка между запросами
+                        await new Promise(resolve => setTimeout(resolve, 50));
                         
                     } catch (error) {
                         console.error(`Error setting avatar for room ${room.room_name}:`, error);
                     }
                 }
                 
+                // Сохраняем предпочтение аватара
                 try {
                     const response = await fetch('/api/student/set-avatar', {
                         method: 'POST',
@@ -857,14 +1363,15 @@
                     console.error('Error saving avatar preference:', error);
                 }
                 
-                showAvatarStatus(`✅ Аватар "${selectedAvatar}" успешно установлен для всех ${successCount} комнат!`, true);
+                showAvatarStatus(`✅ Аватар "${selectedAvatar}" успешно установлен для ${successCount} комнат!`, true);
                 
             } catch (error) {
-                console.error('Error loading avatar frames:', error);
-                showAvatarStatus(`❌ Ошибка загрузки аватара: ${error.message}`, false);
+                console.error('Error setting avatar:', error);
+                showAvatarStatus(`❌ Ошибка установки аватара: ${error.message}`, false);
             }
         }
-
+        
+        // Показать статус аватара
         function showAvatarStatus(message, isSuccess) {
             const statusDiv = document.getElementById('avatarStatus');
             statusDiv.textContent = message;
@@ -876,134 +1383,126 @@
             }, 5000);
         }
         
-        // Создание комнат для всех предметов
-        async function createStudentRooms() {
-            if (!currentStudentData || !currentStudentData.student_id) return;
-            
-            try {
-                const response = await fetch('/api/student/create-rooms', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        student_id: currentStudentData.student_id,
-                        student_name: currentStudentData.name,
-                        conference_id: currentStudentData.conference_id || Date.now().toString()
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    console.log(`✅ Создано ${result.created_rooms} комнат для ученика`);
-                    if (result.rooms) {
-                        studentRooms = result.rooms;
-                    }
-                } else {
-                    console.error('Ошибка создания комнат:', result.error);
-                }
-            } catch (error) {
-                console.error('Error creating rooms:', error);
-            }
-        }
+        // ==============================
+        // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        // ==============================
         
-        // Загрузка информации о комнатах ученика
-        async function loadStudentRooms() {
-            if (!currentStudentData || !currentStudentData.student_id) return;
+        // Получение комнат ученика
+        async function getStudentRooms() {
+            if (!currentStudentData || !currentStudentData.student_id) return [];
             
             try {
                 const response = await fetch(`/api/student/${currentStudentData.student_id}/rooms`);
                 const data = await response.json();
                 
                 if (data.success && data.rooms) {
-                    studentRooms = data.rooms;
+                    return data.rooms;
                 }
+                return [];
             } catch (error) {
                 console.error('Error loading rooms:', error);
+                return [];
             }
         }
         
-        // Получение названия предмета по ID
-        function getSubjectName(subjectId) {
-            const subject = subjects.find(s => s.id === subjectId);
-            return subject ? subject.name : subjectId;
-        }
-        
-        function showSubjectSelection(studentData) {
-            // Заполняем информацию об ученике
-            updateStudentInfoDisplay(studentData);
-            loadAvailableSubjects();
-        }
-        
-        function updateStudentInfoDisplay(studentData) {
-            document.getElementById('studentGreeting').textContent = studentData.name;
-            document.getElementById('infoName').textContent = studentData.name;
-            document.getElementById('infoLevel').textContent = getLevelText(studentData.education_level || studentData.level);
-            document.getElementById('infoAge').textContent = studentData.age;
-        }
-        
-        function getLevelText(level) {
-            const levels = {
-                '1': '1 класс',
-                '2': '2 класс', 
-                '3': '3 класс',
-                '4': '4 класс',
-                '5': '5 класс',
-                '6': '6 класс',
-                '7': '7 класс',
-                '8': '8 класс',
-                '9': '9 класс',
-                '10': '10 класс',
-                '11': '11 класс',
-                'student': 'Студент',
-                'adult': 'Взрослый'
-            };
-            return levels[level] || level;
-        }
-        
-        function loadAvailableSubjects() {
-            const grid = document.getElementById('subjectsGrid');
-            grid.innerHTML = '';
+        // Создание комнаты для урока
+        async function createRoomForLesson(lessonId, subjectName) {
+            if (!currentStudentData) return null;
             
-            subjects.forEach(subject => {
-                const subjectCard = document.createElement('a');
-                subjectCard.className = 'subject-card';
-                subjectCard.href = getConferenceUrl(subject.id);
-                subjectCard.target = '_blank';
-                subjectCard.innerHTML = `
-                    <div class="subject-icon">
-                        <i class="${subject.icon}"></i>
-                    </div>
-                    <div class="subject-name">${subject.name}</div>
-                    <div class="subject-description">${subject.description}</div>
-                `;
+            try {
+                // Создаем уникальный идентификатор комнаты
+                const conferenceId = currentStudentData.conference_id || Date.now().toString();
+                const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
+                const studentClass = currentStudentData.education_level || '5';
+                const roomName = `${studentClass}_class_${subjectName}_${studentName}_${conferenceId}_${lessonId}`;
                 
-                grid.appendChild(subjectCard);
-            });
+                // Сохраняем данные ученика для комнаты
+                const response = await fetch('/api/room/register-student', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomName,
+                        student_data: currentStudentData,
+                        lesson_id: lessonId,
+                        subject: subjectName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    return roomName;
+                } else {
+                    throw new Error(result.error || 'Ошибка создания комнаты');
+                }
+                
+            } catch (error) {
+                console.error('Error creating room:', error);
+                // Fallback: создаем простую комнату
+                const conferenceId = currentStudentData.conference_id || Date.now().toString();
+                const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
+                return `${subjectName}_${studentName}_${conferenceId}`;
+            }
         }
         
-        // Минималистичная функция для получения URL конференции
-        function getConferenceUrl(subjectId) {
-            if (!currentStudentData) return '#';
-            
-            const conferenceId = currentStudentData.conference_id || Date.now().toString();
-            const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
-            const roomName = `${subjectId}_${studentName}_${conferenceId}`;
-            
-            return `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectId)}`;
+        // Создание и открытие конференции
+        async function createAndOpenConference(subjectName) {
+            try {
+                const roomName = await createRoomForLesson('next', subjectName);
+                if (roomName) {
+                    openConference(roomName, subjectName);
+                }
+            } catch (error) {
+                console.error('Error creating conference:', error);
+                alert('Ошибка создания комнаты. Попробуйте снова.');
+            }
         }
         
-        // Проверяем, есть ли сохраненные данные ученика при загрузке страницы
+        // Открытие конференции
+        function openConference(roomName, subjectName, lessonId = null) {
+            let url = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
+            
+            if (lessonId) {
+                url += `&lesson_id=${encodeURIComponent(lessonId)}`;
+            }
+            
+            // Открываем в новом окне
+            const newWindow = window.open(url, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+            
+            if (!newWindow) {
+                alert('Пожалуйста, разрешите всплывающие окна для открытия конференции');
+                // Fallback: открываем в этой же вкладке
+                window.location.href = url;
+            }
+        }
+        
+        // Показать индикатор загрузки
+        function showLoading(tab) {
+            document.getElementById(tab + 'Loading').style.display = 'block';
+            document.getElementById(tab + 'Container') && (document.getElementById(tab + 'Container').style.display = 'none');
+        }
+        
+        // Скрыть индикатор загрузки
+        function hideLoading(tab) {
+            document.getElementById(tab + 'Loading').style.display = 'none';
+            document.getElementById(tab + 'Container') && (document.getElementById(tab + 'Container').style.display = 'block');
+        }
+        
+        // Инициализация Socket.io
+        socket.on('connect', function() {
+            console.log('✅ Connected to server');
+        });
+        
+        socket.on('avatar_changed', function(data) {
+            console.log('✅ Avatar changed in room:', data.room_id, data.avatar_name);
+            showAvatarStatus(`Аватар "${data.avatar_name}" установлен в комнате`, true);
+        });
+        
+        // Запуск при загрузке страницы
         window.addEventListener('load', function() {
-            // Сначала проверяем авторизацию через сессию
             checkAuth();
-            
-            // Обработчик изменения выбора аватара
-            document.getElementById('avatarSelect').addEventListener('change', function() {
-                selectedAvatar = this.value;
-                updateAvatarPreview(this.value);
-            });
         });
     </script>
 </body>
