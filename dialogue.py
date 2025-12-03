@@ -169,14 +169,72 @@ class DialogueManager:
             # 3. Загружаем сгенерированные уроки
             self._load_lessons_from_dir(self.generated_lessons_dir, "generated")
             
-            # 4. Для обратной совместимости
-            self._load_lessons_from_dir(self.lessons_dir, "legacy")
+            # 4. 🔥 ИСПРАВЛЕННАЯ ЗАГРУЗКА LEGACY УРОКОВ (рекурсивно)
+            self._load_legacy_lessons()
             
             print(f"✅ Уроки загружены: {sum(len(v) for v in self.lessons.values())} уроков")
             print(f"✅ Классы с уроками: {list(self.lessons_by_class.keys())}")
                     
         except Exception as e:
             print(f"Ошибка доступа к папке уроков: {e}")
+
+    def _load_legacy_lessons(self):
+        """Исправленная загрузка старых уроков (рекурсивный поиск)"""
+        try:
+            # 🔥 РЕКУРСИВНЫЙ ПОИСК ВСЕХ TXT ФАЙЛОВ В lessons/
+            for lesson_file in self.lessons_dir.glob("**/*.txt"):
+                if not lesson_file.is_file():
+                    continue
+                    
+                # Пропускаем уже загруженные из других папок
+                if (lesson_file.parent == self.demo_lessons_dir or 
+                    lesson_file.parent == self.generated_lessons_dir or
+                    "students" in str(lesson_file.parent)):
+                    continue
+                
+                print(f"📂 Загрузка legacy урока: {lesson_file}")
+                
+                try:
+                    subject = self._detect_subject(lesson_file.stem)
+                    lesson_number = self._extract_lesson_number(lesson_file.stem)
+                    lesson_title = self._format_lesson_title(lesson_file.stem)
+                    
+                    # Определяем класс из пути (если есть)
+                    class_level = "general"
+                    if "_class" in str(lesson_file):
+                        for part in lesson_file.parts:
+                            if part.endswith("_class"):
+                                class_level = part.replace("_class", "")
+                                break
+                    
+                    lesson_data = {
+                        'id': f"legacy_{lesson_file.stem}",
+                        'title': lesson_title,
+                        'file_path': lesson_file,
+                        'type': 'legacy',
+                        'subject': subject,
+                        'class_level': class_level,
+                        'lesson_number': lesson_number,
+                        'full_path': str(lesson_file.relative_to(self.lessons_dir))
+                    }
+                    
+                    if subject not in self.lessons:
+                        self.lessons[subject] = []
+                    self.lessons[subject].append(lesson_data)
+                    
+                    # Добавляем в структуру по классам если класс определен
+                    if class_level != "general":
+                        if class_level not in self.lessons_by_class:
+                            self.lessons_by_class[class_level] = {}
+                        if subject not in self.lessons_by_class[class_level]:
+                            self.lessons_by_class[class_level][subject] = []
+                        self.lessons_by_class[class_level][subject].append(lesson_data)
+                        
+                except Exception as e:
+                    print(f"Ошибка загрузки legacy урока {lesson_file}: {e}")
+                    
+        except Exception as e:
+            print(f"Ошибка при поиске legacy уроков: {e}")
 
     def _load_student_lessons_by_class(self, class_dir: Path, class_level: str):
         """Загружает уроки для конкретного класса"""
@@ -252,7 +310,7 @@ class DialogueManager:
                 print(f"Ошибка загрузки урока {lesson_file}: {e}")
 
     def _load_lessons_from_dir(self, dir_path: Path, lesson_type: str):
-        """Загружает уроки из директории (для демо, сгенерированных и legacy)"""
+        """Загружает уроки из директории (для демо, сгенерированных)"""
         if not dir_path.exists():
             return
         
@@ -530,7 +588,7 @@ class DialogueManager:
             
             # Не персонализируем если уже есть обращение
             if student_name.lower() not in first_sentence.lower():
-                # Добавляем имя в начало первого предложения
+                # Добавляем имя в начале первого предложения
                 personalized_first = f"{student_name}, {first_sentence[0].lower() + first_sentence[1:]}"
                 sentences[0] = personalized_first
                 
@@ -1103,6 +1161,15 @@ class DialogueManager:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         text_lower = text.lower().strip()
         
+        # 🔥 ИСПРАВЛЕНИЕ: ЕСЛИ УРОК ВЫБРАН И ГОВОРИМ "НАЧАТЬ УРОК" - НАЧИНАЕМ ЕГО!
+        if (not self.lesson_started and 
+            self.selected_lesson and 
+            self.current_subject and
+            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем'])):
+            
+            print(f"🚀 КОМАНДА НАЧАЛА УРОКА: '{text_lower}', предмет: {self.current_subject}")
+            return self._force_start_lesson()
+        
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ
         continue_commands = [
             "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
@@ -1140,8 +1207,12 @@ class DialogueManager:
                 ]
                 
                 if any(cmd in text_lower for cmd in explicit_start_commands):
-                    # 🔥 НОВОЕ: ПРЕДЛАГАЕМ СЛЕДУЮЩИЙ УРОК ИЛИ ВЫБОР
-                    return self._suggest_next_or_select_lesson()
+                    # 🔥 ЕСЛИ УЖЕ ЕСТЬ ВЫБРАННЫЙ УРОК - НАЧИНАЕМ ЕГО!
+                    if self.selected_lesson:
+                        return self._force_start_lesson()
+                    else:
+                        # 🔥 НОВОЕ: ПРЕДЛАГАЕМ СЛЕДУЮЩИЙ УРОК ИЛИ ВЫБОР
+                        return self._suggest_next_or_select_lesson()
                 else:
                     # 🔥 ТОЛЬКО ЕСЛИ УЧЕНИК ЯВНО ВЫРАЗИЛ ИНТЕРЕС К УРОКУ
                     lesson_interest_words = ['урок', 'занятие', 'обучение', 'изучение', 'предмет', 'научи']
@@ -1207,14 +1278,14 @@ class DialogueManager:
             
             response = f"{student_name}, отлично! "
             response += f"Твой прогресс по {self.current_subject}: {completed_count}/{total_lessons} уроков. "
-            response += f"Следующий урок: '{next_lesson['title']}'. Начинаем?"
+            response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
             
             # Сохраняем следующий урок как выбранный
             self.selected_lesson = next_lesson
             
             return response
         else:
-            # Все уроки завершены или их нет
+            # Все уроки завершены
             return f"{student_name}, ты уже завершил все уроки по {self.current_subject}! Хочешь повторить какой-то урок или выбрать другой предмет?"
 
     def _offer_lesson_options(self) -> str:
@@ -1349,6 +1420,62 @@ class DialogueManager:
                 
                 return f"Я подготовил демо-урок по предмету {subject}. Когда будете готовы, скажите 'начать урок'!"
 
+    def _force_start_lesson(self) -> str:
+        """🔥 НОВЫЙ МЕТОД: Принудительно начинает выбранный урок"""
+        if not self.selected_lesson:
+            return "Сначала выберите урок!"
+        
+        if not self.current_subject:
+            self.current_subject = self.selected_lesson.get('subject', 'общее')
+        
+        print(f"🚀 ПРИНУДИТЕЛЬНЫЙ СТАРТ УРОКА: {self.selected_lesson['title']}")
+        
+        # Начинаем урок
+        self.lesson_started = True
+        self.current_state = "lesson_reading"
+        self.current_paragraph = 0
+        
+        # Загружаем содержание
+        try:
+            self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
+            if not self.lesson_content:
+                self.lesson_started = False
+                return "Ошибка загрузки урока. Попробуйте другой."
+            
+            # Инициализируем базу знаний
+            if self.current_subject:
+                from knowledge.knowledge_base import KnowledgeBase
+                self.knowledge_base = KnowledgeBase(self.current_subject)
+            
+            # Очищаем историю
+            self.conversation_history = []
+            self.conversation_context = []
+            
+            # Получаем первый абзац
+            first_paragraph = self._get_next_paragraph()
+            
+            if self.room_id and self.socketio:
+                # Уведомляем клиент
+                self.socketio.emit('lesson_started', {
+                    'lesson_id': self.selected_lesson['id'],
+                    'title': self.selected_lesson['title'],
+                    'subject': self.current_subject,
+                    'is_generated': self.selected_lesson.get('type') == 'generated'
+                }, room=self.room_id)
+            
+            # Персонализированное начало
+            if self.has_student_data:
+                student_name = self.student_data.get('name', '')
+                name_prefix = f"{student_name}, " if student_name else ""
+                return f"{name_prefix}Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
+            else:
+                return f"Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
+                
+        except Exception as e:
+            print(f"❌ Ошибка начала урока: {e}")
+            self.lesson_started = False
+            return f"Ошибка начала урока: {str(e)}"
+
     def _get_available_lessons(self, subject: str) -> List[dict]:
         """🔥 ВОЗВРАЩАЕТ УРОКИ В ЗАВИСИМОСТИ ОТ НАЛИЧИЯ ДАННЫХ УЧЕНИКА"""
         all_lessons = self.lessons.get(subject, [])
@@ -1374,7 +1501,7 @@ class DialogueManager:
 
 Это демонстрационный урок. В реальной системе здесь был бы полноценный учебный материал.
 
-Для доступа ко всем функциям системы зарегистрируйтесь как ученик!"""
+Для доступа ко всех функциям системы зарегистрируйтесь как ученик!"""
         
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(demo_content)
