@@ -45,7 +45,7 @@
             padding: 3rem;
             box-shadow: 0 20px 60px rgba(0,0,0,0.1);
             width: 100%;
-            max-width: 900px;
+            max-width: 1200px;
             max-height: 90vh;
             overflow-y: auto;
             position: relative;
@@ -78,211 +78,203 @@
             font-size: 1.1rem;
         }
         
-        .tabs {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #e1e1e1;
-            padding-bottom: 1rem;
-        }
-        
-        .tab-btn {
-            padding: 0.8rem 1.5rem;
-            background: none;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            color: var(--text-light);
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .tab-btn:hover {
-            color: var(--primary);
-            background: rgba(126, 118, 249, 0.1);
-        }
-        
-        .tab-btn.active {
-            color: var(--primary);
-            background: rgba(126, 118, 249, 0.1);
-            border-bottom: 3px solid var(--primary);
-        }
-        
-        .tab-content {
+        /* Модальные окна */
+        .modal {
             display: none;
-            animation: fadeIn 0.5s ease;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
         }
         
-        .tab-content.active {
-            display: block;
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            animation: modalSlideIn 0.3s ease;
         }
         
-        .student-info {
-            background: linear-gradient(135deg, rgba(126, 118, 249, 0.1), rgba(106, 97, 229, 0.05));
-            border-radius: 12px;
-            padding: 1.5rem;
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 1.5rem;
-            border: 1px solid rgba(126, 118, 249, 0.2);
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e1e1e1;
         }
         
-        .student-info h3 {
+        .modal-header h3 {
             color: var(--primary);
-            margin-bottom: 0.5rem;
-            font-size: 1.1rem;
+            font-size: 1.3rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
         
-        .student-details {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-        
-        .detail-item {
-            display: flex;
-            flex-direction: column;
-            gap: 0.3rem;
-        }
-        
-        .detail-label {
-            font-size: 0.8rem;
-            color: var(--text-light);
-            font-weight: 500;
-        }
-        
-        .detail-value {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text);
-        }
-        
-        .edit-info-btn {
+        .close-modal {
             background: none;
             border: none;
-            color: var(--primary);
+            font-size: 1.5rem;
+            color: var(--text-light);
             cursor: pointer;
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
             transition: color 0.3s ease;
         }
         
-        .edit-info-btn:hover {
-            color: var(--secondary);
-            text-decoration: underline;
+        .close-modal:hover {
+            color: var(--primary);
         }
         
-        /* Прогресс по предметам */
-        .subjects-progress {
+        /* Карточки предметов на главной */
+        .subject-cards-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
             gap: 1.5rem;
-            margin-bottom: 2rem;
+            margin-top: 2rem;
         }
         
-        .subject-card {
+        .subject-card-main {
             background: white;
-            border-radius: 12px;
+            border-radius: 15px;
             padding: 1.5rem;
             border: 2px solid #e9ecef;
             transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
         }
         
-        .subject-card:hover {
+        .subject-card-main:hover {
             border-color: var(--primary);
             transform: translateY(-5px);
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
         
-        .subject-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+        .subject-icon-main {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .subject-name-main {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subject-description-main {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            text-align: center;
+            line-height: 1.4;
             margin-bottom: 1rem;
         }
         
-        .subject-icon {
-            font-size: 2rem;
-            color: var(--primary);
-            width: 50px;
-            height: 50px;
+        .subject-progress {
+            margin-top: 1rem;
             display: flex;
             align-items: center;
-            justify-content: center;
-            background: rgba(126, 118, 249, 0.1);
-            border-radius: 10px;
+            justify-content: space-between;
         }
         
-        .subject-title {
-            flex: 1;
-        }
-        
-        .subject-title h4 {
-            font-size: 1.1rem;
-            color: var(--text);
-            margin-bottom: 0.2rem;
-        }
-        
-        .subject-title p {
+        .progress-label {
             font-size: 0.85rem;
             color: var(--text-light);
         }
         
-        .progress-bar {
-            height: 8px;
-            background: var(--progress-bg);
-            border-radius: 4px;
-            margin: 1rem 0;
-            overflow: hidden;
+        .progress-value {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--primary);
         }
         
-        .progress-fill {
-            height: 100%;
-            background: var(--progress-fill);
-            border-radius: 4px;
-            transition: width 0.5s ease;
+        /* Информация об ученике */
+        .student-info-main {
+            background: linear-gradient(135deg, rgba(126, 118, 249, 0.1), rgba(106, 97, 229, 0.05));
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(126, 118, 249, 0.2);
         }
         
-        .progress-info {
+        .student-info-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1rem;
         }
         
-        .progress-text {
-            font-size: 0.9rem;
+        .student-info-header h3 {
+            color: var(--primary);
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .student-details-main {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .detail-item-main {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        
+        .detail-label-main {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+        
+        .detail-value-main {
+            font-size: 1rem;
+            font-weight: 600;
             color: var(--text);
         }
         
-        .progress-percent {
-            font-weight: 600;
-            color: var(--primary);
-        }
-        
-        .subject-actions {
+        /* Кнопки действий */
+        .action-buttons {
             display: flex;
-            gap: 0.8rem;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
         }
         
         .btn {
-            padding: 0.8rem 1.5rem;
+            padding: 1rem 1.5rem;
             background: var(--gradient);
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 0.95rem;
+            border-radius: 10px;
+            font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -290,17 +282,12 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            flex: 1;
             text-decoration: none;
         }
         
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(126, 118, 249, 0.3);
-        }
-        
-        .btn:active {
-            transform: translateY(0);
         }
         
         .btn-secondary {
@@ -316,11 +303,72 @@
         
         .btn-small {
             padding: 0.6rem 1rem;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
         
-        /* Список уроков */
-        .lessons-container {
+        /* Управление аватаром в модальном окне */
+        .avatar-controls-modal {
+            padding: 1rem 0;
+        }
+        
+        .avatar-select-modal {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+            transition: border 0.3s ease;
+        }
+        
+        .avatar-select-modal:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(126, 118, 249, 0.1);
+        }
+        
+        .avatar-preview-modal {
+            width: 150px;
+            height: 150px;
+            border: 3px solid #e1e1e1;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            overflow: hidden;
+            margin: 0 auto 1.5rem;
+        }
+        
+        .avatar-preview-modal img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .avatar-status-modal {
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.95rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        
+        .avatar-status-modal.success {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid rgba(72, 187, 120, 0.2);
+            color: #166534;
+        }
+        
+        .avatar-status-modal.error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+        }
+        
+        /* Уроки в модальном окне */
+        .lessons-list-modal {
             max-height: 400px;
             overflow-y: auto;
             margin-top: 1rem;
@@ -329,7 +377,7 @@
             padding: 1rem;
         }
         
-        .lesson-item {
+        .lesson-item-modal {
             display: flex;
             align-items: center;
             padding: 1rem;
@@ -337,15 +385,15 @@
             transition: background 0.3s ease;
         }
         
-        .lesson-item:hover {
+        .lesson-item-modal:hover {
             background: rgba(126, 118, 249, 0.05);
         }
         
-        .lesson-item:last-child {
+        .lesson-item-modal:last-child {
             border-bottom: none;
         }
         
-        .lesson-status {
+        .lesson-status-modal {
             width: 30px;
             height: 30px;
             border-radius: 50%;
@@ -355,120 +403,89 @@
             margin-right: 1rem;
         }
         
-        .lesson-status.completed {
+        .lesson-status-modal.completed {
             background: rgba(72, 187, 120, 0.1);
             color: var(--success);
         }
         
-        .lesson-status.current {
+        .lesson-status-modal.current {
             background: rgba(59, 130, 246, 0.1);
             color: #3b82f6;
         }
         
-        .lesson-status.pending {
+        .lesson-status-modal.pending {
             background: rgba(203, 213, 225, 0.1);
             color: #94a3b8;
         }
         
-        .lesson-info {
+        .lesson-info-modal {
             flex: 1;
         }
         
-        .lesson-info h5 {
+        .lesson-info-modal h5 {
             font-size: 1rem;
             color: var(--text);
             margin-bottom: 0.2rem;
         }
         
-        .lesson-info p {
+        .lesson-info-modal p {
             font-size: 0.85rem;
             color: var(--text-light);
         }
         
-        .lesson-number {
+        .lesson-number-modal {
             font-weight: 600;
             color: var(--primary);
             margin-right: 0.5rem;
         }
         
-        /* Управление аватаром */
-        .avatar-controls {
-            background: rgba(248, 250, 252, 0.8);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin: 1.5rem 0;
-            border: 1px solid rgba(126, 118, 249, 0.2);
+        /* Выбор класса */
+        .class-selection {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
         
-        .avatar-controls h3 {
-            color: var(--primary);
-            margin-bottom: 1rem;
-            font-size: 1.1rem;
+        .class-buttons-modal {
             display: flex;
-            align-items: center;
             gap: 0.5rem;
-        }
-        
-        .avatar-select-container {
-            display: flex;
-            gap: 1.5rem;
-            align-items: center;
             flex-wrap: wrap;
         }
         
-        .avatar-select {
-            flex: 1;
-            min-width: 250px;
-            padding: 1rem;
+        .class-btn-modal {
+            padding: 0.5rem 1rem;
+            background: white;
             border: 2px solid #e1e1e1;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: border 0.3s ease;
-        }
-        
-        .avatar-select:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(126, 118, 249, 0.1);
-        }
-        
-        .avatar-preview {
-            width: 100px;
-            height: 100px;
-            border: 3px solid #e1e1e1;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f8f9fa;
-            overflow: hidden;
-        }
-        
-        .avatar-preview img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        
-        .avatar-status {
-            margin-top: 1rem;
-            padding: 1rem;
             border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .class-btn-modal:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        .class-btn-modal.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        /* Загрузка */
+        .loading {
             text-align: center;
-            font-size: 0.95rem;
-            display: none;
+            padding: 2rem;
+            color: var(--text-light);
         }
         
-        .avatar-status.success {
-            background: rgba(72, 187, 120, 0.1);
-            border: 1px solid rgba(72, 187, 120, 0.2);
-            color: #166534;
-        }
-        
-        .avatar-status.error {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: #dc2626;
+        .loading i {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            animation: spin 1s linear infinite;
         }
         
         /* Кнопка выхода */
@@ -525,20 +542,6 @@
             gap: 0.5rem;
         }
         
-        /* Загрузка */
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-light);
-        }
-        
-        .loading i {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-            color: var(--primary);
-            animation: spin 1s linear infinite;
-        }
-        
         /* Анимации */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -548,6 +551,10 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease;
         }
         
         /* Адаптивность */
@@ -561,39 +568,22 @@
                 font-size: 1.7rem;
             }
             
-            .tabs {
-                flex-direction: column;
-                gap: 0.5rem;
+            .subject-cards-grid {
+                grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+                gap: 1rem;
             }
             
-            .tab-btn {
-                width: 100%;
-                justify-content: center;
-            }
-            
-            .subjects-progress {
-                grid-template-columns: 1fr;
-            }
-            
-            .avatar-select-container {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .avatar-select {
-                min-width: 100%;
-            }
-            
-            .avatar-preview {
-                align-self: center;
-            }
-            
-            .subject-actions {
+            .action-buttons {
                 flex-direction: column;
             }
             
             .btn {
                 width: 100%;
+            }
+            
+            .modal-content {
+                width: 95%;
+                padding: 1.5rem;
             }
         }
         
@@ -615,28 +605,31 @@
                 font-size: 1rem;
             }
             
-            .subject-header {
-                flex-direction: column;
-                text-align: center;
+            .subject-cards-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .student-details-main {
+                grid-template-columns: 1fr;
             }
         }
         
         /* Стили для скроллбара */
-        .lessons-container::-webkit-scrollbar {
+        .lessons-list-modal::-webkit-scrollbar {
             width: 6px;
         }
         
-        .lessons-container::-webkit-scrollbar-track {
+        .lessons-list-modal::-webkit-scrollbar-track {
             background: #f1f1f1;
             border-radius: 3px;
         }
         
-        .lessons-container::-webkit-scrollbar-thumb {
+        .lessons-list-modal::-webkit-scrollbar-thumb {
             background: var(--primary);
             border-radius: 3px;
         }
         
-        .lessons-container::-webkit-scrollbar-thumb:hover {
+        .lessons-list-modal::-webkit-scrollbar-thumb:hover {
             background: var(--secondary);
         }
     </style>
@@ -650,95 +643,142 @@
         </div>
         
         <!-- Информация об ученике -->
-        <div class="student-info">
-            <h3><i class="fas fa-user-graduate"></i> Ваш профиль</h3>
-            <div class="student-details" id="studentDetails">
+        <div class="student-info-main">
+            <div class="student-info-header">
+                <h3><i class="fas fa-user-graduate"></i> Ваш профиль</h3>
+                <button class="btn btn-small btn-secondary" onclick="redirectToProfile()">
+                    <i class="fas fa-edit"></i> Изменить
+                </button>
+            </div>
+            <div class="student-details-main" id="studentDetails">
                 <!-- Данные будут заполнены через JavaScript -->
             </div>
-            <button class="edit-info-btn" onclick="redirectToProfile()">
-                <i class="fas fa-edit"></i> Изменить данные профиля
+        </div>
+        
+        <!-- Кнопки действий -->
+        <div class="action-buttons">
+            <button class="btn" onclick="openModal('avatarModal')">
+                <i class="fas fa-user-circle"></i> Управление аватаром
+            </button>
+            <button class="btn btn-secondary" onclick="openModal('lessonsModal')">
+                <i class="fas fa-book"></i> Выбрать урок
+            </button>
+            <button class="btn btn-secondary" onclick="openModal('progressModal')">
+                <i class="fas fa-chart-line"></i> Мой прогресс
             </button>
         </div>
         
-        <!-- Вкладки -->
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('progress')">
-                <i class="fas fa-chart-line"></i> Прогресс
-            </button>
-            <button class="tab-btn" onclick="switchTab('lessons')">
-                <i class="fas fa-book"></i> Все уроки
-            </button>
-            <button class="tab-btn" onclick="switchTab('avatar')">
-                <i class="fas fa-user-circle"></i> Аватар
-            </button>
+        <!-- Основной контент: Предметы -->
+        <h3 style="margin-bottom: 1rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fas fa-graduation-cap"></i> Доступные предметы
+        </h3>
+        <p style="margin-bottom: 1.5rem; color: var(--text-light); font-size: 0.95rem;">
+            Выберите предмет для начала обучения. Комната откроется в новой вкладке.
+        </p>
+        
+        <div class="subject-cards-grid" id="subjectsGrid">
+            <!-- Предметы будут загружены через JavaScript -->
         </div>
         
-        <!-- Вкладка 1: Прогресс по предметам -->
-        <div id="progressTab" class="tab-content active">
-            <div class="info-message" id="progressMessage">
-                <i class="fas fa-info-circle"></i>
-                <span>Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение</span>
-            </div>
-            
-            <div id="progressContainer">
-                <!-- Прогресс будет загружен через JavaScript -->
-            </div>
-            
-            <div class="loading" id="progressLoading">
-                <i class="fas fa-spinner"></i>
-                <p>Загрузка вашего прогресса...</p>
-            </div>
-        </div>
-        
-        <!-- Вкладка 2: Все уроки -->
-        <div id="lessonsTab" class="tab-content">
-            <div class="info-message" id="lessonsMessage">
-                <i class="fas fa-info-circle"></i>
-                <span>Выберите предмет для просмотра всех доступных уроков</span>
-            </div>
-            
-            <div id="lessonsSubjectSelect" style="margin-bottom: 1.5rem;">
-                <!-- Выбор предмета будет загружен через JavaScript -->
-            </div>
-            
-            <div id="lessonsList">
-                <!-- Список уроков будет загружен через JavaScript -->
-            </div>
-            
-            <div class="loading" id="lessonsLoading">
-                <i class="fas fa-spinner"></i>
-                <p>Загрузка уроков...</p>
-            </div>
-        </div>
-        
-        <!-- Вкладка 3: Управление аватаром -->
-        <div id="avatarTab" class="tab-content">
-            <div class="info-message" id="avatarMessage">
-                <i class="fas fa-info-circle"></i>
-                <span>Выберите аватар для AI-учителя во всех ваших комнатах</span>
-            </div>
-            
-            <div class="avatar-controls">
-                <h3><i class="fas fa-user-circle"></i> Выбор аватара учителя</h3>
-                <div class="avatar-select-container">
-                    <select id="avatarSelect" class="avatar-select">
-                        <option value="">Выберите аватар...</option>
-                    </select>
-                    <div class="avatar-preview" id="avatarPreview">
-                        <i class="fas fa-user" style="font-size: 3rem; color: #6c757d;"></i>
-                    </div>
-                </div>
-                <button class="btn" onclick="setAvatarForAllRooms()" style="margin-top: 1rem;">
-                    <i class="fas fa-check"></i> Установить аватар для всех комнат
-                </button>
-                <div id="avatarStatus" class="avatar-status"></div>
-            </div>
+        <div class="loading" id="subjectsLoading">
+            <i class="fas fa-spinner"></i>
+            <p>Загрузка предметов...</p>
         </div>
         
         <!-- Кнопка выхода -->
         <button class="logout-btn" onclick="logout()">
             <i class="fas fa-sign-out-alt"></i> Выйти из системы
         </button>
+    </div>
+    
+    <!-- Модальное окно управления аватаром -->
+    <div id="avatarModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-circle"></i> Управление аватаром</h3>
+                <button class="close-modal" onclick="closeModal('avatarModal')">&times;</button>
+            </div>
+            
+            <div class="info-message">
+                <i class="fas fa-info-circle"></i>
+                <span>Выберите аватар для AI-учителя во всех ваших комнатах</span>
+            </div>
+            
+            <div class="avatar-controls-modal">
+                <select id="avatarSelect" class="avatar-select-modal">
+                    <option value="">Выберите аватар...</option>
+                </select>
+                
+                <div class="avatar-preview-modal" id="avatarPreview">
+                    <i class="fas fa-user" style="font-size: 4rem; color: #6c757d;"></i>
+                </div>
+                
+                <button class="btn" onclick="setAvatarForAllRooms()">
+                    <i class="fas fa-check"></i> Установить аватар для всех комнат
+                </button>
+                
+                <div id="avatarStatus" class="avatar-status-modal"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно выбора урока -->
+    <div id="lessonsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-book"></i> Выбор урока</h3>
+                <button class="close-modal" onclick="closeModal('lessonsModal')">&times;</button>
+            </div>
+            
+            <div class="info-message">
+                <i class="fas fa-info-circle"></i>
+                <span>Выберите класс и предмет для просмотра уроков</span>
+            </div>
+            
+            <div class="class-selection">
+                <label style="font-size: 0.9rem; color: var(--text-light); font-weight: 500;">Класс:</label>
+                <div class="class-buttons-modal" id="classButtons">
+                    <!-- Кнопки классов будут загружены через JavaScript -->
+                </div>
+            </div>
+            
+            <select id="subjectSelectModal" class="avatar-select-modal" onchange="loadLessonsForSubjectModal(this.value)">
+                <option value="">Сначала выберите класс...</option>
+            </select>
+            
+            <div id="lessonsListModal" class="lessons-list-modal">
+                <!-- Список уроков будет загружен через JavaScript -->
+            </div>
+            
+            <div class="loading" id="lessonsLoadingModal" style="display: none;">
+                <i class="fas fa-spinner"></i>
+                <p>Загрузка уроков...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно прогресса -->
+    <div id="progressModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-chart-line"></i> Мой прогресс</h3>
+                <button class="close-modal" onclick="closeModal('progressModal')">&times;</button>
+            </div>
+            
+            <div class="info-message">
+                <i class="fas fa-info-circle"></i>
+                <span>Ваш прогресс по пройденным предметам</span>
+            </div>
+            
+            <div id="progressListModal">
+                <!-- Прогресс будет загружен через JavaScript -->
+            </div>
+            
+            <div class="loading" id="progressLoadingModal" style="display: none;">
+                <i class="fas fa-spinner"></i>
+                <p>Загрузка прогресса...</p>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -749,6 +789,7 @@
         let currentStudentData = null;
         let availableAvatars = [];
         let subjectsData = null;
+        let currentClass = null;
         
         // Иконки для предметов
         const subjectIcons = {
@@ -766,6 +807,8 @@
             'французский язык': 'fas fa-flag',
             'география': 'fas fa-map',
             'информатика': 'fas fa-laptop-code',
+            'окружающий мир': 'fas fa-globe-europe',
+            'литературное чтение': 'fas fa-book-reader',
             'default': 'fas fa-book-open'
         };
         
@@ -784,7 +827,24 @@
             'английский язык': 'Иностранный язык и культура',
             'французский язык': 'Французский язык и культура',
             'география': 'Страны, природа и путешествия',
-            'информатика': 'Программирование и компьютерные науки'
+            'информатика': 'Программирование и компьютерные науки',
+            'окружающий мир': 'Природа, экология и мир вокруг нас',
+            'литературное чтение': 'Чтение и анализ литературных произведений'
+        };
+        
+        // Предметы по классам
+        const subjectsByClass = {
+            '1': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир'],
+            '2': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир'],
+            '3': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир'],
+            '4': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир'],
+            '5': ['математика', 'русский язык', 'литература', 'английский язык', 'история', 'география', 'биология', 'информатика'],
+            '6': ['математика', 'русский язык', 'литература', 'английский язык', 'история', 'обществознание', 'география', 'биология', 'информатика'],
+            '7': ['алгебра', 'геометрия', 'русский язык', 'литература', 'английский язык', 'физика', 'история', 'обществознание', 'география', 'биология', 'информатика'],
+            '8': ['алгебра', 'геометрия', 'русский язык', 'литература', 'английский язык', 'физика', 'химия', 'история', 'обществознание', 'география', 'биология', 'информатика'],
+            '9': ['алгебра', 'геометрия', 'русский язык', 'литература', 'английский язык', 'физика', 'химия', 'история', 'обществознание', 'география', 'биология', 'информатика'],
+            '10': ['алгебра', 'геометрия', 'русский язык', 'литература', 'английский язык', 'физика', 'химия', 'история', 'обществознание', 'география', 'биология', 'информатика'],
+            '11': ['алгебра', 'геометрия', 'русский язык', 'литература', 'английский язык', 'физика', 'химия', 'история', 'обществознание', 'география', 'биология', 'информатика']
         };
         
         // ==============================
@@ -802,33 +862,40 @@
             });
         }
         
-        // Переключение вкладок
-        function switchTab(tabName) {
-            // Скрыть все вкладки
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Убрать активный класс у всех кнопок
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Показать выбранную вкладку
-            document.getElementById(tabName + 'Tab').classList.add('active');
-            
-            // Сделать активной кнопку
-            event.target.classList.add('active');
-            
-            // Загрузить данные для вкладки
-            if (tabName === 'progress') {
-                loadProgressData();
-            } else if (tabName === 'lessons') {
-                loadLessonsData();
-            } else if (tabName === 'avatar') {
-                loadAvatars();
+        // Открытие модального окна
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'flex';
+                
+                // Загружаем данные для конкретного модального окна
+                if (modalId === 'avatarModal') {
+                    loadAvatars();
+                } else if (modalId === 'lessonsModal') {
+                    initLessonsModal();
+                } else if (modalId === 'progressModal') {
+                    loadProgressData();
+                }
             }
         }
+        
+        // Закрытие модального окна
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Закрытие модального окна при клике вне его
+        window.addEventListener('click', function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
         
         // Перенаправление на страницу профиля
         function redirectToProfile() {
@@ -865,11 +932,11 @@
                     // Обновить отображение данных ученика
                     updateStudentInfoDisplay();
                     
-                    // Загрузить прогресс
-                    loadProgressData();
+                    // Установить текущий класс
+                    currentClass = currentStudentData.education_level || currentStudentData.level || '5';
                     
-                    // Загрузить аватары
-                    loadAvatars();
+                    // Загрузить основные предметы
+                    loadMainSubjects();
                 } else {
                     window.location.href = '/student_profile';
                 }
@@ -884,22 +951,20 @@
             const detailsContainer = document.getElementById('studentDetails');
             if (!currentStudentData) return;
             
+            const level = currentStudentData.education_level || currentStudentData.level || '5';
+            
             const details = `
-                <div class="detail-item">
-                    <span class="detail-label">Имя</span>
-                    <span class="detail-value">${currentStudentData.name || 'Не указано'}</span>
+                <div class="detail-item-main">
+                    <span class="detail-label-main">Имя</span>
+                    <span class="detail-value-main">${currentStudentData.name || 'Не указано'}</span>
                 </div>
-                <div class="detail-item">
-                    <span class="detail-label">Класс</span>
-                    <span class="detail-value">${getLevelText(currentStudentData.education_level || currentStudentData.level)}</span>
+                <div class="detail-item-main">
+                    <span class="detail-label-main">Класс</span>
+                    <span class="detail-value-main">${getLevelText(level)}</span>
                 </div>
-                <div class="detail-item">
-                    <span class="detail-label">Возраст</span>
-                    <span class="detail-value">${currentStudentData.age || 'Не указан'} лет</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">ID ученика</span>
-                    <span class="detail-value" style="font-size: 0.85rem;">${currentStudentData.student_id || 'Не указан'}</span>
+                <div class="detail-item-main">
+                    <span class="detail-label-main">Возраст</span>
+                    <span class="detail-value-main">${currentStudentData.age || 'Не указан'} лет</span>
                 </div>
             `;
             
@@ -927,300 +992,79 @@
         }
         
         // ==============================
-        // ВКЛАДКА ПРОГРЕССА
+        // ГЛАВНАЯ СТРАНИЦА: ПРЕДМЕТЫ
         // ==============================
         
-        // Загрузка данных о прогрессе
-        async function loadProgressData() {
+        async function loadMainSubjects() {
             try {
-                showLoading('progress');
+                showLoading('subjects');
                 
-                const response = await fetch('/api/student/progress');
-                const data = await response.json();
+                const container = document.getElementById('subjectsGrid');
+                container.innerHTML = '';
                 
-                if (data.success && data.progress && data.progress.subjects) {
-                    subjectsData = data.progress.subjects;
-                    renderProgressSubjects(data.progress.subjects);
-                } else {
-                    document.getElementById('progressMessage').className = 'error-message';
-                    document.getElementById('progressMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Не удалось загрузить данные о прогрессе';
+                // Определяем предметы для текущего класса ученика
+                const studentClass = currentStudentData.education_level || currentStudentData.level || '5';
+                const subjects = subjectsByClass[studentClass] || subjectsByClass['5'];
+                
+                // Загружаем прогресс для предметов
+                let progressData = {};
+                try {
+                    const progressResponse = await fetch('/api/student/progress');
+                    const progressResult = await progressResponse.json();
+                    if (progressResult.success && progressResult.progress && progressResult.progress.subjects) {
+                        progressData = progressResult.progress.subjects;
+                    }
+                } catch (error) {
+                    console.error('Error loading progress:', error);
                 }
                 
-                hideLoading('progress');
-            } catch (error) {
-                console.error('Error loading progress:', error);
-                document.getElementById('progressMessage').className = 'error-message';
-                document.getElementById('progressMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки данных о прогрессе';
-                hideLoading('progress');
-            }
-        }
-        
-        // Отображение предметов с прогрессом
-        function renderProgressSubjects(subjects) {
-            const container = document.getElementById('progressContainer');
-            
-            if (!subjects || Object.keys(subjects).length === 0) {
-                container.innerHTML = `
-                    <div class="info-message">
-                        <i class="fas fa-info-circle"></i>
-                        <span>У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.</span>
-                    </div>
-                `;
-                return;
-            }
-            
-            let html = '<div class="subjects-progress">';
-            
-            for (const [subjectName, subjectData] of Object.entries(subjects)) {
-                const progressPercent = subjectData.progress_percent || 0;
-                const totalLessons = subjectData.total_lessons || 0;
-                const completedLessons = subjectData.completed_lessons || 0;
-                const nextLesson = subjectData.next_lesson;
-                
-                html += `
-                    <div class="subject-card">
-                        <div class="subject-header">
-                            <div class="subject-icon">
-                                <i class="${subjectIcons[subjectName] || subjectIcons.default}"></i>
-                            </div>
-                            <div class="subject-title">
-                                <h4>${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</h4>
-                                <p>${subjectDescriptions[subjectName] || 'Изучение предмета'}</p>
-                            </div>
-                        </div>
-                        
-                        <div class="progress-info">
-                            <span class="progress-text">Прогресс</span>
-                            <span class="progress-percent">${progressPercent}%</span>
-                        </div>
-                        
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${progressPercent}%"></div>
-                        </div>
-                        
-                        <div class="progress-info">
-                            <span class="progress-text">${completedLessons}/${totalLessons} уроков завершено</span>
-                            <span class="progress-text">
-                                ${nextLesson ? `Следующий: Урок ${nextLesson.lesson_number || ''}` : 'Все уроки завершены'}
-                            </span>
-                        </div>
-                        
-                        <div class="subject-actions">
-                            ${nextLesson ? `
-                                <button class="btn btn-small" onclick="continueNextLesson('${subjectName}')">
-                                    <i class="fas fa-play"></i> Продолжить
-                                </button>
-                            ` : ''}
-                            
-                            <button class="btn btn-small btn-secondary" onclick="selectSubjectLessons('${subjectName}')">
-                                <i class="fas fa-list"></i> Все уроки
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            html += '</div>';
-            container.innerHTML = html;
-        }
-        
-        // Продолжить следующий урок
-        async function continueNextLesson(subjectName) {
-            try {
-                // Получаем следующую комнату для этого предмета
-                const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
-                const data = await response.json();
-                
-                if (data.success && data.room) {
-                    openConference(data.room.room_name, subjectName);
-                } else {
-                    // Создаем новую комнату
-                    createAndOpenConference(subjectName);
-                }
-            } catch (error) {
-                console.error('Error getting room:', error);
-                createAndOpenConference(subjectName);
-            }
-        }
-        
-        // Выбрать предмет для просмотра уроков
-        function selectSubjectLessons(subjectName) {
-            // Переключаемся на вкладку уроков
-            switchTab('lessons');
-            
-            // Устанавливаем выбранный предмет в селекторе
-            setTimeout(() => {
-                const select = document.getElementById('subjectSelect');
-                if (select) {
-                    select.value = subjectName;
-                    loadLessonsForSubject(subjectName);
-                }
-            }, 100);
-        }
-        
-        // ==============================
-        // ВКЛАДКА ВСЕХ УРОКОВ
-        // ==============================
-        
-        // Загрузка данных для вкладки уроков
-        async function loadLessonsData() {
-            try {
-                showLoading('lessons');
-                
-                const response = await fetch('/api/student/lessons-by-class');
-                const data = await response.json();
-                
-                if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
-                    subjectsData = data.lessons;
-                    renderSubjectSelect(data.lessons);
+                // Создаем карточки предметов с прямыми ссылками
+                subjects.forEach(subject => {
+                    const subjectCard = document.createElement('a');
+                    subjectCard.className = 'subject-card-main fade-in';
+                    subjectCard.href = getConferenceUrl(subject); // Прямая ссылка
+                    subjectCard.target = '_blank'; // Открываем в новой вкладке
                     
-                    // Загрузить уроки для первого предмета
-                    const firstSubject = Object.keys(data.lessons)[0];
-                    loadLessonsForSubject(firstSubject);
-                } else {
-                    document.getElementById('lessonsMessage').className = 'error-message';
-                    document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Уроки для вашего класса пока не загружены';
-                    hideLoading('lessons');
-                }
+                    // Получаем прогресс для этого предмета
+                    const subjectProgress = progressData[subject] || {};
+                    const progressPercent = subjectProgress.progress_percent || 0;
+                    const completedLessons = subjectProgress.completed_lessons || 0;
+                    const totalLessons = subjectProgress.total_lessons || 0;
+                    
+                    subjectCard.innerHTML = `
+                        <div class="subject-icon-main">
+                            <i class="${subjectIcons[subject] || subjectIcons.default}"></i>
+                        </div>
+                        <div class="subject-name-main">${subject.charAt(0).toUpperCase() + subject.slice(1)}</div>
+                        <div class="subject-description-main">${subjectDescriptions[subject] || 'Изучение предмета'}</div>
+                        <div class="subject-progress">
+                            <span class="progress-label">Прогресс</span>
+                            <span class="progress-value">${progressPercent}%</span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-light); text-align: center; margin-top: 0.5rem;">
+                            ${completedLessons}/${totalLessons} уроков
+                        </div>
+                    `;
+                    
+                    container.appendChild(subjectCard);
+                });
+                
+                hideLoading('subjects');
             } catch (error) {
-                console.error('Error loading lessons:', error);
-                document.getElementById('lessonsMessage').className = 'error-message';
-                document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки уроков';
-                hideLoading('lessons');
-            }
-        }
-        
-        // Отображение выбора предмета
-        function renderSubjectSelect(subjects) {
-            const container = document.getElementById('lessonsSubjectSelect');
-            
-            let html = `
-                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                    <select id="subjectSelect" class="avatar-select" onchange="loadLessonsForSubject(this.value)" style="flex: 1; min-width: 250px;">
-            `;
-            
-            for (const [subjectName, subjectData] of Object.entries(subjects)) {
-                html += `<option value="${subjectName}">${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</option>`;
-            }
-            
-            html += `
-                    </select>
-                    <div style="font-size: 0.9rem; color: var(--text-light);">
-                        Выберите предмет для просмотра уроков
-                    </div>
-                </div>
-            `;
-            
-            container.innerHTML = html;
-        }
-        
-        // Загрузка уроков для конкретного предмета
-        async function loadLessonsForSubject(subjectName) {
-            try {
-                showLoading('lessons');
-                
-                if (!subjectsData || !subjectsData[subjectName]) {
-                    // Загружаем заново если нет данных
-                    await loadLessonsData();
-                    return;
-                }
-                
-                const subjectData = subjectsData[subjectName];
-                renderLessonsList(subjectName, subjectData.lessons);
-                
-                hideLoading('lessons');
-            } catch (error) {
-                console.error('Error loading lessons for subject:', error);
-                document.getElementById('lessonsList').innerHTML = `
-                    <div class="error-message">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        Ошибка загрузки уроков для предмета ${subjectName}
-                    </div>
-                `;
-                hideLoading('lessons');
-            }
-        }
-        
-        // Отображение списка уроков
-        function renderLessonsList(subjectName, lessons) {
-            const container = document.getElementById('lessonsList');
-            
-            if (!lessons || lessons.length === 0) {
+                console.error('Error loading main subjects:', error);
+                const container = document.getElementById('subjectsGrid');
                 container.innerHTML = `
-                    <div class="info-message">
-                        <i class="fas fa-info-circle"></i>
-                        <span>Для предмета "${subjectName}" уроки пока не загружены</span>
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 2rem; color: var(--text-light);">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <p>Ошибка загрузки предметов. Попробуйте обновить страницу.</p>
                     </div>
                 `;
-                return;
-            }
-            
-            // Сортируем уроки по номеру
-            const sortedLessons = [...lessons].sort((a, b) => {
-                return (a.lesson_number || 999) - (b.lesson_number || 999);
-            });
-            
-            let html = `
-                <div class="lessons-container">
-                    <div style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600; color: var(--primary);">
-                        <i class="fas fa-book"></i> Уроки по предмету: ${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
-                    </div>
-            `;
-            
-            sortedLessons.forEach((lesson, index) => {
-                const isCompleted = lesson.completed || false;
-                const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
-                
-                html += `
-                    <div class="lesson-item">
-                        <div class="lesson-status ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}">
-                            ${isCompleted ? '<i class="fas fa-check"></i>' : 
-                              isCurrent ? '<i class="fas fa-play"></i>' : 
-                              '<i class="fas fa-clock"></i>'}
-                        </div>
-                        <div class="lesson-info">
-                            <h5>
-                                <span class="lesson-number">Урок ${lesson.lesson_number || index + 1}:</span>
-                                ${lesson.title}
-                            </h5>
-                            <p>
-                                ${lesson.subject} • ${lesson.class_level || currentStudentData?.education_level || 'Не указан'} класс
-                                ${isCompleted ? '• <span style="color: var(--success);">Завершен</span>' : 
-                                 isCurrent ? '• <span style="color: #3b82f6;">Текущий</span>' : 
-                                 '• <span style="color: var(--text-light);">Ожидает</span>'}
-                            </p>
-                        </div>
-                        <div>
-                            <button class="btn btn-small" onclick="startSpecificLesson('${lesson.id}', '${subjectName}')" 
-                                    ${isCompleted ? 'style="opacity: 0.7;"' : ''}>
-                                <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
-                                ${isCompleted ? 'Повторить' : 'Начать'}
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            container.innerHTML = html;
-        }
-        
-        // Начать конкретный урок
-        async function startSpecificLesson(lessonId, subjectName) {
-            try {
-                // Создаем комнату для этого урока
-                const roomName = await createRoomForLesson(lessonId, subjectName);
-                if (roomName) {
-                    openConference(roomName, subjectName, lessonId);
-                }
-            } catch (error) {
-                console.error('Error starting specific lesson:', error);
-                alert('Ошибка запуска урока. Попробуйте снова.');
+                hideLoading('subjects');
             }
         }
         
         // ==============================
-        // ВКЛАДКА АВАТАРА
+        // МОДАЛЬНОЕ ОКНО: УПРАВЛЕНИЕ АВАТАРОМ (старая логика)
         // ==============================
         
         // Загрузка доступных аватаров
@@ -1269,19 +1113,19 @@
                         if (data.frames && data.frames.length > 0) {
                             const firstFrame = data.frames[0];
                             preview.innerHTML = `<img src="/frames/${avatarName}/${firstFrame}" alt="${avatarName}" 
-                                onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 3rem; color: #6c757d;\\'></i>';">`;
+                                onerror="this.style.display='none'; this.parentNode.innerHTML='<i class=\\'fas fa-user\\' style=\\'font-size: 4rem; color: #6c757d;\\'></i>';">`;
                         }
                     })
                     .catch(error => {
                         console.error('Error loading avatar preview:', error);
-                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 3rem; color: #6c757d;"></i>';
+                        preview.innerHTML = '<i class="fas fa-user" style="font-size: 4rem; color: #6c757d;"></i>';
                     });
             } else {
-                preview.innerHTML = '<i class="fas fa-user" style="font-size: 3rem; color: #6c757d;"></i>';
+                preview.innerHTML = '<i class="fas fa-user" style="font-size: 4rem; color: #6c757d;"></i>';
             }
         }
         
-        // Установка аватара для всех комнат
+        // Установка аватара для всех комнат (старая логика)
         async function setAvatarForAllRooms() {
             const avatarSelect = document.getElementById('avatarSelect');
             const selectedAvatar = avatarSelect.value;
@@ -1318,7 +1162,7 @@
                 
                 let successCount = 0;
                 
-                // Устанавливаем аватар для каждой комнаты
+                // Устанавливаем аватар для каждой комнаты (старая логика)
                 for (const room of rooms) {
                     try {
                         socket.emit('avatar_changed', {
@@ -1375,12 +1219,278 @@
         function showAvatarStatus(message, isSuccess) {
             const statusDiv = document.getElementById('avatarStatus');
             statusDiv.textContent = message;
-            statusDiv.className = `avatar-status ${isSuccess ? 'success' : 'error'}`;
+            statusDiv.className = `avatar-status-modal ${isSuccess ? 'success' : 'error'}`;
             statusDiv.style.display = 'block';
             
             setTimeout(() => {
                 statusDiv.style.display = 'none';
             }, 5000);
+        }
+        
+        // ==============================
+        // МОДАЛЬНОЕ ОКНО: ВЫБОР УРОКА
+        // ==============================
+        
+        // Инициализация модального окна уроков
+        async function initLessonsModal() {
+            try {
+                // Загружаем кнопки классов
+                loadClassButtonsModal();
+                
+                // Загружаем предметы для текущего класса
+                await loadSubjectsForClassModal(currentClass);
+            } catch (error) {
+                console.error('Error initializing lessons modal:', error);
+            }
+        }
+        
+        // Загрузка кнопок классов в модальном окне
+        function loadClassButtonsModal() {
+            const container = document.getElementById('classButtons');
+            container.innerHTML = '';
+            
+            // Создаем кнопки для классов 1-11
+            for (let i = 1; i <= 11; i++) {
+                const classBtn = document.createElement('button');
+                classBtn.className = `class-btn-modal ${i.toString() === currentClass ? 'active' : ''}`;
+                classBtn.textContent = `${i} класс`;
+                classBtn.onclick = () => {
+                    currentClass = i.toString();
+                    document.querySelectorAll('.class-btn-modal').forEach(btn => {
+                        btn.classList.remove('active');
+                    });
+                    classBtn.classList.add('active');
+                    loadSubjectsForClassModal(i.toString());
+                };
+                container.appendChild(classBtn);
+            }
+        }
+        
+        // Загрузка предметов для выбранного класса
+        async function loadSubjectsForClassModal(classNum) {
+            try {
+                const subjectSelect = document.getElementById('subjectSelectModal');
+                subjectSelect.innerHTML = '<option value="">Загрузка предметов...</option>';
+                
+                // Очищаем список уроков
+                document.getElementById('lessonsListModal').innerHTML = '';
+                
+                // Загружаем уроки для этого класса
+                const response = await fetch(`/api/student/lessons-by-class?class=${classNum}`);
+                const data = await response.json();
+                
+                if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
+                    subjectsData = data.lessons;
+                    
+                    // Заполняем выпадающий список предметов
+                    subjectSelect.innerHTML = '<option value="">Выберите предмет...</option>';
+                    for (const [subjectName, subjectData] of Object.entries(data.lessons)) {
+                        const option = document.createElement('option');
+                        option.value = subjectName;
+                        option.textContent = subjectName.charAt(0).toUpperCase() + subjectName.slice(1);
+                        subjectSelect.appendChild(option);
+                    }
+                    
+                    // Автоматически выбираем первый предмет
+                    if (Object.keys(data.lessons).length > 0) {
+                        const firstSubject = Object.keys(data.lessons)[0];
+                        subjectSelect.value = firstSubject;
+                        await loadLessonsForSubjectModal(firstSubject);
+                    }
+                } else {
+                    subjectSelect.innerHTML = '<option value="">Нет уроков для этого класса</option>';
+                    document.getElementById('lessonsListModal').innerHTML = `
+                        <div class="info-message" style="margin: 0;">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Для ${classNum} класса уроки пока не загружены</span>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading subjects for class:', error);
+                document.getElementById('subjectSelectModal').innerHTML = '<option value="">Ошибка загрузки</option>';
+                document.getElementById('lessonsListModal').innerHTML = `
+                    <div class="error-message" style="margin: 0;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка загрузки уроков для ${classNum} класса
+                    </div>
+                `;
+            }
+        }
+        
+        // Загрузка уроков для выбранного предмета
+        async function loadLessonsForSubjectModal(subjectName) {
+            try {
+                showLessonsLoading();
+                
+                if (!subjectsData || !subjectsData[subjectName]) {
+                    // Загружаем заново если нет данных
+                    await loadSubjectsForClassModal(currentClass);
+                    return;
+                }
+                
+                const subjectData = subjectsData[subjectName];
+                renderLessonsListModal(subjectName, subjectData.lessons);
+                
+                hideLessonsLoading();
+            } catch (error) {
+                console.error('Error loading lessons for subject:', error);
+                document.getElementById('lessonsListModal').innerHTML = `
+                    <div class="error-message" style="margin: 0;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка загрузки уроков для предмета ${subjectName}
+                    </div>
+                `;
+                hideLessonsLoading();
+            }
+        }
+        
+        // Отображение списка уроков в модальном окне
+        function renderLessonsListModal(subjectName, lessons) {
+            const container = document.getElementById('lessonsListModal');
+            
+            if (!lessons || lessons.length === 0) {
+                container.innerHTML = `
+                    <div class="info-message" style="margin: 0;">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Для предмета "${subjectName}" уроки пока не загружены</span>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Сортируем уроки по номеру
+            const sortedLessons = [...lessons].sort((a, b) => {
+                return (a.lesson_number || 999) - (b.lesson_number || 999);
+            });
+            
+            let html = '';
+            
+            sortedLessons.forEach((lesson, index) => {
+                const isCompleted = lesson.completed || false;
+                const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
+                const lessonUrl = getConferenceUrlForLesson(subjectName, lesson);
+                
+                html += `
+                    <div class="lesson-item-modal">
+                        <div class="lesson-status-modal ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}">
+                            ${isCompleted ? '<i class="fas fa-check"></i>' : 
+                              isCurrent ? '<i class="fas fa-play"></i>' : 
+                              '<i class="fas fa-clock"></i>'}
+                        </div>
+                        <div class="lesson-info-modal">
+                            <h5>
+                                <span class="lesson-number-modal">Урок ${lesson.lesson_number || index + 1}:</span>
+                                ${lesson.title || 'Урок без названия'}
+                            </h5>
+                            <p>
+                                ${subjectName} • ${currentClass} класс
+                                ${isCompleted ? '• <span style="color: var(--success);">Завершен</span>' : 
+                                 isCurrent ? '• <span style="color: #3b82f6;">Текущий</span>' : 
+                                 '• <span style="color: var(--text-light);">Ожидает</span>'}
+                            </p>
+                        </div>
+                        <div>
+                            <a href="${lessonUrl}" target="_blank" class="btn btn-small" ${isCompleted ? 'style="opacity: 0.7;"' : ''}>
+                                <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
+                                ${isCompleted ? 'Повторить' : 'Начать'}
+                            </a>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // ==============================
+        // МОДАЛЬНОЕ ОКНО: ПРОГРЕСС
+        // ==============================
+        
+        // Загрузка данных о прогрессе
+        async function loadProgressData() {
+            try {
+                showProgressLoading();
+                
+                const response = await fetch('/api/student/progress');
+                const data = await response.json();
+                
+                if (data.success && data.progress && data.progress.subjects) {
+                    renderProgressList(data.progress.subjects);
+                } else {
+                    const container = document.getElementById('progressListModal');
+                    container.innerHTML = `
+                        <div class="info-message" style="margin: 0;">
+                            <i class="fas fa-info-circle"></i>
+                            <span>У вас пока нет данных о прогрессе</span>
+                        </div>
+                    `;
+                }
+                
+                hideProgressLoading();
+            } catch (error) {
+                console.error('Error loading progress:', error);
+                const container = document.getElementById('progressListModal');
+                container.innerHTML = `
+                    <div class="error-message" style="margin: 0;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка загрузки данных о прогрессе
+                    </div>
+                `;
+                hideProgressLoading();
+            }
+        }
+        
+        // Отображение списка прогресса
+        function renderProgressList(subjects) {
+            const container = document.getElementById('progressListModal');
+            
+            if (!subjects || Object.keys(subjects).length === 0) {
+                container.innerHTML = `
+                    <div class="info-message" style="margin: 0;">
+                        <i class="fas fa-info-circle"></i>
+                        <span>У вас пока нет уроков. Начните изучение предмета на главной странице.</span>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            
+            for (const [subjectName, subjectData] of Object.entries(subjects)) {
+                const progressPercent = subjectData.progress_percent || 0;
+                const totalLessons = subjectData.total_lessons || 0;
+                const completedLessons = subjectData.completed_lessons || 0;
+                const nextLesson = subjectData.next_lesson;
+                const continueUrl = getConferenceUrl(subjectName);
+                
+                html += `
+                    <div class="lesson-item-modal">
+                        <div class="lesson-status-modal ${progressPercent === 100 ? 'completed' : progressPercent > 0 ? 'current' : 'pending'}">
+                            ${progressPercent === 100 ? '<i class="fas fa-check"></i>' : 
+                              progressPercent > 0 ? '<i class="fas fa-play"></i>' : 
+                              '<i class="fas fa-clock"></i>'}
+                        </div>
+                        <div class="lesson-info-modal">
+                            <h5>
+                                ${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
+                            </h5>
+                            <p>
+                                Прогресс: ${progressPercent}% • ${completedLessons}/${totalLessons} уроков
+                                ${nextLesson ? `<br>Следующий: Урок ${nextLesson.lesson_number || ''}` : ''}
+                            </p>
+                        </div>
+                        <div>
+                            <a href="${continueUrl}" target="_blank" class="btn btn-small">
+                                <i class="fas ${nextLesson ? 'fa-play' : 'fa-redo'}"></i>
+                                ${nextLesson ? 'Продолжить' : 'Повторить'}
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
         }
         
         // ==============================
@@ -1405,89 +1515,85 @@
             }
         }
         
-        // Создание комнаты для урока
-        async function createRoomForLesson(lessonId, subjectName) {
-            if (!currentStudentData) return null;
+        // Генерация URL для конференции (формат: 1_class_литературное чтение_рома_1764801232686)
+        function getConferenceUrl(subject, lessonId = null) {
+            if (!currentStudentData) return '#';
             
-            try {
-                // Создаем уникальный идентификатор комнаты
-                const conferenceId = currentStudentData.conference_id || Date.now().toString();
-                const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
-                const studentClass = currentStudentData.education_level || '5';
-                const roomName = `${studentClass}_class_${subjectName}_${studentName}_${conferenceId}_${lessonId}`;
-                
-                // Сохраняем данные ученика для комнаты
-                const response = await fetch('/api/room/register-student', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        room_id: roomName,
-                        student_data: currentStudentData,
-                        lesson_id: lessonId,
-                        subject: subjectName
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    return roomName;
-                } else {
-                    throw new Error(result.error || 'Ошибка создания комнаты');
-                }
-                
-            } catch (error) {
-                console.error('Error creating room:', error);
-                // Fallback: создаем простую комнату
-                const conferenceId = currentStudentData.conference_id || Date.now().toString();
-                const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
-                return `${subjectName}_${studentName}_${conferenceId}`;
-            }
-        }
-        
-        // Создание и открытие конференции
-        async function createAndOpenConference(subjectName) {
-            try {
-                const roomName = await createRoomForLesson('next', subjectName);
-                if (roomName) {
-                    openConference(roomName, subjectName);
-                }
-            } catch (error) {
-                console.error('Error creating conference:', error);
-                alert('Ошибка создания комнаты. Попробуйте снова.');
-            }
-        }
-        
-        // Открытие конференции
-        function openConference(roomName, subjectName, lessonId = null) {
-            let url = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
+            const studentClass = currentStudentData.education_level || currentStudentData.level || '5';
+            const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
+            const timestamp = currentStudentData.conference_id || Date.now().toString();
             
+            // Формат: класс_class_предмет_имя_время
+            // Пример: 1_class_литературное чтение_рома_1764801232686
+            const roomName = `${studentClass}_class_${subject}_${studentName}_${timestamp}`;
+            
+            // URL-кодируем имя комнаты, так как оно содержит пробелы
+            const encodedRoomName = encodeURIComponent(roomName);
+            
+            let url = `/conference?room=${encodedRoomName}&student=true&subject=${encodeURIComponent(subject)}&class=${studentClass}`;
+            
+            // Если есть lessonId, добавляем параметр
             if (lessonId) {
                 url += `&lesson_id=${encodeURIComponent(lessonId)}`;
             }
             
-            // Открываем в новом окне
-            const newWindow = window.open(url, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+            return url;
+        }
+        
+        // Генерация URL для конкретного урока
+        function getConferenceUrlForLesson(subject, lesson) {
+            if (!currentStudentData) return '#';
             
-            if (!newWindow) {
-                alert('Пожалуйста, разрешите всплывающие окна для открытия конференции');
-                // Fallback: открываем в этой же вкладке
-                window.location.href = url;
-            }
+            const studentClass = currentStudentData.education_level || currentStudentData.level || '5';
+            const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
+            const timestamp = currentStudentData.conference_id || Date.now().toString();
+            const lessonNumber = lesson.lesson_number || '1';
+            const lessonId = lesson.id || lessonNumber;
+            
+            // Формат: класс_class_предмет_имя_время_lesson_номер
+            // Пример: 1_class_литературное чтение_рома_1764801232686_lesson_1
+            const roomName = `${studentClass}_class_${subject}_${studentName}_${timestamp}_lesson_${lessonNumber}`;
+            
+            // URL-кодируем имя комнаты, так как оно содержит пробелы
+            const encodedRoomName = encodeURIComponent(roomName);
+            
+            return `/conference?room=${encodedRoomName}&student=true&subject=${encodeURIComponent(subject)}&class=${studentClass}&lesson_id=${lessonId}&lesson_number=${lessonNumber}`;
         }
         
         // Показать индикатор загрузки
-        function showLoading(tab) {
-            document.getElementById(tab + 'Loading').style.display = 'block';
-            document.getElementById(tab + 'Container') && (document.getElementById(tab + 'Container').style.display = 'none');
+        function showLoading(element) {
+            const loadingEl = document.getElementById(element + 'Loading');
+            if (loadingEl) loadingEl.style.display = 'block';
         }
         
         // Скрыть индикатор загрузки
-        function hideLoading(tab) {
-            document.getElementById(tab + 'Loading').style.display = 'none';
-            document.getElementById(tab + 'Container') && (document.getElementById(tab + 'Container').style.display = 'block');
+        function hideLoading(element) {
+            const loadingEl = document.getElementById(element + 'Loading');
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+        
+        // Показать индикатор загрузки уроков
+        function showLessonsLoading() {
+            const loadingEl = document.getElementById('lessonsLoadingModal');
+            if (loadingEl) loadingEl.style.display = 'block';
+        }
+        
+        // Скрыть индикатор загрузки уроков
+        function hideLessonsLoading() {
+            const loadingEl = document.getElementById('lessonsLoadingModal');
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+        
+        // Показать индикатор загрузки прогресса
+        function showProgressLoading() {
+            const loadingEl = document.getElementById('progressLoadingModal');
+            if (loadingEl) loadingEl.style.display = 'block';
+        }
+        
+        // Скрыть индикатор загрузки прогресса
+        function hideProgressLoading() {
+            const loadingEl = document.getElementById('progressLoadingModal');
+            if (loadingEl) loadingEl.style.display = 'none';
         }
         
         // Инициализация Socket.io
