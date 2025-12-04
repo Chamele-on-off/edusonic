@@ -1165,7 +1165,7 @@ class DialogueManager:
         if (not self.lesson_started and 
             self.selected_lesson and 
             self.current_subject and
-            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем'])):
+            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем', 'готов начать'])):
             
             print(f"🚀 КОМАНДА НАЧАЛА УРОКА: '{text_lower}', предмет: {self.current_subject}")
             return self._force_start_lesson()
@@ -1280,7 +1280,7 @@ class DialogueManager:
             response += f"Твой прогресс по {self.current_subject}: {completed_count}/{total_lessons} уроков. "
             response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
             
-            # Сохраняем следующий урок как выбранный
+            # 🔥 КРИТИЧЕСКО ВАЖНО: Сохраняем следующий урок как выбранный
             self.selected_lesson = next_lesson
             
             return response
@@ -1353,43 +1353,39 @@ class DialogueManager:
         
         print(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
         
-        # 🔥 НОВОЕ: ДЛЯ УЧЕНИКА - ПРЕДЛАГАЕМ СЛЕДУЮЩИЙ УРОК ИЛИ ВЫБОР
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДЛЯ УЧЕНИКА - СРАЗУ ВЫБИРАЕМ УРОК И УСТАНАВЛИВАЕМ ЕГО
         if self.has_student_data:
             student_name = self.student_data.get('name', 'ученик')
-            age = self.student_data.get('age', '12')
             level = self.student_data.get('education_level', '5')
             
-            # 🔥 ПРОВЕРЯЕМ, ЕСТЬ ЛИ УРОКИ ДЛЯ ЭТОГО КЛАССА
+            # 🔥 ВАЖНО: Ищем уроки для этого класса и предмета
             if level not in self.lessons_by_class or subject not in self.lessons_by_class[level]:
-                return f"{student_name}, у меня пока нет уроков по {subject} для {level} класса. Давай выберем другой предмет?"
+                return f"{student_name}, у меня пока нет уроков по {subject} для {level} класса."
             
-            # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ О ВЫБОРЕ ПРЕДМЕТА
-            subject_responses = [
-                f"Отлично, {student_name}! {subject} - это интересный предмет для {level} класса.",
-                f"Прекрасный выбор, {student_name}! {subject} действительно увлекателен.",
-                f"Здорово, {student_name}! Я хорошо знаю {subject} для твоего уровня.",
-                f"Отлично, {student_name}! {subject} подходит для {level} класса."
-            ]
+            # 🔥 КРИТИЧЕСКО ВАЖНО: НАХОДИМ СЛЕДУЮЩИЙ УРОК И УСТАНАВЛИВАЕМ ЕГО
+            next_lesson = self.get_next_lesson_for_student(subject)
+            if not next_lesson:
+                # Берем первый урок
+                available_lessons = self.lessons_by_class[level][subject]
+                if available_lessons:
+                    next_lesson = available_lessons[0]
             
-            # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОГРЕССЕ
+            if not next_lesson:
+                return f"{student_name}, не удалось найти урок по {subject}."
+            
+            # 🔥 КРИТИЧЕСКИ ВАЖНО: Устанавливаем урок!
+            self.selected_lesson = next_lesson
+            print(f"✅ Урок установлен для ученика: {next_lesson['title']}")
+            
+            # Теперь урок готов к запуску по команде 'готов начать'
             progress = self.get_student_progress(subject)
             completed_count = len(progress.get('completed_lessons', []))
-            total_lessons = len(self.get_lessons_for_student_subject(subject))
-            
-            response = f"{random.choice(subject_responses)} "
+            total_lessons = len(self.lessons_by_class[level][subject])
             
             if completed_count > 0:
-                response += f"Ты уже завершил {completed_count} из {total_lessons} уроков. "
-            
-            # 🔥 ПРЕДЛАГАЕМ СЛЕДУЮЩИЙ УРОК
-            next_lesson = self.get_next_lesson_for_student(subject)
-            if next_lesson:
-                response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
-                self.selected_lesson = next_lesson
+                return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Следующий урок: '{next_lesson['title']}'. Скажи 'готов начать', чтобы начать урок!"
             else:
-                response += f"Ты уже завершил все уроки по {subject}! Хочешь повторить или выбрать другой предмет?"
-            
-            return response
+                return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}'. Скажи 'готов начать', чтобы начать урок!"
         
         # 🔥 ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ: выбираем урок, но не начинаем автоматически
         available_lessons = self._get_available_lessons(subject)
@@ -1650,7 +1646,7 @@ class DialogueManager:
         if hasattr(self.practice_manager, 'student_data'):
             self.practice_manager.student_data = self.student_data
         
-        # Инициализируем менеджер практики с асинхронной генерацией
+        # Инициализируем менеджер практики с асинхронной генерации
         lesson_context = " ".join(self.lesson_content)
         self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
@@ -2212,7 +2208,7 @@ class DialogueManager:
             return False
 
     def get_conversation_stats(self) -> Dict:
-        """Возвращает статистику диалога"""
+        """Возвращает статистики диалога"""
         user_messages = [msg for msg in self.conversation_history if msg['is_user']]
         teacher_messages = [msg for msg in self.conversation_history if not msg['is_user']]
         
@@ -2264,157 +2260,6 @@ class DialogueManager:
             "student_class_lessons": self.get_available_subjects_for_student(),
             "student_progress": student_progress,
             "next_lesson": self.get_next_lesson_for_student(self.current_subject) if self.current_subject else None
-        }
-
-    def add_custom_lesson(self, subject: str, title: str, content: str) -> bool:
-        """Добавляет пользовательский урок"""
-        try:
-            # Создаем имя файла
-            filename = f"{subject}_{title.lower().replace(' ', '_')}.txt"
-            
-            # Сохраняем в соответствующую папку
-            if self.has_student_data:
-                student_class = self.student_data.get('education_level', '5')
-                lesson_path = self.students_base_dir / f"{student_class}_class" / subject / filename
-                lesson_path.parent.mkdir(parents=True, exist_ok=True)
-                lesson_type = "student"
-            else:
-                lesson_path = self.demo_lessons_dir / filename
-                lesson_type = "demo"
-            
-            # Записываем контент
-            with open(lesson_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            # Добавляем в список уроков
-            lesson_id = f"{lesson_type}_{filename.replace('.txt', '')}"
-            lesson_data = {
-                'id': lesson_id,
-                'title': title,
-                'file_path': lesson_path,
-                'type': lesson_type,
-                'subject': subject,
-                'class_level': self.student_data.get('education_level', 'general') if self.has_student_data else 'general',
-                'lesson_number': 999,
-                'full_path': str(lesson_path.relative_to(self.lessons_dir))
-            }
-            
-            if subject not in self.lessons:
-                self.lessons[subject] = []
-            
-            self.lessons[subject].append(lesson_data)
-            
-            # 🔥 НОВОЕ: Добавляем в структуру по классам
-            if self.has_student_data:
-                student_class = self.student_data['education_level']
-                if student_class not in self.lessons_by_class:
-                    self.lessons_by_class[student_class] = {}
-                if subject not in self.lessons_by_class[student_class]:
-                    self.lessons_by_class[student_class][subject] = []
-                self.lessons_by_class[student_class][subject].append(lesson_data)
-            
-            print(f"✅ Пользовательский урок добавлен: {title} ({subject})")
-            return True
-            
-        except Exception as e:
-            print(f"❌ Ошибка добавления пользовательского урока: {e}")
-            return False
-
-    def list_all_lessons(self) -> Dict[str, List[Dict]]:
-        """Возвращает все доступные уроки по предметам"""
-        return self.lessons
-
-    def get_lesson_progress(self) -> Dict:
-        """Возвращает прогресс по текущему уроку"""
-        if not self.lesson_started or not self.lesson_content:
-            return {"error": "Урок не начат"}
-        
-        progress_percent = (self.current_paragraph / len(self.lesson_content)) * 100 if self.lesson_content else 0
-        
-        # 🔥 НОВОЕ: Информация о прогрессе ученика по предмету
-        subject_progress = {}
-        if self.has_student_data and self.current_subject:
-            subject_progress = self.get_student_progress(self.current_subject)
-        
-        return {
-            "current_paragraph": self.current_paragraph,
-            "total_paragraphs": len(self.lesson_content),
-            "progress_percent": round(progress_percent, 1),
-            "remaining_paragraphs": len(self.lesson_content) - self.current_paragraph,
-            "lesson_title": self.selected_lesson['title'] if self.selected_lesson else "Неизвестно",
-            "subject": self.current_subject,
-            "student_progress": subject_progress
-        }
-
-    def continue_lesson(self) -> Optional[str]:
-        """Продолжает урок с текущей позиции"""
-        if not self.lesson_started:
-            return "Урок не начат. Скажите 'привет' чтобы начать."
-        
-        return self._get_next_paragraph()
-
-    def restart_lesson(self) -> str:
-        """Перезапускает текущий урок"""
-        if not self.selected_lesson:
-            return "Нет активного урока для перезапуска."
-        
-        try:
-            self.current_paragraph = 0
-            self.lesson_content = self._load_lesson_content(self.selected_lesson['file_path'])
-            
-            if not self.lesson_content:
-                return "Ошибка загрузки урока."
-            
-            first_paragraph = self.lesson_content[0] if self.lesson_content else ""
-            return f"Урок перезапущен. {first_paragraph}"
-            
-        except Exception as e:
-            print(f"❌ Ошибка перезапуска урока: {e}")
-            return "Ошибка перезапуска урока."
-
-    def set_max_practice_questions(self, max_questions: int):
-        """Устанавливает максимальное количество вопросов в практике"""
-        if 1 <= max_questions <= 20:
-            self.max_questions = max_questions
-            self.practice_manager.max_questions = max_questions
-            print(f"🔧 Максимальное количество вопросов установлено: {max_questions}")
-        else:
-            print("❌ Некорректное количество вопросов. Должно быть от 1 до 20.")
-
-    def get_system_status(self) -> Dict:
-        """Возвращает общий статус системы"""
-        llm_status = self.llm.get_llm_status() if hasattr(self.llm, 'get_llm_status') else {}
-        knowledge_stats = self.get_knowledge_stats() or {}
-        practice_stats = self.practice_manager.get_practice_stats() if hasattr(self.practice_manager, 'get_practice_stats') else {}
-        
-        # 🔥 НОВОЕ: Прогресс ученика по всем предметам
-        student_progress_all = {}
-        if self.has_student_data:
-            student_progress_all = self.get_student_progress()
-        
-        return {
-            "dialogue_manager": {
-                "current_state": self.current_state,
-                "lesson_started": self.lesson_started,
-                "practice_active": self.practice_active,
-                "current_subject": self.current_subject,
-                "conversation_history_length": len(self.conversation_history),
-                "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
-                "max_questions": self.max_questions,
-                "has_student_data": self.has_student_data,
-                "student_data": self.student_data,
-                "student_progress": student_progress_all
-            },
-            "llm": llm_status,
-            "knowledge_base": knowledge_stats,
-            "practice": practice_stats,
-            "visualization": self.get_visualization_status(),
-            "lessons": {
-                "available_subjects": self.get_available_subjects(),
-                "total_lessons": sum(len(lessons) for lessons in self.lessons.values()),
-                "lessons_by_class": {k: {subj: len(lessons) for subj, lessons in v.items()} 
-                                   for k, v in self.lessons_by_class.items()}
-            }
         }
 
     def export_conversation_history(self) -> List[Dict]:
@@ -2532,6 +2377,52 @@ class DialogueManager:
         
         return result
 
+    def start_lesson_for_student_with_ready(self):
+        """🔥 НОВЫЙ МЕТОД: Явно начинает урок для ученика когда все готово"""
+        if not self.has_student_data or not self.current_subject:
+            print("❌ Нет данных ученика или предмета")
+            return None
+        
+        print(f"🚀 Явный старт урока для ученика: {self.current_subject}")
+        
+        # 1. Получаем следующий урок
+        next_lesson = self.get_next_lesson_for_student(self.current_subject)
+        
+        if not next_lesson:
+            # Если нет следующего урока, берем первый
+            available_lessons = self.get_lessons_for_student_subject(self.current_subject)
+            if not available_lessons:
+                return f"У меня нет уроков по {self.current_subject} для твоего класса."
+            next_lesson = available_lessons[0]
+        
+        print(f"🎯 Найден урок: {next_lesson['title']}")
+        
+        # 2. Устанавливаем урок
+        self.selected_lesson = next_lesson
+        self.lesson_started = True
+        self.current_state = "lesson_reading"
+        
+        # 3. Загружаем содержание
+        self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
+        self.current_paragraph = 0
+        
+        if not self.lesson_content:
+            return "Ошибка загрузки урока."
+        
+        # 4. Инициализируем базу знаний
+        if self.current_subject:
+            from knowledge.knowledge_base import KnowledgeBase
+            self.knowledge_base = KnowledgeBase(self.current_subject)
+        
+        # 5. Очищаем историю
+        self.conversation_history = []
+        self.conversation_context = []
+        
+        # 6. Возвращаем первый абзац
+        first_paragraph = self._get_next_paragraph()
+        
+        student_name = self.student_data.get('name', 'ученик')
+        return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
 
 # Создаем глобальный экземпляр для тестирования
 if __name__ == "__main__":
