@@ -43,49 +43,6 @@ class DialogueManager:
         self.progress_dir = Path("students_progress")
         self.progress_dir.mkdir(exist_ok=True)
         
-        # 🔥 ПРОСТЫЕ ДАННЫЕ УЧЕНИКА
-        self.student_data = {}
-        self.has_student_data = False
-        
-        # 🔥 НОВЫЕ ПОЛЯ ДЛЯ СТРУКТУРЫ ПО КЛАССАМ
-        self.lessons = {}  # Все уроки по предметам
-        self.lessons_by_class = {}  # Уроки по классам {"5": {"математика": [lessons...], ...}}
-        self.available_classes = ["5", "6", "7", "8", "9", "10", "11"]  # Поддерживаемые классы
-        
-        # 🔥 НОВОЕ: Текущий предмет из комнаты
-        self.room_subject = None  # Предмет, извлеченный из room_id
-        
-        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
-        self.visualization_enabled = True
-        self.last_visualization_time = 0
-        self.visualization_cooldown = 5
-        self.visualization_counter = 0
-        self.paragraphs_since_last_viz = 0
-        self.viz_paragraph_interval = 2
-        
-        self._load_lessons()
-        
-        # Расширенные локальные шаблоны
-        self.local_patterns = {
-            "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
-            "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
-            "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
-            "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
-            "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
-            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
-            "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
-            "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
-            "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
-            "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
-            "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
-            "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
-                      "AI-учитель, который сделает ваше обучение интересным и эффективным."],
-            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
-                          "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
-            "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
-                               "Моя задача - помочь вам учиться с удовольствием и пониманием."]
-        }
-
         self.knowledge_base = None
         self.llm = LLMIntegration()
         self.conversation_counter = 0
@@ -117,52 +74,46 @@ class DialogueManager:
             "Что будем изучать? Выбирайте из: {subjects}.",
             "Готов начать урок! Какой предмет вас интересует? У меня есть: {subjects}."
         ]
-
-    def extract_subject_from_room_id(self, room_id):
-        """🔥 НОВЫЙ МЕТОД: Извлекает предмет из ID комнаты ученика"""
-        if not room_id:
-            return None
         
-        # Форматы: 1_class_информатика_рома_1764801232686
-        parts = room_id.split('_')
-        if len(parts) >= 4 and 'class' in room_id:
-            try:
-                # Находим 'class' в названии
-                if 'class' in parts:
-                    class_index = parts.index('class')
-                else:
-                    # Ищем паттерн X_class
-                    for i, part in enumerate(parts):
-                        if i < len(parts) - 1 and parts[i+1] == 'class':
-                            class_index = i + 1
-                            break
-                    else:
-                        return None
-                
-                # Предмет после 'class'
-                subject_index = class_index + 1
-                if subject_index < len(parts):
-                    # Собираем части предмета (может быть "русский_язык")
-                    subject_parts = []
-                    for i in range(subject_index, len(parts)):
-                        # Останавливаемся на имени ученика или timestamp
-                        if i > subject_index + 2:  # Предмет обычно 1-3 слова
-                            break
-                        if parts[i].isdigit() and len(parts[i]) > 5:  # timestamp
-                            break
-                        if not parts[i].replace('_', '').isalnum():  # Не алфавитно-цифровое
-                            break
-                        subject_parts.append(parts[i])
-                    
-                    if subject_parts:
-                        subject = '_'.join(subject_parts)
-                        # Приводим к читаемому виду
-                        subject = subject.replace('_', ' ')
-                        return subject.lower()
-            except Exception as e:
-                print(f"Ошибка извлечения предмета из {room_id}: {e}")
+        # 🔥 ПРОСТЫЕ ДАННЫЕ УЧЕНИКА
+        self.student_data = {}
+        self.has_student_data = False
         
-        return None
+        # 🔥 НОВЫЕ ПОЛЯ ДЛЯ СТРУКТУРЫ ПО КЛАССАМ
+        self.lessons = {}  # Все уроки по предметам
+        self.lessons_by_class = {}  # Уроки по классам {"5": {"математика": [lessons...], ...}}
+        self.available_classes = ["5", "6", "7", "8", "9", "10", "11"]  # Поддерживаемые классы
+        
+        # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
+        self.visualization_enabled = True
+        self.last_visualization_time = 0
+        self.visualization_cooldown = 5
+        self.visualization_counter = 0
+        self.paragraphs_since_last_viz = 0
+        self.viz_paragraph_interval = 2
+        
+        self._load_lessons()
+        
+        # Расширенные локальные шаблоны
+        self.local_patterns = {
+            "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
+            "как дела": ["Все прекрасно! Готов помочь вам с обучением.", "Отлично! А как ваши успехи в учебе?"],
+            "спасибо": ["Всегда пожалуйста! Рад был помочь.", "Не стоит благодарности! Это моя работа."],
+            "не понимаю": ["Давайте разберем этот момент еще раз вместе.", "Хорошо, объясню по-другому, чтобы было понятнее."],
+            "повтори": ["Конечно, повторяю для вас...", "С удовольствием скажу еще раз."],
+            "скучно": ["Давайте сделаем урок более интересным! Может, викторину?", "Понимаю. Предлагаю сменить активность!"],
+            "трудно": ["Не переживайте! Сложности - это нормально. Я помогу разобраться.", "Вместе мы обязательно справимся!"],
+            "молодец": ["Спасибо! Стараюсь для вас.", "Вы тоже молодец, что так активно участвуете!"],
+            "хорошо": ["Прекрасно! Продолжаем наш урок.", "Отлично! Двигаемся дальше."],
+            "не знаю": ["Это нормально не знать! Сейчас вместе разберемся.", "Отличный повод узнать что-то новое!"],
+            "стоп": ["Останавливаю урок. Скажите 'привет', когда будете готовы продолжить.", "Прерываю чтение. Жду вашей команды."],
+            "кто ты": ["Я ваш виртуальный учитель с искусственным интеллектом! Готов помочь с обучением.", 
+                      "AI-учитель, который сделает ваше обучение интересным и эффективным."],
+            "что умеешь": ["Я могу проводить уроки, отвечать на вопросы, объяснять сложные темы и делать обучение увлекательным!", 
+                          "Умею преподавать разные предметы, отвечать на ваши вопросы и адаптироваться под ваш уровень."],
+            "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
+                               "Моя задача - помочь вам учиться с удовольствием и пониманием."]
+        }
 
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка расширенной базы диалоговых шаблонов"""
@@ -745,10 +696,6 @@ class DialogueManager:
         
         self.last_subject_prompt_time = current_time
         
-        # 🔥 НЕ предлагаем выбор предмета если уже есть предмет
-        if self.current_subject and self.has_student_data:
-            return None  # Уже есть предмет, не предлагаем выбор
-        
         # 🔥 ДЛЯ УЧЕНИКА: показываем предметы его класса
         if self.has_student_data and self.student_data.get('education_level'):
             student_class = self.student_data['education_level']
@@ -783,8 +730,8 @@ class DialogueManager:
         if self.lesson_started:
             return original_response
         
-        # 🔥 НЕ предлагаем выбор предмета если уже есть предмет
-        if self.current_subject and self.has_student_data:
+        # Если есть данные ученика и выбран предмет, не предлагаем выбор
+        if self.has_student_data and self.current_subject:
             return original_response
         
         # Если ответ уже содержит предложение о выборе предмета, не дублируем
@@ -804,47 +751,20 @@ class DialogueManager:
         
         return original_response + " " + subject_prompt
 
-    def get_context_for_student_room(self):
-        """🔥 НОВЫЙ МЕТОД: Возвращает контекстное приветствие для студенческой комнаты"""
-        if not self.has_student_data or not self.room_subject:
-            return self._get_contextual_fallback()
-        
-        student_name = self.student_data.get('name', 'ученик')
-        student_class = self.student_data.get('education_level', '5')
-        
-        # Проверяем, есть ли уроки по этому предмету для класса
-        if student_class in self.lessons_by_class and self.room_subject in self.lessons_by_class[student_class]:
-            lessons = self.lessons_by_class[student_class][self.room_subject]
-            if lessons:
-                # Берем следующий урок
-                next_lesson = self.get_next_lesson_for_student(self.room_subject)
-                if next_lesson:
-                    return f"Привет, {student_name}! Я вижу, ты хочешь изучать {self.room_subject}. У тебя есть следующий урок: '{next_lesson['title']}'. Готов начать? Скажи 'готов' чтобы начать урок!"
-                else:
-                    return f"Привет, {student_name}! Ты уже завершил все уроки по {self.room_subject}. Хочешь повторить материал или выбрать другой предмет?"
-        
-        return f"Привет, {student_name}! У меня пока нет уроков по {self.room_subject} для {student_class} класса. Давай выберем другой предмет?"
-
     def _get_contextual_fallback(self) -> str:
-        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Возвращает контекстно-зависимый ответ"""
-        
-        # 🔥 ПРИОРИТЕТ: Сначала проверяем студенческую комнату
-        if self.has_student_data and self.room_subject and not self.lesson_started:
-            return self.get_context_for_student_room()
-        
+        """Возвращает контекстно-зависимый ответ когда ничего не найдено"""
         if not self.conversation_history:
-            # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
-                student_name = self.student_data.get('name', 'ученик')
+                name = self.student_data.get('name', 'ученик')
                 # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ ДЛЯ УЧЕНИКА
                 age = self.student_data.get('age', '12')
                 level = self.student_data.get('education_level', '5')
                 
                 greeting_variants = [
-                    f"Привет, {student_name}! Я твой виртуальный учитель. Рад видеть тебя! Ты в {level} классе, это отлично!",
-                    f"Здравствуй, {student_name}! Я твой AI-репетитор. Готов помочь тебе с учебой в {level} классе!",
-                    f"Привет, {student_name}! Я твой цифровой преподаватель. Рад видеть ученика {level} класса!",
-                    f"Здравствуй, {student_name}! Я твой персональный учитель. {level} класс - это интересное время для учебы!"
+                    f"Привет, {name}! Я твой виртуальный учитель. Рад видеть тебя! Ты в {level} классе, это отлично!",
+                    f"Здравствуй, {name}! Я твой AI-репетитор. Готов помочь тебе с учебой в {level} классе!",
+                    f"Привет, {name}! Я твой цифровой преподаватель. Рад видеть ученика {level} класса!",
+                    f"Здравствуй, {name}! Я твой персональный учитель. {level} класс - это интересное время для учебы!"
                 ]
                 return random.choice(greeting_variants)
             else:
@@ -857,8 +777,8 @@ class DialogueManager:
         # Определяем тему разговора по последним сообщениям
         if any(word in last_user_message for word in ['имя', 'зовут', 'меня']):
             if self.has_student_data:
-                student_name = self.student_data.get('name', 'ученик')
-                return f"Приятно познакомиться, {student_name}! Теперь давайте выберем предмет для изучения. Что вас интересует?"
+                name = self.student_data.get('name', 'ученик')
+                return f"Приятно познакомиться, {name}! Теперь давайте выберем предмет для изучения. Что вас интересует?"
             else:
                 return "Приятно познакомиться! Теперь давайте выберем предмет для изучения. Что вас интересует?"
         
@@ -1238,28 +1158,17 @@ class DialogueManager:
         print("❌ Автоматическая визуализация выключена")
 
     def process_input(self, text: str) -> Optional[str]:
-        """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА ДЛЯ СТУДЕНЧЕСКИХ КОМНАТ"""
+        """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         text_lower = text.lower().strip()
         
-        # 🔥 ПРИОРИТЕТ 1: Команда начала урока в студенческой комнате
+        # 🔥 ИСПРАВЛЕНИЕ: ЕСЛИ УРОК ВЫБРАН И ГОВОРИМ "НАЧАТЬ УРОК" - НАЧИНАЕМ ЕГО!
         if (not self.lesson_started and 
-            self.has_student_data and 
-            self.room_subject and
-            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем', 'готов'])):
+            self.selected_lesson and 
+            self.current_subject and
+            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем'])):
             
-            print(f"🚀 КОМАНДА НАЧАЛА УРОКА В СТУДЕНЧЕСКОЙ КОМНАТЕ: предмет {self.room_subject}")
-            
-            # 🔥 ОБЯЗАТЕЛЬНО выбираем урок если еще не выбран
-            if not self.selected_lesson:
-                next_lesson = self.get_next_lesson_for_student(self.room_subject)
-                if next_lesson:
-                    self.selected_lesson = next_lesson
-                    print(f"📚 Выбран урок: {next_lesson['title']}")
-            
-            if self.selected_lesson:
-                return self._force_start_lesson()
-            else:
-                return "Не могу найти подходящий урок. Попробуйте другой предмет."
+            print(f"🚀 КОМАНДА НАЧАЛА УРОКА: '{text_lower}', предмет: {self.current_subject}")
+            return self._force_start_lesson()
         
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ
         continue_commands = [
@@ -1283,7 +1192,7 @@ class DialogueManager:
         self._add_to_conversation_history(text, is_user=True)
         
         # 🔥 ИСПРАВЛЕНИЕ: УСЛОВИЯ ДЛЯ НАЧАЛА УРОКА ТОЛЬКО ПО ЯВНОМУ СОГЛАСИЮ
-        if self.has_student_data and self.room_subject and not self.lesson_started:
+        if self.has_student_data and self.current_subject and not self.lesson_started:
             user_messages = [msg for msg in self.conversation_history if msg['is_user']]
             
             # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Только после 3+ сообщений И явного согласия
@@ -1353,22 +1262,22 @@ class DialogueManager:
 
     def _suggest_next_or_select_lesson(self) -> str:
         """Предлагает следующий урок или выбор урока"""
-        if not self.has_student_data or not self.room_subject:
+        if not self.has_student_data or not self.current_subject:
             return "Давайте выберем предмет для изучения!"
         
         student_name = self.student_data.get('name', 'ученик')
         
         # 🔥 ПОЛУЧАЕМ СЛЕДУЮЩИЙ УРОК ПО ПРЕДМЕТУ
-        next_lesson = self.get_next_lesson_for_student(self.room_subject)
+        next_lesson = self.get_next_lesson_for_student(self.current_subject)
         
         if next_lesson:
             # Есть следующий урок
-            progress = self.get_student_progress(self.room_subject)
+            progress = self.get_student_progress(self.current_subject)
             completed_count = len(progress.get('completed_lessons', []))
-            total_lessons = len(self.get_lessons_for_student_subject(self.room_subject))
+            total_lessons = len(self.get_lessons_for_student_subject(self.current_subject))
             
             response = f"{student_name}, отлично! "
-            response += f"Твой прогресс по {self.room_subject}: {completed_count}/{total_lessons} уроков. "
+            response += f"Твой прогресс по {self.current_subject}: {completed_count}/{total_lessons} уроков. "
             response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
             
             # Сохраняем следующий урок как выбранный
@@ -1377,20 +1286,20 @@ class DialogueManager:
             return response
         else:
             # Все уроки завершены
-            return f"{student_name}, ты уже завершил все уроки по {self.room_subject}! Хочешь повторить какой-то урок или выбрать другой предмет?"
+            return f"{student_name}, ты уже завершил все уроки по {self.current_subject}! Хочешь повторить какой-то урок или выбрать другой предмет?"
 
     def _offer_lesson_options(self) -> str:
         """Предлагает варианты работы с уроками"""
-        if not self.has_student_data or not self.room_subject:
+        if not self.has_student_data or not self.current_subject:
             return "Давайте выберем предмет для изучения!"
         
         student_name = self.student_data.get('name', 'ученик')
         
         # 🔥 ПРЕДЛАГАЕМ ВЫБОР:
         options = [
-            f"Хочешь начать следующий урок по {self.room_subject}?",
-            f"Или выбрать конкретный урок по {self.room_subject}?",
-            f"Может быть, повторить пройденный материал по {self.room_subject}?"
+            f"Хочешь начать следующий урок по {self.current_subject}?",
+            f"Или выбрать конкретный урок по {self.current_subject}?",
+            f"Может быть, повторить пройденный материал по {self.current_subject}?"
         ]
         
         return f"{student_name}, {random.choice(options)}"
@@ -1440,14 +1349,6 @@ class DialogueManager:
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
-        
-        # 🔥 ВАЖНО: Если предмет уже установлен из room_id, не меняем его
-        if self.room_subject and subject.lower() != self.room_subject.lower():
-            # Пользователь пытается сменить предмет в студенческой комнате
-            if self.has_student_data:
-                student_name = self.student_data.get('name', 'ученик')
-                return f"{student_name}, в этой комнате мы изучаем {self.room_subject}. Если хочешь сменить предмет, выйди и создай новую комнату."
-        
         self.current_subject = subject
         
         print(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
@@ -2020,7 +1921,6 @@ class DialogueManager:
         # Сброс данных ученика
         self.student_data = {}
         self.has_student_data = False
-        self.room_subject = None
 
     def get_available_subjects(self) -> List[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
@@ -2211,15 +2111,9 @@ class DialogueManager:
         """Установка ID комнаты для WebSocket коммуникации"""
         self.room_id = room_id
         print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
-        
-        # 🔥 КРИТИЧЕСКИ ВАЖНО: Извлекаем предмет из room_id
-        if room_id:
-            self.room_subject = self.extract_subject_from_room_id(room_id)
-            if self.room_subject:
-                print(f"📚 Предмет из room_id: {self.room_subject}")
 
     def set_student_data(self, student_data: dict):
-        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Устанавливает данные ученика с предметом из комнаты"""
+        """🔥 ПРОСТО УСТАНАВЛИВАЕМ ДАННЫЕ УЧЕНИКА"""
         self.student_data = student_data
         self.has_student_data = bool(student_data)
         
@@ -2228,20 +2122,16 @@ class DialogueManager:
             student_class = student_data.get('education_level', 'неизвестно')
             print(f"🎓 Установлены данные ученика: {student_name} ({student_class} класс)")
             
-            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Извлекаем предмет из room_id если еще не извлечен
-            if self.room_id and not self.room_subject:
-                self.room_subject = self.extract_subject_from_room_id(self.room_id)
-                if self.room_subject:
-                    print(f"📚 Предмет из room_id: {self.room_subject}")
-                    self.current_subject = self.room_subject
-                    
-                    # 🔥 НОВОЕ: Ищем следующий урок по этому предмету
-                    next_lesson = self.get_next_lesson_for_student(self.room_subject)
-                    if next_lesson:
-                        self.selected_lesson = next_lesson
-                        print(f"📚 Автоматически выбран урок: {next_lesson['title']}")
-                    else:
-                        print(f"⚠️ Не найден следующий урок по предмету {self.room_subject}")
+            # 🔥 НОВОЕ: Загружаем прогресс ученика при установке данных
+            self._load_student_progress()
+
+    def _load_student_progress(self):
+        """Загружает прогресс ученика"""
+        if not self.has_student_data:
+            return
+        
+        # Прогресс загружается лениво при вызове get_student_progress
+        print(f"📊 Прогресс ученика будет загружен при необходимости")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -2337,8 +2227,7 @@ class DialogueManager:
             "conversation_context": self.conversation_context,
             "has_student_data": self.has_student_data,
             "student_name": self.student_data.get('name', 'нет'),
-            "student_class": self.student_data.get('education_level', 'нет'),
-            "room_subject": self.room_subject
+            "student_class": self.student_data.get('education_level', 'нет')
         }
 
     def debug_info(self) -> Dict:
@@ -2353,7 +2242,6 @@ class DialogueManager:
         return {
             "current_state": self.current_state,
             "current_subject": self.current_subject,
-            "room_subject": self.room_subject,
             "lesson_started": self.lesson_started,
             "practice_active": self.practice_active,
             "waiting_for_answer": self.waiting_for_answer,
@@ -2510,7 +2398,6 @@ class DialogueManager:
                 "lesson_started": self.lesson_started,
                 "practice_active": self.practice_active,
                 "current_subject": self.current_subject,
-                "room_subject": self.room_subject,
                 "conversation_history_length": len(self.conversation_history),
                 "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
                 "max_questions": self.max_questions,
