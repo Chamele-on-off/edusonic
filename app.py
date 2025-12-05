@@ -732,7 +732,7 @@ def setup_llm_manager():
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """🔥 ИСПРАВЛЕННАЯ БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ - ТЕПЕРЬ ПРАВИЛЬНО РАБОТАЕТ ДЛЯ УЧЕНИКОВ"""
+    """🔥 ИСПРАВЛЕННАЯ БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ - С ПЕРСОНАЛИЗИРОВАННЫМ ПРИВЕТСТВИЕМ"""
     try:
         # ВСЕГДА создаем DialogueManager если его нет
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
@@ -789,7 +789,7 @@ def _fast_room_initialization(room_id):
                 is_student_room = True
                 break
         
-        # 🔥 ЕСЛИ ЭТО КОМНАТА УЧЕНИКА - НАСТРАИВАЕМ DIALOGUE MANAGER
+        # 🔥 ЕСЛИ ЭТО КОМНАТА УЧЕНИКА - НАСТРАИВАЕМ DIALOGUE MANAGER И ОТПРАВЛЯЕМ ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ
         if is_student_room and student_class and subject_eng and student_name:
             debug_log(f"🔥 ПАРСИНГ КОМНАТЫ УЧЕНИКА УСПЕШЕН:")
             debug_log(f"🔥 Класс: {student_class}")
@@ -841,46 +841,20 @@ def _fast_room_initialization(room_id):
             dialogue.current_subject = subject_rus
             debug_log(f"🔥 Данные ученика переданы в DialogueManager")
             
-            # 🔥 ПРОВЕРЯЕМ НАЛИЧИЕ УРОКОВ ДЛЯ ЭТОГО КЛАССА И ПРЕДМЕТА
-            lessons_available = dialogue.get_lessons_for_student_subject(subject_rus)
-            debug_log(f"🔥 Доступно уроков по предмету '{subject_rus}': {len(lessons_available)}")
+            # 🔥 НЕМЕДЛЕННО отправляем ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ ученику
+            welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по предмету {subject_rus}. Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
             
-            if lessons_available:
-                # 🔥 ИЩЕМ СЛЕДУЮЩИЙ УРОК ПО ПРОГРЕССУ УЧЕНИКА
-                next_lesson = dialogue.get_next_lesson_for_student(subject_rus)
-                
-                if next_lesson:
-                    dialogue.selected_lesson = next_lesson
-                    debug_log(f"🔥 Выбран следующий урок для ученика: {next_lesson['title']}")
-                    
-                    # 🔥 НЕМЕДЛЕННО отправляем приветственное сообщение ученику
-                    welcome_message = f"{student_name}, сегодня мы с тобой проведем урок по {subject_rus}. Тема: '{next_lesson['title']}'. Давай начнем наше занятие? Скажи 'готов начать', чтобы начать урок."
-                    
-                    # Запускаем в фоновом режиме
-                    socketio.start_background_task(
-                        send_student_welcome_message_delayed,
-                        room_id,
-                        student_data,
-                        next_lesson,
-                        welcome_message
-                    )
-                else:
-                    # Если все уроки завершены
-                    debug_log(f"🔥 Все уроки по предмету '{subject_rus}' завершены")
-                    welcome_message = f"{student_name}, ты уже завершил все уроки по {subject_rus}! Хочешь повторить какой-то урок или выбрать другой предмет?"
-                    socketio.start_background_task(
-                        send_generic_message_delayed,
-                        room_id,
-                        welcome_message
-                    )
-            else:
-                debug_log(f"🔥 Нет доступных уроков по предмету {subject_rus}")
-                welcome_message = f"{student_name}, к сожалению, у меня пока нет уроков по {subject_rus} для {student_class} класса."
-                socketio.start_background_task(
-                    send_generic_message_delayed,
-                    room_id,
-                    welcome_message
-                )
+            # Запускаем в фоновом режиме с небольшой задержкой
+            socketio.start_background_task(
+                send_student_welcome_message_delayed,
+                room_id,
+                student_data,
+                welcome_message
+            )
+            
+            # 🔥 КРИТИЧЕСКО ВАЖНО: Устанавливаем специальный флаг для комнаты ученика
+            room_ai_activated[room_id] = True
+            debug_log(f"✅ Комната ученика настроена с персонализированным приветствием")
         
         # 🔥 ДЛЯ ОБЫЧНЫХ КОМНАТ (не учеников)
         elif room_id == "default" or not is_student_room:
@@ -903,25 +877,25 @@ def _fast_room_initialization(room_id):
         traceback.print_exc()
         return False
 
-def send_student_welcome_message_delayed(room_id, student_data, lesson_data, message):
-    """Отправляет приветственное сообщение ученику с задержкой"""
-    time.sleep(3)  # Даем время клиенту загрузиться
+def send_student_welcome_message_delayed(room_id, student_data, message):
+    """🔥 НОВАЯ ФУНКЦИЯ: Отправляет персонализированное приветствие ученику с задержкой"""
+    time.sleep(2)  # Даем время клиенту полностью загрузиться
     
-    debug_log(f"🔥 Отправка приветственного сообщения ученику {student_data.get('name')}")
-    
-    socketio.emit('student_welcome_message', {
-        'room_id': room_id,
-        'student_name': student_data.get('name', 'ученик'),
-        'subject': student_data.get('subject', 'предмету'),
-        'lesson_title': lesson_data['title'],
-        'lesson_id': lesson_data.get('id'),
-        'message': message
-    }, room=room_id)
+    debug_log(f"🔥 Отправка персонализированного приветствия ученику {student_data.get('name')}")
     
     # Озвучиваем приветствие
     speak_text(room_id, message, voice_type='female', is_teacher=True)
     
-    debug_log(f"✅ Приветственное сообщение отправлено")
+    # Также отправляем через WebSocket для визуального отображения
+    socketio.emit('student_welcome_message', {
+        'room_id': room_id,
+        'student_name': student_data.get('name', 'ученик'),
+        'subject': student_data.get('subject', 'предмету'),
+        'message': message,
+        'prompt_ready': True  # Флаг, что система ждет команды 'готов начать'
+    }, room=room_id)
+    
+    debug_log(f"✅ Персонализированное приветствие отправлено")
 
 def send_generic_message_delayed(room_id, message):
     """Отправляет общее сообщение с задержкой"""
@@ -3027,7 +3001,7 @@ def download_lessons():
     
     with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
         for lesson_file in lesson_files:
-            # Сохраняем с информацией о типе урока в пути
+            # Сохраняем с информацией о типу урока в пути
             if lesson_file.parent == LESSONS_DEMO_DIR:
                 zip_path = f"demo/{lesson_file.name}"
             elif lesson_file.parent == LESSONS_STUDENTS_DIR:
