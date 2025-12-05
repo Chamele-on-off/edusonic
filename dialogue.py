@@ -698,7 +698,7 @@ class DialogueManager:
         
         # 🔥 ДЛЯ УЧЕНИКА: показываем предметы его класса
         if self.has_student_data and self.student_data.get('education_level'):
-            student_class = self.student_data['education_level']
+            student_class = self.student_data.get('education_level')
             if student_class in self.lessons_by_class:
                 subjects = list(self.lessons_by_class[student_class].keys())
                 if subjects:
@@ -1173,7 +1173,7 @@ class DialogueManager:
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ
         continue_commands = [
             "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
-            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", " ладно", "ясно",
+            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
             "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
         ]
 
@@ -1387,14 +1387,14 @@ class DialogueManager:
             else:
                 return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}'. Скажи 'готов начать', чтобы начать урок!"
         
-        # 🔥 ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ: выбираем урок, но не начинаем автоматически
+        # 🔥 ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ: используем ту же логику диалога, что и в демо-комнатах
         available_lessons = self._get_available_lessons(subject)
         
         if available_lessons:
             self.selected_lesson = available_lessons[0]
             print(f"✅ Выбран существующий урок: {self.selected_lesson['title']}")
             
-            # 🔥 НЕ НАЧИНАЕМ УРОК, ПРОСТО ИНФОРМИРУЕМ
+            # 🔥 ИСПРАВЛЕНИЕ: Возвращаем предложение начать урок, как в демо-комнатах
             return f"Отлично! Я выбрал урок '{self.selected_lesson['title']}' по предмету {subject}. Когда будете готовы, скажите 'начать урок'!"
         else:
             # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Если уроков нет - создаем новый
@@ -1407,7 +1407,7 @@ class DialogueManager:
                 self.selected_lesson = generated_lesson
                 print(f"✅ Сгенерирован новый урок: {generated_lesson['title']}")
                 
-                # 🔥 НЕ НАЧИНАЕМ УРОК, ПРОСТО ИНФОРМИРУЕМ
+                # 🔥 ВОЗВРАЩАЕМ ТО ЖЕ ПРЕДЛОЖЕНИЕ, ЧТО И В ДЕМО-КОМНАТАХ
                 return f"Я создал для вас урок по теме '{subject}'. Когда будете готовы, скажите 'начать урок'!"
             else:
                 # Fallback на демо-урок, если генерация не удалась
@@ -1922,7 +1922,7 @@ class DialogueManager:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
         # 🔥 ДЛЯ УЧЕНИКА: предметы его класса
         if self.has_student_data and self.student_data.get('education_level'):
-            student_class = self.student_data['education_level']
+            student_class = self.student_data.get('education_level')
             if student_class in self.lessons_by_class:
                 return list(self.lessons_by_class[student_class].keys())
         
@@ -1985,7 +1985,7 @@ class DialogueManager:
             return {}
         
         # 🔥 НОВОЕ: Загружаем прогресс из файла
-        progress_file = self.progress_dir / f"{student_id}.json"
+        progress_file = Path("students_progress") / f"{student_id}.json"
         try:
             if progress_file.exists():
                 with open(progress_file, 'r', encoding='utf-8') as f:
@@ -2023,7 +2023,7 @@ class DialogueManager:
         if not student_id:
             return
         
-        progress_file = self.progress_dir / f"{student_id}.json"
+        progress_file = Path("students_progress") / f"{student_id}.json"
         
         # Загружаем существующий прогресс
         progress_data = {}
@@ -2441,9 +2441,5 @@ if __name__ == "__main__":
     # Тест обработки приветствия
     response = dm.process_input("привет")
     print(f"👋 Ответ на приветствие: {response}")
-    
-    # Тест статуса системы
-    status = dm.get_system_status()
-    print(f"📊 Статус системы: {status.keys()}")
     
     print("✅ Тестирование завершено!")
