@@ -11,6 +11,10 @@ import time
 import threading
 from practice_manager import PracticeManager
 
+def debug_log(message):
+    """Логирование для отладки"""
+    print(f"🔥 [DIALOGUE] {message}")
+
 class DialogueManager:
     def __init__(self, socketio):
         self.socketio = socketio
@@ -83,6 +87,28 @@ class DialogueManager:
         self.lessons = {}  # Все уроки по предметам
         self.lessons_by_class = {}  # Уроки по классам {"5": {"математика": [lessons...], ...}}
         self.available_classes = ["5", "6", "7", "8", "9", "10", "11"]  # Поддерживаемые классы
+        
+        # 🔥 МАППИНГ АНГЛИЙСКИХ НАЗВАНИЙ ПРЕДМЕТОВ
+        self.subject_mapping = {
+            'math': 'математика',
+            'mathematics': 'математика',
+            'algebra': 'алгебра',
+            'geometry': 'геометрия',
+            'physics': 'физика',
+            'chemistry': 'химия',
+            'biology': 'биология',
+            'history': 'история',
+            'social': 'обществознание',
+            'literature': 'литература',
+            'russian': 'русский язык',
+            'english': 'английский язык',
+            'french': 'французский язык',
+            'geography': 'география',
+            'informatics': 'информатика'
+        }
+        
+        # Обратный маппинг (русский -> английский для поиска в путях)
+        self.subject_mapping_reverse = {v: k for k, v in self.subject_mapping.items()}
         
         # НОВЫЕ ПОЛЯ ДЛЯ ВИЗУАЛИЗАЦИИ - ТОЛЬКО SVG
         self.visualization_enabled = True
@@ -172,11 +198,11 @@ class DialogueManager:
             # 4. 🔥 ИСПРАВЛЕННАЯ ЗАГРУЗКА LEGACY УРОКОВ (рекурсивно)
             self._load_legacy_lessons()
             
-            print(f"✅ Уроки загружены: {sum(len(v) for v in self.lessons.values())} уроков")
-            print(f"✅ Классы с уроками: {list(self.lessons_by_class.keys())}")
+            debug_log(f"✅ Уроки загружены: {sum(len(v) for v in self.lessons.values())} уроков")
+            debug_log(f"✅ Классы с уроками: {list(self.lessons_by_class.keys())}")
                     
         except Exception as e:
-            print(f"Ошибка доступа к папке уроков: {e}")
+            debug_log(f"Ошибка доступа к папке уроков: {e}")
 
     def _load_legacy_lessons(self):
         """Исправленная загрузка старых уроков (рекурсивный поиск)"""
@@ -192,7 +218,7 @@ class DialogueManager:
                     "students" in str(lesson_file.parent)):
                     continue
                 
-                print(f"📂 Загрузка legacy урока: {lesson_file}")
+                debug_log(f"📂 Загрузка legacy урока: {lesson_file}")
                 
                 try:
                     subject = self._detect_subject(lesson_file.stem)
@@ -231,38 +257,38 @@ class DialogueManager:
                         self.lessons_by_class[class_level][subject].append(lesson_data)
                         
                 except Exception as e:
-                    print(f"Ошибка загрузки legacy урока {lesson_file}: {e}")
+                    debug_log(f"Ошибка загрузки legacy урока {lesson_file}: {e}")
                     
         except Exception as e:
-            print(f"Ошибка при поиске legacy уроков: {e}")
+            debug_log(f"Ошибка при поиске legacy уроков: {e}")
 
     def _load_student_lessons_by_class(self, class_dir: Path, class_level: str):
         """Загружает уроки для конкретного класса"""
         if class_level not in self.lessons_by_class:
             self.lessons_by_class[class_level] = {}
         
-        print(f"📂 Загрузка уроков для класса {class_level}...")
+        debug_log(f"📂 Загрузка уроков для класса {class_level}...")
         
         # Предметы по классам
         subjects_by_class = {
-            "5": ["математика", "география", "биология", "русский", "литература", 
-                  "английский", "французский", "история", "информатика"],
-            "6": ["математика", "география", "биология", "русский", "литература",
-                  "английский", "французский", "история", "обществознание", "информатика"],
-            "7": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-                  "литература", "математика", "английский", "французский", "история",
+            "5": ["математика", "география", "биология", "русский язык", "литература", 
+                  "английский язык", "французский язык", "история", "информатика"],
+            "6": ["математика", "география", "биология", "русский язык", "литература",
+                  "английский язык", "французский язык", "история", "обществознание", "информатика"],
+            "7": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
+                  "литература", "английский язык", "французский язык", "история",
                   "обществознание", "информатика"],
-            "8": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-                  "литература", "математика", "английский", "французский", "история",
+            "8": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
+                  "литература", "английский язык", "французский язык", "история",
                   "обществознание", "информатика", "химия"],
-            "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-                  "литература", "математика", "английский", "французский", "история",
+            "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
+                  "литература", "английский язык", "французский язык", "история",
                   "обществознание", "информатика", "химия"],
-            "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-                   "литература", "математика", "английский", "французский", "история",
+            "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
+                   "литература", "английский язык", "французский язык", "история",
                    "обществознание", "информатика", "химия"],
-            "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский",
-                   "литература", "математика", "английский", "французский", "история",
+            "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
+                   "литература", "английский язык", "французский язык", "история",
                    "обществознание", "информатика", "химия"]
         }
         
@@ -272,7 +298,7 @@ class DialogueManager:
             if subject_dir.exists() and subject_dir.is_dir():
                 self._load_lessons_from_subject_dir(subject_dir, subject, class_level, "student")
         
-        print(f"✅ Класс {class_level}: {sum(len(v) for v in self.lessons_by_class[class_level].values())} уроков")
+        debug_log(f"✅ Класс {class_level}: {sum(len(v) for v in self.lessons_by_class[class_level].values())} уроков")
 
     def _load_lessons_from_subject_dir(self, subject_dir: Path, subject: str, class_level: str, lesson_type: str):
         """Загружает уроки из папки предмета"""
@@ -306,8 +332,10 @@ class DialogueManager:
                     self.lessons_by_class[class_level][subject] = []
                 self.lessons_by_class[class_level][subject].append(lesson_data)
                 
+                debug_log(f"✅ Загружен урок: {lesson_title} (класс {class_level}, предмет {subject})")
+                
             except Exception as e:
-                print(f"Ошибка загрузки урока {lesson_file}: {e}")
+                debug_log(f"Ошибка загрузки урока {lesson_file}: {e}")
 
     def _load_lessons_from_dir(self, dir_path: Path, lesson_type: str):
         """Загружает уроки из директории (для демо, сгенерированных)"""
@@ -336,7 +364,7 @@ class DialogueManager:
                 self.lessons[subject].append(lesson_data)
                 
             except Exception as e:
-                print(f"Ошибка загрузки урока {lesson_file}: {e}")
+                debug_log(f"Ошибка загрузки урока {lesson_file}: {e}")
 
     def _extract_lesson_number(self, filename: str) -> int:
         """Извлекает номер урока из имени файла"""
@@ -376,26 +404,8 @@ class DialogueManager:
         """Определяет предмет по названию файла"""
         filename_lower = filename.lower()
         
-        # Карта английских названий предметов
-        subject_map = {
-            'math': 'математика',
-            'mathematics': 'математика',
-            'algebra': 'алгебра',
-            'geometry': 'геометрия',
-            'physics': 'физика', 
-            'chemistry': 'химия',
-            'biology': 'биология',
-            'history': 'история',
-            'social': 'обществознание',
-            'literature': 'литература',
-            'russian': 'русский язык',
-            'english': 'английский язык',
-            'french': 'французский язык',
-            'geography': 'география',
-            'informatics': 'информатика'
-        }
-        
-        for eng, rus in subject_map.items():
+        # 🔥 ИСПРАВЛЕННЫЙ: Используем маппинг из константы
+        for eng, rus in self.subject_mapping.items():
             if eng in filename_lower:
                 return rus
         
@@ -430,16 +440,16 @@ class DialogueManager:
     def _load_lesson_content(self, lesson_file: Path) -> List[str]:
         """Загружает содержание урока из текстового файла с улучшенной очисткой"""
         try:
-            print(f"📖 Загрузка урока из файла: {lesson_file}")
+            debug_log(f"📖 Загрузка урока из файла: {lesson_file}")
             
             if not lesson_file.exists():
-                print(f"❌ Файл урока не существует: {lesson_file}")
+                debug_log(f"❌ Файл урока не существует: {lesson_file}")
                 return ["Файл урока не найден. Попробуйте другой урок."]
                 
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            print(f"✅ Файл прочитан, длина: {len(content)} символов")
+            debug_log(f"✅ Файл прочитан, длина: {len(content)} символов")
             
             # УЛУЧШЕННАЯ ОЧИСТКА СОДЕРЖАНИЯ
             content = self._clean_lesson_content(content)
@@ -449,7 +459,7 @@ class DialogueManager:
             
             # Если абзацев нет, разбиваем на предложения
             if not paragraphs:
-                print("⚠️ Нет абзацев, разбиваем на предложения")
+                debug_log("⚠️ Нет абзацев, разбиваем на предложения")
                 sentences = re.split(r'(?<=[.!?])\s+', content)
                 # Объединяем предложения в группы по 2-3 для плавного чтения
                 current_paragraph = []
@@ -466,16 +476,16 @@ class DialogueManager:
                 if current_paragraph:
                     paragraphs.append(' '.join(current_paragraph))
             
-            print(f"✅ Урок разбит на {len(paragraphs)} абзацев")
+            debug_log(f"✅ Урок разбит на {len(paragraphs)} абзацев")
             
             if not paragraphs:
-                print("❌ Не удалось разбить урок на абзацев")
+                debug_log("❌ Не удалось разбить урок на абзацев")
                 return ["Содержание урока временно недоступно. Давайте поговорим на эту тему!"]
                 
             return paragraphs
             
         except Exception as e:
-            print(f"❌ Ошибка загрузки содержания урока: {e}")
+            debug_log(f"❌ Ошибка загрузки содержания урока: {e}")
             return ["Ошибка загрузки урока. Попробуйте позже."]
 
     def _clean_lesson_content(self, content: str) -> str:
@@ -684,7 +694,7 @@ class DialogueManager:
                     return self._add_personalization(limited_response)
                     
         except Exception as e:
-            print(f"Ошибка запроса к LLM для диалога: {e}")
+            debug_log(f"Ошибка запроса к LLM для диалога: {e}")
         
         return self._get_subject_selection_prompt()
 
@@ -819,7 +829,7 @@ class DialogueManager:
     def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
         """Генерирует урок по запрошенной теме с помощью LLM"""
         try:
-            print(f"🎯 Генерация урока по теме: {topic}")
+            debug_log(f"🎯 Генерация урока по теме: {topic}")
             
             # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Добавляем данные ученика для адаптации сложности
             age = self.student_data.get('age', '12')
@@ -868,14 +878,14 @@ class DialogueManager:
             )
             
             if not lesson_content:
-                print("❌ Ошибка: LLM не вернул содержание урока")
+                debug_log("❌ Ошибка: LLM не вернул содержание урока")
                 return None
             
-            print(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
+            debug_log(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
             
             # Убедимся, что есть правильное разделение на абзацы
             if '\n\n' not in lesson_content:
-                print("⚠️ В ответе нет двойных переводов строк, добавляем...")
+                debug_log("⚠️ В ответе нет двойных переводов строк, добавляем...")
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
                 lesson_content = '\n\n'.join(sentences)
             
@@ -889,7 +899,7 @@ class DialogueManager:
                 f.write(f"Урок по теме: {topic}\n\n")
                 f.write(lesson_content)
             
-            print(f"✅ Файл урока создан: {lesson_path}")
+            debug_log(f"✅ Файл урока создан: {lesson_path}")
             
             # Добавляем в список уроков
             subject = self.current_subject or "общее"
@@ -908,11 +918,11 @@ class DialogueManager:
                 self.lessons[subject] = []
             self.lessons[subject].append(lesson_data)
             
-            print(f"✅ Урок успешно сгенерирован и добавлен в список: {lesson_id}")
+            debug_log(f"✅ Урок успешно сгенерирован и добавлен в список: {lesson_id}")
             return lesson_data
             
         except Exception as e:
-            print(f"❌ Ошибка генерации урока: {e}")
+            debug_log(f"❌ Ошибка генерации урока: {e}")
             return None
 
     def _check_for_lesson_generation_intent(self, text_lower: str) -> bool:
@@ -924,7 +934,7 @@ class DialogueManager:
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower and len(subject) > 3:
-                print(f"Обнаружен существующий предмет: {subject}, пропускаем генерацию")
+                debug_log(f"Обнаружен существующий предмет: {subject}, пропускаем генерацию")
                 return False
         
         # Шаблоны фраз, которые означают "создай урок"
@@ -947,12 +957,12 @@ class DialogueManager:
                 topic = match.group(1).strip()
                 topic = re.sub(r'[.?]$', '', topic)
                 if topic and len(topic) > 2:
-                    print(f"🎯 Обнаружен запрос на генерацию урока по теме: '{topic}'")
+                    debug_log(f"🎯 Обнаружен запрос на генерацию урока по теме: '{topic}'")
                     
                     # ГЕНЕРИРУЕМ И СОХРАНЯЕМ УРОК
                     generated_lesson = self.generate_lesson_on_demand(topic)
                     if generated_lesson:
-                        print(f"✅ Урок успешно сгенерирован и сохранен: {generated_lesson['id']}")
+                        debug_log(f"✅ Урок успешно сгенерирован и сохранен: {generated_lesson['id']}")
                         
                         # КРИТИЧЕСКИ ВАЖНО: Добавляем урок в список доступных уроков
                         subject = self.current_subject or "общее"
@@ -963,19 +973,19 @@ class DialogueManager:
                         lesson_exists = any(lesson['id'] == generated_lesson['id'] for lesson in self.lessons[subject])
                         if not lesson_exists:
                             self.lessons[subject].append(generated_lesson)
-                            print(f"✅ Урок добавлен в список уроков по предмету: {subject}")
+                            debug_log(f"✅ Урок добавлен в список уроков по предмету: {subject}")
                         
                         # НАЧИНАЕМ УРОК - это запускает отображение
                         self._start_generated_lesson(generated_lesson)
                         return True
                     else:
-                        print("❌ Не удалось сгенерировать урок")
+                        debug_log("❌ Не удалось сгенерировать урок")
         return False
 
     def _start_generated_lesson(self, lesson_data: dict):
         """Начинает сгенерированный урок с гарантированным отображением"""
         try:
-            print(f"🚀 НАЧИНАЕМ сгенерированный урок: {lesson_data['title']}")
+            debug_log(f"🚀 НАЧИНАЕМ сгенерированный урок: {lesson_data['title']}")
             
             self.current_subject = self.current_subject or "общее"
             self.selected_lesson = lesson_data
@@ -987,14 +997,14 @@ class DialogueManager:
             self.enable_visualization()
             
             # Загружаем содержание урока
-            print(f"📖 Загрузка содержания урока из: {lesson_data['file_path']}")
+            debug_log(f"📖 Загрузка содержания урока из: {lesson_data['file_path']}")
             self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
             
             if not self.lesson_content:
-                print("❌ Не удалось загрузить содержание урока")
+                debug_log("❌ Не удалось загрузить содержание урока")
                 return
             
-            print(f"✅ Урок загружен, количество абзацев: {len(self.lesson_content)}")
+            debug_log(f"✅ Урок загружен, количество абзацев: {len(self.lesson_content)}")
             
             # Инициализируем базу знаний
             self.knowledge_base = KnowledgeBase(self.current_subject)
@@ -1011,12 +1021,12 @@ class DialogueManager:
                     'subject': self.current_subject,
                     'is_generated': True
                 }, room=self.room_id)
-                print(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
+                debug_log(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
             
-            print(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат и отображается!")
+            debug_log(f"🎉 Сгенерированный урок '{lesson_data['title']}' успешно начат и отображается!")
             
         except Exception as e:
-            print(f"❌ Ошибка начала сгенерированного урока: {e}")
+            debug_log(f"❌ Ошибка начала сгенерированного урока: {e}")
             self.lesson_started = False
 
     def _has_visualization_triggers(self, text: str) -> bool:
@@ -1061,7 +1071,7 @@ class DialogueManager:
                 self.paragraphs_since_last_viz = 0
                 self.visualization_counter += 1
                 
-                print(f"🎨 Генерация SVG инфографики для: {text[:100]}...")
+                debug_log(f"🎨 Генерация SVG инфографики для: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
                     # Генерируем SVG инфографику через LLM
@@ -1075,7 +1085,7 @@ class DialogueManager:
                             'timestamp': time.time(),
                             'type': 'infographic'
                         }, room=self.room_id)
-                        print(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
+                        debug_log(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
                     else:
                         # Fallback - простая SVG схема
                         fallback_svg = self._create_fallback_infographic(text)
@@ -1086,10 +1096,10 @@ class DialogueManager:
                             'timestamp': time.time(),
                             'type': 'fallback'
                         }, room=self.room_id)
-                        print(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
+                        debug_log(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
                     
             except Exception as e:
-                print(f"❌ Ошибка генерации SVG инфографики: {e}")
+                debug_log(f"❌ Ошибка генерации SVG инфографики: {e}")
                 # Fallback при ошибке
                 if self.room_id and self.socketio:
                     fallback_svg = self._create_fallback_infographic(text)
@@ -1150,12 +1160,12 @@ class DialogueManager:
     def enable_visualization(self):
         """Включение автоматической визуализации - ТОЛЬКО SVG"""
         self.visualization_enabled = True
-        print("✅ Автоматическая SVG визуализация включена")
+        debug_log("✅ Автоматическая SVG визуализация включена")
 
     def disable_visualization(self):
         """Выключение автоматической визуализации"""
         self.visualization_enabled = False
-        print("❌ Автоматическая визуализация выключена")
+        debug_log("❌ Автоматическая визуализация выключена")
 
     def process_input(self, text: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
@@ -1207,7 +1217,7 @@ class DialogueManager:
             self.current_subject and
             any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем', 'готов начать'])):
             
-            print(f"🚀 КОМАНДА НАЧАЛА УРОКА: '{text_lower}', предмет: {self.current_subject}")
+            debug_log(f"🚀 КОМАНДА НАЧАЛА УРОКА: '{text_lower}', предмет: {self.current_subject}")
             return self._force_start_lesson()
         
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ
@@ -1220,10 +1230,10 @@ class DialogueManager:
         if self.lesson_started and any(cmd in text_lower for cmd in continue_commands):
             next_paragraph = self._get_next_paragraph()
             if next_paragraph:
-                print(f"✅ Команда продолжения обработана: '{text_lower}' -> следующий абзац")
+                debug_log(f"✅ Команда продолжения обработана: '{text_lower}' -> следующий абзац")
                 return next_paragraph
             else:
-                print("🏁 Урок завершен по команде продолжения")
+                debug_log("🏁 Урок завершен по команде продолжения")
                 # 🔥 ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ
                 if self.selected_lesson and self.has_student_data:
                     self.mark_lesson_completed(self.selected_lesson)
@@ -1268,7 +1278,7 @@ class DialogueManager:
         available_subjects = self.get_available_subjects()
         for subject in available_subjects:
             if subject.lower() in text_lower and len(subject) > 3:
-                print(f"Обнаружен выбор предмета: {subject}")
+                debug_log(f"Обнаружен выбор предмета: {subject}")
                 return self._handle_subject_selection_direct(subject)
         
         if self.practice_active and self.waiting_for_answer:
@@ -1301,37 +1311,107 @@ class DialogueManager:
         return None
 
     def auto_suggest_lessons_for_student(self) -> str:
-        """🔥 НОВЫЙ: Автоматически предлагает уроки по предмету ученика (как в демо)"""
+        """🔥 ИСПРАВЛЕННЫЙ: Автоматически предлагает уроки по предмету ученика (как в демо)"""
         if not self.has_student_data or not self.current_subject:
             return None
         
         student_name = self.student_data.get('name', 'ученик')
         subject = self.current_subject
         
-        # Получаем уроки для этого предмета и класса
-        lessons = self.get_lessons_for_student_subject(subject)
+        debug_log(f"🔥 Поиск уроков для ученика {student_name}, предмет: {subject}")
         
-        if not lessons:
-            # Если нет уроков для этого класса, пробуем общие уроки по предмету
-            lessons = self.lessons.get(subject, [])
+        # 🔥 КРИТИЧЕСКО ВАЖНО: Получаем класс ученика
+        student_class = self.student_data.get('education_level', '5')
+        debug_log(f"🔥 Класс ученика: {student_class}")
         
+        # 🔥 ИСПРАВЛЕНИЕ 1: Проверяем правильный путь к урокам
+        if student_class in self.lessons_by_class:
+            debug_log(f"🔥 Уроки для класса {student_class}: {list(self.lessons_by_class[student_class].keys())}")
+        
+        # 🔥 ИСПРАВЛЕНИЕ 2: Пытаемся найти уроки разными способами
+        lessons = []
+        
+        # Способ 1: Ищем уроки в структуре по классам
+        if student_class in self.lessons_by_class:
+            # Пробуем разные варианты названия предмета
+            subject_variants = [subject]
+            
+            # Добавляем англоязычное название для поиска
+            if subject in self.subject_mapping_reverse:
+                subject_variants.append(self.subject_mapping_reverse[subject])
+            
+            # Добавляем русскоязычные варианты
+            if 'язык' in subject:
+                subject_variants.append(subject.replace('язык', '').strip())
+            
+            debug_log(f"🔥 Варианты названия предмета для поиска: {subject_variants}")
+            
+            for subject_variant in subject_variants:
+                if subject_variant in self.lessons_by_class[student_class]:
+                    lessons = self.lessons_by_class[student_class][subject_variant]
+                    debug_log(f"🔥 Найдены уроки по предмету '{subject_variant}': {len(lessons)} уроков")
+                    break
+        
+        # Способ 2: Если не нашли, пробуем через общую структуру
         if not lessons:
-            return f"{student_name}, к сожалению, у меня пока нет уроков по {subject}."
+            debug_log(f"🔥 Не найдено уроков через lessons_by_class, пробуем общую структуру")
+            
+            # Пробуем найти предмет в общей структуре
+            for subject_variant in [subject, self.subject_mapping_reverse.get(subject, '')]:
+                if subject_variant in self.lessons:
+                    lessons = self.lessons[subject_variant]
+                    debug_log(f"🔥 Найдены уроки в общей структуре: {len(lessons)} уроков")
+                    break
+        
+        # 🔥 ИСПРАВЛЕНИЕ 3: Если уроков нет, показываем отладочную информацию
+        if not lessons:
+            debug_log(f"🔥 Уроки не найдены. Проверяем структуру папок...")
+            
+            # Формируем ожидаемый путь
+            expected_path = f"lessons/students/{student_class}_class/"
+            debug_log(f"🔥 Ожидаемый путь: {expected_path}")
+            
+            # Проверяем существование папки
+            import os
+            if os.path.exists(f"lessons/students/{student_class}_class/"):
+                debug_log(f"🔥 Папка класса существует")
+                
+                # Проверяем папки предметов
+                import glob
+                subject_folders = glob.glob(f"lessons/students/{student_class}_class/*")
+                debug_log(f"🔥 Папки в классе {student_class}: {subject_folders}")
+                
+                # Ищем папку предмета
+                for folder in subject_folders:
+                    if subject in folder.lower() or any(word in folder.lower() for word in subject.split()):
+                        debug_log(f"🔥 Найдена папка предмета: {folder}")
+                        
+                        # Ищем файлы уроков
+                        lesson_files = glob.glob(f"{folder}/*.txt")
+                        debug_log(f"🔥 Файлы уроков в папке: {lesson_files}")
+            
+            return f"{student_name}, к сожалению, у меня пока нет уроков по предмету '{subject}' для {student_class} класса."
         
         # 🔥 Формируем список уроков (первые 3 + "и другие")
         lesson_titles = []
-        for i, lesson in enumerate(lessons[:3], 1):
+        sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+        
+        for i, lesson in enumerate(sorted_lessons[:3], 1):
             lesson_titles.append(f"{i}. {lesson['title']}")
         
         lesson_list = ", ".join(lesson_titles)
         
-        if len(lessons) > 3:
-            lesson_list += f" и еще {len(lessons) - 3} других уроков"
+        if len(sorted_lessons) > 3:
+            lesson_list += f" и еще {len(sorted_lessons) - 3} других уроков"
         
         # 🔥 Формируем приветствие как в демо
-        return f"{student_name}, привет! Я твой виртуальный учитель по {subject}. " \
-               f"У меня есть уроки по этой теме: {lesson_list}. " \
-               f"Что тебя интересует? Скажи, например, 'первый урок' или 'урок 2'."
+        response = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
+        response += f"У меня есть уроки по этой теме: {lesson_list}. "
+        response += f"Что тебя интересует? Скажи, например, 'первый урок' или 'урок 2'."
+        
+        debug_log(f"🔥 Приветственное сообщение сформировано: {response[:100]}...")
+        
+        return response
 
     def _select_lesson_by_number(self, lesson_number: int) -> str:
         """Выбирает урок по номеру"""
@@ -1415,7 +1495,7 @@ class DialogueManager:
 
     def _start_lesson_for_student(self) -> str:
         """Начинает урок для ученика по выбранному предмету"""
-        print(f"🚀 Начинаем урок для ученика по предмету: {self.current_subject}")
+        debug_log(f"🚀 Начинаем урок для ученика по предмету: {self.current_subject}")
         
         # 🔥 НОВОЕ: ПРОВЕРЯЕМ, ЕСТЬ ЛИ ВЫБРАННЫЙ УРОК
         if not self.selected_lesson:
@@ -1450,7 +1530,7 @@ class DialogueManager:
                     'lesson_number': self.selected_lesson.get('lesson_number'),
                     'is_student_lesson': True
                 }, room=self.room_id)
-                print(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
+                debug_log(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
             
             return start_message
         
@@ -1460,7 +1540,7 @@ class DialogueManager:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
         self.current_subject = subject
         
-        print(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
+        debug_log(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
         
         # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДЛЯ УЧЕНИКА - СРАЗУ ВЫБИРАЕМ УРОК И УСТАНАВЛИВАЕМ ЕГО
         if self.has_student_data:
@@ -1468,28 +1548,66 @@ class DialogueManager:
             level = self.student_data.get('education_level', '5')
             
             # 🔥 ВАЖНО: Ищем уроки для этого класса и предмета
-            if level not in self.lessons_by_class or subject not in self.lessons_by_class[level]:
+            # Пробуем разные варианты названия предмета
+            subject_variants = [subject]
+            if subject in self.subject_mapping_reverse:
+                subject_variants.append(self.subject_mapping_reverse[subject])
+            if 'язык' in subject:
+                subject_variants.append(subject.replace('язык', '').strip())
+            
+            debug_log(f"🔥 Поиск уроков для класса {level}, предмет {subject}")
+            debug_log(f"🔥 Варианты названия предмета: {subject_variants}")
+            
+            found_lessons = False
+            found_subject_variant = None
+            
+            for subject_variant in subject_variants:
+                if (level in self.lessons_by_class and 
+                    subject_variant in self.lessons_by_class[level]):
+                    found_lessons = True
+                    found_subject_variant = subject_variant
+                    debug_log(f"🔥 Найдены уроки по предмету '{subject_variant}' для класса {level}")
+                    break
+            
+            if not found_lessons:
+                # 🔥 ИЩЕМ УРОКИ ЧЕРЕЗ ПРЯМОЙ ПОИСК
+                debug_log(f"🔥 Не найдено уроков через lessons_by_class, пробуем прямой поиск")
+                direct_lessons = self._find_lessons_directly(level, subject)
+                
+                if direct_lessons:
+                    found_lessons = True
+                    # Добавляем найденные уроки в кэш
+                    if level not in self.lessons_by_class:
+                        self.lessons_by_class[level] = {}
+                    self.lessons_by_class[level][subject] = direct_lessons
+            
+            if not found_lessons:
                 return f"{student_name}, у меня пока нет уроков по {subject} для {level} класса."
             
             # 🔥 КРИТИЧЕСКО ВАЖНО: НАХОДИМ СЛЕДУЮЩИЙ УРОК И УСТАНАВЛИВАЕМ ЕГО
             next_lesson = self.get_next_lesson_for_student(subject)
             if not next_lesson:
                 # Берем первый урок
-                available_lessons = self.lessons_by_class[level][subject]
-                if available_lessons:
-                    next_lesson = available_lessons[0]
+                if level in self.lessons_by_class and subject in self.lessons_by_class[level]:
+                    available_lessons = self.lessons_by_class[level][subject]
+                    if available_lessons:
+                        next_lesson = available_lessons[0]
             
             if not next_lesson:
                 return f"{student_name}, не удалось найти урок по {subject}."
             
             # 🔥 КРИТИЧЕСКИ ВАЖНО: Устанавливаем урок!
             self.selected_lesson = next_lesson
-            print(f"✅ Урок установлен для ученика: {next_lesson['title']}")
+            debug_log(f"✅ Урок установлен для ученика: {next_lesson['title']}")
             
             # Теперь урок готов к запуску по команде 'готов начать'
             progress = self.get_student_progress(subject)
             completed_count = len(progress.get('completed_lessons', []))
-            total_lessons = len(self.lessons_by_class[level][subject])
+            
+            if level in self.lessons_by_class and subject in self.lessons_by_class[level]:
+                total_lessons = len(self.lessons_by_class[level][subject])
+            else:
+                total_lessons = 0
             
             if completed_count > 0:
                 return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Следующий урок: '{next_lesson['title']}'. Скажи 'готов начать', чтобы начать урок!"
@@ -1501,26 +1619,26 @@ class DialogueManager:
         
         if available_lessons:
             self.selected_lesson = available_lessons[0]
-            print(f"✅ Выбран существующий урок: {self.selected_lesson['title']}")
+            debug_log(f"✅ Выбран существующий урок: {self.selected_lesson['title']}")
             
             # 🔥 ИСПРАВЛЕНИЕ: Возвращаем предложение начать урок, как в демо-комнатах
             return f"Отлично! Я выбрал урок '{self.selected_lesson['title']}' по предмету {subject}. Когда будете готовы, скажите 'начать урок'!"
         else:
             # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Если уроков нет - создаем новый
-            print(f"⚠️ Урок по предмету '{subject}' не найден. Генерация урока 'на лету'...")
+            debug_log(f"⚠️ Урок по предмету '{subject}' не найден. Генерация урока 'на лету'...")
             
             # Генерируем урок по предмету
             generated_lesson = self.generate_lesson_on_demand(f"Введение в {subject}")
             
             if generated_lesson:
                 self.selected_lesson = generated_lesson
-                print(f"✅ Сгенерирован новый урок: {generated_lesson['title']}")
+                debug_log(f"✅ Сгенерирован новый урок: {generated_lesson['title']}")
                 
                 # 🔥 ВОЗВРАЩАЕМ ТО ЖЕ ПРЕДЛОЖЕНИЕ, ЧТО И В ДЕМО-КОМНАТАХ
                 return f"Я создал для вас урок по теме '{subject}'. Когда будете готовы, скажите 'начать урок'!"
             else:
                 # Fallback на демо-урок, если генерация не удалась
-                print("❌ Генерация не удалась, создаем демо-урок")
+                debug_log("❌ Генерация не удалась, создаем демо-урок")
                 self.selected_lesson = self._create_demo_lesson(subject)
                 
                 return f"Я подготовил демо-урок по предмету {subject}. Когда будете готовы, скажите 'начать урок'!"
@@ -1533,7 +1651,7 @@ class DialogueManager:
         if not self.current_subject:
             self.current_subject = self.selected_lesson.get('subject', 'общее')
         
-        print(f"🚀 ПРИНУДИТЕЛЬНЫЙ СТАРТ УРОКА: {self.selected_lesson['title']}")
+        debug_log(f"🚀 ПРИНУДИТЕЛЬНЫЙ СТАРТ УРОКА: {self.selected_lesson['title']}")
         
         # Начинаем урок
         self.lesson_started = True
@@ -1577,7 +1695,7 @@ class DialogueManager:
                 return f"Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
                 
         except Exception as e:
-            print(f"❌ Ошибка начала урока: {e}")
+            debug_log(f"❌ Ошибка начала урока: {e}")
             self.lesson_started = False
             return f"Ошибка начала урока: {str(e)}"
 
@@ -1713,7 +1831,7 @@ class DialogueManager:
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
-        print(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
+        debug_log(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
@@ -1729,10 +1847,10 @@ class DialogueManager:
                 
                 threading.Thread(target=delayed_visualization, daemon=True).start()
             
-            print(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
+            debug_log(f"✅ Возвращаем абзац {self.current_paragraph}: {paragraph[:100]}...")
             return paragraph
         else:
-            print("🏁 Урок завершен, запускаем практику")
+            debug_log("🏁 Урок завершен, запускаем практику")
             # 🔥 ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ
             if self.selected_lesson and self.has_student_data:
                 self.mark_lesson_completed(self.selected_lesson)
@@ -1748,8 +1866,8 @@ class DialogueManager:
         self.waiting_for_answer = False
         self.current_question_index = 0  # СБРАСЫВАЕМ СЧЕТЧИК ВОПРОСОВ
         
-        print("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
-        print(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
+        debug_log("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
+        debug_log(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
         
         # 🔥 ОБНОВЛЕНИЕ: Передаем данные ученика в менеджер практики
         if hasattr(self.practice_manager, 'student_data'):
@@ -1764,18 +1882,18 @@ class DialogueManager:
             self.socketio.emit('practice_started', {'room_id': self.room_id})
         
         # ПОЛУЧАЕМ ПЕРВЫЙ ВОПРОС ИЗ ОЧЕРЕДИ
-        print("🔄 Получение первого вопроса практики...")
+        debug_log("🔄 Получение первого вопроса практики...")
         first_question = self.practice_manager.get_next_question()
         
         if first_question:
-            print(f"✅ Первый вопрос получен: {first_question}")
+            debug_log(f"✅ Первый вопрос получен: {first_question}")
             self.waiting_for_answer = True
             self.current_practice_question = {
                 "id": 1,
                 "question": first_question,
                 "answer": ""
             }
-            print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
+            debug_log(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
@@ -1785,7 +1903,7 @@ class DialogueManager:
             else:
                 return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
-            print("❌ Не удалось получить первый вопрос практики")
+            debug_log("❌ Не удалось получить первый вопрос практики")
             self.practice_active = False
             return "Практические задания временно недоступны. Давайте продолжим урок или выберем другую тему."
 
@@ -1795,16 +1913,16 @@ class DialogueManager:
 
     def _evaluate_and_generate_next(self, student_answer: str) -> str:
         """Оценивает ответ и возвращает следующий вопрос с асинхронной генерацией"""
-        print(f"🔍 Обработка ответа: '{student_answer}'")
-        print(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
+        debug_log(f"🔍 Обработка ответа: '{student_answer}'")
+        debug_log(f"📊 Состояние: practice_active={self.practice_active}, waiting_for_answer={self.waiting_for_answer}")
         
         if not self.practice_active:
-            print("❌ Практика не активна")
+            debug_log("❌ Практика не активна")
             return "Практика не активна."
         
         # ПРОВЕРЯЕМ, НЕ ЯВЛЯЕТСЯ ЛИ ОТВЕТ КОМАНДОЙ
         if any(cmd in student_answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
-            print(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
+            debug_log(f"🔇 Игнорирую команду вместо ответа: {student_answer}")
             next_question = self.practice_manager.get_next_question()
             if next_question:
                 # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
@@ -1817,21 +1935,21 @@ class DialogueManager:
                 self._end_practice_session()
                 return "Практика завершена."
         
-        print(f"🎯 Оценка ответа и получение следующего вопроса...")
+        debug_log(f"🎯 Оценка ответа и получение следующего вопроса...")
         
         current_question = self.current_practice_question
         if not current_question:
-            print("❌ Нет текущего вопроса практики")
+            debug_log("❌ Нет текущего вопроса практики")
             self._end_practice_session()
             return "Практика завершена."
         
         # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ
         self.current_question_index += 1
-        print(f"📊 Текущий номер вопроса: {self.current_question_index}/{self.max_questions}")
+        debug_log(f"📊 Текущий номер вопроса: {self.current_question_index}/{self.max_questions}")
         
         # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
         if self.current_question_index >= self.max_questions:
-            print(f"🏁 Достигнут лимит вопросов: {self.current_question_index}/{self.max_questions}")
+            debug_log(f"🏁 Достигнут лимит вопросов: {self.current_question_index}/{self.max_questions}")
             self._end_practice_session()
             
             # 🔥 ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
@@ -1869,12 +1987,12 @@ class DialogueManager:
             self.waiting_for_answer = True
             
             response = f"{feedback}. Следующий вопрос: {next_question}"
-            print(f"➡️ Следующий вопрос получен: {next_question[:80]}...")
-            print(f"📊 Вопросов задано: {self.current_question_index}/{self.max_questions}")
-            print(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
+            debug_log(f"➡️ Следующий вопрос получен: {next_question[:80]}...")
+            debug_log(f"📊 Вопросов задано: {self.current_question_index}/{self.max_questions}")
+            debug_log(f"📊 Установлен waiting_for_answer: {self.waiting_for_answer}")
             return response
         else:
-            print("❌ Не удалось получить следующий вопрос")
+            debug_log("❌ Не удалось получить следующий вопрос")
             self._end_practice_session()
             return f"{feedback}. Практика завершена!"
 
@@ -1894,7 +2012,7 @@ class DialogueManager:
         
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
-        print("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
+        debug_log("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
         """Обработка вопросов ученика во время урока"""
@@ -1907,11 +2025,11 @@ class DialogueManager:
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph])
             self._generate_visualization(question, context)
         
-        print(f"Немедленная обработка вопроса: '{question}'")
+        debug_log(f"Немедленная обработка вопроса: '{question}'")
         final_response = None
         
         if self.llm_query_mode == "llm_first":
-            print(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
+            debug_log(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
             
             current_context = ""
             if self.lesson_content and self.current_paragraph > 0:
@@ -1925,23 +2043,23 @@ class DialogueManager:
                     self.knowledge_base.add_llm_answer(question, llm_response)
                     self.knowledge_base.add_knowledge(question=question, answer=llm_response)
                     self.knowledge_base.add_to_dialogue_knowledge(question, llm_response)
-                print(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
+                debug_log(f"✅ Ответ получен от LLM (режим llm_first): {llm_response[:100]}...")
                 final_response = llm_response
             
             if not final_response and self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
                 if knowledge_response and not knowledge_response.startswith("Интересный вопрос!"):
-                    print(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
+                    debug_log(f"📚 Ответ найден в базе знаний после неудачи LLM: {knowledge_response[:100]}...")
                     final_response = knowledge_response
             
             if not final_response and self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
-                    print(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
+                    debug_log(f"💾 Использован сохраненный ответ LLM: {llm_answer[:100]}...")
                     final_response = llm_answer
         
         else:
-            print(f"🔀 Режим traditional: Обработка вопроса '{question}'")
+            debug_log(f"🔀 Режим traditional: Обработка вопроса '{question}'")
             
             if self.knowledge_base:
                 knowledge_response = self.knowledge_base.get_dialogue_response(question_lower)
@@ -1967,7 +2085,7 @@ class DialogueManager:
             if not final_response and self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
-                    print(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
+                    debug_log(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
                     final_response = llm_answer
             
             if not final_response:
@@ -2049,44 +2167,151 @@ class DialogueManager:
         return self._get_available_lessons(subject)
 
     def get_lessons_for_student_subject(self, subject: str) -> List[dict]:
-        """🔥 НОВЫЙ МЕТОД: Возвращает уроки по предмету для текущего ученика"""
+        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Возвращает уроки по предмету для текущего ученика"""
         if not self.has_student_data:
             return []
         
         student_class = self.student_data.get('education_level', '5')
-        if student_class in self.lessons_by_class and subject in self.lessons_by_class[student_class]:
-            # Сортируем по номеру урока
-            lessons = self.lessons_by_class[student_class][subject]
-            return sorted(lessons, key=lambda x: x.get('lesson_number', 999))
         
-        # Если нет уроков для этого класса, возвращаем общие уроки по предмету
-        return self.lessons.get(subject, [])
+        debug_log(f"🔥 Поиск уроков: класс {student_class}, предмет '{subject}'")
+        
+        # Способ 1: Через lessons_by_class
+        if student_class in self.lessons_by_class:
+            # Пробуем разные варианты названия предмета
+            subject_variants = [subject]
+            
+            # Если предмет содержит "язык", пробуем без него
+            if 'язык' in subject:
+                subject_variants.append(subject.replace('язык', '').strip())
+            
+            # Пробуем английское название
+            if subject in self.subject_mapping_reverse:
+                subject_variants.append(self.subject_mapping_reverse[subject])
+            
+            debug_log(f"🔥 Пробуем варианты: {subject_variants}")
+            
+            for subject_variant in subject_variants:
+                if subject_variant in self.lessons_by_class[student_class]:
+                    lessons = self.lessons_by_class[student_class][subject_variant]
+                    debug_log(f"🔥 Найдено через lessons_by_class: {len(lessons)} уроков")
+                    return sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+        
+        # Способ 2: Прямой поиск в файловой системе
+        debug_log(f"🔥 Прямой поиск в файловой системе...")
+        direct_lessons = self._find_lessons_directly(student_class, subject)
+        
+        if direct_lessons:
+            debug_log(f"🔥 Найдено прямым поиском: {len(direct_lessons)} уроков")
+            
+            # Добавляем найденные уроки в кэш
+            if student_class not in self.lessons_by_class:
+                self.lessons_by_class[student_class] = {}
+            
+            if subject not in self.lessons_by_class[student_class]:
+                self.lessons_by_class[student_class][subject] = direct_lessons
+            
+            return sorted(direct_lessons, key=lambda x: x.get('lesson_number', 999))
+        
+        debug_log(f"🔥 Уроки не найдены ни одним способом")
+        return []
+
+    def _find_lessons_directly(self, class_level: str, subject: str) -> List[dict]:
+        """Прямой поиск уроков в файловой системе"""
+        import os
+        from pathlib import Path
+        
+        lessons = []
+        
+        # 🔥 ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ ПАПКИ КЛАССА
+        class_dir = self.students_base_dir / f"{class_level}_class"
+        if not class_dir.exists():
+            debug_log(f"🔥 Папка класса не существует: {class_dir}")
+            return lessons
+        
+        debug_log(f"🔥 Папка класса найдена: {class_dir}")
+        
+        # 🔥 ИЩЕМ ПАПКУ ПРЕДМЕТА
+        # Вариант 1: Точное совпадение
+        subject_dir = class_dir / subject
+        if subject_dir.exists() and subject_dir.is_dir():
+            debug_log(f"🔥 Найдена папка предмета (точное совпадение): {subject_dir}")
+            lesson_files = list(subject_dir.glob("*.txt"))
+            debug_log(f"🔥 Найдено файлов уроков: {len(lesson_files)}")
+        else:
+            # Вариант 2: Поиск по частичному совпадению
+            debug_log(f"🔥 Ищем папку с частичным совпадением...")
+            lesson_files = []
+            
+            for potential_subject_dir in class_dir.iterdir():
+                if potential_subject_dir.is_dir():
+                    dir_name_lower = potential_subject_dir.name.lower()
+                    subject_lower = subject.lower()
+                    
+                    # Проверяем разные варианты совпадения
+                    if (subject_lower in dir_name_lower or 
+                        dir_name_lower in subject_lower or
+                        any(word in dir_name_lower for word in subject_lower.split())):
+                        
+                        debug_log(f"🔥 Найдена подходящая папка: {potential_subject_dir}")
+                        lesson_files.extend(potential_subject_dir.glob("*.txt"))
+                        break
+            
+            debug_log(f"🔥 Найдено файлов уроков: {len(lesson_files)}")
+        
+        # 🔥 ПРЕОБРАЗУЕМ ФАЙЛЫ В СТРУКТУРУ УРОКОВ
+        for lesson_file in lesson_files:
+            try:
+                lesson_id = lesson_file.stem
+                lesson_number = self._extract_lesson_number(lesson_id)
+                lesson_title = self._format_lesson_title(lesson_id)
+                
+                lesson_data = {
+                    'id': f"{class_level}_{subject}_{lesson_id}",
+                    'title': lesson_title,
+                    'file_path': lesson_file,
+                    'type': 'student',
+                    'subject': subject,
+                    'class_level': class_level,
+                    'lesson_number': lesson_number,
+                    'full_path': f"{class_level}_class/{subject}/{lesson_file.name}"
+                }
+                
+                lessons.append(lesson_data)
+                debug_log(f"🔥 Добавлен урок: {lesson_title}")
+                
+            except Exception as e:
+                debug_log(f"🔥 Ошибка обработки файла {lesson_file}: {e}")
+        
+        return lessons
 
     def get_next_lesson_for_student(self, subject: str) -> Optional[Dict]:
-        """🔥 НОВЫЙ МЕТОД: Возвращает следующий незавершенный урок по предмету"""
+        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Возвращает следующий незавершенный урок по предмету"""
         if not self.has_student_data:
             return None
         
         student_class = self.student_data.get('education_level', '5')
-        if (student_class not in self.lessons_by_class or 
-            subject not in self.lessons_by_class[student_class]):
+        
+        # 🔥 ИСПРАВЛЕНИЕ: Сначала получаем все уроки для этого класса и предмета
+        lessons = self.get_lessons_for_student_subject(subject)
+        
+        if not lessons:
             # Если нет уроков для этого класса, возвращаем первый общий урок
             general_lessons = self.lessons.get(subject, [])
             if general_lessons:
                 return general_lessons[0]
             return None
         
-        # Получаем прогресс ученика по предмету
+        # 🔥 Получаем прогресс ученика по предмету
         progress = self.get_student_progress(subject)
         completed_ids = progress.get('completed_lessons', [])
         
-        # Ищем следующий незавершенный урок
-        available_lessons = self.get_lessons_for_student_subject(subject)
-        
-        for lesson in available_lessons:
+        # 🔥 Ищем следующий незавершенный урок
+        for lesson in lessons:
             if lesson['id'] not in completed_ids:
+                debug_log(f"🔥 Найден следующий урок: {lesson['title']}")
                 return lesson
         
+        debug_log(f"🔥 Все уроки по предмету '{subject}' завершены")
         return None  # Все уроки завершены
 
     def get_student_progress(self, subject: str = None) -> Dict:
@@ -2115,7 +2340,7 @@ class DialogueManager:
                     else:
                         return all_progress
         except Exception as e:
-            print(f"Ошибка загрузки прогресса: {e}")
+            debug_log(f"Ошибка загрузки прогресса: {e}")
         
         # Возвращаем пустой прогресс если файла нет
         if subject:
@@ -2172,14 +2397,14 @@ class DialogueManager:
         try:
             with open(progress_file, 'w', encoding='utf-8') as f:
                 json.dump(progress_data, f, ensure_ascii=False, indent=2)
-            print(f"✅ Прогресс сохранен: {lesson_id} по предмету {subject}")
+            debug_log(f"✅ Прогресс сохранен: {lesson_id} по предмету {subject}")
         except Exception as e:
-            print(f"❌ Ошибка сохранения прогресса: {e}")
+            debug_log(f"❌ Ошибка сохранения прогресса: {e}")
 
     def mark_lesson_completed(self, lesson_data: Dict):
         """🔥 НОВЫЙ МЕТОД: Помечает урок как завершенный"""
         if lesson_data and self.has_student_data:
-            print(f"🎓 Отмечаем урок как завершенный: {lesson_data['title']}")
+            debug_log(f"🎓 Отмечаем урок как завершенный: {lesson_data['title']}")
             self.save_student_progress(
                 lesson_data['id'], 
                 lesson_data['subject'], 
@@ -2205,12 +2430,12 @@ class DialogueManager:
 
     def set_llm_model(self, model: str):
         self.llm.set_model(model)
-        print(f"Установлена модель LLM: {model}")
+        debug_log(f"Установлена модель LLM: {model}")
 
     def set_llm_mode(self, mode: str):
         if mode in ["traditional", "llm_first"]:
             self.llm_query_mode = mode
-            print(f"Установлен режим LLM: {mode}")
+            debug_log(f"Установлен режим LLM: {mode}")
 
     def get_knowledge_stats(self) -> Optional[Dict]:
         if self.knowledge_base:
@@ -2220,7 +2445,7 @@ class DialogueManager:
     def set_room_id(self, room_id: str):
         """Установка ID комнаты для WebSocket коммуникации"""
         self.room_id = room_id
-        print(f"🔧 Установлен room_id для DialogueManager: {room_id}")
+        debug_log(f"🔧 Установлен room_id для DialogueManager: {room_id}")
 
     def set_student_data(self, student_data: dict):
         """🔥 ПРОСТО УСТАНАВЛИВАЕМ ДАННЫЕ УЧЕНИКА"""
@@ -2230,7 +2455,7 @@ class DialogueManager:
         if self.has_student_data:
             student_name = student_data.get('name', 'неизвестно')
             student_class = student_data.get('education_level', 'неизвестно')
-            print(f"🎓 Установлены данные ученика: {student_name} ({student_class} класс)")
+            debug_log(f"🎓 Установлены данные ученика: {student_name} ({student_class} класс)")
             
             # 🔥 НОВОЕ: Загружаем прогресс ученика при установке данных
             self._load_student_progress()
@@ -2241,7 +2466,7 @@ class DialogueManager:
             return
         
         # Прогресс загружается лениво при вызове get_student_progress
-        print(f"📊 Прогресс ученика будет загружен при необходимости")
+        debug_log(f"📊 Прогресс ученика будет загружен при необходимости")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -2263,7 +2488,7 @@ class DialogueManager:
             self.waiting_for_answer = False
             self.current_question_index = 0
             
-            print("=== ПРИНУДИТЕЛЬНЫЙ ЗАПУСК ПРАКТИКИ ===")
+            debug_log("=== ПРИНУДИТЕЛЬНЫЙ ЗАПУСК ПРАКТИКИ ===")
             
             # Инициализируем менеджер практики
             self.practice_manager.initialize_practice_generation(lesson_context, subject)
@@ -2284,7 +2509,7 @@ class DialogueManager:
                 return "Не удалось запустить практику"
                 
         except Exception as e:
-            print(f"❌ Ошибка принудительного запуска практики: {e}")
+            debug_log(f"❌ Ошибка принудительного запуска практики: {e}")
             return f"Ошибка запуска практики: {e}"
 
     def skip_to_practice(self):
@@ -2292,7 +2517,7 @@ class DialogueManager:
         if not self.lesson_started or not self.lesson_content:
             return "Сначала нужно начать урок"
         
-        print("=== ПРОПУСК К ПРАКТИКЕ ===")
+        debug_log("=== ПРОПУСК К ПРАКТИКЕ ===")
         practice_message = self._start_practice_session()
         return practice_message
 
@@ -2310,7 +2535,7 @@ class DialogueManager:
         """Принудительно генерирует SVG инфографику для текста"""
         try:
             if not self.room_id:
-                print("❌ Нет room_id для отправки инфографики")
+                debug_log("❌ Нет room_id для отправки инфографики")
                 return False
             
             context = " ".join(self.lesson_content[max(0, self.current_paragraph-2):self.current_paragraph]) if self.lesson_content else ""
@@ -2318,7 +2543,7 @@ class DialogueManager:
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка принудительной генерации инфографики: {e}")
+            debug_log(f"❌ Ошибка принудительной генерации инфографики: {e}")
             return False
 
     def get_conversation_stats(self) -> Dict:
@@ -2384,7 +2609,7 @@ class DialogueManager:
         """Очищает историю диалога"""
         self.conversation_history = []
         self.conversation_context = []
-        print("🗑️ История диалога очищена")
+        debug_log("🗑️ История диалога очищена")
 
     def simulate_student_answer(self, answer: str) -> str:
         """Симулирует ответ студента (для тестирования)"""
@@ -2420,7 +2645,7 @@ class DialogueManager:
     def force_lesson_start_notification(self):
         """Принудительно отправляет уведомление о начале урока (для восстановления состояния)"""
         if self.lesson_started and self.selected_lesson and self.room_id and self.socketio:
-            print(f"🔧 ПРИНУДИТЕЛЬНАЯ отправка lesson_started для комнаты {self.room_id}")
+            debug_log(f"🔧 ПРИНУДИТЕЛЬНАЯ отправка lesson_started для комнаты {self.room_id}")
             
             self.socketio.emit('lesson_started', {
                 'lesson_id': self.selected_lesson['id'],
@@ -2494,10 +2719,10 @@ class DialogueManager:
     def start_lesson_for_student_with_ready(self):
         """🔥 НОВЫЙ МЕТОД: Явно начинает урок для ученика когда все готово"""
         if not self.has_student_data or not self.current_subject:
-            print("❌ Нет данных ученика или предмета")
+            debug_log("❌ Нет данных ученика или предмета")
             return None
         
-        print(f"🚀 Явный старт урока для ученика: {self.current_subject}")
+        debug_log(f"🚀 Явный старт урока для ученика: {self.current_subject}")
         
         # 1. Получаем следующий урок
         next_lesson = self.get_next_lesson_for_student(self.current_subject)
@@ -2509,7 +2734,7 @@ class DialogueManager:
                 return f"У меня нет уроков по {self.current_subject} для твоего класса."
             next_lesson = available_lessons[0]
         
-        print(f"🎯 Найден урок: {next_lesson['title']}")
+        debug_log(f"🎯 Найден урок: {next_lesson['title']}")
         
         # 2. Устанавливаем урок
         self.selected_lesson = next_lesson
@@ -2532,7 +2757,16 @@ class DialogueManager:
         self.conversation_history = []
         self.conversation_context = []
         
-        # 6. Возвращаем первый абзац
+        # 6. Обновляем прогресс ученика
+        student_id = self.student_data.get('student_id')
+        if student_id:
+            self.save_student_progress(
+                next_lesson['id'],
+                next_lesson['subject'],
+                completed=False
+            )
+        
+        # 7. Возвращаем первый абзац
         first_paragraph = self._get_next_paragraph()
         
         student_name = self.student_data.get('name', 'ученик')
@@ -2543,17 +2777,17 @@ if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    print("🧪 Тестирование DialogueManager с новой структурой по классам...")
+    debug_log("🧪 Тестирование DialogueManager с новой структурой по классам...")
     
     # Тест доступных предметов
     subjects = dm.get_available_subjects()
-    print(f"📚 Доступные предметы: {subjects}")
+    debug_log(f"📚 Доступные предметы: {subjects}")
     
     # Тест загрузки уроков по классам
-    print(f"📊 Уроки по классам: {list(dm.lessons_by_class.keys())}")
+    debug_log(f"📊 Уроки по классам: {list(dm.lessons_by_class.keys())}")
     
     # Тест обработки приветствия
     response = dm.process_input("привет")
-    print(f"👋 Ответ на приветствие: {response}")
+    debug_log(f"👋 Ответ на приветствие: {response}")
     
-    print("✅ Тестирование завершено!")
+    debug_log("✅ Тестирование завершено!")
