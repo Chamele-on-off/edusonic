@@ -3379,7 +3379,7 @@ def get_student(student_id):
     try:
         student_data = load_student_data(student_id)
         if student_data:
-            return jsonify({"success": True, "student": student_data}")
+            return jsonify({"success": True, "student": student_data})
         else:
             return jsonify({"success": False, "error": "Ученик не найден"})
     except Exception as e:
