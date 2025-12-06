@@ -441,7 +441,7 @@ def complete_profile():
         }
         
         if update_student_profile(user_id, student_data):
-            # Создаем начальный прогресс для ученика
+            # 🔥 НОВОЕ: Создаем начальный прогресс для ученика
             initialize_student_progress(student_data['student_id'], student_data['education_level'])
             
             return jsonify({
@@ -732,7 +732,7 @@ def setup_llm_manager():
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """🔥 ИСПРАВЛЕННАЯ БЫСТРАЯ ИНИЦИАЛИЗАЦИЯ КОМНАТЫ - С ПЕРСОНАЛИЗИРОВАННЫМ ПРИВЕТСТВИЕМ"""
+    """Быстрая инициализация комнаты с учетом типа (ученик или обычный)"""
     try:
         # ВСЕГДА создаем DialogueManager если его нет
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
@@ -740,135 +740,33 @@ def _fast_room_initialization(room_id):
             room_dialogue[room_id].room_id = room_id
             debug_log(f"Создан DialogueManager для комнаты {room_id}")
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Определяем тип комнаты и параметры
-        debug_log(f"🔥 Анализ комнаты: {room_id}")
-        
-        # 🔥 РАЗБИРАЕМ РАЗНЫЕ ФОРМАТЫ КОМНАТ:
-        # 1. Комнаты учеников: {класс}_class_{предмет}_{имя}_{timestamp}
-        # 2. Обычные комнаты: default, test_room и т.д.
-        
-        student_class = None
-        subject_eng = None
-        subject_rus = None
-        student_name = None
+        # Определяем, является ли это комната ученика
         is_student_room = False
+        student_data = None
         
-        # 🔥 УЛУЧШЕННЫЙ ПАРСИНГ КОМНАТ УЧЕНИКОВ
-        parts = room_id.split('_')
-        debug_log(f"🔥 Части комнаты: {parts}")
+        # Проверяем наличие данных ученика для этой комнаты
+        if room_id in room_student_data and room_student_data[room_id]:
+            is_student_room = True
+            student_data = room_student_data[room_id]
+            debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
+            
+            # Передаем данные ученика в DialogueManager
+            room_dialogue[room_id].set_student_data(student_data)
+            
+            # Если есть предмет, устанавливаем его
+            if 'subject' in student_data:
+                room_dialogue[room_id].current_subject = student_data['subject']
+                debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
         
-        # Проверяем разные форматы комнат учеников
-        patterns = [
-            (r'(\d+)_class_(\w+)_(\w+)_(\d+)', 'формат: класс_class_предмет_имя_timestamp'),
-            (r'(\d+)_class_(\w+)_(\w+)', 'формат: класс_class_предмет_имя'),
-            (r'student_(\d+)_(\w+)_(\w+)', 'формат: student_класс_предмет_имя'),
-            (r'(\d+)класс_(\w+)_(\w+)', 'формат: класс_предмет_имя')
-        ]
-        
-        for pattern, description in patterns:
-            match = re.match(pattern, room_id)
-            if match:
-                debug_log(f"🔥 Найдено совпадение с {description}")
-                
-                if 'class' in pattern:
-                    # Формат: {класс}_class_{предмет}_{имя}...
-                    student_class = match.group(1)
-                    subject_eng = match.group(2)
-                    student_name = match.group(3)
-                elif 'student' in pattern:
-                    # Формат: student_{класс}_{предмет}_{имя}
-                    student_class = match.group(1)
-                    subject_eng = match.group(2)
-                    student_name = match.group(3)
-                else:
-                    # Формат: {класс}класс_{предмет}_{имя}
-                    student_class = match.group(1)
-                    subject_eng = match.group(2)
-                    student_name = match.group(3)
-                
-                is_student_room = True
-                break
-        
-        # 🔥 ЕСЛИ ЭТО КОМНАТА УЧЕНИКА - НАСТРАИВАЕМ DIALOGUE MANAGER И ОТПРАВЛЯЕМ ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ
-        if is_student_room and student_class and subject_eng and student_name:
-            debug_log(f"🔥 ПАРСИНГ КОМНАТЫ УЧЕНИКА УСПЕШЕН:")
-            debug_log(f"🔥 Класс: {student_class}")
-            debug_log(f"🔥 Предмет (англ): {subject_eng}")
-            debug_log(f"🔥 Имя ученика: {student_name}")
-            
-            # 🔥 МАППИНГ АНГЛИЙСКИХ НАЗВАНИЙ ПРЕДМЕТОВ К РУССКИМ
-            subject_mapping = {
-                'math': 'математика',
-                'mathematics': 'математика',
-                'algebra': 'алгебра',
-                'geometry': 'геометрия',
-                'physics': 'физика',
-                'chemistry': 'химия',
-                'biology': 'биология',
-                'history': 'история',
-                'social': 'обществознание',
-                'literature': 'литература',
-                'russian': 'русский язык',
-                'english': 'английский язык',
-                'french': 'французский язык',
-                'geography': 'география',
-                'informatics': 'информатика',
-                'info': 'информатика'  # Добавляем короткие варианты
-            }
-            
-            # Получаем русское название предмета
-            subject_rus = subject_mapping.get(subject_eng.lower(), subject_eng)
-            debug_log(f"🔥 Предмет (русский): {subject_rus}")
-            
-            # 🔥 КРИТИЧЕСКО ВАЖНО: СОЗДАЕМ ДАННЫЕ УЧЕНИКА
-            student_data = {
-                'name': student_name,
-                'education_level': student_class,
-                'subject': subject_rus,
-                'subject_english': subject_eng,
-                'student_id': f"room_{room_id}",
-                'conference_id': room_id,
-                'room_type': 'student'
-            }
-            
-            # 🔥 СОХРАНЯЕМ ДАННЫЕ УЧЕНИКА ДЛЯ КОМНАТЫ
-            room_student_data[room_id] = student_data
-            debug_log(f"🔥 Данные ученика сохранены для комнаты {room_id}")
-            
-            # 🔥 ПЕРЕДАЕМ ДАННЫЕ УЧЕНИКА В DIALOGUE MANAGER
-            dialogue = room_dialogue[room_id]
-            dialogue.set_student_data(student_data)
-            dialogue.current_subject = subject_rus
-            debug_log(f"🔥 Данные ученика переданы в DialogueManager")
-            
-            # 🔥 НЕМЕДЛЕННО отправляем ПЕРСОНАЛИЗИРОВАННОЕ ПРИВЕТСТВИЕ ученику
-            welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по предмету {subject_rus}. Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
-            
-            # Запускаем в фоновом режиме с небольшой задержкой
-            socketio.start_background_task(
-                send_student_welcome_message_delayed,
-                room_id,
-                student_data,
-                welcome_message
-            )
-            
-            # 🔥 КРИТИЧЕСКО ВАЖНО: Устанавливаем специальный флаг для комнаты ученика
-            room_ai_activated[room_id] = True
-            debug_log(f"✅ Комната ученика настроена с персонализированным приветствием")
-        
-        # 🔥 ДЛЯ ОБЫЧНЫХ КОМНАТ (не учеников)
-        elif room_id == "default" or not is_student_room:
-            debug_log(f"🔥 Обычная комната: {room_id}")
-            
-            # Ничего особенного не делаем, просто инициализируем
-            if room_dialogue[room_id]:
-                room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-        
-        # 🔥 Устанавливаем аватар
+        # Устанавливаем аватар
         if room_id not in room_current_avatar:
-            room_current_avatar[room_id] = 'woman'
-
-        debug_log(f"✅ Инициализация завершена для комнаты {room_id}")
+            room_current_avatar[room_id] = 'teacher'
+        
+        # Устанавливаем режим LLM
+        if room_dialogue[room_id]:
+            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+        
+        debug_log(f"✅ Инициализация завершена для комнаты {room_id} (ученик: {is_student_room})")
         return True
         
     except Exception as e:
@@ -876,37 +774,6 @@ def _fast_room_initialization(room_id):
         import traceback
         traceback.print_exc()
         return False
-
-def send_student_welcome_message_delayed(room_id, student_data, message):
-    """🔥 НОВАЯ ФУНКЦИЯ: Отправляет персонализированное приветствие ученику с задержкой"""
-    time.sleep(2)  # Даем время клиенту полностью загрузиться
-    
-    debug_log(f"🔥 Отправка персонализированного приветствия ученику {student_data.get('name')}")
-    
-    # Озвучиваем приветствие
-    speak_text(room_id, message, voice_type='female', is_teacher=True)
-    
-    # Также отправляем через WebSocket для визуального отображения
-    socketio.emit('student_welcome_message', {
-        'room_id': room_id,
-        'student_name': student_data.get('name', 'ученик'),
-        'subject': student_data.get('subject', 'предмету'),
-        'message': message,
-        'prompt_ready': True  # Флаг, что система ждет команды 'готов начать'
-    }, room=room_id)
-    
-    debug_log(f"✅ Персонализированное приветствие отправлено")
-
-def send_generic_message_delayed(room_id, message):
-    """Отправляет общее сообщение с задержкой"""
-    time.sleep(3)
-    
-    debug_log(f"🔥 Отправка сообщения в комнату {room_id}: {message[:100]}...")
-    
-    # Можно добавить специальное событие или просто озвучить
-    speak_text(room_id, message, voice_type='female', is_teacher=True)
-    
-    debug_log(f"✅ Сообщение отправлено")
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -1060,7 +927,7 @@ def update_student_data(student_id, updates):
         return False
 
 def create_student_conference(student_data):
-    """🔥 СОЗДАЕТ ОБЫЧНУЮ КОМНАТУ С ДАННЫМИ УЧЕНИКА"""
+    """Создает комнату для ученика"""
     try:
         conference_id = str(int(time.time() * 1000))
         room_id = f"student_{conference_id}"
@@ -1068,7 +935,7 @@ def create_student_conference(student_data):
         # Сохраняем данные ученика для комнаты
         room_student_data[room_id] = student_data
         
-        # Инициализируем комнату (она будет обычной, но с данными ученика)
+        # Инициализируем комнату
         _fast_room_initialization(room_id)
         
         debug_log(f"Создана комната {room_id} для ученика {student_data.get('name')}")
@@ -1394,14 +1261,37 @@ def handle_join_room(data):
         
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
-        # 🔥 ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА ДЛЯ КОМНАТ УЧЕНИКОВ
-        if "_class_" in room_id and len(room_participants[room_id]) == 1:
-            # Проверяем, что урок загружен для ученика
-            socketio.start_background_task(check_student_lesson_ready, room_id)
+        # 🔥 ДЛЯ КОМНАТ УЧЕНИКОВ: Отправляем приветствие с предложением начать урок
+        if (room_id in room_student_data and 
+            room_student_data[room_id] and 
+            len(room_participants[room_id]) == 1):
+            
+            student_data = room_student_data[room_id]
+            student_name = student_data.get('name', 'ученик')
+            subject = student_data.get('subject', 'предмету')
+            
+            # Проверяем, что это не демо-комната
+            if not room_id.startswith('demo_') and not room_id == 'default':
+                # Формируем приветствие как в демо-комнатах
+                welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
+                welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
+                
+                # Отправляем через WebSocket для отображения
+                socketio.emit('student_welcome_message', {
+                    'room_id': room_id,
+                    'student_name': student_name,
+                    'subject': subject,
+                    'message': welcome_message,
+                    'prompt_ready': True
+                }, room=room_id)
+                
+                # Озвучиваем приветствие с небольшой задержкой
+                socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message))
         
         elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
+            # Для обычных комнат
             greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
-            speak_text(room_id, greeting, voice_type='female', is_teacher=True)
+            socketio.start_background_task(lambda: delayed_welcome(room_id, greeting))
         
         debug_log(f"Успешное присоединение к комнате {room_id}, участников: {len(room_participants[room_id])}")
         
@@ -1415,43 +1305,14 @@ def handle_join_room(data):
         except:
             print("⚠️ Не удалось отправить ошибку - клиент уже отключен")
 
-def check_student_lesson_ready(room_id):
-    """Проверяет, что урок готов для ученика"""
-    time.sleep(3)  # Даем время на полную инициализацию
-    
-    if room_id in room_dialogue and room_dialogue[room_id]:
-        dialogue = room_dialogue[room_id]
-        
-        # Если у ученика есть данные и выбран урок, но еще не отправлено приветствие
-        if (dialogue.has_student_data and 
-            dialogue.selected_lesson and 
-            dialogue.current_subject):
-            
-            # Проверяем, было ли уже отправлено приветствие
-            student_data = room_student_data.get(room_id, {})
-            if student_data and not student_data.get('welcome_sent', False):
-                # Отправляем приветствие
-                welcome_message = f"{student_data.get('name', 'ученик')}, сегодня мы с тобой проведем урок по {dialogue.current_subject}. Тема: '{dialogue.selected_lesson['title']}'. Давай начнем наше занятие? Скажи 'готов начать', чтобы начать урок."
-                
-                socketio.emit('student_welcome_message', {
-                    'room_id': room_id,
-                    'student_name': student_data.get('name', 'ученик'),
-                    'subject': dialogue.current_subject,
-                    'lesson_title': dialogue.selected_lesson['title'],
-                    'lesson_id': dialogue.selected_lesson.get('id'),
-                    'message': welcome_message
-                }, room=room_id)
-                
-                # Озвучиваем приветствие
-                speak_text(room_id, welcome_message, voice_type='female', is_teacher=True)
-                
-                # Помечаем, что приветствие отправлено
-                student_data['welcome_sent'] = True
-                room_student_data[room_id] = student_data
+def delayed_welcome(room_id, message, delay=2):
+    """Отправляет приветствие с задержкой"""
+    time.sleep(delay)
+    speak_text(room_id, message, voice_type='female', is_teacher=True)
 
 @socketio.on('start_student_lesson')
 def handle_start_student_lesson(data):
-    """Обработчик команды 'готов начать' от ученика"""
+    """🔥 НОВЫЙ ОБРАБОТЧИК: Команда 'готов начать' от ученика"""
     room_id = data['room_id']
     sid = request.sid
     
@@ -1463,34 +1324,87 @@ def handle_start_student_lesson(data):
     
     dialogue = room_dialogue[room_id]
     
-    # Проверяем, что есть данные ученика и выбран урок
-    if not dialogue.has_student_data or not dialogue.selected_lesson:
-        emit('lesson_error', {'error': 'Нет данных ученика или урока'}, to=sid)
+    # Проверяем, что есть данные ученика
+    if not dialogue.has_student_data:
+        emit('lesson_error', {'error': 'Нет данных ученика'}, to=sid)
         return
     
-    # 🔥 ИСПРАВЛЕНИЕ: Используем новый метод для начала урока
+    # 🔥 ИСПРАВЛЕНИЕ: Получаем следующий урок для ученика
     try:
-        debug_log(f"🔥 Начинаем урок для ученика: {dialogue.selected_lesson['title']}")
+        debug_log(f"🔥 Поиск следующего урока для ученика...")
         
-        # 🔥 ВАЖНО: Используем метод, который вы добавили в dialogue.py
-        response = dialogue.start_lesson_for_student_with_ready()
+        # Получаем предмет из данных ученика или комнаты
+        subject = dialogue.current_subject
+        if not subject and room_id in room_student_data:
+            subject = room_student_data[room_id].get('subject')
         
-        if response:
-            # Отправляем подтверждение клиенту
-            emit('student_lesson_started', {
-                'room_id': room_id,
-                'lesson_id': dialogue.selected_lesson['id'],
-                'lesson_title': dialogue.selected_lesson['title'],
-                'subject': dialogue.current_subject,
-                'first_paragraph': response
-            }, room=room_id)
-            
-            debug_log(f"🔥 Урок успешно начат для ученика")
-            
-            # 🔥 ОЗВУЧИВАЕМ ПЕРВЫЙ АБЗАЦ
-            speak_text(room_id, response, voice_type='female', is_teacher=True)
+        if not subject:
+            emit('lesson_error', {'error': 'Не указан предмет'}, to=sid)
+            return
+        
+        # Получаем следующий урок
+        next_lesson = dialogue.get_next_lesson_for_student(subject)
+        
+        if not next_lesson:
+            # Если нет следующего урока, пробуем получить первый урок
+            lessons = dialogue.get_lessons_for_student_subject(subject)
+            if not lessons:
+                emit('lesson_error', {'error': f'Нет уроков по предмету {subject}'}, to=sid)
+                return
+            next_lesson = lessons[0]
+        
+        debug_log(f"🔥 Найден следующий урок: {next_lesson['title']}")
+        
+        # Устанавливаем урок
+        dialogue.selected_lesson = next_lesson
+        dialogue.lesson_started = True
+        dialogue.current_state = "lesson_reading"
+        
+        # Загружаем содержание урока
+        dialogue.lesson_content = dialogue._load_lesson_content(next_lesson['file_path'])
+        dialogue.current_paragraph = 0
+        
+        if not dialogue.lesson_content:
+            emit('lesson_error', {'error': 'Ошибка загрузки урока'}, to=sid)
+            return
+        
+        # Инициализируем базу знаний
+        if dialogue.current_subject:
+            from knowledge.knowledge_base import KnowledgeBase
+            dialogue.knowledge_base = KnowledgeBase(dialogue.current_subject)
+        
+        # Очищаем историю
+        dialogue.conversation_history = []
+        dialogue.conversation_context = []
+        
+        # Обновляем прогресс ученика
+        student_id = dialogue.student_data.get('student_id')
+        if student_id:
+            update_student_lesson_progress(
+                student_id, 
+                next_lesson.get('subject'), 
+                next_lesson['id'], 
+                completed=False
+            )
+        
+        # Отправляем подтверждение клиенту
+        emit('student_lesson_started', {
+            'room_id': room_id,
+            'lesson_id': next_lesson['id'],
+            'lesson_title': next_lesson['title'],
+            'subject': dialogue.current_subject,
+            'class_level': next_lesson.get('class_level', '5'),
+            'lesson_number': next_lesson.get('lesson_number', 1)
+        }, room=room_id)
+        
+        # 🔥 ОЗВУЧИВАЕМ ПЕРВЫЙ АБЗАЦ
+        first_paragraph = dialogue._get_next_paragraph()
+        if first_paragraph:
+            student_name = dialogue.student_data.get('name', 'ученик')
+            start_message = f"{student_name}, отлично! Начинаем урок по {dialogue.current_subject}. {first_paragraph}"
+            speak_text(room_id, start_message, voice_type='female', is_teacher=True)
         else:
-            emit('lesson_error', {'error': 'Не удалось начать урок'}, to=sid)
+            speak_text(room_id, "Начинаем урок!", voice_type='female', is_teacher=True)
             
     except Exception as e:
         debug_log(f"🔥 Ошибка начала урока: {e}")
@@ -1689,7 +1603,7 @@ def handle_student_message(data):
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
-    """🔥 ИСПРАВЛЕННЫЙ ОБРАБОТЧИК РАСПОЗНАННОЙ РЕЧИ"""
+    """Обработчик распознанной речи"""
     room_id = data['room_id']
     text = data['text']
     user_sid = request.sid
@@ -3473,7 +3387,7 @@ def add_student_lesson(student_id):
 @app.route('/api/student/create-conference', methods=['POST'])
 @student_required  
 def create_student_conference_route():
-    """🔥 СОЗДАЕТ КОНФЕРЕНЦИЮ ДЛЯ УЧЕНИКА - ОБЫЧНУЮ КОМНАТУ С ДАННЫМИ УЧЕНИКА"""
+    """Создает конференцию для ученика"""
     try:
         user_data = load_user_data(session['user_id'])
         student_data = user_data.get('student_data', {})
