@@ -1171,32 +1171,47 @@ class DialogueManager:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         text_lower = text.lower().strip()
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Обработка входа ученика в комнату
-        if self.has_student_data and self.current_subject and not self.selected_lesson:
-            # Если ученик только вошел и еще не выбрал урок
-            if any(word in text_lower for word in ['привет', 'здравствуй', 'начать', 'старт', 'готов', 'здравствуйте']):
-                # 🔥 АВТОМАТИЧЕСКОЕ ПРЕДЛОЖЕНИЕ УРОКОВ ПО ПРЕДМЕТУ (КАК В ДЕМО)
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 1: Обработка первого входа ученика
+        if (self.has_student_data and 
+            self.current_subject and 
+            not self.selected_lesson and
+            not self.lesson_started):
+            
+            # Если это первое сообщение ученика в комнате
+            if any(word in text_lower for word in ['привет', 'здравствуй', 'начать', 'старт', 'готов', 'здравствуйте', 'хай']):
+                # 🔥 НЕМЕДЛЕННОЕ ПРЕДЛОЖЕНИЕ УРОКОВ (КАК В ДЕМО)
                 return self.auto_suggest_lessons_for_student()
+        
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 2: Обработка команды "готов начать"
+        if (self.has_student_data and 
+            self.current_subject and 
+            self.selected_lesson and
+            not self.lesson_started and
+            any(cmd in text_lower for cmd in ['готов начать', 'готов к уроку', 'начнем урок', 'начинаем', 'поехали'])):
             
-            # 🔥 ОБРАБОТКА ВЫБОРА УРОКА ПО НОМЕРУ
-            lesson_patterns = [
-                (r'урок\s*(\d+)', int),  # "урок 1"
-                (r'(\d+)\s*урок', int),  # "1 урок"
-                (r'первый', lambda x: 1),
-                (r'второй', lambda x: 2),
-                (r'третий', lambda x: 3),
-                (r'четвертый', lambda x: 4),
-                (r'пятый', lambda x: 5),
-                (r'шестой', lambda x: 6),
-                (r'седьмой', lambda x: 7),
-                (r'восьмой', lambda x: 8),
-                (r'девятый', lambda x: 9),
-                (r'десятый', lambda x: 10),
-                (r'последний', lambda x: -1),  # "последний урок"
-                (r'любой', lambda x: 0),  # "любой урок"
-                (r'lesson\s*(\d+)', int)  # "lesson 1"
-            ]
-            
+            debug_log(f"🚀 КОМАНДА 'ГОТОВ НАЧАТЬ' ОТ УЧЕНИКА")
+            return self.start_lesson_for_student_with_ready()
+        
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 3: Обработка выбора урока по номеру
+        lesson_patterns = [
+            (r'урок\s*(\d+)', int),  # "урок 1"
+            (r'(\d+)\s*урок', int),  # "1 урок"
+            (r'первый', lambda x: 1),
+            (r'второй', lambda x: 2),
+            (r'третий', lambda x: 3),
+            (r'четвертый', lambda x: 4),
+            (r'пятый', lambda x: 5),
+            (r'шестой', lambda x: 6),
+            (r'седьмой', lambda x: 7),
+            (r'восьмой', lambda x: 8),
+            (r'девятый', lambda x: 9),
+            (r'десятый', lambda x: 10),
+            (r'последний', lambda x: -1),  # "последний урок"
+            (r'любой', lambda x: 0),  # "любой урок"
+            (r'lesson\s*(\d+)', int)  # "lesson 1"
+        ]
+        
+        if self.has_student_data and self.current_subject and not self.lesson_started:
             for pattern, converter in lesson_patterns:
                 match = re.search(pattern, text_lower)
                 if match:
@@ -1215,7 +1230,7 @@ class DialogueManager:
         if (not self.lesson_started and 
             self.selected_lesson and 
             self.current_subject and
-            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем', 'готов начать'])):
+            any(cmd in text_lower for cmd in ['начать урок', 'начнем урок', 'начни урок', 'старт урока', 'приступаем', 'давай начнем'])):
             
             debug_log(f"🚀 КОМАНДА НАЧАЛА УРОКА: '{text_lower}', предмет: {self.current_subject}")
             return self._force_start_lesson()
@@ -1240,36 +1255,6 @@ class DialogueManager:
                 return "Урок завершен. Переходим к практике."
         
         self._add_to_conversation_history(text, is_user=True)
-        
-        # 🔥 ИСПРАВЛЕНИЕ: УСЛОВИЯ ДЛЯ НАЧАЛА УРОКА ТОЛЬКО ПО ЯВНОМУ СОГЛАСИЮ
-        if self.has_student_data and self.current_subject and not self.lesson_started:
-            user_messages = [msg for msg in self.conversation_history if msg['is_user']]
-            
-            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Только после 3+ сообщений И явного согласия
-            if len(user_messages) >= 3 and not self.lesson_started:
-                student_name = self.student_data.get('name', 'ученик')
-                
-                # 🔥 ЯВНЫЕ КОМАНДЫ ДЛЯ НАЧАЛА УРОКА
-                explicit_start_commands = [
-                    'начать урок', 'начнем урок', 'поехали', 'готов к уроку', 
-                    'давай начнем', 'приступаем', 'начинаем урок', 'старт урока',
-                    'начни урок', 'запусти урок', 'хочу урок'
-                ]
-                
-                if any(cmd in text_lower for cmd in explicit_start_commands):
-                    # 🔥 ЕСЛИ УЖЕ ЕСТЬ ВЫБРАННЫЙ УРОК - НАЧИНАЕМ ЕГО!
-                    if self.selected_lesson:
-                        return self._force_start_lesson()
-                    else:
-                        # 🔥 НОВОЕ: ПРЕДЛАГАЕМ СЛЕДУЮЩИЙ УРОК ИЛИ ВЫБОР
-                        return self._suggest_next_or_select_lesson()
-                else:
-                    # 🔥 ТОЛЬКО ЕСЛИ УЧЕНИК ЯВНО ВЫРАЗИЛ ИНТЕРЕС К УРОКУ
-                    lesson_interest_words = ['урок', 'занятие', 'обучение', 'изучение', 'предмет', 'научи']
-                    if any(word in text_lower for word in lesson_interest_words):
-                        # 🔥 НОВОЕ: ПРЕДЛАГАЕМ ВЫБРАТЬ ИЛИ НАЧАТЬ СЛЕДУЮЩИЙ УРОК
-                        return self._offer_lesson_options()
-                    # 🔥 ИНАЧЕ - продолжаем обычный диалог без навязывания урока
         
         generated_lesson = self._check_for_lesson_generation_intent(text_lower)
         if generated_lesson:
@@ -1311,91 +1296,35 @@ class DialogueManager:
         return None
 
     def auto_suggest_lessons_for_student(self) -> str:
-        """🔥 ИСПРАВЛЕННЫЙ: Автоматически предлагает уроки по предмету ученика (как в демо)"""
+        """🔥 УЛУЧШЕННЫЙ: Автоматически предлагает уроки по предмету ученика"""
         if not self.has_student_data or not self.current_subject:
             return None
         
         student_name = self.student_data.get('name', 'ученик')
         subject = self.current_subject
-        
-        debug_log(f"🔥 Поиск уроков для ученика {student_name}, предмет: {subject}")
-        
-        # 🔥 КРИТИЧЕСКО ВАЖНО: Получаем класс ученика
         student_class = self.student_data.get('education_level', '5')
-        debug_log(f"🔥 Класс ученика: {student_class}")
         
-        # 🔥 ИСПРАВЛЕНИЕ 1: Проверяем правильный путь к урокам
-        if student_class in self.lessons_by_class:
-            debug_log(f"🔥 Уроки для класса {student_class}: {list(self.lessons_by_class[student_class].keys())}")
+        debug_log(f"🔥 Автопредложение уроков для {student_name} ({student_class} класс), предмет: {subject}")
         
-        # 🔥 ИСПРАВЛЕНИЕ 2: Пытаемся найти уроки разными способами
-        lessons = []
+        # 1. Пробуем получить уроки через метод ученика
+        lessons = self.get_lessons_for_student_subject(subject)
         
-        # Способ 1: Ищем уроки в структуре по классам
-        if student_class in self.lessons_by_class:
-            # Пробуем разные варианты названия предмета
-            subject_variants = [subject]
-            
-            # Добавляем англоязычное название для поиска
-            if subject in self.subject_mapping_reverse:
-                subject_variants.append(self.subject_mapping_reverse[subject])
-            
-            # Добавляем русскоязычные варианты
-            if 'язык' in subject:
-                subject_variants.append(subject.replace('язык', '').strip())
-            
-            debug_log(f"🔥 Варианты названия предмета для поиска: {subject_variants}")
-            
-            for subject_variant in subject_variants:
-                if subject_variant in self.lessons_by_class[student_class]:
-                    lessons = self.lessons_by_class[student_class][subject_variant]
-                    debug_log(f"🔥 Найдены уроки по предмету '{subject_variant}': {len(lessons)} уроков")
-                    break
-        
-        # Способ 2: Если не нашли, пробуем через общую структуру
+        # 2. Если не нашли, пробуем найти в общей структуре
         if not lessons:
-            debug_log(f"🔥 Не найдено уроков через lessons_by_class, пробуем общую структуру")
-            
-            # Пробуем найти предмет в общей структуре
-            for subject_variant in [subject, self.subject_mapping_reverse.get(subject, '')]:
-                if subject_variant in self.lessons:
-                    lessons = self.lessons[subject_variant]
-                    debug_log(f"🔥 Найдены уроки в общей структуре: {len(lessons)} уроков")
-                    break
+            lessons = self.lessons.get(subject, [])
+            debug_log(f"🔥 Уроки не найдены через ученика, пробуем общие: {len(lessons)}")
         
-        # 🔥 ИСПРАВЛЕНИЕ 3: Если уроков нет, показываем отладочную информацию
         if not lessons:
-            debug_log(f"🔥 Уроки не найдены. Проверяем структуру папок...")
-            
-            # Формируем ожидаемый путь
-            expected_path = f"lessons/students/{student_class}_class/"
-            debug_log(f"🔥 Ожидаемый путь: {expected_path}")
-            
-            # Проверяем существование папки
-            import os
-            if os.path.exists(f"lessons/students/{student_class}_class/"):
-                debug_log(f"🔥 Папка класса существует")
-                
-                # Проверяем папки предметов
-                import glob
-                subject_folders = glob.glob(f"lessons/students/{student_class}_class/*")
-                debug_log(f"🔥 Папки в классе {student_class}: {subject_folders}")
-                
-                # Ищем папку предмета
-                for folder in subject_folders:
-                    if subject in folder.lower() or any(word in folder.lower() for word in subject.split()):
-                        debug_log(f"🔥 Найдена папка предмета: {folder}")
-                        
-                        # Ищем файлы уроков
-                        lesson_files = glob.glob(f"{folder}/*.txt")
-                        debug_log(f"🔥 Файлы уроков в папке: {lesson_files}")
-            
-            return f"{student_name}, к сожалению, у меня пока нет уроков по предмету '{subject}' для {student_class} класса."
+            # 🔥 ВАЖНО: Формируем понятное сообщение для ученика
+            return f"{student_name}, привет! Я твой виртуальный учитель по {subject}. " \
+                   f"К сожалению, у меня пока нет уроков для {student_class} класса. " \
+                   f"Давай начнем с демо-урока или выберем другой предмет?"
         
-        # 🔥 Формируем список уроков (первые 3 + "и другие")
-        lesson_titles = []
+        # Сортируем уроки
         sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
         
+        # Формируем список (первые 3 урока)
+        lesson_titles = []
         for i, lesson in enumerate(sorted_lessons[:3], 1):
             lesson_titles.append(f"{i}. {lesson['title']}")
         
@@ -1404,17 +1333,28 @@ class DialogueManager:
         if len(sorted_lessons) > 3:
             lesson_list += f" и еще {len(sorted_lessons) - 3} других уроков"
         
-        # 🔥 Формируем приветствие как в демо
+        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Добавляем КОНКРЕТНЫЕ команды для ученика
         response = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-        response += f"У меня есть уроки по этой теме: {lesson_list}. "
-        response += f"Что тебя интересует? Скажи, например, 'первый урок' или 'урок 2'."
+        response += f"У меня есть уроки: {lesson_list}. "
         
-        debug_log(f"🔥 Приветственное сообщение сформировано: {response[:100]}...")
+        # Проверяем, есть ли следующий урок по прогрессу
+        next_lesson = self.get_next_lesson_for_student(subject)
+        if next_lesson:
+            response += f"Твой следующий урок: '{next_lesson['title']}'. "
+            # 🔥 СОХРАНЯЕМ следующий урок как выбранный
+            self.selected_lesson = next_lesson
+        
+        # Добавляем понятные команды
+        if self.selected_lesson:
+            response += "Скажи 'готов начать', чтобы начать этот урок. "
+        response += "Или назови номер урока, например 'первый урок' или 'урок 2'."
+        
+        debug_log(f"🔥 Приветствие сформировано: {response[:150]}...")
         
         return response
 
     def _select_lesson_by_number(self, lesson_number: int) -> str:
-        """Выбирает урок по номеру"""
+        """Выбирает урок по номеру и СОХРАНЯЕТ его"""
         if not self.current_subject:
             return "Сначала выбери предмет."
         
@@ -1447,7 +1387,7 @@ class DialogueManager:
         # 🔥 ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
         student_name = self.student_data.get('name', 'ученик')
         return f"Отлично, {student_name}! Выбран урок: '{selected_lesson['title']}'. " \
-               f"Скажи 'начать урок', чтобы начать."
+               f"Скажи 'готов начать', чтобы начать."
 
     def _suggest_next_or_select_lesson(self) -> str:
         """Предлагает следующий урок или выбор урока"""
