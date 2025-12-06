@@ -866,7 +866,7 @@ def _fast_room_initialization(room_id):
         
         # 🔥 Устанавливаем аватар
         if room_id not in room_current_avatar:
-            room_current_avatar[room_id] = 'teacher'
+            room_current_avatar[room_id] = 'woman'
 
         debug_log(f"✅ Инициализация завершена для комнаты {room_id}")
         return True
