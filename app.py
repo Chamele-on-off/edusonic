@@ -160,6 +160,9 @@ key_manager = get_key_manager()
 # Данные учеников для комнат
 room_student_data = defaultdict(dict)
 
+# Маппинг комнат и предметов
+room_subject_mapping = {}
+
 # Отладочный режим
 DEBUG_LLM = True
 
@@ -740,23 +743,43 @@ def _fast_room_initialization(room_id):
             room_dialogue[room_id].room_id = room_id
             debug_log(f"Создан DialogueManager для комнаты {room_id}")
         
-        # Определяем, является ли это комната ученика
-        is_student_room = False
-        student_data = None
-        
-        # Проверяем наличие данных ученика для этой комнаты
-        if room_id in room_student_data and room_student_data[room_id]:
-            is_student_room = True
-            student_data = room_student_data[room_id]
-            debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
+        # 🔥 ДОБАВЛЯЕМ: Автоматическое определение предмета из названия комнаты
+        if room_id and 'room_id' in locals() and room_dialogue[room_id]:
+            dialogue = room_dialogue[room_id]
             
-            # Передаем данные ученика в DialogueManager
-            room_dialogue[room_id].set_student_data(student_data)
-            
-            # Если есть предмет, устанавливаем его
-            if 'subject' in student_data:
-                room_dialogue[room_id].current_subject = student_data['subject']
-                debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
+            # Проверяем, является ли это комната ученика
+            if room_id.startswith('student_') or any(subj in room_id.lower() for subj in ['math_', 'physics_', 'chemistry_', 'history_', 'литература', 'география']):
+                # Определяем предмет по названию комнаты
+                room_lower = room_id.lower()
+                
+                if 'math' in room_lower or 'математика' in room_lower or 'алгебра' in room_lower:
+                    subject = 'математика'
+                elif 'physics' in room_lower or 'физика' in room_lower:
+                    subject = 'физика'
+                elif 'chemistry' in room_lower or 'химия' in room_lower:
+                    subject = 'химия'
+                elif 'biology' in room_lower or 'биология' in room_lower:
+                    subject = 'биология'
+                elif 'history' in room_lower or 'история' in room_lower:
+                    subject = 'история'
+                elif 'social' in room_lower or 'обществознание' in room_lower:
+                    subject = 'обществознание'
+                elif 'literature' in room_lower or 'литература' in room_lower:
+                    subject = 'литература'
+                elif 'russian' in room_lower or 'русский' in room_lower:
+                    subject = 'русский язык'
+                elif 'english' in room_lower or 'английский' in room_lower:
+                    subject = 'английский язык'
+                elif 'geography' in room_lower or 'география' in room_lower:
+                    subject = 'география'
+                elif 'informatics' in room_lower or 'информатика' in room_lower:
+                    subject = 'информатика'
+                else:
+                    subject = None
+                
+                if subject and not dialogue.current_subject:
+                    dialogue.current_subject = subject
+                    debug_log(f"🔥 Автоматически определен предмет для комнаты {room_id}: {subject}")
         
         # Устанавливаем аватар
         if room_id not in room_current_avatar:
@@ -766,7 +789,7 @@ def _fast_room_initialization(room_id):
         if room_dialogue[room_id]:
             room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
-        debug_log(f"✅ Инициализация завершена для комнаты {room_id} (ученик: {is_student_room})")
+        debug_log(f"✅ Инициализация завершена для комнаты {room_id}")
         return True
         
     except Exception as e:
@@ -1019,7 +1042,7 @@ def initialize_student_progress(student_id, education_level):
     try:
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         
-        # Базовая структура прогресса
+        # Базовая структура прогресс
         progress_data = {
             "student_id": student_id,
             "education_level": education_level,
@@ -1225,6 +1248,87 @@ def handle_join_room(data):
         if room_id not in room_llm_mode:
             room_llm_mode[room_id] = get_llm_mode()
 
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Определяем тип комнаты
+        is_student_room = False
+        student_data = None
+        subject_from_room = None
+        
+        # Проверяем, является ли это комната ученика
+        room_lower = room_id.lower()
+        
+        # Определяем, является ли это комната ученика по шаблону
+        is_student_room = (
+            room_lower.startswith('student_') or 
+            any(subj in room_lower for subj in ['math_', 'physics_', 'chemistry_', 'biology_', 'history_', 'social_', 'literature_', 'russian_', 'english_', 'geography_', 'informatics_', 'алгебра_', 'геометрия_', 'физика_', 'химия_', 'биология_', 'история_', 'обществознание_', 'литература_', 'русский_', 'английский_', 'география_', 'информатика_'])
+        )
+        
+        if is_student_room:
+            # 🔥 ИЩЕМ ПРЕДМЕТ В ИМЕНИ КОМНАТЫ
+            subject_patterns = {
+                'математика': ['math', 'математика', 'алгебра', 'геометрия'],
+                'физика': ['physics', 'физика'],
+                'химия': ['chemistry', 'химия'],
+                'биология': ['biology', 'биология'],
+                'история': ['history', 'история'],
+                'обществознание': ['social', 'обществознание'],
+                'литература': ['literature', 'литература'],
+                'русский язык': ['russian', 'русский'],
+                'английский язык': ['english', 'английский'],
+                'география': ['geography', 'география'],
+                'информатика': ['informatics', 'информатика']
+            }
+            
+            for subject, patterns in subject_patterns.items():
+                if any(pattern in room_lower for pattern in patterns):
+                    subject_from_room = subject
+                    break
+            
+            # Если не нашли по названию, пробуем извлечь из структуры комнаты
+            if not subject_from_room and '_' in room_id:
+                parts = room_id.split('_')
+                for part in parts:
+                    if part in subject_patterns.keys():
+                        subject_from_room = part
+                        break
+                    elif part in ['math', 'physics', 'chemistry', 'biology', 'history', 'social', 'literature', 'russian', 'english', 'geography', 'informatics']:
+                        # Маппинг английских названий на русские
+                        english_to_russian = {
+                            'math': 'математика',
+                            'physics': 'физика',
+                            'chemistry': 'химия',
+                            'biology': 'биология',
+                            'history': 'история',
+                            'social': 'обществознание',
+                            'literature': 'литература',
+                            'russian': 'русский язык',
+                            'english': 'английский язык',
+                            'geography': 'география',
+                            'informatics': 'информатика'
+                        }
+                        subject_from_room = english_to_russian.get(part)
+                        break
+            
+            debug_log(f"🔥 Определен предмет для комнаты {room_id}: {subject_from_room}")
+            
+            # Если есть предмет, устанавливаем его
+            if subject_from_room:
+                # Сохраняем данные для комнаты
+                room_student_data[room_id] = {
+                    'subject': subject_from_room,
+                    'is_student_room': True,
+                    'room_id': room_id
+                }
+                
+                # Сохраняем маппинг комнаты и предмета
+                room_subject_mapping[room_id] = subject_from_room
+                
+                # 🔥 ДОБАВЛЯЕМ: Если есть данные сессии, получаем информацию об ученике
+                if 'user_id' in session:
+                    user_data = load_user_data(session['user_id'])
+                    if user_data and user_data.get('student_data'):
+                        room_student_data[room_id].update(user_data['student_data'])
+                        debug_log(f"🔥 Добавлены данные ученика для комнаты {room_id}")
+        
         # 🔥 ВАЖНО: Инициализация перед join_room
         _fast_room_initialization(room_id)
 
@@ -1241,6 +1345,12 @@ def handle_join_room(data):
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
             room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+        
+        # 🔥 ДОБАВЛЯЕМ: Передаем данные ученика в DialogueManager
+        if is_student_room and room_id in room_student_data:
+            if room_dialogue[room_id]:
+                room_dialogue[room_id].set_student_data(room_student_data[room_id])
+                debug_log(f"🔥 Переданы данные ученика в DialogueManager для комнаты {room_id}")
         
         if peer_id:
             emit('participant_joined', {
@@ -1262,36 +1372,33 @@ def handle_join_room(data):
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
         # 🔥 ДЛЯ КОМНАТ УЧЕНИКОВ: Отправляем приветствие с предложением начать урок
-        if (room_id in room_student_data and 
-            room_student_data[room_id] and 
-            len(room_participants[room_id]) == 1):
+        if (is_student_room and 
+            len(room_participants[room_id]) == 1 and
+            subject_from_room):
             
-            student_data = room_student_data[room_id]
-            student_name = student_data.get('name', 'ученик')
-            subject = student_data.get('subject', 'предмету')
+            student_name = room_student_data[room_id].get('name', 'ученик') if room_id in room_student_data else 'ученик'
             
-            # Проверяем, что это не демо-комната
-            if not room_id.startswith('demo_') and not room_id == 'default':
-                # Формируем приветствие как в демо-комнатах
-                welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-                welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
-                
-                # Отправляем через WebSocket для отображения
-                socketio.emit('student_welcome_message', {
-                    'room_id': room_id,
-                    'student_name': student_name,
-                    'subject': subject,
-                    'message': welcome_message,
-                    'prompt_ready': True
-                }, room=room_id)
-                
-                # Озвучиваем приветствие с небольшой задержкой
-                socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message))
+            # 🔥 ИСПРАВЛЕННОЕ ПРИВЕТСТВИЕ: сразу предлагаем следующий урок
+            welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject_from_room}. "
+            welcome_message += "Я вижу, что ты выбрал этот предмет. Давай сразу начнем наш сегодняшний урок! "
+            welcome_message += "Скажи 'готов начать', чтобы начать урок."
+            
+            # Отправляем через WebSocket для отображения
+            socketio.emit('student_welcome_message', {
+                'room_id': room_id,
+                'student_name': student_name,
+                'subject': subject_from_room,
+                'message': welcome_message,
+                'prompt_ready': True
+            }, room=room_id)
+            
+            # Озвучиваем приветствие с небольшой задержкой
+            socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message, is_student_room=True, subject=subject_from_room))
         
         elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
             # Для обычных комнат
             greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
-            socketio.start_background_task(lambda: delayed_welcome(room_id, greeting))
+            socketio.start_background_task(lambda: delayed_welcome(room_id, greeting, is_student_room=False))
         
         debug_log(f"Успешное присоединение к комнате {room_id}, участников: {len(room_participants[room_id])}")
         
@@ -1305,10 +1412,27 @@ def handle_join_room(data):
         except:
             print("⚠️ Не удалось отправить ошибку - клиент уже отключен")
 
-def delayed_welcome(room_id, message, delay=2):
+def delayed_welcome(room_id, message, delay=2, is_student_room=False, subject=None):
     """Отправляет приветствие с задержкой"""
     time.sleep(delay)
-    speak_text(room_id, message, voice_type='female', is_teacher=True)
+    
+    # 🔥 ИСПРАВЛЕНИЕ: Используем глобальный маппинг для определения предмета
+    if room_id in room_subject_mapping:
+        subject = room_subject_mapping[room_id]
+        is_student_room = True
+    
+    # 🔥 ДОБАВЛЯЕМ: Проверяем, является ли это комната ученика
+    if is_student_room and subject:
+        # Для учеников: говорим и отправляем сообщение
+        speak_text(room_id, message, voice_type='female', is_teacher=True)
+        
+        # 🔥 ДОПОЛНИТЕЛЬНО: Устанавливаем предмет в DialogueManager если он еще не установлен
+        if room_id in room_dialogue and room_dialogue[room_id] and not room_dialogue[room_id].current_subject:
+            room_dialogue[room_id].current_subject = subject
+            debug_log(f"🔥 Установлен предмет {subject} для комнаты {room_id} в delayed_welcome")
+    else:
+        # Для обычных комнат
+        speak_text(room_id, message, voice_type='female', is_teacher=True)
 
 @socketio.on('start_student_lesson')
 def handle_start_student_lesson(data):
@@ -1335,8 +1459,8 @@ def handle_start_student_lesson(data):
         
         # Получаем предмет из данных ученика или комнаты
         subject = dialogue.current_subject
-        if not subject and room_id in room_student_data:
-            subject = room_student_data[room_id].get('subject')
+        if not subject and room_id in room_subject_mapping:
+            subject = room_subject_mapping[room_id]
         
         if not subject:
             emit('lesson_error', {'error': 'Не указан предмет'}, to=sid)
@@ -1642,7 +1766,7 @@ def handle_recognized_speech(data):
         if dialogue.is_lesson_started():
             all_continue_commands = [
                 "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
-                "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
+                "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", " ладно", "ясно",
                 "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
             ]
             
@@ -2845,6 +2969,26 @@ def add_lesson():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@app.route('/api/add_lesson_with_class', methods=['POST'])
+@teacher_required
+def add_lesson_with_class():
+    """Добавление урока с указанием класса (для нового интерфейса)"""
+    try:
+        data = request.json
+        subject = data.get('subject', 'общее')
+        title = data.get('title', '')
+        content = data.get('content', '')
+        class_level = data.get('class_level', '5')
+        
+        if not title or not content:
+            return jsonify({"success": False, "error": "Title and content are required"})
+        
+        # Просто вызываем существующую функцию
+        return add_lesson()
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route('/api/add_practice', methods=['POST'])
 def add_practice():
     """Добавление практических заданий"""
@@ -2934,6 +3078,50 @@ def download_lessons():
         temp_zip.name,
         as_attachment=True,
         download_name="ai_teacher_lessons.zip",
+        mimetype='application/zip'
+    )
+
+@app.route('/api/download_lessons_by_class')
+def download_lessons_by_class():
+    """Скачивание уроков для конкретного класса"""
+    class_level = request.args.get('class', 'demo')
+    
+    import tempfile
+    import zipfile
+    
+    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+    
+    with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+        if class_level == 'demo':
+            # Демо-уроки
+            for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
+                zipf.write(lesson_file, f"demo/{lesson_file.name}")
+        
+        elif class_level == 'generated':
+            # Сгенерированные уроки
+            for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
+                zipf.write(lesson_file, f"generated/{lesson_file.name}")
+        
+        elif class_level == 'all':
+            # Все уроки (существующая логика)
+            return download_lessons()
+        
+        else:
+            # Уроки для конкретного класса
+            class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
+            if class_dir.exists():
+                for subject_dir in class_dir.iterdir():
+                    if subject_dir.is_dir():
+                        for lesson_file in subject_dir.glob("*.txt"):
+                            rel_path = lesson_file.relative_to(LESSONS_STUDENTS_DIR)
+                            zipf.write(lesson_file, f"students/{rel_path}")
+    
+    temp_zip.close()
+    
+    return send_file(
+        temp_zip.name,
+        as_attachment=True,
+        download_name=f"lessons_{class_level}_class.zip",
         mimetype='application/zip'
     )
 
