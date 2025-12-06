@@ -24,7 +24,7 @@ class PracticeManager:
         self.current_question_index = 0
         self.max_questions = 5  # ЖЕСТКИЙ ЛИМИТ 5 ВОПРОСОВ
         
-        # ФЛАГИ УПРАВЛЕНИЯ АСИНХРОННОЙ ГЕНЕРАЦИЕЙ
+        # ФЛАГИ УПРАВЛЕНИЯ АСИНХРОННОЙ ГЕНЕРАЦИИ
         self.generation_thread = None
         self.stop_generation = False
         self.generation_active = False
@@ -142,83 +142,73 @@ class PracticeManager:
             return fallback
 
     def generate_single_question(self) -> Optional[str]:
-        """Генерирует один вопрос (синхронно) с учетом возраста ученика"""
+        """Генерирует один ТЕСТОВЫЙ вопрос с вариантами ответов A, B, C, D"""
         try:
             # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит вопросов
             if len(self.generated_questions) >= self.max_questions:
                 print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
             
-            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Добавляем данные ученика для адаптации сложности
-            age = self.student_data.get('age', '12')
-            level = self.student_data.get('level', '5')
-            name = self.student_data.get('name', 'ученик')
-            
-            # УЛУЧШЕННЫЙ промт с историей вопросов и учетом возраста
-            previous_questions = self._get_previous_questions_text()
-            
+            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Генерируем ТЕСТОВЫЙ вопрос с вариантами
             prompt = f"""
-            Создай ОДИН УНИКАЛЬНЫЙ учебный вопрос для проверки понимания темы.
-
-            ПАРАМЕТРЫ УЧЕНИКА:
-            - Имя: {name}
-            - Возраст: {age} лет
-            - Уровень образования: {level} класс
-            - Предмет: {self.current_subject}
-
-            КРАТКОЕ СОДЕРЖАНИЕ УРОКА:
+            СОЗДАЙ ТЕСТОВЫЙ ВОПРОС ДЛЯ ПРОВЕРКИ ПОНИМАНИЯ УРОКА.
+            
+            МАТЕРИАЛ УРОКА:
             {self.current_lesson_summary}
-
-            УЖЕ ЗАДАННЫЕ ВОПРОСЫ (НЕ ПОВТОРЯЙ ИХ!):
-            {previous_questions}
-
+            
             ТРЕБОВАНИЯ К ВОПРОСУ:
-            1. СООТВЕТСТВИЕ ВОЗРАСТУ {age} ЛЕТ:
-               - Сложность вопроса должна быть адекватна для {age}-летнего
-               - Формулировки должны быть понятны ученику {level} класса
-               - Используй язык и примеры, релевантные для этого возраста
-
-            2. ПЕДАГОГИЧЕСКИЕ ТРЕБОВАНИЯ:
-               - Вопрос ДОЛЖЕН быть УНИКАЛЬНЫМ и не похожим на уже заданные
-               - Проверяй понимание РАЗНЫХ аспектов материала
-               - Вопрос должен требовать развернутого ответа
-               - Будь конкретным и четким
-
-            3. ФОРМАТ:
-               - Только один вопрос
-               - Без нумерации и лишних слов
-               - Вопрос должен быть сформулирован ясно и однозначно
-
-            Создай вопрос, который будет интересен и посилен для ученика {age} лет.
+            1. ВОПРОС ДОЛЖЕН БЫТЬ ИСКЛЮЧИТЕЛЬНО ПО СОДЕРЖАНИЮ ЭТОГО УРОКА
+            2. НЕ ВЫХОДИ ЗА ПРЕДЕЛЫ МАТЕРИАЛА УРОКА  
+            3. ВОПРОС НЕ ДОЛЖЕН ПОВТОРЯТЬСЯ С ПРЕДЫДУЩИМИ
+            4. СОЗДАЙ 4 ВАРИАНТА ОТВЕТА: A, B, C, D
+            5. НЕ ВКЛЮЧАЙ ПРАВИЛЬНЫЙ ОТВЕТ В ТЕКСТ ВОПРОСА
+            6. ВОПРОС ДОЛЖЕН БЫТЬ ОДНОЗНАЧНЫМ
+            7. ВОПРОС НЕ ДОЛЖЕН БЫТЬ ОЧЕНЬ СЛОЖНЫМ
+            
+            ФОРМАТ:
+            [Текст вопроса?]
+            
+            Варианты ответов:
+            A) [Текст варианта A]
+            B) [Текст варианта B] 
+            C) [Текст варианта C]
+            D) [Текст варианта D]
+            
+            УЖЕ ЗАДАННЫЕ ВОПРОСЫ (НЕ ПОВТОРЯЙ!):
+            {self._get_previous_questions_text()}
+            
+            Верни только вопрос в указанном формате.
             """
-
-            # УВЕЛИЧИВАЕМ ТАЙМАУТ для LLM запроса
+            
             llm_response = self.llm.query(
                 question=prompt,
                 context="",
                 subject=self.current_subject
             )
             
-            if llm_response and not llm_response.startswith("Спасибо за вопрос!"):
-                question = self._clean_question_text(llm_response)
-                
-                if question and len(question.strip()) > 10 and self._is_question_unique(question):
-                    # Сохраняем в историю
-                    self.generated_questions.append({
-                        "question": question,
-                        "generated_at": time.time(),
-                        "type": "general",
-                        "age_adapted": True  # 🔥 НОВОЕ: Отмечаем, что вопрос адаптирован по возрасту
-                    })
-                    return question
+            if llm_response and len(llm_response.strip()) > 50:
+                # Проверяем, что есть варианты ответов
+                if any(marker in llm_response for marker in ["A)", "B)", "C)", "D)"]):
+                    question_text = llm_response.strip()
+                    
+                    if self._is_question_unique(question_text):
+                        self.generated_questions.append({
+                            "question": question_text,
+                            "generated_at": time.time(),
+                            "type": "test_question"
+                        })
+                        return question_text
             
-            # Fallback если не удалось сгенерировать
-            return self._get_fallback_question_for_age(age, ensure_unique=True)
-                
+            # 🔥 FALLBACK: Если не получился тестовый вопрос - обычный вопрос
+            fallback = self._get_fallback_question(ensure_unique=True)
+            print(f"🔄 Использован fallback вопрос: {fallback[:80]}...")
+            return fallback
+            
         except Exception as e:
-            print(f"❌ Ошибка генерации вопроса: {e}")
-            age = self.student_data.get('age', '12')
-            return self._get_fallback_question_for_age(age, ensure_unique=True)
+            print(f"❌ Ошибка генерации тестового вопроса: {e}")
+            fallback = self._get_fallback_question(ensure_unique=True)
+            print(f"🔄 Использован fallback после ошибки: {fallback[:80]}...")
+            return fallback
 
     def evaluate_and_continue(self, student_answer: str, current_question: str) -> Tuple[str, Optional[str]]:
         """Оценивает ответ и возвращает feedback + следующий вопрос с учетом возраста"""
@@ -240,7 +230,7 @@ class PracticeManager:
             return feedback, next_question
 
     def evaluate_single_answer(self, student_answer: str, question: str) -> str:
-        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ ученика с учетом возраста"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ ученика через LLM (все как раньше)"""
         try:
             if not student_answer or len(student_answer.strip()) < 2:
                 return "Ответ слишком короткий. Пожалуйста, попробуйте ответить более развернуто."
@@ -249,11 +239,15 @@ class PracticeManager:
             if any(cmd in student_answer.lower() for cmd in command_words):
                 return "Это похоже на команду. Пожалуйста, дайте ответ на вопрос."
             
-            correct_answer = self._generate_correct_answer(question)
-            if not correct_answer:
-                correct_answer = "Информация содержится в учебном материале."
-            
-            evaluation = self._evaluate_with_llm_context(student_answer, question, correct_answer)
+            # 🔥 ВАЖНО: Проверяем, это тестовый вопрос или обычный
+            if any(marker in question for marker in ["A)", "B)", "C)", "D)"]):
+                # 🔥 ЭТО ТЕСТОВЫЙ ВОПРОС - проверяем через LLM как обычно
+                correct_answer = self._generate_correct_answer_for_test(question)
+                evaluation = self._evaluate_with_llm_context(student_answer, question, correct_answer)
+            else:
+                # 🔥 ЭТО ОБЫЧНЫЙ ВОПРОС - используем старую логику
+                correct_answer = self._generate_correct_answer(question)
+                evaluation = self._evaluate_with_llm_context(student_answer, question, correct_answer)
             
             # ИСПРАВЛЕНИЕ: Заменяем неподходящие fallback ответы
             if not evaluation or any(phrase in evaluation for phrase in [
@@ -261,7 +255,11 @@ class PracticeManager:
                 "Мне нужно немного времени подумать",
                 "Спасибо за вопрос! Я подумаю над ответом"
             ]):
-                evaluation = f"Спасибо за ответ! Правильный ответ: {correct_answer}"
+                # Для тестовых вопросов даем более конкретный feedback
+                if any(marker in question for marker in ["A)", "B)", "C)", "D)"]):
+                    evaluation = "Спасибо за ответ! Давайте проверим правильность."
+                else:
+                    evaluation = "Спасибо за ответ! Переходим к следующему вопросу."
             
             return evaluation
             
@@ -270,27 +268,40 @@ class PracticeManager:
             # ИСПРАВЛЕННЫЙ FALLBACK
             return "Спасибо за ответ! Переходим к следующему вопросу."
 
-    def _generate_correct_answer(self, question: str) -> Optional[str]:
-        """Генерирует правильный ответ на вопрос с учетом возраста"""
+    def _generate_correct_answer_for_test(self, question: str) -> Optional[str]:
+        """Генерирует правильный ответ на тестовый вопрос"""
         try:
-            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Учитываем возраст ученика
-            age = self.student_data.get('age', '12')
-            level = self.student_data.get('level', '5')
-            
+            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Учитываем что это тестовый вопрос
             prompt = f"""
-            Дай точный и краткий ответ на вопрос, адаптированный для ученика {age} лет, {level} класс.
+            Этот тестовый вопрос был задан ученику:
+            
+            {question}
+            
+            Какой ПРАВИЛЬНЫЙ ответ на этот тестовый вопрос?
+            Укажи только правильный вариант (A, B, C или D) и краткое объяснение.
+            """
+            
+            llm_response = self.llm.query(
+                question=prompt,
+                context="",
+                subject=self.current_subject
+            )
+            return llm_response.strip() if llm_response else None
+            
+        except Exception as e:
+            print(f"❌ Ошибка генерации правильного ответа для теста: {e}")
+            return None
 
+    def _generate_correct_answer(self, question: str) -> Optional[str]:
+        """Генерирует правильный ответ на обычный вопрос"""
+        try:
+            prompt = f"""
+            Дай точный и краткий ответ на вопрос.
+            
             ВОПРОС: {question}
             КОНТЕКСТ: {self.current_lesson_summary}
-
-            Требования:
-            - Ответ должен быть точным и соответствовать материалу
-            - Ответ должен быть кратким (1-2 предложения)
-            - Используй язык, понятный для {age}-летнего
-            - Объясняй сложные понятия простыми словами
-            - Без лишних объяснений
-
-            Верни только ответ.
+            
+            Верни только краткий правильный ответ.
             """
             
             llm_response = self.llm.query(
@@ -305,7 +316,7 @@ class PracticeManager:
             return None
 
     def _evaluate_with_llm_context(self, student_answer: str, question: str, correct_answer: str) -> str:
-        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ через LLM с учетом возраста"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ через LLM (все как раньше)"""
         try:
             # 🔥 НОВОЕ: Получаем данные ученика для персонализации
             age = self.student_data.get('age', '12')
@@ -373,7 +384,9 @@ class PracticeManager:
         
         questions_text = "Уже заданные вопросы:\n"
         for i, q_data in enumerate(self.generated_questions, 1):
-            questions_text += f"{i}. {q_data['question']}\n"
+            # Берем только первые 100 символов вопроса для компактности
+            question_preview = q_data["question"][:100] + "..." if len(q_data["question"]) > 100 else q_data["question"]
+            questions_text += f"{i}. {question_preview}\n"
         return questions_text
 
     def _is_question_unique(self, new_question: str, similarity_threshold: float = 0.7) -> bool:
@@ -701,16 +714,16 @@ class PracticeManager:
         return None
 
     def get_practice_stats(self) -> Dict:
-        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает статистику по практике с учетом возраста"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает статистику по практике"""
         question_types = {}
-        age_adapted_count = 0
+        test_questions_count = 0
         
         for q in self.generated_questions:
             q_type = q.get("type", "unknown")
             question_types[q_type] = question_types.get(q_type, 0) + 1
             
-            if q.get("age_adapted", False):
-                age_adapted_count += 1
+            if q_type == "test_question":
+                test_questions_count += 1
         
         age = self.student_data.get('age', 'неизвестен')
         level = self.student_data.get('level', 'неизвестен')
@@ -723,26 +736,32 @@ class PracticeManager:
             "current_subject": self.current_subject,
             "has_more_questions": self.has_more_questions(),
             "question_types": question_types,
+            "test_questions_count": test_questions_count,
             "lesson_summary_length": len(self.current_lesson_summary),
             # 🔥 НОВОЕ: Статистика по адаптации
             "student_data": {
                 "age": age,
                 "level": level
             },
-            "age_adapted_questions": age_adapted_count,
-            "adaptation_percentage": round((age_adapted_count / len(self.generated_questions)) * 100, 1) if self.generated_questions else 0
+            "test_questions_percentage": round((test_questions_count / len(self.generated_questions)) * 100, 1) if self.generated_questions else 0
         }
 
 
 # Создаем глобальный экземпляр для тестирования
 if __name__ == "__main__":
     # Тестирование базовой функциональности
-    print("🧪 Тестирование PracticeManager...")
+    print("🧪 Тестирование PracticeManager с тестовыми вопросами...")
     
     # Создаем mock LLM для тестирования
     class MockLLM:
         def query(self, question, context, subject):
-            return "Тестовый вопрос: Объясни основную концепцию изученного материала?"
+            return """Какая форма правления существует в современной России?
+
+Варианты ответов:
+A) Монархия
+B) Республика
+C) Диктатура
+D) Анархия"""
     
     # Тестируем менеджер практики
     pm = PracticeManager(MockLLM())
@@ -755,11 +774,11 @@ if __name__ == "__main__":
     }
     
     # Тест инициализации
-    pm.initialize_practice_generation("Текст урока для тестирования", "математика")
+    pm.initialize_practice_generation("Урок о формах правления в разных странах", "обществознание")
     
     # Тест генерации вопроса
     question = pm.generate_single_question()
-    print(f"📝 Сгенерированный вопрос: {question}")
+    print(f"📝 Сгенерированный тестовый вопрос:\n{question}")
     
     # Тест статистики
     stats = pm.get_practice_stats()
