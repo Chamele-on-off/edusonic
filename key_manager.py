@@ -4,7 +4,9 @@ from typing import List, Dict, Optional
 import json
 from pathlib import Path
 import threading
-import sys
+import re
+from config import load_config, save_config
+import hashlib
 
 class APIKeyManager:
     def __init__(self, config_file: str = "api_keys.json"):
@@ -15,6 +17,7 @@ class APIKeyManager:
         self.extended_limit = 900  # Расширенный лимит - 900 запросов в день
         self.reset_time = "00:00"  # Время сброса счетчиков
         self.reset_check_interval = 60  # Проверка каждые 60 секунд
+        self.model = "meta-llama/llama-3.3-70b-instruct:free"  # Текущая модель
         
         # Запускаем фоновую проверку сброса
         self._start_reset_checker()
@@ -32,13 +35,22 @@ class APIKeyManager:
                         self.daily_limit = data['settings'].get('default_limit', 40)
                         self.extended_limit = data['settings'].get('extended_limit', 900)
                         self.reset_time = data['settings'].get('reset_time', '00:00')
+                        self.model = data['settings'].get('model', 'meta-llama/llama-3.3-70b-instruct:free')
                     
                     # Обновляем структуру ключей если нужно
                     for key in keys:
                         if 'limit_type' not in key:
-                            key['limit_type'] = 'standard'  # По умолчанию стандартный лимит
+                            key['limit_type'] = 'standard'
                         if 'limit' not in key:
                             key['limit'] = self.daily_limit if key['limit_type'] == 'standard' else self.extended_limit
+                        if 'is_active' not in key:
+                            key['is_active'] = True
+                        if 'created_at' not in key:
+                            key['created_at'] = datetime.now().isoformat()
+                        if 'last_reset' not in key:
+                            key['last_reset'] = datetime.now().isoformat()
+                        if 'total_requests' not in key:
+                            key['total_requests'] = 0
                     
                     return keys
             except Exception as e:
@@ -56,9 +68,15 @@ class APIKeyManager:
                 'limit_type': 'standard',
                 'limit': self.daily_limit,
                 'created_at': datetime.now().isoformat(),
-                'is_active': True
+                'is_active': True,
+                'total_requests': 0,
+                'key_hash': self._hash_key(openrouter_key)
             }]
         return []
+    
+    def _hash_key(self, key: str) -> str:
+        """Хеширование ключа для безопасного хранения"""
+        return hashlib.sha256(key.encode()).hexdigest()[:16]
     
     def _save_keys(self):
         """Сохранение ключей в файл"""
@@ -69,6 +87,7 @@ class APIKeyManager:
                     'default_limit': self.daily_limit,
                     'extended_limit': self.extended_limit,
                     'reset_time': self.reset_time,
+                    'model': self.model,
                     'last_updated': datetime.now().isoformat()
                 }
             }
@@ -80,16 +99,21 @@ class APIKeyManager:
     
     def add_key(self, api_key: str, name: str = "new_key", limit_type: str = "standard"):
         """Добавление нового ключа"""
+        api_key = api_key.strip()
+        if not api_key:
+            return False
+        
         # Проверяем, нет ли уже такого ключа
+        key_hash = self._hash_key(api_key)
         for existing_key in self.keys:
-            if existing_key['key'] == api_key.strip():
+            if existing_key.get('key_hash') == key_hash:
                 print(f"⚠️ Ключ уже существует: {name}")
                 return False
         
         limit = self.daily_limit if limit_type == "standard" else self.extended_limit
         
         self.keys.append({
-            'key': api_key.strip(),
+            'key': api_key,
             'usage': 0,
             'last_reset': datetime.now().isoformat(),
             'name': name,
@@ -97,7 +121,8 @@ class APIKeyManager:
             'limit': limit,
             'created_at': datetime.now().isoformat(),
             'is_active': True,
-            'total_requests': 0
+            'total_requests': 0,
+            'key_hash': key_hash
         })
         
         self._save_keys()
@@ -148,8 +173,20 @@ class APIKeyManager:
         now = datetime.now()
         reset_hour, reset_minute = map(int, self.reset_time.split(':'))
         
+        reset_performed = False
+        
         for key_data in self.keys:
-            last_reset = datetime.fromisoformat(key_data['last_reset'])
+            last_reset_str = key_data.get('last_reset')
+            if not last_reset_str:
+                continue
+                
+            try:
+                last_reset = datetime.fromisoformat(last_reset_str)
+            except:
+                # Если формат неверный, сбрасываем
+                key_data['usage'] = 0
+                key_data['last_reset'] = now.isoformat()
+                continue
             
             # Определяем время следующего сброса
             next_reset = last_reset.replace(
@@ -169,9 +206,10 @@ class APIKeyManager:
                 old_usage = key_data.get('usage', 0)
                 key_data['usage'] = 0
                 key_data['last_reset'] = now.isoformat()
+                reset_performed = True
                 print(f"🔄 Сброс лимита для ключа {key_data['name']}: {old_usage} → 0")
         
-        if force:
+        if force or reset_performed:
             self._save_keys()
     
     def _start_reset_checker(self):
@@ -203,6 +241,9 @@ class APIKeyManager:
         active_keys = [k for k in self.keys if k.get('is_active', True)]
         inactive_keys = [k for k in self.keys if not k.get('is_active', True)]
         
+        # Время следующего сброса
+        next_reset = self._get_next_reset_time()
+        
         return {
             'total_keys': len(self.keys),
             'active_keys': len(active_keys),
@@ -210,6 +251,8 @@ class APIKeyManager:
             'daily_limit_per_key': self.daily_limit,
             'extended_limit': self.extended_limit,
             'reset_time': self.reset_time,
+            'next_reset': next_reset,
+            'model': self.model,
             'total_used_today': total_used,
             'total_limit_today': total_limit,
             'total_available_today': total_available,
@@ -227,8 +270,7 @@ class APIKeyManager:
                     'total_requests': key.get('total_requests', 0)
                 }
                 for key in self.keys
-            ],
-            'next_reset': self._get_next_reset_time()
+            ]
         }
     
     def _get_next_reset_time(self) -> str:
@@ -275,6 +317,7 @@ class APIKeyManager:
         self.keys = [k for k in self.keys if k['name'] != key_name]
         self._save_keys()
         print(f"✅ Ключ {key_name} удален")
+        return True
     
     def toggle_key_active(self, key_name: str, is_active: bool):
         """Включение/выключение ключа"""
@@ -299,13 +342,13 @@ class APIKeyManager:
             if not line or line.startswith('#'):
                 continue
             
-            # Формат: ключ (опционально: название и тип лимита)
-            parts = line.split(',')
+            # Формат: ключ, название, тип_лимита (опционально)
+            parts = [p.strip() for p in line.split(',')]
             
             if len(parts) >= 1:
-                api_key = parts[0].strip()
-                name = parts[1].strip() if len(parts) > 1 else f"imported_key_{imported_count+1}"
-                limit_type = parts[2].strip() if len(parts) > 2 else "standard"
+                api_key = parts[0]
+                name = parts[1] if len(parts) > 1 else f"imported_key_{imported_count+1}"
+                limit_type = parts[2] if len(parts) > 2 else "standard"
                 
                 if self.add_key(api_key, name, limit_type):
                     imported_count += 1
@@ -315,6 +358,8 @@ class APIKeyManager:
     
     def set_model(self, model: str):
         """Установка модели по умолчанию"""
+        self.model = model
+        
         # Обновляем конфигурацию
         from config import load_config, save_config
         config = load_config()
@@ -325,7 +370,18 @@ class APIKeyManager:
         config['openrouter']['model'] = model
         save_config(config)
         
+        self._save_keys()
         print(f"✅ Модель установлена: {model}")
+        return True
+    
+    def force_reset_all(self):
+        """Принудительный сброс всех счетчиков"""
+        for key in self.keys:
+            key['usage'] = 0
+            key['last_reset'] = datetime.now().isoformat()
+        
+        self._save_keys()
+        print(f"✅ Принудительный сброс всех ключей выполнено")
         return True
 
 # Глобальный экземпляр
