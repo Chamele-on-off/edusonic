@@ -3046,7 +3046,12 @@ def debug_openrouter():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+# =============================================================================
+# НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ КЛЮЧАМИ OPENROUTER
+# =============================================================================
+
 @app.route('/api/keys/status', methods=['GET'])
+@teacher_required
 def get_keys_status():
     """Получение статуса API ключей"""
     try:
@@ -3060,23 +3065,210 @@ def get_keys_status():
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/keys/add', methods=['POST'])
+@teacher_required
 def add_api_key_route():
     """Добавление нового API ключа"""
     try:
         data = request.json
         api_key = data.get('api_key')
         name = data.get('name', 'new_key')
+        limit_type = data.get('limit_type', 'standard')
         
         if not api_key:
             return jsonify({"success": False, "error": "API key is required"})
         
         key_manager = get_key_manager()
-        key_manager.add_key(api_key, name)
+        success = key_manager.add_key(api_key, name, limit_type)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Ключ {name} успешно добавлен",
+                "total_keys": len(key_manager.keys)
+            })
+        else:
+            return jsonify({"success": False, "error": "Ключ уже существует"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/set_reset_time', methods=['POST'])
+@teacher_required
+def set_reset_time():
+    """Установка времени сброса"""
+    try:
+        data = request.json
+        reset_time = data.get('reset_time')
+        
+        if not reset_time:
+            return jsonify({"success": False, "error": "Time is required"})
+        
+        key_manager = get_key_manager()
+        success = key_manager.set_reset_time(reset_time)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Время сброса установлено на {reset_time}"
+            })
+        else:
+            return jsonify({"success": False, "error": "Неверный формат времени"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/force_reset', methods=['POST'])
+@teacher_required
+def force_reset_keys():
+    """Принудительный сброс всех счетчиков"""
+    try:
+        key_manager = get_key_manager()
+        key_manager.force_reset_all()
         
         return jsonify({
             "success": True,
-            "message": f"Ключ {name} успешно добавлен",
-            "total_keys": len(key_manager.keys)
+            "message": "Все счетчики ключей сброшены"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/upload', methods=['POST'])
+@teacher_required
+def upload_keys_file():
+    """Загрузка ключей из TXT файла"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "No file provided"})
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No file selected"})
+        
+        if not file.filename.endswith('.txt'):
+            return jsonify({"success": False, "error": "Only TXT files allowed"})
+        
+        file_content = file.read().decode('utf-8')
+        
+        key_manager = get_key_manager()
+        imported_count = key_manager.import_keys_from_file(file_content)
+        
+        return jsonify({
+            "success": True,
+            "message": f"Импортировано {imported_count} ключей",
+            "imported_count": imported_count
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/set_model', methods=['POST'])
+@teacher_required
+def set_openrouter_model():
+    """Установка модели OpenRouter"""
+    try:
+        data = request.json
+        model = data.get('model')
+        
+        if not model:
+            return jsonify({"success": False, "error": "Model is required"})
+        
+        key_manager = get_key_manager()
+        success = key_manager.set_model(model)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Модель установлена: {model}"
+            })
+        else:
+            return jsonify({"success": False, "error": "Ошибка установки модели"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/toggle', methods=['POST'])
+@teacher_required
+def toggle_key_active():
+    """Включение/выключение ключа"""
+    try:
+        data = request.json
+        key_name = data.get('key_name')
+        is_active = data.get('is_active', True)
+        
+        if not key_name:
+            return jsonify({"success": False, "error": "Key name is required"})
+        
+        key_manager = get_key_manager()
+        success = key_manager.toggle_key_active(key_name, is_active)
+        
+        if success:
+            status = "активирован" if is_active else "деактивирован"
+            return jsonify({
+                "success": True,
+                "message": f"Ключ {key_name} {status}"
+            })
+        else:
+            return jsonify({"success": False, "error": "Ключ не найден"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/set_limit', methods=['POST'])
+@teacher_required
+def set_key_limit():
+    """Установка лимита для ключа"""
+    try:
+        data = request.json
+        key_name = data.get('key_name')
+        limit_type = data.get('limit_type', 'standard')
+        
+        if not key_name:
+            return jsonify({"success": False, "error": "Key name is required"})
+        
+        key_manager = get_key_manager()
+        success = key_manager.set_key_limit(key_name, limit_type)
+        
+        if success:
+            limit = key_manager.extended_limit if limit_type == 'extended' else key_manager.daily_limit
+            return jsonify({
+                "success": True,
+                "message": f"Лимит ключа {key_name} установлен на {limit} запросов"
+            })
+        else:
+            return jsonify({"success": False, "error": "Ключ не найден"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/delete', methods=['POST'])
+@teacher_required
+def delete_key():
+    """Удаление ключа"""
+    try:
+        data = request.json
+        key_name = data.get('key_name')
+        
+        if not key_name:
+            return jsonify({"success": False, "error": "Key name is required"})
+        
+        key_manager = get_key_manager()
+        success = key_manager.delete_key(key_name)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Ключ {key_name} удален"
+            })
+        else:
+            return jsonify({"success": False, "error": "Ключ не найден"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/keys/advanced_stats', methods=['GET'])
+@teacher_required
+def get_keys_advanced_stats():
+    """Расширенная статистика ключей"""
+    try:
+        key_manager = get_key_manager()
+        stats = key_manager.get_usage_stats()
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -4081,6 +4273,185 @@ def test_student_room():
         </html>
         """
     return "Ошибка создания комнаты"
+
+# =============================================================================
+# НОВЫЕ API ДЛЯ ДОБАВЛЕНИЯ УРОКОВ С УЧЕТОМ КЛАССА
+# =============================================================================
+
+@app.route('/api/add_lesson_with_class', methods=['POST'])
+@teacher_required
+def add_lesson_with_class():
+    """Добавление нового урока с учетом класса"""
+    try:
+        data = request.json
+        subject = data.get('subject', 'общее')
+        title = data.get('title', '')
+        content = data.get('content', '')
+        class_level = data.get('class_level', '5')
+        
+        if not title or not content:
+            return jsonify({"success": False, "error": "Название и содержание урока обязательны"})
+        
+        # Определяем папку для сохранения
+        if class_level == 'demo':
+            lesson_dir = LESSONS_DEMO_DIR
+        elif class_level == 'generated':
+            lesson_dir = LESSONS_GENERATED_DIR
+        else:
+            # Создаем папку класса если ее нет
+            class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
+            class_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Создаем папку предмета если ее нет
+            subject_dir = class_dir / subject
+            subject_dir.mkdir(parents=True, exist_ok=True)
+            lesson_dir = subject_dir
+        
+        # Получаем следующий номер урока
+        existing_lessons = list(lesson_dir.glob("lesson_*.txt"))
+        lesson_numbers = []
+        for lesson in existing_lessons:
+            match = re.search(r'lesson[_\s]*(\d+)', lesson.stem.lower())
+            if match:
+                lesson_numbers.append(int(match.group(1)))
+        
+        next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
+        
+        # Формируем имя файла
+        title_slug = re.sub(r'[^\wа-яё]+', '_', title.lower()).strip('_')
+        filename = f"lesson_{next_number:02d}_{title_slug[:50]}.txt"
+        lesson_path = lesson_dir / filename
+        
+        # Сохраняем урок
+        with open(lesson_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "subject": subject,
+            "title": title,
+            "class_level": class_level,
+            "lesson_number": next_number,
+            "file_path": str(lesson_path.relative_to(LESSONS_DIR))
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/lessons/next_number', methods=['GET'])
+@teacher_required
+def get_next_lesson_number():
+    """Получение следующего номера урока для класса и предмета"""
+    try:
+        class_level = request.args.get('class', 'demo')
+        subject = request.args.get('subject', 'общее')
+        
+        # Определяем папку
+        if class_level == 'demo':
+            lesson_dir = LESSONS_DEMO_DIR
+        elif class_level == 'generated':
+            lesson_dir = LESSONS_GENERATED_DIR
+        else:
+            lesson_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class" / subject
+        
+        # Получаем существующие номера уроков
+        existing_lessons = list(lesson_dir.glob("lesson_*.txt"))
+        lesson_numbers = []
+        for lesson in existing_lessons:
+            match = re.search(r'lesson[_\s]*(\d+)', lesson.stem.lower())
+            if match:
+                lesson_numbers.append(int(match.group(1)))
+        
+        next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
+        
+        return jsonify({
+            "success": True,
+            "class_level": class_level,
+            "subject": subject,
+            "next_number": next_number,
+            "total_lessons": len(existing_lessons)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/download_lessons_by_class', methods=['GET'])
+@teacher_required
+def download_lessons_by_class():
+    """Скачивание уроков по классу"""
+    try:
+        class_level = request.args.get('class', 'all')
+        
+        lesson_files = []
+        
+        if class_level == 'all':
+            # Все уроки
+            for lesson_dir in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]:
+                if lesson_dir.exists():
+                    for lesson_file in lesson_dir.glob("*.txt"):
+                        lesson_files.append(lesson_file)
+        elif class_level == 'demo':
+            # Демо уроки
+            if LESSONS_DEMO_DIR.exists():
+                lesson_files = list(LESSONS_DEMO_DIR.glob("*.txt"))
+        elif class_level == 'generated':
+            # Авто-генерированные уроки
+            if LESSONS_GENERATED_DIR.exists():
+                lesson_files = list(LESSONS_GENERATED_DIR.glob("*.txt"))
+        else:
+            # Уроки конкретного класса
+            class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
+            if class_dir.exists():
+                # Рекурсивно собираем все файлы из папок предметов
+                for subject_dir in class_dir.iterdir():
+                    if subject_dir.is_dir():
+                        lesson_files.extend(subject_dir.glob("*.txt"))
+        
+        if not lesson_files:
+            return jsonify({"success": False, "error": f"Уроки для класса {class_level} не найдены"})
+        
+        import tempfile
+        import zipfile
+        
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+            for lesson_file in lesson_files:
+                # Сохраняем структуру папок
+                if lesson_file.parent == LESSONS_DEMO_DIR:
+                    zip_path = f"demo/{lesson_file.name}"
+                elif lesson_file.parent == LESSONS_GENERATED_DIR:
+                    zip_path = f"generated/{lesson_file.name}"
+                elif LESSONS_STUDENTS_DIR in lesson_file.parents:
+                    # Сохраняем полный путь от LESSONS_STUDENTS_DIR
+                    rel_path = lesson_file.relative_to(LESSONS_STUDENTS_DIR)
+                    zip_path = f"students/{rel_path}"
+                else:
+                    zip_path = f"legacy/{lesson_file.name}"
+                zipf.write(lesson_file, zip_path)
+        
+        temp_zip.close()
+        
+        # Имя файла в зависимости от класса
+        if class_level == 'all':
+            filename = "all_lessons.zip"
+        elif class_level == 'demo':
+            filename = "demo_lessons.zip"
+        elif class_level == 'generated':
+            filename = "generated_lessons.zip"
+        else:
+            filename = f"lessons_{class_level}_class.zip"
+        
+        return send_file(
+            temp_zip.name,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
 # ЗАПУСК СЕРВЕРА
