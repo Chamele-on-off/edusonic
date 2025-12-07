@@ -179,6 +179,28 @@ def get_api_key(provider):
     config = load_config()
     return config.get(provider, {}).get("api_key", "")
 
+def get_openrouter_model():
+    """Получение текущей модели OpenRouter"""
+    config = load_config()
+    return config.get("openrouter", {}).get("model", "meta-llama/llama-3.3-70b-instruct:free")
+
+def set_openrouter_model(model: str):
+    """Установка модели OpenRouter"""
+    config = load_config()
+    
+    if 'openrouter' not in config:
+        config['openrouter'] = {}
+    
+    old_model = config['openrouter'].get('model', 'meta-llama/llama-3.3-70b-instruct:free')
+    config['openrouter']['model'] = model
+    
+    if save_config(config):
+        print(f"✅ Модель OpenRouter изменена: {old_model} -> {model}")
+        return True
+    else:
+        print("❌ Не удалось сохранить модель OpenRouter")
+        return False
+
 def get_model_config(provider):
     """Получение конфигурации модели для указанного провайдера"""
     config = load_config()
@@ -462,6 +484,7 @@ if __name__ == "__main__":
     print(f"LLM Mode: {get_llm_mode()}")
     print(f"LLM Priority: {get_llm_priority()}")
     print(f"OpenRouter API Key: {'Set' if get_api_key('openrouter') else 'Not set'}")
+    print(f"OpenRouter Model: {get_openrouter_model()}")
     print(f"Local LLM Enabled: {LOCAL_LLM_CONFIG.get('enabled', False)}")
     print("=" * 50)
     
