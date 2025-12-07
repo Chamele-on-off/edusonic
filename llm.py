@@ -54,8 +54,8 @@ class LLMIntegration:
         config = load_config()
         openrouter_config = get_model_config("openrouter")
         
-        # Используем менеджер ключей вместо одного ключа
-        self.key_manager = get_key_manager()
+        # 🔥 ИСПРАВЛЕНИЕ: Используем менеджер ключей вместо одного ключа
+        self.key_manager = get_key_manager()  # Ключевое изменение!
         self.api_url = api_url or openrouter_config.get("api_url", "https://openrouter.ai/api/v1/chat/completions")
         self.model = model or openrouter_config.get("model", "meta-llama/llama-3.3-70b-instruct:free")
         self.cache_dir = Path(cache_dir)
@@ -76,6 +76,9 @@ class LLMIntegration:
         # Настройки приоритетов из конфигурации
         self.priority_mode = get_llm_priority()
         
+        print(f"🔧 [LLM] Инициализирован с приоритетом: {self.priority_mode}")
+        print(f"🔧 [LLM] Используется менеджер ключей: {len(self.key_manager.keys)} ключей доступно")
+        
     def _load_cache(self) -> Dict:
         """Загрузка кэша из файла"""
         cache_file = self.cache_dir / "llm_cache.json"
@@ -84,7 +87,7 @@ class LLMIntegration:
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception as e:
-            print(f"Ошибка загрузки кэша: {e}")
+            print(f"❌ Ошибка загрузки кэша: {e}")
         return {}
 
     def _save_cache(self):
@@ -97,7 +100,7 @@ class LLMIntegration:
             with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(self.cache, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"Ошибка сохранения кэша: {e}")
+            print(f"❌ Ошибка сохранения кэша: {e}")
 
     def _clean_llm_response(self, content: str) -> str:
         """Очистка ответа LLM от форматирования и специальных символов"""
@@ -136,98 +139,129 @@ class LLMIntegration:
                        system_prompt: str = "", max_tokens: int = 1000, 
                        room_id: str = "default", callback: Callable = None,
                        is_svg: bool = False) -> Optional[str]:
-        """УМНАЯ ЛОГИКА ПРИОРИТЕТОВ С FALLBACK"""
+        """УМНАЯ ЛОГИКА ПРИОРИТЕТОВ С FALLBACK - БЕЗ БЛОКИРОВАНИЯ"""
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
         print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
         
+        # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Используем асинхронный режим чтобы не блокировать систему
+        if callback:
+            # Асинхронный режим - запускаем в фоне
+            import threading
+            def async_query():
+                try:
+                    result = self._execute_llm_query(
+                        prompt, context, subject, system_prompt, 
+                        max_tokens, room_id, is_svg
+                    )
+                    if result:
+                        callback(result, room_id)
+                except Exception as e:
+                    print(f"❌ [LLM] Ошибка асинхронного запроса: {e}")
+                    # Всегда возвращаем fallback чтобы не блокировать систему
+                    fallback = self._get_fallback_response(prompt, subject)
+                    callback(fallback, room_id)
+            
+            # Запускаем в отдельном потоке
+            thread = threading.Thread(target=async_query, daemon=True)
+            thread.start()
+            return None
+        else:
+            # Синхронный режим - с таймаутом и fallback
+            try:
+                return self._execute_llm_query(
+                    prompt, context, subject, system_prompt,
+                    max_tokens, room_id, is_svg
+                )
+            except Exception as e:
+                print(f"❌ [LLM] Ошибка синхронного запроса: {e}")
+                return self._get_fallback_response(prompt, subject)
+    
+    def _execute_llm_query(self, prompt: str, context: str, subject: str,
+                          system_prompt: str, max_tokens: int,
+                          room_id: str, is_svg: bool = False) -> Optional[str]:
+        """Выполнение LLM запроса с безопасным fallback"""
+        
         # ЛОГИКА ВЫБОРА МОДЕЛИ ПО ПРИОРИТЕТУ
         if self.priority_mode == "local_only":
-            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg)
+            return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
             
         elif self.priority_mode == "openrouter_only":
-            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg)
+            return self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
             
         elif self.priority_mode == "openrouter_first":
             # Сначала пробуем OpenRouter
-            response = self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg)
-            if response or (callback is None and response is not None):
+            response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
+            if response:
                 return response
             # Fallback на локальную модель
-            return self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg)
+            return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
             
         else:  # local_first (по умолчанию)
             # Сначала пробуем локальную модель
-            response = self._handle_local_request(prompt, system_prompt, max_tokens, room_id, callback, is_svg)
-            if response or (callback is None and response is not None):
+            response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+            if response:
                 return response
             # Fallback на OpenRouter
-            return self._handle_openrouter_request(prompt, context, subject, system_prompt, max_tokens, room_id, callback, is_svg)
+            return self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
     
-    def _handle_local_request(self, prompt: str, system_prompt: str, max_tokens: int,
-                             room_id: str, callback: Callable, is_svg: bool = False) -> Optional[str]:
-        """Обработка запроса через локальную модель"""
+    def _handle_local_request_safe(self, prompt: str, system_prompt: str, max_tokens: int,
+                                 is_svg: bool = False) -> Optional[str]:
+        """Безопасная обработка локальной модели с таймаутом"""
         if not self.llm_manager.local_llm.is_available():
             print("❌ [LLM] Локальная модель недоступна")
             return None
             
-        print(f"⚡ [LLM] Использую локальную модель для комнаты {room_id}")
+        print(f"⚡ [LLM] Использую локальную модель")
         
-        # Асинхронный режим с callback
-        if callback:
-            request_id = self.llm_manager.submit_request(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                max_tokens=max_tokens,
-                room_id=room_id
-            )
-            self.pending_requests[request_id] = (callback, is_svg)
+        # Создаем отдельный поток для таймаута
+        import threading
+        result_queue = queue.Queue()
+        
+        def local_query():
+            try:
+                response = self.llm_manager.local_llm.generate(
+                    prompt, 
+                    system_prompt or "Ты - профессиональный учитель", 
+                    max_tokens
+                )
+                if response:
+                    processed = self._process_llm_response(response, is_svg)
+                    result_queue.put(processed)
+                else:
+                    result_queue.put(None)
+            except Exception as e:
+                print(f"❌ [LLM] Ошибка локальной модели: {e}")
+                result_queue.put(None)
+        
+        # Запускаем с таймаутом
+        thread = threading.Thread(target=local_query, daemon=True)
+        thread.start()
+        thread.join(timeout=30)  # 30 секунд таймаут
+        
+        if thread.is_alive():
+            print("⏰ [LLM] Таймаут локальной модели")
+            return None
+        
+        try:
+            return result_queue.get_nowait()
+        except queue.Empty:
+            return None
+    
+    def _handle_openrouter_request_safe(self, prompt: str, context: str, subject: str,
+                                      system_prompt: str, max_tokens: int,
+                                      is_svg: bool = False) -> Optional[str]:
+        """Безопасная обработка OpenRouter с менеджером ключей"""
+        try:
+            # 🔥 ИСПРАВЛЕНИЕ: Используем менеджер ключей
+            api_key = self.key_manager.get_next_key()
+            print(f"🔧 [LLM] Использую OpenRouter (ключ: {api_key[:8]}...)")
+            
+        except Exception as e:
+            print(f"❌ [LLM] Нет доступных ключей OpenRouter: {e}")
             return None
             
-        # Синхронный режим с увеличенным таймаутом
-        else:
-            response_queue = queue.Queue()
-            
-            def sync_callback(req_id, response, r_id):
-                response_queue.put(response)
-            
-            self.llm_manager.register_room_callback(room_id, sync_callback)
-            
-            request_id = self.llm_manager.submit_request(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                max_tokens=max_tokens,
-                room_id=room_id
-            )
-            
-            try:
-                # УВЕЛИЧИВАЕМ ТАЙМАУТ ДО 120 СЕКУНД
-                response = response_queue.get(timeout=120)
-                self.llm_manager.unregister_room_callback(room_id)
-                
-                # Обрабатываем ответ в зависимости от типа
-                processed_response = self._process_llm_response(response, is_svg)
-                return processed_response
-                
-            except queue.Empty:
-                print(f"❌ [LLM] Таймаут локальной модели для комнаты {room_id}")
-                self.llm_manager.unregister_room_callback(room_id)
-                return None
-    
-    def _handle_openrouter_request(self, prompt: str, context: str, subject: str,
-                                  system_prompt: str, max_tokens: int,
-                                  room_id: str, callback: Callable, is_svg: bool = False) -> Optional[str]:
-        """Обработка запроса через OpenRouter с использованием менеджера ключей"""
         try:
-            # Получаем следующий доступный ключ
-            try:
-                api_key = self.key_manager.get_next_key()
-            except Exception as e:
-                print(f"❌ [LLM] {e}")
-                return None if callback else self._get_fallback_response(prompt, subject)
-            
-            print(f"🔧 [LLM] Использую OpenRouter для комнаты {room_id} (ключ: {api_key[:8]}...)")
-            
             # Добавляем задержку между запросами
             current_time = time.time()
             time_since_last_request = current_time - self.last_request_time
@@ -264,7 +298,7 @@ class LLMIntegration:
                 "stream": False
             }
     
-            print(f"🔧 [LLM] Отправка запроса к OpenRouter для комнаты {room_id}")
+            print(f"🔧 [LLM] Отправка запроса к OpenRouter")
             
             for attempt in range(self.max_retries):
                 try:
@@ -278,7 +312,7 @@ class LLMIntegration:
                     self.last_request_time = time.time()
                     
                     if response.status_code == 200:
-                        # ЗАПИСЫВАЕМ ИСПОЛЬЗОВАНИЕ КЛЮЧА ПРИ УСПЕХЕ
+                        # 🔥 ЗАПИСЫВАЕМ ИСПОЛЬЗОВАНИЕ КЛЮЧА
                         self.key_manager.record_usage(api_key)
                         
                         result = response.json()
@@ -286,20 +320,13 @@ class LLMIntegration:
                         if 'choices' in result and len(result['choices']) > 0:
                             answer = result['choices'][0]['message']['content']
                             
-                            # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Обрабатываем ответ в зависимости от типа
                             processed_answer = self._process_llm_response(answer, is_svg)
                             
                             print(f"✅ [LLM] Ответ от OpenRouter получен: {processed_answer[:100]}...")
-                            
-                            # Если есть callback, вызываем его
-                            if callback:
-                                callback(processed_answer, room_id)
-                                return None
-                            else:
-                                return processed_answer
+                            return processed_answer
                         else:
                             print("❌ [LLM] Неверный формат ответа от OpenRouter")
-                            return self._get_fallback_response(prompt, subject)
+                            return None
                             
                     elif response.status_code == 429:
                         wait_time = self.retry_delay * (attempt + 1)
@@ -310,34 +337,34 @@ class LLMIntegration:
                     elif response.status_code == 401:
                         print(f"❌ [LLM] Ошибка аутентификации OpenRouter (неверный API ключ)")
                         # Помечаем OpenRouter как недоступный для этого запроса
-                        return None if callback else self._get_fallback_response(prompt, subject)
+                        return None
                         
                     else:
                         print(f"❌ [LLM] Ошибка OpenRouter: {response.status_code}")
                         if attempt < self.max_retries - 1:
                             time.sleep(self.retry_delay)
                             continue
-                        return self._get_fallback_response(prompt, subject)
+                        return None
                         
                 except requests.exceptions.Timeout:
                     print(f"⏰ [LLM] Таймаут OpenRouter. Попытка {attempt + 1}/{self.max_retries}")
                     if attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay)
                         continue
-                    return self._get_fallback_response(prompt, subject)
+                    return None
                     
                 except Exception as e:
                     print(f"❌ [LLM] Ошибка OpenRouter (попытка {attempt + 1}): {e}")
                     if attempt < self.max_retries - 1:
                         time.sleep(self.retry_delay)
                         continue
-                    return self._get_fallback_response(prompt, subject)
+                    return None
             
         except Exception as e:
             print(f"❌ [LLM] Критическая ошибка OpenRouter: {e}")
-            return self._get_fallback_response(prompt, subject)
+            return None
         
-        return self._get_fallback_response(prompt, subject)
+        return None
 
     def _test_openrouter_connection(self) -> bool:
         """УПРОЩЕННАЯ проверка доступности OpenRouter API"""
@@ -346,7 +373,7 @@ class LLMIntegration:
         return bool(self.key_manager.keys)
 
     def _get_fallback_response(self, prompt: str, subject: str = "") -> str:
-        """Возвращает fallback ответ когда LLM недоступен"""
+        """Возвращает fallback ответ когда LLM недоступен - НИКОГДА НЕ ПАДАЕТ"""
         prompt_lower = prompt.lower()
         
         # УЛУЧШЕННЫЕ FALLBACK ОТВЕТЫ
@@ -366,10 +393,10 @@ class LLMIntegration:
         # Общий fallback ответ
         return "Спасибо за вопрос! Я подумаю над ответом и скоро вернусь с подробным объяснением."
 
-    def query(self, question: str, context: str = "", subject: str = "") -> Optional[str]:
-        """Запрос к LLM API с гарантированным ответом"""
+    def query(self, question: str, context: str = "", subject: str = "") -> str:
+        """Запрос к LLM API с ГАРАНТИРОВАННЫМ ответом - НЕ БЛОКИРУЕТ СИСТЕМУ"""
         if not question.strip():
-            return None
+            return ""
             
         question_lower = question.lower().strip()
         
@@ -381,28 +408,34 @@ class LLMIntegration:
         
         print(f"📨 Запрос к LLM: '{question}' (предмет: {subject})")
         
-        # ДАЕМ БОЛЬШЕ ВРЕМЕНИ ДЛЯ ОБРАБОТКИ
+        # 🔥 ВАЖНО: Используем асинхронный запрос с таймаутом
         start_time = time.time()
         
-        # Запрос к реальному LLM
-        llm_response = self._query_llm_api(question, context, subject)
-        
-        total_time = time.time() - start_time
-        print(f"⏱️ Общее время обработки: {total_time:.2f}с")
-        
-        if llm_response and llm_response.strip():
-            print(f"✅ Ответ получен: {llm_response[:100]}...")
-            self.cache[cache_key] = llm_response
+        try:
+            # Запрос к реальному LLM
+            llm_response = self._query_llm_api(question, context, subject)
+            
+            total_time = time.time() - start_time
+            print(f"⏱️ Общее время обработки: {total_time:.2f}с")
+            
+            if llm_response and llm_response.strip():
+                print(f"✅ Ответ получен: {llm_response[:100]}...")
+                self.cache[cache_key] = llm_response
+                self._save_cache()
+                return llm_response
+            
+            # Fallback на локальные ответы если LLM недоступен
+            print("⚠️ LLM недоступен, использую fallback ответ")
+            fallback_response = self._get_fallback_response(question, subject)
+            self.cache[cache_key] = fallback_response
             self._save_cache()
-            return llm_response
-        
-        # Fallback на локальные ответы если LLM недоступен
-        print("⚠️ LLM недоступен, использую fallback ответ")
-        fallback_response = self._get_fallback_response(question, subject)
-        self.cache[cache_key] = fallback_response
-        self._save_cache()
-        
-        return fallback_response
+            
+            return fallback_response
+            
+        except Exception as e:
+            print(f"❌ Критическая ошибка в LLM.query: {e}")
+            # 🔥 КРИТИЧЕСКО ВАЖНО: Всегда возвращаем ответ, даже если ошибка
+            return "Спасибо за вопрос! Я обрабатываю ваш запрос."
 
     def add_to_cache(self, question: str, answer: str, subject: str = ""):
         """Добавление ответа в кэш"""
@@ -437,10 +470,6 @@ class LLMIntegration:
         else:
             self.model = model
             print(f"🔧 Установлена кастомная модель: {self.model}")
-            
-        # Всегда используем OpenRouter API ключ
-        config = load_config()
-        self.api_key = config.get("openrouter", {}).get("api_key", "")
 
     def set_priority(self, priority: str):
         """Установка приоритета моделей"""
@@ -508,7 +537,11 @@ class LLMIntegration:
             "effective_priority": self._get_effective_priority(),
             "local_status": self.llm_manager.local_llm.get_status(),
             "local_url": self.llm_manager.local_llm.base_url,
-            "cache_stats": self.get_cache_stats()
+            "cache_stats": self.get_cache_stats(),
+            "key_manager_stats": {
+                "total_keys": len(self.key_manager.keys),
+                "active_keys": len([k for k in self.key_manager.keys if k.get('is_active', True)])
+            }
         }
 
     def handle_llm_response(self, request_id: str, response: str, room_id: str):
