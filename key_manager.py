@@ -1,16 +1,23 @@
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Optional
 import json
 from pathlib import Path
+import threading
+import sys
 
 class APIKeyManager:
     def __init__(self, config_file: str = "api_keys.json"):
         self.config_file = Path(config_file)
         self.keys = self._load_keys()
         self.current_key_index = 0
-        self.daily_limit = 40  # Лимит запросов на ключ в день
-        self.reset_time = None
+        self.daily_limit = 40  # Стандартный лимит - 40 запросов в день
+        self.extended_limit = 900  # Расширенный лимит - 900 запросов в день
+        self.reset_time = "00:00"  # Время сброса счетчиков
+        self.reset_check_interval = 60  # Проверка каждые 60 секунд
+        
+        # Запускаем фоновую проверку сброса
+        self._start_reset_checker()
         
     def _load_keys(self) -> List[Dict]:
         """Загрузка ключей из файла конфигурации"""
@@ -18,7 +25,22 @@ class APIKeyManager:
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    return data.get('keys', [])
+                    keys = data.get('keys', [])
+                    
+                    # Загружаем настройки лимитов и времени сброса
+                    if 'settings' in data:
+                        self.daily_limit = data['settings'].get('default_limit', 40)
+                        self.extended_limit = data['settings'].get('extended_limit', 900)
+                        self.reset_time = data['settings'].get('reset_time', '00:00')
+                    
+                    # Обновляем структуру ключей если нужно
+                    for key in keys:
+                        if 'limit_type' not in key:
+                            key['limit_type'] = 'standard'  # По умолчанию стандартный лимит
+                        if 'limit' not in key:
+                            key['limit'] = self.daily_limit if key['limit_type'] == 'standard' else self.extended_limit
+                    
+                    return keys
             except Exception as e:
                 print(f"❌ Ошибка загрузки ключей: {e}")
         
@@ -30,46 +52,84 @@ class APIKeyManager:
                 'key': openrouter_key,
                 'usage': 0,
                 'last_reset': datetime.now().isoformat(),
-                'name': 'default_key'
+                'name': 'default_key',
+                'limit_type': 'standard',
+                'limit': self.daily_limit,
+                'created_at': datetime.now().isoformat(),
+                'is_active': True
             }]
         return []
     
     def _save_keys(self):
         """Сохранение ключей в файл"""
         try:
+            data = {
+                'keys': self.keys,
+                'settings': {
+                    'default_limit': self.daily_limit,
+                    'extended_limit': self.extended_limit,
+                    'reset_time': self.reset_time,
+                    'last_updated': datetime.now().isoformat()
+                }
+            }
+            
             with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump({'keys': self.keys}, f, ensure_ascii=False, indent=2)
+                json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"❌ Ошибка сохранения ключей: {e}")
     
-    def add_key(self, api_key: str, name: str = "new_key"):
+    def add_key(self, api_key: str, name: str = "new_key", limit_type: str = "standard"):
         """Добавление нового ключа"""
+        # Проверяем, нет ли уже такого ключа
+        for existing_key in self.keys:
+            if existing_key['key'] == api_key.strip():
+                print(f"⚠️ Ключ уже существует: {name}")
+                return False
+        
+        limit = self.daily_limit if limit_type == "standard" else self.extended_limit
+        
         self.keys.append({
             'key': api_key.strip(),
             'usage': 0,
             'last_reset': datetime.now().isoformat(),
-            'name': name
+            'name': name,
+            'limit_type': limit_type,
+            'limit': limit,
+            'created_at': datetime.now().isoformat(),
+            'is_active': True,
+            'total_requests': 0
         })
+        
         self._save_keys()
-        print(f"✅ Добавлен ключ: {name}")
+        print(f"✅ Добавлен ключ: {name} (лимит: {limit} запросов/день)")
+        return True
     
     def get_next_key(self) -> str:
         """Получение следующего доступного ключа"""
         if not self.keys:
             raise Exception("❌ Нет доступных API ключей")
         
+        # Проверяем активные ключи
+        active_keys = [k for k in self.keys if k.get('is_active', True)]
+        if not active_keys:
+            raise Exception("❌ Нет активных API ключей")
+        
         # Проверяем сброс дневного лимита
         self._check_daily_reset()
         
         # Ищем ключ с доступными запросами
-        for _ in range(len(self.keys)):
-            key_data = self.keys[self.current_key_index]
+        start_index = self.current_key_index
+        
+        for i in range(len(active_keys)):
+            idx = (start_index + i) % len(active_keys)
+            key_data = active_keys[idx]
             
-            if key_data['usage'] < self.daily_limit:
+            current_limit = key_data.get('limit', self.daily_limit)
+            current_usage = key_data.get('usage', 0)
+            
+            if current_usage < current_limit:
+                self.current_key_index = (idx + 1) % len(active_keys)
                 return key_data['key']
-            
-            # Переходим к следующему ключу
-            self.current_key_index = (self.current_key_index + 1) % len(self.keys)
         
         # Если все ключи исчерпаны
         raise Exception("❌ Все API ключи исчерпали дневной лимит")
@@ -79,44 +139,194 @@ class APIKeyManager:
         for key_data in self.keys:
             if key_data['key'] == api_key:
                 key_data['usage'] += 1
+                key_data['total_requests'] = key_data.get('total_requests', 0) + 1
                 break
         self._save_keys()
     
-    def _check_daily_reset(self):
+    def _check_daily_reset(self, force: bool = False):
         """Проверка и сброс дневного лимита"""
         now = datetime.now()
+        reset_hour, reset_minute = map(int, self.reset_time.split(':'))
         
         for key_data in self.keys:
             last_reset = datetime.fromisoformat(key_data['last_reset'])
             
-            # Если прошло больше 24 часов, сбрасываем счетчик
-            if now - last_reset > timedelta(hours=24):
+            # Определяем время следующего сброса
+            next_reset = last_reset.replace(
+                hour=reset_hour, 
+                minute=reset_minute, 
+                second=0, 
+                microsecond=0
+            )
+            
+            # Если время последнего сброса позже времени сброса сегодня, 
+            # то следующий сброс - завтра
+            if last_reset.time() >= next_reset.time():
+                next_reset += timedelta(days=1)
+            
+            # Проверяем, наступило ли время сброса
+            if force or now >= next_reset:
+                old_usage = key_data.get('usage', 0)
                 key_data['usage'] = 0
                 key_data['last_reset'] = now.isoformat()
-                print(f"🔄 Сброс лимита для ключа: {key_data['name']}")
+                print(f"🔄 Сброс лимита для ключа {key_data['name']}: {old_usage} → 0")
         
-        self._save_keys()
+        if force:
+            self._save_keys()
+    
+    def _start_reset_checker(self):
+        """Запуск фоновой проверки сброса счетчиков"""
+        def check_reset_loop():
+            while True:
+                try:
+                    current_time = datetime.now().strftime("%H:%M")
+                    if current_time == self.reset_time:
+                        self._check_daily_reset(force=True)
+                        print(f"⏰ Автоматический сброс счетчиков в {self.reset_time}")
+                    
+                    time.sleep(self.reset_check_interval)
+                except Exception as e:
+                    print(f"❌ Ошибка в фоновой проверке сброса: {e}")
+                    time.sleep(60)
+        
+        # Запускаем в отдельном потоке
+        thread = threading.Thread(target=check_reset_loop, daemon=True)
+        thread.start()
+        print(f"🚀 Запущен фоновый проверщик сброса (проверка каждые {self.reset_check_interval} сек)")
     
     def get_usage_stats(self) -> Dict:
         """Получение статистики использования"""
-        total_used = sum(key['usage'] for key in self.keys)
-        total_available = len(self.keys) * self.daily_limit - total_used
+        total_used = sum(key.get('usage', 0) for key in self.keys)
+        total_limit = sum(key.get('limit', self.daily_limit) for key in self.keys)
+        total_available = total_limit - total_used
+        
+        active_keys = [k for k in self.keys if k.get('is_active', True)]
+        inactive_keys = [k for k in self.keys if not k.get('is_active', True)]
         
         return {
             'total_keys': len(self.keys),
+            'active_keys': len(active_keys),
+            'inactive_keys': len(inactive_keys),
             'daily_limit_per_key': self.daily_limit,
+            'extended_limit': self.extended_limit,
+            'reset_time': self.reset_time,
             'total_used_today': total_used,
+            'total_limit_today': total_limit,
             'total_available_today': total_available,
             'keys': [
                 {
-                    'name': key['name'],
-                    'used': key['usage'],
-                    'available': self.daily_limit - key['usage'],
-                    'last_reset': key['last_reset']
+                    'name': key.get('name', 'Без имени'),
+                    'key_preview': key['key'][:8] + '...' + key['key'][-4:] if len(key['key']) > 12 else key['key'],
+                    'used': key.get('usage', 0),
+                    'limit': key.get('limit', self.daily_limit),
+                    'limit_type': key.get('limit_type', 'standard'),
+                    'available': key.get('limit', self.daily_limit) - key.get('usage', 0),
+                    'last_reset': key.get('last_reset', 'Неизвестно'),
+                    'created_at': key.get('created_at', 'Неизвестно'),
+                    'is_active': key.get('is_active', True),
+                    'total_requests': key.get('total_requests', 0)
                 }
                 for key in self.keys
-            ]
+            ],
+            'next_reset': self._get_next_reset_time()
         }
+    
+    def _get_next_reset_time(self) -> str:
+        """Получение времени следующего сброса"""
+        now = datetime.now()
+        reset_hour, reset_minute = map(int, self.reset_time.split(':'))
+        
+        next_reset = now.replace(hour=reset_hour, minute=reset_minute, second=0, microsecond=0)
+        
+        if now.time() >= next_reset.time():
+            next_reset += timedelta(days=1)
+        
+        return next_reset.strftime("%Y-%m-%d %H:%M:%S")
+    
+    def set_key_limit(self, key_name: str, limit_type: str):
+        """Установка типа лимита для ключа"""
+        for key in self.keys:
+            if key['name'] == key_name:
+                old_limit = key.get('limit', self.daily_limit)
+                key['limit_type'] = limit_type
+                key['limit'] = self.extended_limit if limit_type == 'extended' else self.daily_limit
+                self._save_keys()
+                print(f"✅ Лимит ключа {key_name} изменен: {old_limit} → {key['limit']}")
+                return True
+        
+        print(f"❌ Ключ {key_name} не найден")
+        return False
+    
+    def set_reset_time(self, reset_time: str):
+        """Установка времени сброса"""
+        try:
+            # Проверяем формат времени
+            datetime.strptime(reset_time, "%H:%M")
+            self.reset_time = reset_time
+            self._save_keys()
+            print(f"✅ Время сброса установлено: {reset_time}")
+            return True
+        except ValueError:
+            print(f"❌ Неверный формат времени: {reset_time}. Используйте HH:MM")
+            return False
+    
+    def delete_key(self, key_name: str):
+        """Удаление ключа"""
+        self.keys = [k for k in self.keys if k['name'] != key_name]
+        self._save_keys()
+        print(f"✅ Ключ {key_name} удален")
+    
+    def toggle_key_active(self, key_name: str, is_active: bool):
+        """Включение/выключение ключа"""
+        for key in self.keys:
+            if key['name'] == key_name:
+                key['is_active'] = is_active
+                self._save_keys()
+                status = "активирован" if is_active else "деактивирован"
+                print(f"✅ Ключ {key_name} {status}")
+                return True
+        
+        print(f"❌ Ключ {key_name} не найден")
+        return False
+    
+    def import_keys_from_file(self, file_content: str):
+        """Импорт ключей из текстового файла"""
+        imported_count = 0
+        
+        lines = file_content.strip().split('\n')
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            
+            # Формат: ключ (опционально: название и тип лимита)
+            parts = line.split(',')
+            
+            if len(parts) >= 1:
+                api_key = parts[0].strip()
+                name = parts[1].strip() if len(parts) > 1 else f"imported_key_{imported_count+1}"
+                limit_type = parts[2].strip() if len(parts) > 2 else "standard"
+                
+                if self.add_key(api_key, name, limit_type):
+                    imported_count += 1
+        
+        print(f"✅ Импортировано ключей: {imported_count}")
+        return imported_count
+    
+    def set_model(self, model: str):
+        """Установка модели по умолчанию"""
+        # Обновляем конфигурацию
+        from config import load_config, save_config
+        config = load_config()
+        
+        if 'openrouter' not in config:
+            config['openrouter'] = {}
+        
+        config['openrouter']['model'] = model
+        save_config(config)
+        
+        print(f"✅ Модель установлена: {model}")
+        return True
 
 # Глобальный экземпляр
 key_manager = APIKeyManager()
