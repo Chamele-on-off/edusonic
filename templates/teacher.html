@@ -789,6 +789,50 @@
             margin-left: 10px;
         }
         
+        /* Стили для расширенного управления ключами */
+        .key-advanced-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .key-advanced-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .btn-sm {
+            padding: 4px 8px !important;
+            font-size: 12px !important;
+            border-radius: 4px !important;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.3s;
+        }
+
+        .btn-sm:hover {
+            opacity: 0.9;
+        }
+
+        .model-preset-btn {
+            background: #6f42c1;
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .model-preset-btn:hover {
+            background: #5a32a3;
+            transform: translateY(-1px);
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -868,6 +912,16 @@
             .user-actions {
                 align-self: stretch;
                 justify-content: flex-end;
+            }
+            
+            .key-advanced-item {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .model-preset-btn {
+                padding: 6px 10px;
+                font-size: 12px;
             }
         }
         
@@ -1117,6 +1171,7 @@
                 <div class="tab" data-tab="lessons">Уроки</div>
                 <div class="tab" data-tab="students">Ученики</div>
                 <div class="tab" data-tab="download">Скачать</div>
+                <div class="tab" data-tab="keys-advanced">Расширенное управление ключами</div>
             </div>
             
             <div class="tab-content active" id="knowledge-tab">
@@ -1287,6 +1342,88 @@
                 
                 <div id="download-status" class="success-message"></div>
             </div>
+            
+            <!-- Вкладка для расширенного управления ключами -->
+            <div class="tab-content" id="keys-advanced-tab">
+                <div class="management-panel">
+                    <h3><i class="fas fa-cogs"></i> Расширенное управление ключами OpenRouter</h3>
+                    
+                    <!-- Настройка времени сброса -->
+                    <div class="keys-management">
+                        <h4>⏰ Настройка времени сброса</h4>
+                        <div style="display: flex; gap: 10px; align-items: center; margin: 15px 0;">
+                            <input type="time" id="reset-time-input" value="00:00" style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <button id="set-reset-time-btn" class="btn" style="background: #17a2b8;">
+                                <i class="fas fa-clock"></i> Установить время сброса
+                            </button>
+                        </div>
+                        <div id="reset-time-status" class="api-status"></div>
+                        
+                        <button id="force-reset-btn" class="btn" style="background: #28a745; margin-top: 10px;">
+                            <i class="fas fa-redo"></i> Принудительный сброс счетчиков
+                        </button>
+                    </div>
+                    
+                    <!-- Загрузка ключей из файла -->
+                    <div class="keys-management" style="margin-top: 20px;">
+                        <h4>📁 Загрузка ключей из файла</h4>
+                        <p>Загрузите TXT файл с ключами OpenRouter (один ключ на строку):</p>
+                        
+                        <div class="add-key-form" id="upload-keys-form">
+                            <input type="file" id="keys-file-input" accept=".txt" style="display: none;">
+                            <div style="text-align: center; padding: 30px; border: 2px dashed #3498db; border-radius: 8px; cursor: pointer;" 
+                                 id="keys-file-dropzone">
+                                <i class="fas fa-file-upload" style="font-size: 40px; color: #3498db; margin-bottom: 15px;"></i>
+                                <p style="margin-bottom: 10px;">Перетащите TXT файл сюда или кликните для выбора</p>
+                                <p style="font-size: 12px; color: #666;">Формат: один ключ на строку, можно добавить название и тип лимита через запятую</p>
+                                <p style="font-size: 12px; color: #666;">Пример: sk-xxx...xxx,Основной ключ,extended</p>
+                            </div>
+                            <div id="keys-upload-status" class="api-status"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Быстрая смена модели -->
+                    <div class="keys-management" style="margin-top: 20px;">
+                        <h4>🔄 Быстрая смена модели</h4>
+                        <p>Введите название модели OpenRouter для мгновенного переключения:</p>
+                        
+                        <div style="display: flex; gap: 10px; margin: 15px 0; flex-wrap: wrap;">
+                            <input type="text" id="model-name-input" 
+                                   placeholder="Например: meta-llama/llama-3.3-70b-instruct:free" 
+                                   style="flex: 1; min-width: 300px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <button id="set-model-btn" class="btn" style="background: #6f42c1;">
+                                <i class="fas fa-exchange-alt"></i> Сменить модель
+                            </button>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-top: 10px;">
+                            <h5>Популярные модели:</h5>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
+                                <button class="model-preset-btn" data-model="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</button>
+                                <button class="model-preset-btn" data-model="meta-llama/llama-3.2-3b-instruct:free">Llama 3.2 3B</button>
+                                <button class="model-preset-btn" data-model="qwen/qwen2.5-72b-instruct:free">Qwen 2.5 72B</button>
+                                <button class="model-preset-btn" data-model="google/gemini-pro">Gemini Pro</button>
+                                <button class="model-preset-btn" data-model="anthropic/claude-3.5-sonnet">Claude 3.5</button>
+                            </div>
+                        </div>
+                        
+                        <div id="model-status" class="api-status"></div>
+                    </div>
+                    
+                    <!-- Расширенное управление ключами -->
+                    <div class="keys-management" style="margin-top: 20px;">
+                        <h4>⚙️ Управление лимитами ключей</h4>
+                        <div id="keys-advanced-list">
+                            <!-- Список ключей с расширенными действиями -->
+                            <div class="key-advanced-item">
+                                <div class="key-info">
+                                    <div class="key-name">Загрузка списка ключей...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1367,6 +1504,19 @@
         const lessonCounter = document.getElementById('lesson-counter');
         const nextLessonNumberSpan = document.getElementById('next-lesson-number');
         const lessonFilenamePreview = document.getElementById('lesson-filename-preview');
+        
+        // Элементы для расширенного управления ключами
+        const resetTimeInput = document.getElementById('reset-time-input');
+        const setResetTimeBtn = document.getElementById('set-reset-time-btn');
+        const resetTimeStatus = document.getElementById('reset-time-status');
+        const forceResetBtn = document.getElementById('force-reset-btn');
+        const keysFileInput = document.getElementById('keys-file-input');
+        const keysFileDropzone = document.getElementById('keys-file-dropzone');
+        const keysUploadStatus = document.getElementById('keys-upload-status');
+        const modelNameInput = document.getElementById('model-name-input');
+        const setModelBtn = document.getElementById('set-model-btn');
+        const modelStatus = document.getElementById('model-status');
+        const keysAdvancedList = document.getElementById('keys-advanced-list');
         
         // Socket.io
         const socket = io();
@@ -2130,6 +2280,291 @@
             }
         }
         
+        // Функции для расширенного управления ключами
+        function loadAdvancedKeysList() {
+            fetch('/api/keys/advanced_stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayAdvancedKeysList(data.stats);
+                    } else {
+                        keysAdvancedList.innerHTML = 
+                            '<div class="key-advanced-item"><div class="key-info"><div class="key-name">Ошибка загрузки ключей: ' + data.error + '</div></div></div>';
+                    }
+                })
+                .catch(error => {
+                    keysAdvancedList.innerHTML = 
+                        '<div class="key-advanced-item"><div class="key-info"><div class="key-name">Ошибка сети: ' + error + '</div></div></div>';
+                });
+        }
+        
+        function displayAdvancedKeysList(stats) {
+            let html = `
+                <div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e9ecef;">
+                    <h5>📊 Общая статистика</h5>
+                    <p><strong>Время сброса:</strong> ${stats.reset_time}</p>
+                    <p><strong>Следующий сброс:</strong> ${stats.next_reset}</p>
+                    <p><strong>Всего ключей:</strong> ${stats.total_keys} (${stats.active_keys} активных)</p>
+                    <p><strong>Использовано сегодня:</strong> ${stats.total_used_today} / ${stats.total_limit_today} запросов</p>
+                </div>
+                
+                <h5>🔑 Управление ключами</h5>
+            `;
+            
+            if (stats.keys.length === 0) {
+                html += '<p style="text-align: center; color: #6c757d; padding: 20px;">Ключи не найдены</p>';
+            } else {
+                stats.keys.forEach(key => {
+                    const usagePercent = (key.used / key.limit) * 100;
+                    const statusIcon = key.is_active ? '✅' : '⭕';
+                    const limitTypeLabel = key.limit_type === 'extended' ? '900 запросов' : '40 запросов';
+                    
+                    html += `
+                        <div class="key-advanced-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <div>
+                                    <strong>${statusIcon} ${key.name}</strong>
+                                    <span style="font-size: 12px; color: #6c757d; margin-left: 10px;">${key.key_preview}</span>
+                                </div>
+                                <div style="display: flex; gap: 5px;">
+                                    <button class="btn-sm toggle-key-btn" data-key-name="${key.name}" data-active="${key.is_active}" 
+                                            style="background: ${key.is_active ? '#6c757d' : '#28a745'}; padding: 4px 8px; font-size: 12px;">
+                                        ${key.is_active ? 'Деактивировать' : 'Активировать'}
+                                    </button>
+                                    <button class="btn-sm delete-key-btn" data-key-name="${key.name}" 
+                                            style="background: #dc3545; color: white; padding: 4px 8px; font-size: 12px;">
+                                        Удалить
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 10px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span>Использование: ${key.used} / ${key.limit} (${limitTypeLabel})</span>
+                                    <span>Всего запросов: ${key.total_requests || 0}</span>
+                                </div>
+                                <div class="usage-bar">
+                                    <div class="usage-fill ${usagePercent > 80 ? 'danger' : usagePercent > 60 ? 'warning' : ''}" 
+                                         style="width: ${Math.min(usagePercent, 100)}%"></div>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #6c757d;">
+                                <span>Создан: ${new Date(key.created_at).toLocaleDateString('ru-RU')}</span>
+                                <span>Обновлен: ${new Date(key.last_reset).toLocaleDateString('ru-RU')}</span>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <button class="btn-sm set-limit-btn" data-key-name="${key.name}" data-limit-type="standard" 
+                                        style="background: ${key.limit_type === 'standard' ? '#17a2b8' : '#6c757d'}; padding: 4px 8px; font-size: 12px;">
+                                    Лимит 40
+                                </button>
+                                <button class="btn-sm set-limit-btn" data-key-name="${key.name}" data-limit-type="extended" 
+                                        style="background: ${key.limit_type === 'extended' ? '#17a2b8' : '#6c757d'}; padding: 4px 8px; font-size: 12px;">
+                                    Лимит 900
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            keysAdvancedList.innerHTML = html;
+            
+            // Добавляем обработчики для кнопок
+            document.querySelectorAll('.toggle-key-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyName = this.dataset.keyName;
+                    const currentActive = this.dataset.active === 'true';
+                    toggleKey(keyName, !currentActive);
+                });
+            });
+            
+            document.querySelectorAll('.delete-key-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyName = this.dataset.keyName;
+                    deleteKeyAdvanced(keyName);
+                });
+            });
+            
+            document.querySelectorAll('.set-limit-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const keyName = this.dataset.keyName;
+                    const limitType = this.dataset.limitType;
+                    setKeyLimit(keyName, limitType);
+                });
+            });
+        }
+        
+        function setResetTime() {
+            const resetTime = resetTimeInput.value;
+            
+            fetch('/api/keys/set_reset_time', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ reset_time: resetTime })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showApiStatus(resetTimeStatus, data.message, true);
+                    loadAdvancedKeysList();
+                } else {
+                    showApiStatus(resetTimeStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(resetTimeStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
+        
+        function forceResetCounters() {
+            if (!confirm('Принудительно сбросить счетчики всех ключей?')) return;
+            
+            fetch('/api/keys/force_reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    loadAdvancedKeysList();
+                    loadKeysStats();
+                    loadKeysList();
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети: ' + error);
+            });
+        }
+        
+        function uploadKeysFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            fetch('/api/keys/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showApiStatus(keysUploadStatus, data.message, true);
+                    loadAdvancedKeysList();
+                    loadKeysStats();
+                    loadKeysList();
+                } else {
+                    showApiStatus(keysUploadStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(keysUploadStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
+        
+        function setModel(modelName) {
+            fetch('/api/keys/set_model', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ model: modelName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showApiStatus(modelStatus, data.message, true);
+                } else {
+                    showApiStatus(modelStatus, 'Ошибка: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(modelStatus, 'Ошибка сети: ' + error, false);
+            });
+        }
+        
+        function toggleKey(keyName, isActive) {
+            fetch('/api/keys/toggle', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    key_name: keyName,
+                    is_active: isActive 
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAdvancedKeysList();
+                    loadKeysStats();
+                    loadKeysList();
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети: ' + error);
+            });
+        }
+        
+        function deleteKeyAdvanced(keyName) {
+            if (!confirm(`Удалить ключ "${keyName}"?`)) return;
+            
+            fetch('/api/keys/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ key_name: keyName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAdvancedKeysList();
+                    loadKeysStats();
+                    loadKeysList();
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети: ' + error);
+            });
+        }
+        
+        function setKeyLimit(keyName, limitType) {
+            fetch('/api/keys/set_limit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    key_name: keyName,
+                    limit_type: limitType 
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadAdvancedKeysList();
+                } else {
+                    alert('Ошибка: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Ошибка сети: ' + error);
+            });
+        }
+        
         // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
@@ -2467,6 +2902,62 @@
                 exportStudentsData();
             });
             
+            // Обработчики для расширенного управления ключами
+            setResetTimeBtn.addEventListener('click', setResetTime);
+            forceResetBtn.addEventListener('click', forceResetCounters);
+            setModelBtn.addEventListener('click', function() {
+                const modelName = modelNameInput.value;
+                if (modelName) {
+                    setModel(modelName);
+                }
+            });
+            
+            // Обработчики для пресетов моделей
+            document.querySelectorAll('.model-preset-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const model = this.dataset.model;
+                    modelNameInput.value = model;
+                    setModel(model);
+                });
+            });
+            
+            // Загрузка файла ключей
+            keysFileDropzone.addEventListener('click', () => keysFileInput.click());
+            
+            keysFileInput.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    uploadKeysFile(this.files[0]);
+                }
+            });
+            
+            // Drag and drop для файлов
+            keysFileDropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#3498db';
+                this.style.backgroundColor = '#f8f9fa';
+            });
+            
+            keysFileDropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#3498db';
+                this.style.backgroundColor = 'white';
+            });
+            
+            keysFileDropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#3498db';
+                this.style.backgroundColor = 'white';
+                
+                if (e.dataTransfer.files.length > 0) {
+                    const file = e.dataTransfer.files[0];
+                    if (file.name.endsWith('.txt')) {
+                        uploadKeysFile(file);
+                    } else {
+                        showApiStatus(keysUploadStatus, 'Только TXT файлы разрешены', false);
+                    }
+                }
+            });
+            
             // Динамическая загрузка предметов по классам
             lessonClassSelect.addEventListener('change', function() {
                 const selectedClass = this.value;
@@ -2540,7 +3031,16 @@
                     });
                     
                     this.classList.add('active');
-                    document.getElementById(this.dataset.tab + '-tab').classList.add('active');
+                    const tabId = this.dataset.tab + '-tab';
+                    const tabContent = document.getElementById(tabId);
+                    if (tabContent) {
+                        tabContent.classList.add('active');
+                        
+                        // Загружаем данные для конкретной вкладки
+                        if (tabId === 'keys-advanced-tab') {
+                            loadAdvancedKeysList();
+                        }
+                    }
                 });
             });
             
