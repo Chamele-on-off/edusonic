@@ -754,9 +754,17 @@ def _fast_room_initialization(room_id):
             room_dialogue[room_id].set_student_data(student_data)
             
             # Если есть предмет, устанавливаем его
-            if 'subject' in student_data:
+            if 'subject' in student_data and student_data['subject']:
                 room_dialogue[room_id].current_subject = student_data['subject']
                 debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
+            else:
+                # Если предмет не указан, определяем из имени комнаты
+                if room_id.startswith('student_'):
+                    # Формат: student_предмет_имя_идентификатор
+                    parts = room_id.split('_')
+                    if len(parts) > 1:
+                        room_dialogue[room_id].current_subject = parts[1]
+                        debug_log(f"🔥 Предмет определен из имени комнаты: {parts[1]}")
         
         # Устанавливаем аватар
         if room_id not in room_current_avatar:
@@ -926,24 +934,40 @@ def update_student_data(student_id, updates):
         print(f"Error updating student data: {e}")
         return False
 
-def create_student_conference(student_data):
-    """Создает комнату для ученика"""
+def create_student_conference(student_data, subject=None):
+    """Создает комнату для ученика с ОБЯЗАТЕЛЬНЫМ предметом"""
     try:
         conference_id = str(int(time.time() * 1000))
-        room_id = f"student_{conference_id}"
         
-        # Сохраняем данные ученика для комнаты
-        room_student_data[room_id] = student_data
+        # Определяем предмет
+        if subject:
+            room_subject = subject
+        elif 'subject' in student_data:
+            room_subject = student_data['subject']
+        else:
+            # По умолчанию первый предмет ученика
+            room_subject = 'математика'
         
-        # Инициализируем комнату
+        # Формируем room_id с предметом
+        student_name = student_data.get('name', 'ученик').replace(' ', '_').lower()
+        room_id = f"student_{room_subject}_{student_name}_{conference_id}"
+        
+        # Сохраняем данные ученика для комнаты С ПРЕДМЕТОМ
+        room_student_data[room_id] = {
+            **student_data,
+            'subject': room_subject,
+            'conference_id': conference_id
+        }
+        
+        # Инициализируем комнату с ПРЕДМЕТОМ
         _fast_room_initialization(room_id)
         
-        debug_log(f"Создана комната {room_id} для ученика {student_data.get('name')}")
+        debug_log(f"Создана комната {room_id} для ученика {student_data.get('name')}, предмет: {room_subject}")
         
         return {
             'room_id': room_id,
             'conference_url': f'/conference?room={room_id}',
-            'student_data': student_data
+            'student_data': room_student_data[room_id]
         }
         
     except Exception as e:
@@ -951,7 +975,7 @@ def create_student_conference(student_data):
         return None
 
 def create_student_rooms(student_data):
-    """Автоматически создает комнаты для ученика с единым идентификатором"""
+    """Автоматически создает комнаты для ученика с ОБЯЗАТЕЛЬНЫМ предметом"""
     try:
         student_id = student_data.get('student_id')
         student_name = student_data.get('name')
@@ -964,22 +988,25 @@ def create_student_rooms(student_data):
             conference_id = str(int(time.time() * 1000))
             student_data['conference_id'] = conference_id
         
+        # Предметы по умолчанию с русскими названиями
         subjects = [
-            'math', 'physics', 'chemistry', 'biology', 
-            'history', 'social', 'literature', 'russian', 
-            'english', 'geography'
+            'математика', 'физика', 'химия', 'биология', 
+            'история', 'обществознание', 'литература', 'русский язык', 
+            'английский язык', 'география', 'информатика'
         ]
         
         created_rooms = []
         
         for subject in subjects:
-            room_name = f"{subject}_{student_name.replace(' ', '_').lower()}_{conference_id}"
+            # Формируем понятный room_id
+            room_name = f"student_{subject}_{student_name.replace(' ', '_').lower()}_{conference_id}"
             
+            # Сохраняем с предметом
             room_student_data[room_name] = {
                 'name': student_name,
                 'age': student_data.get('age'),
-                'level': student_data.get('education_level'),
-                'subject': subject,
+                'education_level': student_data.get('education_level'),
+                'subject': subject,  # КРИТИЧЕСКИ ВАЖНО: Устанавливаем предмет
                 'student_id': student_id,
                 'conference_id': conference_id
             }
@@ -987,10 +1014,11 @@ def create_student_rooms(student_data):
             # Инициализируем DialogueManager для комнаты
             _fast_room_initialization(room_name)
             
-            debug_log(f"Создана комната {room_name} для ученика {student_name}")
+            debug_log(f"Создана комната {room_name} для ученика {student_name}, предмет: {subject}")
             
             created_rooms.append({
                 'subject': subject,
+                'subject_name': subject,
                 'room_name': room_name,
                 'avatar': 'woman',
                 'conference_id': conference_id,
@@ -1071,7 +1099,7 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
         with open(progress_file, 'r', encoding='utf-8') as f:
             progress_data = json.load(f)
         
-        # Инициализируем предмет если его нет
+        # Инициализируем прогресс по предмету если нужно
         if subject not in progress_data["subjects"]:
             progress_data["subjects"][subject] = {
                 "completed_lessons": [],
@@ -1081,37 +1109,27 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
                 "progress_percent": 0
             }
         
-        subject_progress = progress_data["subjects"][subject]
+        # Обновляем прогресс
+        subject_progress = progress_data[subject]
         
         if completed and lesson_id not in subject_progress["completed_lessons"]:
             subject_progress["completed_lessons"].append(lesson_id)
+            subject_progress["current_lesson"] = lesson_id
+            subject_progress["last_accessed"] = time.time()
+            
+            # Обновляем общее количество уроков
+            subject_progress["total_lessons"] = len(self.get_lessons_for_student_subject(subject))
         
-        subject_progress["current_lesson"] = lesson_id
-        subject_progress["last_accessed"] = datetime.now().isoformat()
-        
-        # Обновляем общее количество уроков
-        class_level = progress_data.get("education_level", "5")
-        class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class" / subject
-        if class_dir.exists():
-            subject_progress["total_lessons"] = len(list(class_dir.glob("*.txt")))
-        
-        # Рассчитываем процент прогресса
-        if subject_progress["total_lessons"] > 0:
-            subject_progress["progress_percent"] = int(
-                (len(subject_progress["completed_lessons"]) / subject_progress["total_lessons"]) * 100
-            )
-        
-        progress_data["last_updated"] = datetime.now().isoformat()
-        
-        # Сохраняем обновленный прогресс
-        with open(progress_file, 'w', encoding='utf-8') as f:
-            json.dump(progress_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"✅ Обновлен прогресс для ученика {student_id}: {subject} - урок {lesson_id}")
-        return True
+        # Сохраняем
+        try:
+            with open(progress_file, 'w', encoding='utf-8') as f:
+                json.dump(progress_data, f, ensure_ascii=False, indent=2)
+            debug_log(f"✅ Прогресс сохранен: {lesson_id} по предмету {subject}")
+        except Exception as e:
+            debug_log(f"❌ Ошибка сохранения прогресса: {e}")
         
     except Exception as e:
-        print(f"❌ Ошибка обновления прогресса: {e}")
+        debug_log(f"❌ Ошибка обновления прогресса: {e}")
         return False
 
 def get_student_lessons_by_class(student_class):
@@ -1309,150 +1327,6 @@ def delayed_welcome(room_id, message, delay=2):
     """Отправляет приветствие с задержкой"""
     time.sleep(delay)
     speak_text(room_id, message, voice_type='female', is_teacher=True)
-
-@socketio.on('start_student_lesson')
-def handle_start_student_lesson(data):
-    """🔥 НОВЫЙ ОБРАБОТЧИК: Команда 'готов начать' от ученика"""
-    room_id = data['room_id']
-    sid = request.sid
-    
-    debug_log(f"🔥 Получена команда 'готов начать' от ученика в комнате {room_id}")
-    
-    if room_id not in room_dialogue or room_dialogue[room_id] is None:
-        emit('lesson_error', {'error': 'Диалог не инициализирован'}, to=sid)
-        return
-    
-    dialogue = room_dialogue[room_id]
-    
-    # Проверяем, что есть данные ученика
-    if not dialogue.has_student_data:
-        emit('lesson_error', {'error': 'Нет данных ученика'}, to=sid)
-        return
-    
-    # 🔥 ИСПРАВЛЕНИЕ: Получаем следующий урок для ученика
-    try:
-        debug_log(f"🔥 Поиск следующего урока для ученика...")
-        
-        # Получаем предмет из данных ученика или комнаты
-        subject = dialogue.current_subject
-        if not subject and room_id in room_student_data:
-            subject = room_student_data[room_id].get('subject')
-        
-        if not subject:
-            emit('lesson_error', {'error': 'Не указан предмет'}, to=sid)
-            return
-        
-        # Получаем следующий урок
-        next_lesson = dialogue.get_next_lesson_for_student(subject)
-        
-        if not next_lesson:
-            # Если нет следующего урока, пробуем получить первый урок
-            lessons = dialogue.get_lessons_for_student_subject(subject)
-            if not lessons:
-                emit('lesson_error', {'error': f'Нет уроков по предмету {subject}'}, to=sid)
-                return
-            next_lesson = lessons[0]
-        
-        debug_log(f"🔥 Найден следующий урок: {next_lesson['title']}")
-        
-        # Устанавливаем урок
-        dialogue.selected_lesson = next_lesson
-        dialogue.lesson_started = True
-        dialogue.current_state = "lesson_reading"
-        
-        # Загружаем содержание урока
-        dialogue.lesson_content = dialogue._load_lesson_content(next_lesson['file_path'])
-        dialogue.current_paragraph = 0
-        
-        if not dialogue.lesson_content:
-            emit('lesson_error', {'error': 'Ошибка загрузки урока'}, to=sid)
-            return
-        
-        # Инициализируем базу знаний
-        if dialogue.current_subject:
-            from knowledge.knowledge_base import KnowledgeBase
-            dialogue.knowledge_base = KnowledgeBase(dialogue.current_subject)
-        
-        # Очищаем историю
-        dialogue.conversation_history = []
-        dialogue.conversation_context = []
-        
-        # Обновляем прогресс ученика
-        student_id = dialogue.student_data.get('student_id')
-        if student_id:
-            update_student_lesson_progress(
-                student_id, 
-                next_lesson.get('subject'), 
-                next_lesson['id'], 
-                completed=False
-            )
-        
-        # Отправляем подтверждение клиенту
-        emit('student_lesson_started', {
-            'room_id': room_id,
-            'lesson_id': next_lesson['id'],
-            'lesson_title': next_lesson['title'],
-            'subject': dialogue.current_subject,
-            'class_level': next_lesson.get('class_level', '5'),
-            'lesson_number': next_lesson.get('lesson_number', 1)
-        }, room=room_id)
-        
-        # 🔥 ОЗВУЧИВАЕМ ПЕРВЫЙ АБЗАЦ
-        first_paragraph = dialogue._get_next_paragraph()
-        if first_paragraph:
-            student_name = dialogue.student_data.get('name', 'ученик')
-            start_message = f"{student_name}, отлично! Начинаем урок по {dialogue.current_subject}. {first_paragraph}"
-            speak_text(room_id, start_message, voice_type='female', is_teacher=True)
-        else:
-            speak_text(room_id, "Начинаем урок!", voice_type='female', is_teacher=True)
-            
-    except Exception as e:
-        debug_log(f"🔥 Ошибка начала урока: {e}")
-        emit('lesson_error', {'error': f'Ошибка: {str(e)}'}, to=sid)
-
-def delayed_auto_activation(room_id, delay=3):
-    """Улучшенная отложенная автоматическая активация с повторными попытками"""
-    time.sleep(delay)
-    
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            debug_log(f"Попытка автоматической активации {room_id} (попытка {attempt + 1})")
-            
-            room_exists = (
-                room_id in room_participants or 
-                room_id in room_dialogue or 
-                room_id in room_current_avatar
-            )
-            
-            if (room_exists and 
-                room_id in room_participants and 
-                len(room_participants[room_id]) > 0 and 
-                not room_ai_activated.get(room_id, False)):
-                
-                debug_log(f"Запуск автоматической активации для {room_id}")
-                
-                room_ai_activated[room_id] = True
-                _fast_room_initialization(room_id)
-                
-                socketio.emit('ai_teacher_activated', {
-                    'room_id': room_id,
-                    'message': 'AI-учитель автоматически активирован',
-                    'is_student_mode': hasattr(room_dialogue.get(room_id), 'has_student_data') and room_dialogue[room_id].has_student_data if room_id in room_dialogue else False
-                }, room=room_id)
-                
-                debug_log(f"Автоматическая активация успешна для {room_id}")
-                break
-                
-            else:
-                debug_log(f"Комната {room_id} не готова для автоматической активации (попытка {attempt + 1})")
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                    
-        except Exception as e:
-            print(f"⚠️ Ошибка автоматической активации {room_id} (попытка {attempt + 1}): {e}")
-            if attempt < max_retries - 1:
-                time.sleep(2)
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
@@ -3387,17 +3261,24 @@ def add_student_lesson(student_id):
 @app.route('/api/student/create-conference', methods=['POST'])
 @student_required  
 def create_student_conference_route():
-    """Создает конференцию для ученика"""
+    """Создает конференцию для ученика с указанием предмета"""
     try:
+        data = request.json
+        subject = data.get('subject')
+        
+        if not subject:
+            return jsonify({"success": False, "error": "Не указан предмет"})
+        
         user_data = load_user_data(session['user_id'])
         student_data = user_data.get('student_data', {})
         
-        conference = create_student_conference(student_data)
+        conference = create_student_conference(student_data, subject)
         
         if conference:
             return jsonify({
                 "success": True,
-                "conference": conference
+                "conference": conference,
+                "message": f"Создана комната для урока по {subject}"
             })
         else:
             return jsonify({"success": False, "error": "Ошибка создания конференции"})
@@ -3754,10 +3635,13 @@ def get_student_room_for_subject(subject):
         conference_id = student_data.get('conference_id', str(int(time.time() * 1000)))
         student_class = student_data.get('education_level', '5')
         student_name = student_data.get('name', '').replace(' ', '_').lower()
-        room_name = f"{student_class}_class_{subject}_{student_name}_{conference_id}"
+        room_name = f"student_{subject}_{student_name}_{conference_id}"
         
         # Сохраняем данные ученика для комнаты
-        room_student_data[room_name] = student_data
+        room_student_data[room_name] = {
+            **student_data,
+            'subject': subject
+        }
         
         return jsonify({
             "success": True,
@@ -4122,24 +4006,20 @@ def test_student_flow():
 @app.route('/api/debug/room/<room_id>')
 def debug_room_info(room_id):
     """Отладочная информация о комнате"""
-    if room_id not in room_dialogue or room_dialogue[room_id] is None:
-        return jsonify({"success": False, "error": "Room not initialized"})
-    
-    dialogue = room_dialogue[room_id]
-    info = dialogue.debug_info()
-    
-    return jsonify({
+    info = {
         "success": True,
         "room_id": room_id,
-        "dialogue_info": info,
         "student_data": room_student_data.get(room_id, {}),
+        "has_student_data": room_id in room_student_data,
+        "subject": room_student_data.get(room_id, {}).get('subject') if room_id in room_student_data else None,
+        "dialogue_exists": room_id in room_dialogue and room_dialogue[room_id] is not None,
+        "dialogue_has_student_data": room_dialogue[room_id].has_student_data if room_id in room_dialogue and room_dialogue[room_id] else False,
+        "dialogue_current_subject": room_dialogue[room_id].current_subject if room_id in room_dialogue and room_dialogue[room_id] else None,
         "participants": list(room_participants.get(room_id, [])),
-        "ai_activated": room_ai_activated.get(room_id, False),
-        "has_student_data": dialogue.has_student_data,
-        "current_subject": dialogue.current_subject,
-        "selected_lesson": dialogue.selected_lesson,
-        "lesson_started": dialogue.lesson_started
-    })
+        "ai_activated": room_ai_activated.get(room_id, False)
+    }
+    
+    return jsonify(info)
 
 @app.route('/api/debug/student-lessons')
 @student_required
@@ -4175,6 +4055,32 @@ def debug_student_lessons_route():
         "subjects_in_folder": subjects_in_folder,
         "student_class": student_class
     })
+
+@app.route('/test-student-room')
+def test_student_room():
+    """Тестирование комнаты ученика с предметом"""
+    student_data = {
+        'name': 'Тестовый Ученик',
+        'education_level': '5',
+        'age': '11',
+        'student_id': 'test123'
+    }
+    
+    # Создаем комнату с предметом
+    conference = create_student_conference(student_data, 'математика')
+    
+    if conference:
+        return f"""
+        <html>
+            <body>
+                <h1>Тест комнаты ученика</h1>
+                <p>Комната создана: {conference['room_id']}</p>
+                <p>Предмет: {conference['student_data'].get('subject')}</p>
+                <a href="{conference['conference_url']}" target="_blank">Открыть комнату</a>
+            </body>
+        </html>
+        """
+    return "Ошибка создания комнаты"
 
 # =============================================================================
 # ЗАПУСК СЕРВЕРА
