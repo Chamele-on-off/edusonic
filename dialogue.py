@@ -449,7 +449,7 @@ class DialogueManager:
             with open(lesson_file, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            debug_log(f"✅ Файл прочитан, длина: {len(content)} символов")
+            debug_log(f"✅ Файл прочитаен, длина: {len(content)} символов")
             
             # УЛУЧШЕННАЯ ОЧИСТКА СОДЕРЖАНИЯ
             content = self._clean_lesson_content(content)
@@ -827,16 +827,16 @@ class DialogueManager:
         return True
 
     def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
-        """Генерирует урок по запрошенной теме с помощью LLM"""
+        """🔥 ОБНОВЛЕННЫЙ: Генерирует урок по запрошенной теме с ПРОВЕРОЧНЫМИ ВОПРОСАМИ"""
         try:
             debug_log(f"🎯 Генерация урока по теме: {topic}")
             
-            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Добавляем данные ученика для адаптации сложности
+            # 🔥 ОБНОВЛЕННЫЙ ПРОМПТ: Добавляем данные ученика и ТРЕБОВАНИЯ К ВОПРОСАМ
             age = self.student_data.get('age', '12')
             level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
-            # Формируем промпт для генерации урока с учетом возраста
+            # 🔥 ОБНОВЛЕННЫЙ: Формируем промпт для генерации урока с ПРОВЕРОЧНЫМИ ВОПРОСАМИ
             system_prompt = f"""Ты - эксперт по созданию образовательных материалов.
 
 ВАЖНЫЕ ПАРАМЕТРЫ УЧЕНИКА:
@@ -845,24 +845,31 @@ class DialogueManager:
 - Уровень образования: {level} класс
 - Предмет: {self.current_subject or 'общее'}
 
-Создай структурированный урок по заданной теме. Урок должен быть:
+🔥 ОЧЕНЬ ВАЖНОЕ ТРЕБОВАНИЕ:
+- ВСТАВЬ 1-2 проверочных вопроса естественным образом в середине урока
+- Вопросы должны проверять понимание ключевых понятий
+- Вопросы должны быть частью текста, а не выделены специально
+- Используй естественные формулировки: "Как вы думаете...", "Попробуйте ответить...", "Как называется процесс..."
 
-1. АДАПТИРОВАН ПОД ВОЗРАСТ {age} ЛЕТ:
-   - Используй язык и примеры, понятные для {age}-летнего
-   - Сложность материала должна соответствовать {level} классу
-   - Длина предложений и абзацев должна подходить для этого возраста
-   - Используй примеры и аналогии, релевантные для ученика {age} лет
+Примеры естественных вопросов:
+- "Как вы думаете, почему это происходит?"
+- "Как называется этот процесс?"
+- "Что является результатом этой реакции?"
+- "Можете назвать основные компоненты?"
+- "Попробуйте объяснить это своими словами"
 
-2. СОДЕРЖАТЕЛЬНЫЕ ТРЕБОВАНИЯ:
-   - Информативным и точным
-   - Разделен на логические абзацы (разделяй пустыми строками)
-   - Содержать практические примеры если уместно
-   - Быть увлекательным и интересным
+ВАЖНО: Вопросы должны органично вписываться в текст урока!
 
-3. ФОРМАТИРОВАНИЕ:
-   - Разделяй абзацы ДВУМЯ переводами строки (\\n\\n)
-   - Используй подходящий для возраста стиль изложения
-   - Объясняй сложные понятия простыми словами
+СОДЕРЖАТЕЛЬНЫЕ ТРЕБОВАНИЯ:
+- Информативным и точным
+- Разделен на логические абзацы (разделяй пустыми строками)
+- Содержать практические примеры если уместно
+- Быть увлекательным и интересным
+
+ФОРМАТИРОВАНИЕ:
+- Разделяй абзацы ДВУМЯ переводами строки (\\n\\n)
+- Используй подходящий для возраста стиль изложения
+- Объясняй сложные понятия простыми словами
 
 Тема урока: '{topic}'
 
@@ -870,7 +877,7 @@ class DialogueManager:
 
             # Запрос к LLM с увеличенным количеством токенов
             lesson_content = self.llm._query_llm_api(
-                prompt=f"Создай подробный образовательный урок на тему: '{topic}'. Урок должен быть понятным и структурированным.",
+                prompt=f"Создай подробный образовательный урок на тему: '{topic}'. Урок должен быть понятным и структурированным, с проверочными вопросами.",
                 context="",
                 subject=self.current_subject or "общее",
                 system_prompt=system_prompt,
@@ -1312,7 +1319,7 @@ class DialogueManager:
         # 2. Если не нашли, пробуем найти в общей структуре
         if not lessons:
             lessons = self.lessons.get(subject, [])
-            debug_log(f"🔥 Уроки не найдены через ученика, пробуем общие: {len(lessons)}")
+            debug_log(f"🔥 Урокы не найдены через ученика, пробуем общие: {len(lessons)}")
         
         if not lessons:
             # 🔥 ВАЖНО: Формируем понятное сообщение для ученика
@@ -1771,11 +1778,14 @@ class DialogueManager:
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
+        """🔥 ОБНОВЛЕННЫЙ: Получает следующий абзац урока (БЕЗ РАСПОЗНАВАНИЯ ВОПРОСОВ)"""
         debug_log(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
+            
+            # 🔥 УДАЛЕНА логика распознавания вопросов - теперь вся логика в LLM
             
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
@@ -1955,7 +1965,7 @@ class DialogueManager:
         debug_log("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
-        """Обработка вопросов ученика во время урока"""
+        """🔥 ОБНОВЛЕННЫЙ: Обработка вопросов ученика во время урока с КОНТЕКСТУАЛЬНЫМ АНАЛИЗОМ"""
         if not question.strip():
             return "Повторите вопрос пожалуйста, я не расслышал."
             
@@ -1966,17 +1976,40 @@ class DialogueManager:
             self._generate_visualization(question, context)
         
         debug_log(f"Немедленная обработка вопроса: '{question}'")
+        
+        # 🔥 КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: ВСЕГДА передаем контекст урока
+        current_context = ""
+        if self.lesson_content and self.current_paragraph > 0:
+            # Берем последние 2-3 абзаца как контекст
+            context_start = max(0, self.current_paragraph - 3)
+            current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
+        
+        # 🔥 УНИВЕРСАЛЬНЫЙ ПРОМПТ ДЛЯ ВСЕХ ОТВЕТОВ
+        universal_prompt = f"""
+КОНТЕКСТ УРОКА (последние абзацы): {current_context}
+
+ОТВЕТ УЧЕНИКА: {question}
+
+ИНСТРУКЦИИ ДЛЯ УЧИТЕЛЯ:
+1. Проанализируй контекст урока и ответ ученика
+2. ЕСЛИ ответ ученика является ответом на вопрос из урока:
+   - Оцени правильность ответа
+   - Дай краткий комментарий
+   - Скажи "Продолжим урок" для перехода к следующему абзацу
+3. ЕСЛИ это НЕ ответ на вопрос, а обычный вопрос ученика:
+   - Ответь на вопрос по теме урока
+   - Используй контекст для более точного ответа
+   - НЕ говори "Продолжим урок" в этом случае
+
+Верни только ответ учителя, без пояснений о своей логике.
+"""
+        
         final_response = None
         
         if self.llm_query_mode == "llm_first":
-            debug_log(f"🔀 Режим llm_first: Обработка вопроса '{question}'")
+            debug_log(f"🔀 Режим llm_first: Обработка вопроса '{question}' с контекстом")
             
-            current_context = ""
-            if self.lesson_content and self.current_paragraph > 0:
-                context_start = max(0, self.current_paragraph - 2)
-                current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
-            
-            llm_response = self.llm.query(question, current_context, self.current_subject)
+            llm_response = self.llm.query(universal_prompt, current_context, self.current_subject)
             if llm_response and not llm_response.startswith("Интересный вопрос!"):
                 self.llm.add_to_cache(question, llm_response, self.current_subject)
                 if self.knowledge_base and self._should_save_to_knowledge_base(question):
@@ -2029,12 +2062,8 @@ class DialogueManager:
                     final_response = llm_answer
             
             if not final_response:
-                current_context = ""
-                if self.lesson_content and self.current_paragraph > 0:
-                    context_start = max(0, self.current_paragraph - 2)
-                    current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
-                
-                llm_response = self.llm.query(question, current_context, self.current_subject)
+                # Используем универсальный промпт
+                llm_response = self.llm.query(universal_prompt, current_context, self.current_subject)
                 if llm_response:
                     self.llm.add_to_cache(question, llm_response, self.current_subject)
                     if self.knowledge_base and self._should_save_to_knowledge_base(question):
@@ -2044,7 +2073,11 @@ class DialogueManager:
                     final_response = llm_response
         
         if not final_response:
-            final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
+            # 🔥 УЛУЧШЕННЫЙ FALLBACK с учетом контекста
+            if "Продолжим урок" in current_context:
+                final_response = "Хорошо, продолжим урок."
+            else:
+                final_response = "Интересный вопрос! Давайте обсудим его после завершения текущего материала, чтобы не отвлекаться."
         
         # 🔥 ПЕРСОНАЛИЗИРУЕМ ОТВЕТ НА ВОПРОС
         if self.has_student_data and final_response:
