@@ -1792,7 +1792,8 @@
         // Функция для открытия демо-конференции
         function openDemoConference() {
             const roomId = generateDemoRoomId();
-            const url = `/conference.html?room=${roomId}&demo=true&guest=true`;
+            // ИСПРАВЛЕНИЕ: изменили conference.html на conference
+            const url = `/conference?room=${roomId}&demo=true&guest=true`;
             window.open(url, '_blank');
         }
 
