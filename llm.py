@@ -3,7 +3,7 @@ import json
 from typing import Optional, Dict, Callable, List
 from pathlib import Path
 import time
-from config import get_api_key, load_config, get_model_config, get_llm_priority, set_llm_priority
+from config import get_api_key, load_config, get_model_config, get_llm_priority, set_llm_priority, get_openrouter_model, set_openrouter_model
 import re
 from local_llm_manager import get_llm_manager
 import queue
@@ -49,7 +49,7 @@ class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
-                 model: str = "meta-llama/llama-3.3-70b-instruct:free"):
+                 model: str = None):
         
         config = load_config()
         openrouter_config = get_model_config("openrouter")
@@ -57,7 +57,10 @@ class LLMIntegration:
         # Используем менеджер ключей вместо одного ключа
         self.key_manager = get_key_manager()
         self.api_url = api_url or openrouter_config.get("api_url", "https://openrouter.ai/api/v1/chat/completions")
-        self.model = model or openrouter_config.get("model", "meta-llama/llama-3.3-70b-instruct:free")
+        
+        # Используем модель из конфигурации или переданную параметром
+        self.model = model or get_openrouter_model() or openrouter_config.get("model", "meta-llama/llama-3.3-70b-instruct:free")
+        
         self.cache_dir = Path(cache_dir)
         self.cache = self._load_cache()
         self.last_request_time = 0
@@ -140,6 +143,7 @@ class LLMIntegration:
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
         print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
+        print(f"🔧 [LLM] Используемая модель: {self.model}")
         
         # ЛОГИКА ВЫБОРА МОДЕЛИ ПО ПРИОРИТЕТУ
         if self.priority_mode == "local_only":
@@ -227,6 +231,7 @@ class LLMIntegration:
                 return None if callback else self._get_fallback_response(prompt, subject)
             
             print(f"🔧 [LLM] Использую OpenRouter для комнаты {room_id} (ключ: {api_key[:8]}...)")
+            print(f"🔧 [LLM] Модель: {self.model}")
             
             # Добавляем задержку между запросами
             current_time = time.time()
@@ -380,6 +385,7 @@ class LLMIntegration:
             return self.cache[cache_key]
         
         print(f"📨 Запрос к LLM: '{question}' (предмет: {subject})")
+        print(f"🔧 Используемая модель: {self.model}")
         
         # ДАЕМ БОЛЬШЕ ВРЕМЕНИ ДЛЯ ОБРАБОТКИ
         start_time = time.time()
@@ -424,23 +430,17 @@ class LLMIntegration:
 
     def set_model(self, model: str):
         """Установка модели LLM"""
-        available_models = {
-            "llama": "meta-llama/llama-3.3-8b-instruct:free",
-            "llama3": "meta-llama/llama-3.3-8b-instruct:free",
-            "qwen": "qwen/qwen3-235b-a22b:free",
-            "deepseek": "deepseek/deepseek-chat-v3-0324:free"
-        }
+        # Сохраняем в конфигурации
+        success = set_openrouter_model(model)
         
-        if model in available_models:
-            self.model = available_models[model]
-            print(f"🔧 Установлена модель: {self.model}")
-        else:
+        if success:
             self.model = model
-            print(f"🔧 Установлена кастомная модель: {self.model}")
+            print(f"🔧 Установлена модель OpenRouter: {self.model}")
+        else:
+            print(f"❌ Ошибка установки модели: {model}")
             
-        # Всегда используем OpenRouter API ключ
-        config = load_config()
-        self.api_key = config.get("openrouter", {}).get("api_key", "")
+        # Всегда используем менеджер ключей
+        self.key_manager = get_key_manager()
 
     def set_priority(self, priority: str):
         """Установка приоритета моделей"""
@@ -463,7 +463,8 @@ class LLMIntegration:
             "local_available": local_available,
             "openrouter_available": openrouter_available,
             "local_status": self.llm_manager.local_llm.get_status(),
-            "effective_priority": self._get_effective_priority()
+            "effective_priority": self._get_effective_priority(),
+            "current_model": self.model
         }
     
     def _get_effective_priority(self) -> str:
@@ -508,6 +509,7 @@ class LLMIntegration:
             "effective_priority": self._get_effective_priority(),
             "local_status": self.llm_manager.local_llm.get_status(),
             "local_url": self.llm_manager.local_llm.base_url,
+            "current_model": self.model,
             "cache_stats": self.get_cache_stats()
         }
 
@@ -628,6 +630,7 @@ class LLMIntegration:
 
         try:
             print(f"🎨 Генерация УНИКАЛЬНОЙ SVG инфографики для: {topic}")
+            print(f"🔧 Используемая модель: {self.model}")
             
             response = self._query_llm_api(
                 prompt=prompt,
@@ -780,9 +783,12 @@ class LLMIntegration:
     def get_available_models(self) -> list:
         """Получение списка доступных моделей"""
         return [
-            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
-            {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
-            {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
+            {"id": "meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "description": "Мощная и быстрая модель от Meta"},
+            {"id": "meta-llama/llama-3.2-3b-instruct:free", "name": "Llama 3.2 3B", "description": "Легкая и быстрая модель от Meta"},
+            {"id": "qwen/qwen2.5-72b-instruct:free", "name": "Qwen 2.5 72B", "description": "Качественная модель от Alibaba"},
+            {"id": "google/gemini-pro", "name": "Gemini Pro", "description": "Мощная модель от Google"},
+            {"id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5", "description": "Продвинутая модель от Anthropic"},
+            {"id": "deepseek/deepseek-chat-v3-0324:free", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
         ]
 
     def debug_infographic_generation(self, topic: str):
@@ -822,6 +828,8 @@ if __name__ == "__main__":
     llm = LLMIntegration()
     
     print("🔧 Тестирование улучшенного LLM модуля...")
+    print(f"🔧 Текущая модель: {llm.model}")
+    print(f"🔧 Приоритет: {llm.priority_mode}")
     
     # Тестирование генерации инфографики
     test_topic = "Статистика включает описательную статистику и индуктивную статистику"
