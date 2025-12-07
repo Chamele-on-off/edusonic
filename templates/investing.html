@@ -984,10 +984,10 @@
             <h1>EduSonic AI</h1>
             <p>Интеллектуальный голосовой репетитор нового поколения</p>
             <div class="cta-buttons">
-                <a href="/login" class="btn btn-conference">
-                    <i class="fas fa-robot"></i> Попробовать AI-учителя
-                </a>
-                <a href="#pricing" class="btn btn-secondary">Для учебных заведений →</a>
+                <button id="tryTeacherBtn" class="btn btn-conference">
+                    <i class="fas fa-robot"></i> Запустить AI-учителя
+                </button>
+                <button id="startTestingBtn" class="btn btn-secondary">Начать тестирование →</button>
             </div>
         </div>
     </section>
@@ -1030,7 +1030,7 @@
             <div class="demo-visual">
                 <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8;"></i>
             </div>
-            <a href="/login" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</a>
+            <button id="demoTestingBtn" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</button>
         </div>
     </section>
 
@@ -1082,9 +1082,9 @@
                 </div>
                 
                 <div style="margin: 2rem 0;">
-                    <a href="/login" id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem; text-decoration: none;">
+                    <button id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem; text-decoration: none;">
                         <i class="fas fa-play"></i> Запустить AI-учителя
-                    </a>
+                    </button>
                 </div>
                 
                 <p style="color: var(--text-light); font-size: 0.9rem; margin-top: 1rem;">
@@ -1105,15 +1105,16 @@
         <!-- Individual Pricing -->
         <div id="individual-pricing" class="pricing-grid pricing-container active">
             <div class="pricing-card">
-                <h3>Стартовый</h3>
-                <div class="price">$0 <span>/месяц</span></div>
+                <h3>Демо-версия</h3>
+                <div class="price">Бесплатно</div>
                 <ul class="pricing-features">
-                    <li>1 предмет на выбор</li>
-                    <li>5 уроков в месяц</li>
+                    <li>Полноценный демо-урок</li>
+                    <li>Доступ ко всем предметам</li>
+                    <li>Голосовое взаимодействие</li>
+                    <li>Интерактивная доска</li>
                     <li>Базовые функции ИИ</li>
-                    <li>Ограниченная поддержка</li>
                 </ul>
-                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Начать бесплатно</a>
+                <button class="startDemoBtn btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Запустить демо</button>
             </div>
             <div class="pricing-card popular">
                 <h3>Премиум</h3>
@@ -1214,10 +1215,10 @@
         <div class="demo-container">
             <h2 class="section-title" style="color: white;">Готовы к образованию будущего?</h2>
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Первые 50 учебных заведений получат 3 месяца бесплатного тестирования всех возможностей платформы!
+                Запустите демо-версию и убедитесь в возможностях платформы!
             </p>
             <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
-                <a href="/login" class="btn btn-primary" style="background: white; color: var(--accent); text-decoration: none;">Попробовать бесплатно</a>
+                <button id="ctaDemoBtn" class="btn btn-primary" style="background: white; color: var(--accent); text-decoration: none;">Запустить демо</button>
                 <a href="#contact" class="btn btn-secondary" style="border-color: white; color: white; text-decoration: none;">Инвестировать в проект</a>
             </div>
         </div>
@@ -1271,6 +1272,20 @@
 
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
+        // Генерация уникального ID для демо-комнаты
+        function generateDemoRoomId() {
+            const timestamp = Date.now();
+            const random = Math.floor(Math.random() * 10000);
+            return `demo_${timestamp}_${random}`;
+        }
+
+        // Функция для открытия демо-конференции
+        function openDemoConference() {
+            const roomId = generateDemoRoomId();
+            const url = `/conference.html?room=${roomId}&demo=true&guest=true`;
+            window.open(url, '_blank');
+        }
+
         // Инициализация частиц с более заметными параметрами
         particlesJS("particles-js", {
             "particles": {
@@ -1474,6 +1489,27 @@
             });
             
             window.addEventListener('scroll', animateOnScroll);
+
+            // Обработчики для кнопок демо
+            const demoButtons = [
+                document.getElementById('tryTeacherBtn'),
+                document.getElementById('startTestingBtn'),
+                document.getElementById('demoTestingBtn'),
+                document.getElementById('start-conference-btn'),
+                document.getElementById('ctaDemoBtn')
+            ];
+            
+            // Добавляем обработчики для кнопок демо
+            demoButtons.forEach(btn => {
+                if (btn) {
+                    btn.addEventListener('click', openDemoConference);
+                }
+            });
+            
+            // Добавляем обработчики для кнопок "Запустить демо" в карточках тарифов
+            document.querySelectorAll('.startDemoBtn').forEach(btn => {
+                btn.addEventListener('click', openDemoConference);
+            });
         });
     </script>
 </body>
