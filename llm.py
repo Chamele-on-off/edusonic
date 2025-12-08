@@ -57,7 +57,10 @@ class LLMIntegration:
         # 🔥 ИСПРАВЛЕНИЕ: Используем менеджер ключей вместо одного ключа
         self.key_manager = get_key_manager()  # Ключевое изменение!
         self.api_url = api_url or openrouter_config.get("api_url", "https://openrouter.ai/api/v1/chat/completions")
-        self.model = model or openrouter_config.get("model", "meta-llama/llama-3.3-70b-instruct:free")
+        
+        # Получаем модель из менеджера ключей, а не из конфига напрямую
+        self.model = self.key_manager.model or model or openrouter_config.get("model", "meta-llama/llama-3.3-70b-instruct:free")
+        
         self.cache_dir = Path(cache_dir)
         self.cache = self._load_cache()
         self.last_request_time = 0
@@ -78,6 +81,7 @@ class LLMIntegration:
         
         print(f"🔧 [LLM] Инициализирован с приоритетом: {self.priority_mode}")
         print(f"🔧 [LLM] Используется менеджер ключей: {len(self.key_manager.keys)} ключей доступно")
+        print(f"🔧 [LLM] Текущая модель OpenRouter: {self.model}")
         
     def _load_cache(self) -> Dict:
         """Загрузка кэша из файла"""
@@ -143,6 +147,7 @@ class LLMIntegration:
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
         print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
+        print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
         
         # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Используем асинхронный режим чтобы не блокировать систему
         if callback:
@@ -156,9 +161,13 @@ class LLMIntegration:
                     )
                     if result:
                         callback(result, room_id)
+                    else:
+                        # 🔥 ВСЕГДА ВОЗВРАЩАЕМ FALLBACK ДЛЯ АСИНХРОННЫХ ЗАПРОСОВ
+                        fallback = self._get_fallback_response(prompt, subject)
+                        callback(fallback, room_id)
                 except Exception as e:
                     print(f"❌ [LLM] Ошибка асинхронного запроса: {e}")
-                    # Всегда возвращаем fallback чтобы не блокировать систему
+                    # 🔥 ВСЕГДА ВОЗВРАЩАЕМ FALLBACK ЧТОБЫ НЕ БЛОКИРОВАТЬ СИСТЕМУ
                     fallback = self._get_fallback_response(prompt, subject)
                     callback(fallback, room_id)
             
@@ -169,10 +178,14 @@ class LLMIntegration:
         else:
             # Синхронный режим - с таймаутом и fallback
             try:
-                return self._execute_llm_query(
+                result = self._execute_llm_query(
                     prompt, context, subject, system_prompt,
                     max_tokens, room_id, is_svg
                 )
+                if result:
+                    return result
+                else:
+                    return self._get_fallback_response(prompt, subject)
             except Exception as e:
                 print(f"❌ [LLM] Ошибка синхронного запроса: {e}")
                 return self._get_fallback_response(prompt, subject)
@@ -182,28 +195,64 @@ class LLMIntegration:
                           room_id: str, is_svg: bool = False) -> Optional[str]:
         """Выполнение LLM запроса с безопасным fallback"""
         
-        # ЛОГИКА ВЫБОРА МОДЕЛИ ПО ПРИОРИТЕТУ
+        print(f"🔧 [LLM] Запрос: {prompt[:100]}...")
+        print(f"🔧 [LLM] Приоритет: {self.priority_mode}")
+        print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
+        
+        # Проверяем доступность локальной модели
+        local_available = self.llm_manager.local_llm.is_available()
+        print(f"🔧 [LLM] Локальная модель доступна: {local_available}")
+        
         if self.priority_mode == "local_only":
-            return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
-            
+            print("🔧 [LLM] Режим: только локальная модель")
+            if local_available:
+                return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+            else:
+                print("❌ [LLM] Локальная модель недоступна в режиме local_only")
+                return None
+                
         elif self.priority_mode == "openrouter_only":
-            return self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
-            
-        elif self.priority_mode == "openrouter_first":
-            # Сначала пробуем OpenRouter
+            print("🔧 [LLM] Режим: только OpenRouter")
             response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
             if response:
                 return response
-            # Fallback на локальную модель
-            return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+            else:
+                print("⚠️ [LLM] OpenRouter не ответил, но режим 'openrouter_only' - возвращаем None")
+                return None
+                
+        elif self.priority_mode == "openrouter_first":
+            print("🔧 [LLM] Режим: сначала OpenRouter")
+            response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
+            if response:
+                print("✅ [LLM] Использую ответ от OpenRouter")
+                return response
+            
+            print("⚠️ [LLM] OpenRouter не ответил, пробую локальную модель...")
+            if local_available:
+                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+                if response:
+                    print("✅ [LLM] Использую ответ от локальной модели")
+                    return response
+            
+            print("❌ [LLM] Ни одна модель не ответила")
+            return None
             
         else:  # local_first (по умолчанию)
-            # Сначала пробуем локальную модель
-            response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+            print("🔧 [LLM] Режим: сначала локальная модель")
+            if local_available:
+                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+                if response:
+                    print("✅ [LLM] Использую ответ от локальной модели")
+                    return response
+            
+            print("⚠️ [LLM] Локальная модель не ответила, пробую OpenRouter...")
+            response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
             if response:
+                print("✅ [LLM] Использую ответ от OpenRouter")
                 return response
-            # Fallback на OpenRouter
-            return self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
+            
+            print("❌ [LLM] Ни одна модель не ответила")
+            return None
     
     def _handle_local_request_safe(self, prompt: str, system_prompt: str, max_tokens: int,
                                  is_svg: bool = False) -> Optional[str]:
@@ -251,117 +300,124 @@ class LLMIntegration:
     def _handle_openrouter_request_safe(self, prompt: str, context: str, subject: str,
                                       system_prompt: str, max_tokens: int,
                                       is_svg: bool = False) -> Optional[str]:
-        """Безопасная обработка OpenRouter с менеджером ключей"""
+        """Безопасная обработка OpenRouter с улучшенным fallback"""
         try:
-            # 🔥 ИСПРАВЛЕНИЕ: Используем менеджер ключей
-            api_key = self.key_manager.get_next_key()
-            print(f"🔧 [LLM] Использую OpenRouter (ключ: {api_key[:8]}...)")
+            # 🔥 БЕЗОПАСНОЕ ПОЛУЧЕНИЕ КЛЮЧА
+            try:
+                api_key = self.key_manager.get_next_key()
+                print(f"🔧 [LLM] Пробую OpenRouter: ключ {api_key[:8]}..., модель: {self.model}")
+            except Exception as e:
+                print(f"❌ [LLM] Нет доступных ключей OpenRouter: {e}")
+                return None  # Fallback на локальную модель
             
-        except Exception as e:
-            print(f"❌ [LLM] Нет доступных ключей OpenRouter: {e}")
-            return None
+            # 🔥 ПРОВЕРЯЕМ КЛЮЧ ПЕРЕД ИСПОЛЬЗОВАНИЕМ
+            if not api_key or len(api_key.strip()) < 20:
+                print(f"❌ [LLM] Неверный ключ API (слишком короткий)")
+                return None
             
-        try:
-            # Добавляем задержку между запросами
-            current_time = time.time()
-            time_since_last_request = current_time - self.last_request_time
-            if time_since_last_request < self.request_delay:
-                time.sleep(self.request_delay - time_since_last_request)
-            
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://ai-teacher.com",
-                "X-Title": "AI Teacher"
-            }
-            
-            # Улучшенный промпт
-            final_system_prompt = system_prompt or f"""Ты - профессиональный учитель и эксперт по предмету "{subject}". 
-    Отвечай максимально подробно и информативно. Объясняй сложные понятия простым языком.
-    Контекст: {context}"""
-    
-            messages = []
-            
-            if final_system_prompt:
-                messages.append({"role": "system", "content": final_system_prompt})
-            
-            if context and context.strip():
-                messages.append({"role": "system", "content": f"Контекст разговора: {context}"})
-            
-            messages.append({"role": "user", "content": prompt})
-    
-            data = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": max_tokens,
-                "stream": False
-            }
-    
-            print(f"🔧 [LLM] Отправка запроса к OpenRouter")
-            
-            for attempt in range(self.max_retries):
-                try:
-                    response = requests.post(
-                        self.api_url,
-                        headers=headers,
-                        json=data,
-                        timeout=self.request_timeout
-                    )
+            try:
+                # Добавляем задержку между запросами
+                current_time = time.time()
+                time_since_last_request = current_time - self.last_request_time
+                if time_since_last_request < self.request_delay:
+                    time.sleep(self.request_delay - time_since_last_request)
+                
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://ai-teacher.com",
+                    "X-Title": "AI Teacher"
+                }
+                
+                # 🔥 УПРОЩЕННЫЙ ПРОМПТ
+                final_system_prompt = system_prompt or f"Ты - профессиональный учитель."
+                
+                messages = []
+                
+                if final_system_prompt:
+                    messages.append({"role": "system", "content": final_system_prompt})
+                
+                if context and context.strip():
+                    messages.append({"role": "user", "content": f"Контекст: {context}"})
+                
+                messages.append({"role": "user", "content": prompt})
+        
+                data = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": max_tokens,
+                    "stream": False
+                }
+        
+                print(f"🔧 [LLM] Отправляю запрос к модели OpenRouter: {self.model}")
+                
+                response = requests.post(
+                    self.api_url,
+                    headers=headers,
+                    json=data,
+                    timeout=15  # Уменьшаем таймаут для быстрого fallback
+                )
+                
+                self.last_request_time = time.time()
+                
+                if response.status_code == 200:
+                    # 🔥 ЗАПИСЫВАЕМ ИСПОЛЬЗОВАНИЕ КЛЮЧА
+                    self.key_manager.record_usage(api_key)
                     
-                    self.last_request_time = time.time()
+                    result = response.json()
                     
-                    if response.status_code == 200:
-                        # 🔥 ЗАПИСЫВАЕМ ИСПОЛЬЗОВАНИЕ КЛЮЧА
-                        self.key_manager.record_usage(api_key)
+                    if 'choices' in result and len(result['choices']) > 0:
+                        answer = result['choices'][0]['message']['content']
                         
-                        result = response.json()
+                        processed_answer = self._process_llm_response(answer, is_svg)
                         
-                        if 'choices' in result and len(result['choices']) > 0:
-                            answer = result['choices'][0]['message']['content']
-                            
-                            processed_answer = self._process_llm_response(answer, is_svg)
-                            
-                            print(f"✅ [LLM] Ответ от OpenRouter получен: {processed_answer[:100]}...")
-                            return processed_answer
-                        else:
-                            print("❌ [LLM] Неверный формат ответа от OpenRouter")
-                            return None
-                            
-                    elif response.status_code == 429:
-                        wait_time = self.retry_delay * (attempt + 1)
-                        print(f"⏳ [LLM] Rate Limit. Ждем {wait_time} сек...")
-                        time.sleep(wait_time)
-                        continue
-                        
-                    elif response.status_code == 401:
-                        print(f"❌ [LLM] Ошибка аутентификации OpenRouter (неверный API ключ)")
-                        # Помечаем OpenRouter как недоступный для этого запроса
-                        return None
-                        
+                        print(f"✅ [LLM] Успешный ответ от модели: {self.model}")
+                        return processed_answer
                     else:
-                        print(f"❌ [LLM] Ошибка OpenRouter: {response.status_code}")
-                        if attempt < self.max_retries - 1:
-                            time.sleep(self.retry_delay)
-                            continue
+                        print("❌ [LLM] Неверный формат ответа от OpenRouter")
                         return None
                         
-                except requests.exceptions.Timeout:
-                    print(f"⏰ [LLM] Таймаут OpenRouter. Попытка {attempt + 1}/{self.max_retries}")
-                    if attempt < self.max_retries - 1:
-                        time.sleep(self.retry_delay)
-                        continue
+                elif response.status_code == 400:
+                    print(f"❌ [LLM] Модель {self.model} не найдена или недоступна (ошибка 400)")
+                    # 🔥 ОШИБКА МОДЕЛИ - возвращаем None для fallback
                     return None
                     
-                except Exception as e:
-                    print(f"❌ [LLM] Ошибка OpenRouter (попытка {attempt + 1}): {e}")
-                    if attempt < self.max_retries - 1:
-                        time.sleep(self.retry_delay)
-                        continue
+                elif response.status_code == 401:
+                    print(f"❌ [LLM] Ошибка аутентификации (неверный ключ)")
+                    # Пробуем деактивировать ключ
+                    try:
+                        # Находим имя ключа для деактивации
+                        for key_data in self.key_manager.keys:
+                            if key_data['key'] == api_key:
+                                self.key_manager.toggle_key_active(key_data['name'], False)
+                                break
+                    except:
+                        pass
                     return None
-            
+                    
+                elif response.status_code == 404:
+                    print(f"❌ [LLM] Модель {self.model} не существует (ошибка 404)")
+                    return None
+                    
+                elif response.status_code == 429:
+                    print(f"⏳ [LLM] Rate limit для модели {self.model}")
+                    return None
+                    
+                else:
+                    print(f"❌ [LLM] Ошибка {response.status_code} для модели {self.model}")
+                    return None
+                    
+            except requests.exceptions.Timeout:
+                print(f"⏰ [LLM] Таймаут для модели {self.model}")
+                return None
+                
+            except Exception as e:
+                print(f"❌ [LLM] Ошибка при запросе к модели {self.model}: {e}")
+                return None
+                
         except Exception as e:
-            print(f"❌ [LLM] Критическая ошибка OpenRouter: {e}")
+            print(f"❌ [LLM] Критическая ошибка при работе с моделью {self.model}: {e}")
             return None
         
         return None
@@ -391,7 +447,7 @@ class LLMIntegration:
             return "Хороший вопрос! Давайте разберем эту тему подробнее. Мне нужно немного времени подумать..."
         
         # Общий fallback ответ
-        return "Спасибо за вопрос! Я подумаю над ответом и скоро вернусь с подробным объяснением."
+        return "Спасибо за вопрос! Я обрабатываю ваш запрос."
 
     def query(self, question: str, context: str = "", subject: str = "") -> str:
         """Запрос к LLM API с ГАРАНТИРОВАННЫМ ответом - НЕ БЛОКИРУЕТ СИСТЕМУ"""
@@ -407,6 +463,7 @@ class LLMIntegration:
             return self.cache[cache_key]
         
         print(f"📨 Запрос к LLM: '{question}' (предмет: {subject})")
+        print(f"🔧 [LLM] Использую модель: {self.model}")
         
         # 🔥 ВАЖНО: Используем асинхронный запрос с таймаутом
         start_time = time.time()
@@ -456,20 +513,9 @@ class LLMIntegration:
         }
 
     def set_model(self, model: str):
-        """Установка модели LLM"""
-        available_models = {
-            "llama": "meta-llama/llama-3.3-8b-instruct:free",
-            "llama3": "meta-llama/llama-3.3-8b-instruct:free",
-            "qwen": "qwen/qwen3-235b-a22b:free",
-            "deepseek": "deepseek/deepseek-chat-v3-0324:free"
-        }
-        
-        if model in available_models:
-            self.model = available_models[model]
-            print(f"🔧 Установлена модель: {self.model}")
-        else:
-            self.model = model
-            print(f"🔧 Установлена кастомная модель: {self.model}")
+        """Установка модели LLM - перенаправляем в key_manager"""
+        print(f"🔧 [LLM] Установка модели через key_manager: {model}")
+        return self.key_manager.set_model(model)
 
     def set_priority(self, priority: str):
         """Установка приоритета моделей"""
@@ -492,7 +538,8 @@ class LLMIntegration:
             "local_available": local_available,
             "openrouter_available": openrouter_available,
             "local_status": self.llm_manager.local_llm.get_status(),
-            "effective_priority": self._get_effective_priority()
+            "effective_priority": self._get_effective_priority(),
+            "current_model": self.model
         }
     
     def _get_effective_priority(self) -> str:
@@ -534,13 +581,17 @@ class LLMIntegration:
             "local_working": local_working,
             "openrouter_available": openrouter_available,
             "current_priority": self.priority_mode,
+            "current_model": self.model,
             "effective_priority": self._get_effective_priority(),
             "local_status": self.llm_manager.local_llm.get_status(),
             "local_url": self.llm_manager.local_llm.base_url,
             "cache_stats": self.get_cache_stats(),
             "key_manager_stats": {
                 "total_keys": len(self.key_manager.keys),
-                "active_keys": len([k for k in self.key_manager.keys if k.get('is_active', True)])
+                "active_keys": len([k for k in self.key_manager.keys if k.get('is_active', True)]),
+                "daily_limit": self.key_manager.daily_limit,
+                "extended_limit": self.key_manager.extended_limit,
+                "reset_time": self.key_manager.reset_time
             }
         }
 
@@ -794,7 +845,7 @@ class LLMIntegration:
             test_data = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": "test"}],
-                "max_tokens": 10
+                "max_tokens": 5
             }
             
             response = requests.post(
@@ -812,10 +863,12 @@ class LLMIntegration:
 
     def get_available_models(self) -> list:
         """Получение списка доступных моделей"""
+        # Теперь получаем модели из key_manager
+        known_models = self.key_manager.get_known_models()
+        
         return [
-            {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta"},
-            {"id": "qwen", "name": "Qwen 2.5 32B", "description": "Качественная модель от Alibaba"},
-            {"id": "deepseek", "name": "DeepSeek Chat", "description": "Продвинутая модель для сложных задач"}
+            {"id": model, "name": model.split('/')[-1].split(':')[0], "description": f"Модель OpenRouter: {model}"}
+            for model in known_models
         ]
 
     def debug_infographic_generation(self, topic: str):
