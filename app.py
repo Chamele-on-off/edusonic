@@ -1,6 +1,7 @@
 # app.py - AI Teacher System (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 # Исправлены ошибки добавления и скачивания уроков, добавлены младшие классы 1-4
 # Реализована массовая загрузка уроков через drag & drop
+# Добавлено редактирование и удаление уроков
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -70,7 +71,8 @@ for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR, USERS_DIR
 LESSONS_DEMO_DIR = LESSONS_DIR / "demo"
 LESSONS_STUDENTS_DIR = LESSONS_DIR / "students" 
 LESSONS_GENERATED_DIR = LESSONS_DIR / "generated"
-for folder in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR]:
+LESSONS_TRASH_DIR = LESSONS_DIR / "trash"  # Папка для корзины
+for folder in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_TRASH_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Создаем структуру папок для уроков по классам
@@ -170,6 +172,19 @@ DEBUG_LLM = True
 def debug_log(message):
     if DEBUG_LLM:
         print(f"🔧 [LLM_DEBUG] {message}")
+
+# Функция для сериализации Path объектов
+def json_serialize_paths(obj):
+    """Рекурсивная сериализация объектов Path для JSON"""
+    if isinstance(obj, Path):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, (list, tuple)):
+        return [json_serialize_paths(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {key: json_serialize_paths(value) for key, value in obj.items()}
+    return obj
 
 # =============================================================================
 # СИСТЕМА АУТЕНТИФИКАЦИИ
@@ -3723,34 +3738,73 @@ def get_student_progress_api():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+# 🔥 НОВЫЙ ИСПРАВЛЕННЫЙ API: Получение структуры папок уроков
 @app.route('/api/lessons/structure', methods=['GET'])
+@teacher_required
 def get_lessons_structure():
-    """Получение структуры папок уроков"""
+    """Получение структуры папок уроков с исправленной сериализацией"""
     try:
         structure = {
-            'demo': list(LESSONS_DEMO_DIR.glob("*.txt")),
-            'generated': list(LESSONS_GENERATED_DIR.glob("*.txt")),
+            'demo': [],
+            'generated': [],
             'students': {}
         }
         
+        # Демо уроки
+        demo_lessons = []
+        for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
+            demo_lessons.append({
+                'name': lesson_file.name,
+                'size': lesson_file.stat().st_size,
+                'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                'path': str(lesson_file)
+            })
+        structure['demo'] = demo_lessons
+        
+        # Авто-генерированные уроки
+        generated_lessons = []
+        for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
+            generated_lessons.append({
+                'name': lesson_file.name,
+                'size': lesson_file.stat().st_size,
+                'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                'path': str(lesson_file)
+            })
+        structure['generated'] = generated_lessons
+        
         # Структура по классам
-        for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
+        for class_dir in sorted(LESSONS_STUDENTS_DIR.glob("*_class")):
             if class_dir.is_dir():
                 class_name = class_dir.name
                 structure['students'][class_name] = {}
                 
-                for subject_dir in class_dir.iterdir():
+                for subject_dir in sorted(class_dir.iterdir()):
                     if subject_dir.is_dir():
                         subject_name = subject_dir.name
-                        structure['students'][class_name][subject_name] = list(subject_dir.glob("*.txt"))
+                        lesson_files = []
+                        for lesson_file in sorted(subject_dir.glob("*.txt")):
+                            lesson_files.append({
+                                'name': lesson_file.name,
+                                'size': lesson_file.stat().st_size,
+                                'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                                'path': str(lesson_file)
+                            })
+                        structure['students'][class_name][subject_name] = lesson_files
+        
+        # Используем специальную сериализацию
+        serialized_structure = json_serialize_paths(structure)
         
         return jsonify({
             "success": True,
-            "structure": structure
+            "structure": serialized_structure
         })
     except Exception as e:
+        print(f"❌ Ошибка получения структуры уроков: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)})
 
+# 🔥 НОВЫЙ ИСПРАВЛЕННЫЙ API: Создание примерных уроков
 @app.route('/api/lessons/create-sample', methods=['POST'])
 @teacher_required
 def create_sample_lessons():
@@ -3758,6 +3812,31 @@ def create_sample_lessons():
     try:
         created_count = 0
         
+        # 🔥 ИСПРАВЛЕНИЕ: Создаем демо уроки в правильной папке
+        # Создаем демо-уроки
+        demo_subjects = ['математика', 'физика', 'химия', 'биология', 'история', 'литература']
+        for subject in demo_subjects:
+            lesson_file = LESSONS_DEMO_DIR / f"demo_{subject}_введение.txt"
+            if not lesson_file.exists():
+                with open(lesson_file, 'w', encoding='utf-8') as f:
+                    f.write(f"""# Демо урок: Введение в {subject}
+
+Это демонстрационный урок по предмету {subject}.
+
+На этом уроке вы познакомитесь с:
+1. Основными понятиями предмета
+2. Историей развития
+3. Практическим применением знаний
+
+Урок содержит примеры, упражнения и тестовые задания.
+
+Это демо-версия для тестирования системы AI-учителя.
+
+Приятного обучения!
+""")
+                created_count += 1
+        
+        # Создаем уроки для всех классов
         for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
             if class_dir.is_dir():
                 class_level = class_dir.name.replace("_class", "")
@@ -3768,7 +3847,7 @@ def create_sample_lessons():
                         if not any(subject_dir.glob("*.txt")):
                             # Создаем 3 примерных урока
                             for i in range(1, 4):
-                                lesson_file = subject_dir / f"lesson_{i:02d}_introduction.txt"
+                                lesson_file = subject_dir / f"lesson_{i:02d}_введение.txt"
                                 if not lesson_file.exists():
                                     with open(lesson_file, 'w', encoding='utf-8') as f:
                                         f.write(f"""# Урок {i}: Введение в {subject_dir.name}
@@ -3787,8 +3866,323 @@ def create_sample_lessons():
         return jsonify({
             "success": True,
             "message": f"Создано {created_count} примерных уроков",
-            "created_count": created_count
+            "created_count": created_count,
+            "demo_created": len(demo_subjects)
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# 🔥 НОВЫЙ API: Добавление демо-урока (всегда в папку demo)
+@app.route('/api/add_demo_lesson', methods=['POST'])
+@teacher_required
+def add_demo_lesson():
+    """Добавление демо-урока (всегда в папку demo)"""
+    try:
+        data = request.json
+        title = data.get('title', '')
+        content = data.get('content', '')
+        subject = data.get('subject', 'общее')
+        
+        if not title or not content:
+            return jsonify({"success": False, "error": "Название и содержание урока обязательны"})
+        
+        # ВСЕГДА создаем в папке demo
+        lesson_dir = LESSONS_DEMO_DIR
+        
+        # Получаем следующий номер для демо-урока
+        existing_lessons = list(lesson_dir.glob("demo_*.txt"))
+        demo_numbers = []
+        for lesson in existing_lessons:
+            match = re.search(r'demo_(\d+)', lesson.stem.lower())
+            if match:
+                demo_numbers.append(int(match.group(1)))
+        
+        next_number = max(demo_numbers) + 1 if demo_numbers else 1
+        
+        # Формируем имя файла с префиксом demo_
+        title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
+        title_slug = re.sub(r'\s+', '_', title_slug)
+        title_slug = title_slug[:50]
+        
+        filename = f"demo_{next_number:02d}_{subject}_{title_slug}.txt"
+        lesson_path = lesson_dir / filename
+        
+        # Сохраняем урок
+        with open(lesson_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "subject": subject,
+            "title": title,
+            "type": "demo",
+            "lesson_number": next_number,
+            "file_path": str(lesson_path.relative_to(LESSONS_DIR))
+        })
+        
+    except Exception as e:
+        print(f"❌ Ошибка при добавлении демо-урока: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+# 🔥 НОВЫЙ API: Получение списка всех уроков для редактирования
+@app.route('/api/lessons/list', methods=['GET'])
+@teacher_required
+def get_all_lessons_list():
+    """Получение списка всех уроков для редактирования"""
+    try:
+        lessons = []
+        
+        # Демо уроки
+        for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
+            lessons.append({
+                'type': 'demo',
+                'class': 'demo',
+                'subject': 'demo',
+                'name': lesson_file.name,
+                'full_path': str(lesson_file),
+                'size': lesson_file.stat().st_size,
+                'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                'can_edit': True,
+                'can_delete': True
+            })
+        
+        # Авто-генерированные уроки
+        for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
+            lessons.append({
+                'type': 'generated',
+                'class': 'generated',
+                'subject': 'auto',
+                'name': lesson_file.name,
+                'full_path': str(lesson_file),
+                'size': lesson_file.stat().st_size,
+                'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                'can_edit': True,
+                'can_delete': True
+            })
+        
+        # Уроки по классам
+        for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
+            if class_dir.is_dir():
+                class_name = class_dir.name.replace("_class", "")
+                for subject_dir in class_dir.iterdir():
+                    if subject_dir.is_dir():
+                        subject_name = subject_dir.name
+                        for lesson_file in subject_dir.glob("*.txt"):
+                            lessons.append({
+                                'type': 'student',
+                                'class': class_name,
+                                'subject': subject_name,
+                                'name': lesson_file.name,
+                                'full_path': str(lesson_file),
+                                'size': lesson_file.stat().st_size,
+                                'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                                'can_edit': True,
+                                'can_delete': True
+                            })
+        
+        # Сортируем по дате изменения (новые сверху)
+        lessons.sort(key=lambda x: x['modified'], reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "total": len(lessons),
+            "lessons": lessons
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# 🔥 НОВЫЙ API: Получение содержимого урока для редактирования
+@app.route('/api/lesson/edit/<path:lesson_path>', methods=['GET'])
+@teacher_required
+def get_lesson_for_edit(lesson_path):
+    """Получение содержимого урока для редактирования"""
+    try:
+        # Создаем полный путь к файлу
+        full_path = LESSONS_DIR / lesson_path
+        
+        if not full_path.exists():
+            return jsonify({"success": False, "error": "Урок не найден"})
+        
+        with open(full_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return jsonify({
+            "success": True,
+            "lesson_path": lesson_path,
+            "content": content,
+            "size": len(content),
+            "filename": full_path.name
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# 🔥 НОВЫЙ API: Сохранение отредактированного урока
+@app.route('/api/lesson/save', methods=['POST'])
+@teacher_required
+def save_edited_lesson():
+    """Сохранение отредактированного урока"""
+    try:
+        data = request.json
+        lesson_path = data.get('lesson_path')
+        content = data.get('content')
+        
+        if not lesson_path or content is None:
+            return jsonify({"success": False, "error": "Не указаны данные урока"})
+        
+        # Создаем полный путь к файлу
+        full_path = LESSONS_DIR / lesson_path
+        
+        if not full_path.exists():
+            return jsonify({"success": False, "error": "Урок не найден"})
+        
+        # Создаем резервную копию
+        backup_path = full_path.with_suffix('.txt.backup')
+        import shutil
+        shutil.copy2(full_path, backup_path)
+        
+        # Сохраняем изменения
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({
+            "success": True,
+            "message": "Урок успешно сохранен",
+            "backup_created": str(backup_path.name)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# 🔥 НОВЫЙ API: Удаление урока
+@app.route('/api/lesson/delete', methods=['POST'])
+@teacher_required
+def delete_lesson():
+    """Удаление урока"""
+    try:
+        data = request.json
+        lesson_path = data.get('lesson_path')
+        
+        if not lesson_path:
+            return jsonify({"success": False, "error": "Не указан путь к уроку"})
+        
+        # Создаем полный путь к файлу
+        full_path = LESSONS_DIR / lesson_path
+        
+        if not full_path.exists():
+            return jsonify({"success": False, "error": "Урок не найден"})
+        
+        # Проверяем, не является ли это системным файлом
+        if full_path.name.startswith('demo_') or 'generated' in str(full_path):
+            # Создаем резервную копию в корзине
+            trash_dir = LESSONS_DIR / 'trash'
+            trash_dir.mkdir(exist_ok=True)
+            backup_path = trash_dir / full_path.name
+            import shutil
+            shutil.move(full_path, backup_path)
+            
+            return jsonify({
+                "success": True,
+                "message": "Урок перемещен в корзину",
+                "backup_path": str(backup_path)
+            })
+        else:
+            # Удаляем файл
+            full_path.unlink()
+            
+            return jsonify({
+                "success": True,
+                "message": "Урок удален"
+            })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# 🔥 НОВЫЙ API: Получение уроков для редактирования по фильтру
+@app.route('/api/lessons/edit', methods=['GET'])
+@teacher_required
+def get_lessons_for_edit():
+    """Получение уроков для редактирования с фильтрами"""
+    try:
+        class_filter = request.args.get('class', 'all')
+        subject_filter = request.args.get('subject', 'all')
+        search_query = request.args.get('search', '')
+        
+        lessons = []
+        
+        # Демо уроки
+        if class_filter in ['all', 'demo']:
+            for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
+                if search_query and search_query.lower() not in lesson_file.name.lower():
+                    continue
+                
+                lessons.append({
+                    'type': 'demo',
+                    'class': 'demo',
+                    'subject': 'demo',
+                    'name': lesson_file.name,
+                    'full_path': str(lesson_file.relative_to(LESSONS_DIR)),
+                    'size': lesson_file.stat().st_size,
+                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
+                })
+        
+        # Авто-генерированные уроки
+        if class_filter in ['all', 'generated']:
+            for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
+                if search_query and search_query.lower() not in lesson_file.name.lower():
+                    continue
+                
+                lessons.append({
+                    'type': 'generated',
+                    'class': 'generated',
+                    'subject': 'auto',
+                    'name': lesson_file.name,
+                    'full_path': str(lesson_file.relative_to(LESSONS_DIR)),
+                    'size': lesson_file.stat().st_size,
+                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
+                })
+        
+        # Уроки по классам
+        if class_filter == 'all' or class_filter.isdigit():
+            for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
+                if class_dir.is_dir():
+                    class_name = class_dir.name.replace("_class", "")
+                    
+                    if class_filter != 'all' and class_filter != class_name:
+                        continue
+                    
+                    for subject_dir in class_dir.iterdir():
+                        if subject_dir.is_dir():
+                            subject_name = subject_dir.name
+                            
+                            if subject_filter != 'all' and subject_filter != subject_name:
+                                continue
+                            
+                            for lesson_file in subject_dir.glob("*.txt"):
+                                if search_query and search_query.lower() not in lesson_file.name.lower():
+                                    continue
+                                
+                                lessons.append({
+                                    'type': 'student',
+                                    'class': class_name,
+                                    'subject': subject_name,
+                                    'name': lesson_file.name,
+                                    'full_path': str(lesson_file.relative_to(LESSONS_DIR)),
+                                    'size': lesson_file.stat().st_size,
+                                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
+                                })
+        
+        # Сортируем по дате изменения (новые сверху)
+        lessons.sort(key=lambda x: x['modified'], reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "total": len(lessons),
+            "lessons": lessons
+        })
+        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
