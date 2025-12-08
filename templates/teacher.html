@@ -833,6 +833,34 @@
             transform: translateY(-1px);
         }
         
+        /* Стили для структуры уроков */
+        .structure-info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #e9ecef;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        
+        .structure-info h6 {
+            margin: 10px 0 5px 0;
+            color: #495057;
+        }
+        
+        .structure-info ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #6c757d;
+        }
+        
+        .structure-info li {
+            margin-bottom: 3px;
+            word-break: break-all;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -1200,6 +1228,22 @@
             </div>
             
             <div class="tab-content" id="lessons-tab">
+                <!-- Просмотр структуры уроков -->
+                <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                    <h4>📂 Структура уроков</h4>
+                    <p>Текущая структура папок с уроками:</p>
+                    <button id="view-structure-btn" class="btn" style="background: #1976d2;">
+                        <i class="fas fa-folder-open"></i> Показать структуру
+                    </button>
+                    <div id="structure-info" style="margin-top: 10px; display: none;"></div>
+                </div>
+                
+                <!-- Создание примерных уроков -->
+                <button id="create-sample-lessons-btn" class="btn" style="background: #6f42c1; margin-bottom: 20px; width: 100%;">
+                    <i class="fas fa-magic"></i> Создать примерные уроки для всех классов
+                </button>
+                
+                <!-- Форма добавления урока -->
                 <div class="lesson-form">
                     <h3>Добавить новый урок</h3>
                     
@@ -1207,6 +1251,10 @@
                         <label for="lesson-class">Класс:</label>
                         <select id="lesson-class" class="subject-select">
                             <option value="demo">Демо-уроки</option>
+                            <option value="1">1 класс</option>
+                            <option value="2">2 класс</option>
+                            <option value="3">3 класс</option>
+                            <option value="4">4 класс</option>
                             <option value="5">5 класс</option>
                             <option value="6">6 класс</option>
                             <option value="7">7 класс</option>
@@ -1245,6 +1293,15 @@
                         <i class="fas fa-plus"></i> Добавить урок
                     </button>
                     <div id="lesson-status" class="success-message"></div>
+                </div>
+                
+                <!-- Массовая загрузка уроков -->
+                <div class="upload-form" id="bulk-upload-dropzone">
+                    <h4>📁 Массовая загрузка уроков</h4>
+                    <p>Перетащите несколько TXT файлов или кликните для выбора</p>
+                    <p style="font-size: 12px; color: #666;">Автоматически определит класс и предмет из имени файла</p>
+                    <input type="file" id="bulk-upload-input" multiple accept=".txt" style="display: none;">
+                    <div id="upload-status" class="api-status" style="margin-top: 10px;"></div>
                 </div>
             </div>
 
@@ -1321,6 +1378,10 @@
                     <select class="subject-select" id="download-class">
                         <option value="all">Все уроки (полный архив)</option>
                         <option value="demo">Демо-уроки</option>
+                        <option value="1">1 класс</option>
+                        <option value="2">2 класс</option>
+                        <option value="3">3 класс</option>
+                        <option value="4">4 класс</option>
                         <option value="5">5 класс</option>
                         <option value="6">6 класс</option>
                         <option value="7">7 класс</option>
@@ -1518,6 +1579,16 @@
         const modelStatus = document.getElementById('model-status');
         const keysAdvancedList = document.getElementById('keys-advanced-list');
         
+        // Элементы для массовой загрузки уроков
+        const bulkUploadInput = document.getElementById('bulk-upload-input');
+        const bulkUploadDropzone = document.getElementById('bulk-upload-dropzone');
+        const uploadStatus = document.getElementById('upload-status');
+        
+        // Элементы для структуры уроков
+        const viewStructureBtn = document.getElementById('view-structure-btn');
+        const structureInfo = document.getElementById('structure-info');
+        const createSampleLessonsBtn = document.getElementById('create-sample-lessons-btn');
+        
         // Socket.io
         const socket = io();
         
@@ -1527,7 +1598,10 @@
         
         // Маппинг предметов по классам
         const subjectsByClass = {
-            'demo': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее'],
+            '1': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир', 'английский язык', 'французский язык', 'информатика'],
+            '2': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир', 'английский язык', 'французский язык', 'информатика'],
+            '3': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир', 'английский язык', 'французский язык', 'информатика'],
+            '4': ['русский язык', 'литературное чтение', 'математика', 'окружающий мир', 'английский язык', 'французский язык', 'информатика'],
             '5': ['математика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'информатика'],
             '6': ['математика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика'],
             '7': ['алгебра', 'геометрия', 'физика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика'],
@@ -1535,6 +1609,7 @@
             '9': ['алгебра', 'геометрия', 'физика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика', 'химия'],
             '10': ['алгебра', 'геометрия', 'физика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика', 'химия'],
             '11': ['алгебра', 'геометрия', 'физика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика', 'химия'],
+            'demo': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее'],
             'generated': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее']
         };
 
@@ -2565,6 +2640,393 @@
             });
         }
         
+        // Функции для работы с уроками
+        function updateLessonCounter() {
+            const selectedClass = lessonClassSelect.value;
+            const selectedSubject = lessonSubjectSelect.value;
+            const lessonTitle = lessonTitleInput.value.trim();
+            
+            if (!selectedClass || !selectedSubject) {
+                lessonCounter.style.display = 'none';
+                return;
+            }
+            
+            // Запрашиваем следующий номер урока
+            fetch(`/api/lessons/next_number?class=${selectedClass}&subject=${selectedSubject}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const nextNumber = data.next_number.toString().padStart(2, '0');
+                        nextLessonNumberSpan.textContent = nextNumber;
+                        
+                        // Обновляем превью имени файла
+                        let filenameBase = 'lesson';
+                        if (selectedClass === 'demo') {
+                            filenameBase = 'demo_lesson';
+                        } else if (selectedClass === 'generated') {
+                            filenameBase = 'generated_lesson';
+                        }
+                        
+                        let subjectSlug = selectedSubject.toLowerCase().replace(/[^\wа-яё]/g, '_');
+                        let titleSlug = lessonTitle ? '_' + lessonTitle.toLowerCase().replace(/[^\wа-яё]/g, '_').substring(0, 20) : '';
+                        
+                        const filename = `${filenameBase}_${nextNumber}${titleSlug}.txt`;
+                        lessonFilenamePreview.textContent = filename;
+                        
+                        lessonCounter.style.display = 'inline-block';
+                    } else {
+                        lessonCounter.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка получения номера урока:', error);
+                    lessonCounter.style.display = 'none';
+                });
+        }
+
+        function loadSubjectsForClass(classLevel) {
+            if (classLevel === 'demo' || classLevel === 'generated') {
+                const subjects = subjectsByClass[classLevel] || [];
+                updateSubjectSelect(subjects);
+            } else if (classLevel && classLevel.match(/^\d+$/)) {
+                // Для числовых классов (1-11)
+                fetch(`/api/lessons/next_number?class=${classLevel}&subject=общее`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const defaultSubjects = subjectsByClass[classLevel] || subjectsByClass['5'];
+                            updateSubjectSelect(defaultSubjects);
+                        } else {
+                            const defaultSubjects = subjectsByClass[classLevel] || subjectsByClass['5'];
+                            updateSubjectSelect(defaultSubjects);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Ошибка загрузки предметов:', error);
+                        const defaultSubjects = subjectsByClass[classLevel] || subjectsByClass['5'];
+                        updateSubjectSelect(defaultSubjects);
+                    });
+            } else {
+                updateSubjectSelect([]);
+            }
+        }
+
+        function updateSubjectSelect(subjects) {
+            lessonSubjectSelect.innerHTML = '';
+            
+            if (subjects.length > 0) {
+                // Добавляем опцию по умолчанию
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'Выберите предмет';
+                lessonSubjectSelect.appendChild(defaultOption);
+                
+                subjects.forEach(function(subject) {
+                    const option = document.createElement('option');
+                    option.value = subject;
+                    option.textContent = subject;
+                    lessonSubjectSelect.appendChild(option);
+                });
+                
+                // Обновляем счетчик
+                updateLessonCounter();
+            } else {
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Нет доступных предметов';
+                lessonSubjectSelect.appendChild(option);
+                lessonCounter.style.display = 'none';
+            }
+        }
+
+        function addLesson() {
+            const selectedClass = lessonClassSelect.value;
+            const selectedSubject = lessonSubjectSelect.value;
+            const lessonTitle = lessonTitleInput.value.trim();
+            const lessonContent = lessonContentTextarea.value.trim();
+            
+            if (!selectedClass) {
+                showStatus(lessonStatus, 'Выберите класс', false);
+                return;
+            }
+            
+            if (!selectedSubject || selectedSubject === 'Выберите предмет') {
+                showStatus(lessonStatus, 'Выберите предмет', false);
+                return;
+            }
+            
+            if (!lessonTitle) {
+                showStatus(lessonStatus, 'Введите название урока', false);
+                return;
+            }
+            
+            if (!lessonContent) {
+                showStatus(lessonStatus, 'Введите содержание урока', false);
+                return;
+            }
+            
+            // Показываем статус загрузки
+            showStatus(lessonStatus, 'Добавление урока...', true);
+            
+            fetch('/api/add_lesson_with_class', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    class_level: selectedClass,
+                    subject: selectedSubject,
+                    title: lessonTitle,
+                    content: lessonContent
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(lessonStatus, 
+                        `✅ Урок "${lessonTitle}" успешно добавлен!<br>
+                        Класс: ${selectedClass}<br>
+                        Предмет: ${selectedSubject}<br>
+                        Файл: ${data.filename}`);
+                    
+                    // Очищаем поля
+                    lessonTitleInput.value = '';
+                    lessonContentTextarea.value = '';
+                    
+                    // Обновляем счетчик
+                    updateLessonCounter();
+                    
+                } else {
+                    showStatus(lessonStatus, `❌ Ошибка: ${data.error}`, false);
+                    
+                    // Показываем больше деталей об ошибке
+                    if (data.error.includes('SyntaxError')) {
+                        showStatus(lessonStatus, 
+                            `❌ Ошибка в имени файла. Попробуйте:<br>
+                            1. Использовать только буквы и цифры<br>
+                            2. Не использовать специальные символы<br>
+                            3. Сократить название`, false);
+                    }
+                }
+            })
+            .catch(function(error) {
+                showStatus(lessonStatus, `❌ Ошибка сети: ${error}`, false);
+                console.error('Ошибка при добавлении урока:', error);
+            });
+        }
+
+        function uploadMultipleLessons(files) {
+            const formData = new FormData();
+            
+            // Добавляем все TXT файлы
+            for (let i = 0; i < files.length; i++) {
+                if (files[i].name.endsWith('.txt')) {
+                    formData.append('files', files[i]);
+                }
+            }
+            
+            if (formData.getAll('files').length === 0) {
+                showApiStatus(uploadStatus, '❌ Выберите TXT файлы', false);
+                return;
+            }
+            
+            showApiStatus(uploadStatus, `📤 Загрузка ${formData.getAll('files').length} файлов...`, true);
+            
+            fetch('/api/bulk_upload_lessons', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let message = `✅ Загружено ${data.uploaded} из ${data.total_files} файлов<br>`;
+                    if (data.failed > 0) {
+                        message += `❌ Не удалось загрузить: ${data.failed}<br>`;
+                    }
+                    
+                    // Показываем детали
+                    if (data.details) {
+                        message += '<details style="margin-top: 10px;"><summary>Детали</summary>';
+                        data.details.forEach(detail => {
+                            const statusIcon = detail.status === 'success' ? '✅' : '❌';
+                            message += `${statusIcon} ${detail.filename}`;
+                            if (detail.error) message += `: ${detail.error}`;
+                            message += '<br>';
+                        });
+                        message += '</details>';
+                    }
+                    
+                    showApiStatus(uploadStatus, message, true);
+                } else {
+                    showApiStatus(uploadStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(uploadStatus, `❌ Ошибка сети: ${error}`, false);
+            });
+        }
+
+        function downloadLessonsByClass(classLevel) {
+            const downloadBtn = document.querySelector('#download-class-lessons-btn');
+            const originalText = downloadBtn.innerHTML;
+            
+            // Показываем статус загрузки
+            downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Скачивание...';
+            downloadBtn.disabled = true;
+            
+            fetch(`/api/download_lessons_by_class?class=${encodeURIComponent(classLevel)}`)
+            .then(function(response) {
+                if (response.ok) {
+                    return response.blob();
+                }
+                throw new Error(`Ошибка скачивания: ${response.status} ${response.statusText}`);
+            })
+            .then(function(blob) {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                let filename = '';
+                if (classLevel === 'all') {
+                    filename = 'all_lessons.zip';
+                } else if (classLevel === 'demo') {
+                    filename = 'demo_lessons.zip';
+                } else if (classLevel === 'generated') {
+                    filename = 'generated_lessons.zip';
+                } else {
+                    filename = `lessons_${classLevel}_class.zip`;
+                }
+                
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showStatus(downloadStatus, `✅ Уроки успешно скачаны! Файл: ${filename}`);
+            })
+            .catch(function(error) {
+                console.error('Ошибка скачивания:', error);
+                showStatus(downloadStatus, `❌ Ошибка при скачивании: ${error.message}<br>
+                    Проверьте:<br>
+                    1. Есть ли уроки для этого класса<br>
+                    2. Доступ к файловой системе<br>
+                    3. Разрешения на запись`, false);
+            })
+            .finally(function() {
+                // Восстанавливаем кнопку
+                downloadBtn.innerHTML = originalText;
+                downloadBtn.disabled = false;
+            });
+        }
+
+        function downloadAllLessons() {
+            fetch('/api/download_lessons')
+            .then(function(response) {
+                if (response.ok) {
+                    return response.blob();
+                }
+                throw new Error('Ошибка скачивания');
+            })
+            .then(function(blob) {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = 'ai_teacher_lessons.zip';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                showStatus(downloadStatus, '✅ Все уроки успешно скачаны!');
+            })
+            .catch(function(error) {
+                showStatus(downloadStatus, `❌ Ошибка при скачивании уроков: ${error.message}`, false);
+            });
+        }
+
+        function loadLessonsStructure() {
+            viewStructureBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+            
+            fetch('/api/lessons/structure')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let html = '<div class="structure-info">';
+                        
+                        // Демо уроки
+                        if (data.structure.demo && data.structure.demo.length > 0) {
+                            html += `<h5>📁 Демо уроки: ${data.structure.demo.length}</h5>`;
+                            html += '<ul>';
+                            data.structure.demo.slice(0, 5).forEach(file => {
+                                html += `<li>${file.name}</li>`;
+                            });
+                            if (data.structure.demo.length > 5) {
+                                html += `<li>... и ещё ${data.structure.demo.length - 5} файлов</li>`;
+                            }
+                            html += '</ul>';
+                        }
+                        
+                        // Уроки по классам
+                        if (data.structure.students) {
+                            html += '<h5>📁 Уроки по классам:</h5>';
+                            for (const [className, subjects] of Object.entries(data.structure.students)) {
+                                html += `<h6>${className}:</h6>`;
+                                for (const [subject, files] of Object.entries(subjects)) {
+                                    if (files && files.length > 0) {
+                                        html += `<div style="margin-left: 20px;">
+                                            ${subject}: ${files.length} уроков
+                                        </div>`;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        html += '</div>';
+                        structureInfo.innerHTML = html;
+                        structureInfo.style.display = 'block';
+                    } else {
+                        structureInfo.innerHTML = `<p style="color: #dc3545;">Ошибка: ${data.error}</p>`;
+                        structureInfo.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    structureInfo.innerHTML = `<p style="color: #dc3545;">Ошибка сети: ${error}</p>`;
+                    structureInfo.style.display = 'block';
+                })
+                .finally(() => {
+                    viewStructureBtn.innerHTML = '<i class="fas fa-folder-open"></i> Показать структуру';
+                });
+        }
+
+        function createSampleLessons() {
+            if (!confirm('Создать примерные уроки для всех классов и предметов?')) return;
+            
+            createSampleLessonsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Создание...';
+            createSampleLessonsBtn.disabled = true;
+            
+            fetch('/api/lessons/create-sample', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`✅ Создано ${data.created_count} примерных уроков!`);
+                    showStatus(lessonStatus, data.message, true);
+                } else {
+                    alert(`❌ Ошибка: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                alert(`❌ Ошибка сети: ${error}`);
+            })
+            .finally(() => {
+                createSampleLessonsBtn.innerHTML = '<i class="fas fa-magic"></i> Создать примерные уроки для всех классов';
+                createSampleLessonsBtn.disabled = false;
+            });
+        }
+
         // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
@@ -2671,167 +3133,6 @@
                 });
         }
 
-        // Функции для работы с уроками по классам
-        function updateLessonCounter() {
-            const selectedClass = lessonClassSelect.value;
-            const selectedSubject = lessonSubjectSelect.value;
-            const lessonTitle = lessonTitleInput.value.trim();
-            
-            if (!selectedClass || !selectedSubject) {
-                lessonCounter.style.display = 'none';
-                return;
-            }
-            
-            // Запрашиваем следующий номер урока
-            fetch(`/api/lessons/next_number?class=${selectedClass}&subject=${selectedSubject}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const nextNumber = data.next_number.toString().padStart(2, '0');
-                        nextLessonNumberSpan.textContent = nextNumber;
-                        
-                        // Обновляем превью имени файла
-                        let filenameBase = 'lesson';
-                        if (selectedClass === 'demo') {
-                            filenameBase = 'demo_lesson';
-                        } else if (selectedClass === 'generated') {
-                            filenameBase = 'generated_lesson';
-                        }
-                        
-                        let subjectSlug = selectedSubject.toLowerCase().replace(/[^\wа-яё]/g, '_');
-                        let titleSlug = lessonTitle ? '_' + lessonTitle.toLowerCase().replace(/[^\wа-яё]/g, '_').substring(0, 20) : '';
-                        
-                        const filename = `${filenameBase}_${nextNumber}${titleSlug}.txt`;
-                        lessonFilenamePreview.textContent = filename;
-                        
-                        lessonCounter.style.display = 'inline-block';
-                    } else {
-                        lessonCounter.style.display = 'none';
-                    }
-                })
-                .catch(error => {
-                    console.error('Ошибка получения номера урока:', error);
-                    lessonCounter.style.display = 'none';
-                });
-        }
-
-        function addLesson() {
-            const selectedClass = lessonClassSelect.value;
-            const selectedSubject = lessonSubjectSelect.value;
-            const lessonTitle = lessonTitleInput.value.trim();
-            const lessonContent = lessonContentTextarea.value.trim();
-            
-            if (!selectedClass || !selectedSubject) {
-                showStatus(lessonStatus, 'Выберите класс и предмет', false);
-                return;
-            }
-            
-            if (!lessonTitle) {
-                showStatus(lessonStatus, 'Введите название урока', false);
-                return;
-            }
-            
-            if (!lessonContent) {
-                showStatus(lessonStatus, 'Введите содержание урока', false);
-                return;
-            }
-            
-            fetch('/api/add_lesson_with_class', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    class_level: selectedClass,
-                    subject: selectedSubject,
-                    title: lessonTitle,
-                    content: lessonContent
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showStatus(lessonStatus, 
-                        `Урок "${lessonTitle}" успешно добавлен! Класс: ${selectedClass}, предмет: ${selectedSubject}`);
-                    
-                    // Очищаем поля
-                    lessonTitleInput.value = '';
-                    lessonContentTextarea.value = '';
-                    
-                    // Обновляем счетчик
-                    updateLessonCounter();
-                } else {
-                    showStatus(lessonStatus, 'Ошибка: ' + data.error, false);
-                }
-            })
-            .catch(function(error) {
-                showStatus(lessonStatus, 'Ошибка при добавлении урока: ' + error, false);
-            });
-        }
-
-        // Функции для скачивания уроков
-        function downloadLessonsByClass(classLevel) {
-            fetch(`/api/download_lessons_by_class?class=${classLevel}`)
-            .then(function(response) {
-                if (response.ok) {
-                    return response.blob();
-                }
-                throw new Error('Ошибка скачивания');
-            })
-            .then(function(blob) {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                let filename = '';
-                if (classLevel === 'all') {
-                    filename = 'all_lessons.zip';
-                } else if (classLevel === 'demo') {
-                    filename = 'demo_lessons.zip';
-                } else if (classLevel === 'generated') {
-                    filename = 'generated_lessons.zip';
-                } else {
-                    filename = `lessons_${classLevel}_class.zip`;
-                }
-                
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                showStatus(downloadStatus, `Уроки успешно скачаны! Файл: ${filename}`);
-            })
-            .catch(function(error) {
-                showStatus(downloadStatus, 'Ошибка при скачивании: ' + error.message, false);
-            });
-        }
-
-        function downloadAllLessons() {
-            fetch('/api/download_lessons')
-            .then(function(response) {
-                if (response.ok) {
-                    return response.blob();
-                }
-                throw new Error('Ошибка скачивания');
-            })
-            .then(function(blob) {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'ai_teacher_lessons.zip';
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                showStatus(downloadStatus, 'Все уроки успешно скачаны!');
-            })
-            .catch(function(error) {
-                showStatus(downloadStatus, 'Ошибка при скачивании уроков: ' + error.message, false);
-            });
-        }
-        
         // Инициализация
         document.addEventListener('DOMContentLoaded', function() {
             // Загружаем данные при загрузке страницы
@@ -2930,7 +3231,7 @@
                 }
             });
             
-            // Drag and drop для файлов
+            // Drag and drop для файлов ключей
             keysFileDropzone.addEventListener('dragover', function(e) {
                 e.preventDefault();
                 this.style.borderColor = '#3498db';
@@ -2961,28 +3262,7 @@
             // Динамическая загрузка предметов по классам
             lessonClassSelect.addEventListener('change', function() {
                 const selectedClass = this.value;
-                const subjects = subjectsByClass[selectedClass] || [];
-                
-                // Очищаем и заполняем список предметов
-                lessonSubjectSelect.innerHTML = '';
-                
-                if (subjects.length > 0) {
-                    subjects.forEach(function(subject) {
-                        const option = document.createElement('option');
-                        option.value = subject;
-                        option.textContent = subject;
-                        lessonSubjectSelect.appendChild(option);
-                    });
-                    
-                    // Обновляем счетчик
-                    updateLessonCounter();
-                } else {
-                    const option = document.createElement('option');
-                    option.value = '';
-                    option.textContent = 'Нет доступных предметов';
-                    lessonSubjectSelect.appendChild(option);
-                    lessonCounter.style.display = 'none';
-                }
+                loadSubjectsForClass(selectedClass);
             });
             
             // Обновляем счетчик при изменении предмета
@@ -2998,6 +3278,48 @@
             // Обработчик добавления урока
             document.getElementById('add-lesson-btn').addEventListener('click', function() {
                 addLesson();
+            });
+            
+            // Обработчик массовой загрузки уроков
+            bulkUploadDropzone.addEventListener('click', () => bulkUploadInput.click());
+            
+            bulkUploadInput.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    uploadMultipleLessons(this.files);
+                }
+            });
+            
+            // Drag and drop для уроков
+            bulkUploadDropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#3498db';
+                this.style.backgroundColor = '#f8f9fa';
+            });
+            
+            bulkUploadDropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#ddd';
+                this.style.backgroundColor = 'white';
+            });
+            
+            bulkUploadDropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#ddd';
+                this.style.backgroundColor = 'white';
+                
+                if (e.dataTransfer.files.length > 0) {
+                    uploadMultipleLessons(e.dataTransfer.files);
+                }
+            });
+            
+            // Обработчик просмотра структуры уроков
+            viewStructureBtn.addEventListener('click', function() {
+                loadLessonsStructure();
+            });
+            
+            // Обработчик создания примерных уроков
+            createSampleLessonsBtn.addEventListener('click', function() {
+                createSampleLessons();
             });
             
             // Выбор аватара
@@ -3067,14 +3389,14 @@
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
                     if (data.success) {
-                        showStatus(knowledgeStatus, 'Данные успешно добавлены в базу знаний! Добавлено элементов: ' + data.added_items);
+                        showStatus(knowledgeStatus, '✅ Данные успешно добавлены в базу знаний! Добавлено элементов: ' + data.added_items);
                         document.getElementById('knowledge-text').value = '';
                     } else {
-                        showStatus(knowledgeStatus, 'Ошибка: ' + data.error, false);
+                        showStatus(knowledgeStatus, '❌ Ошибка: ' + data.error, false);
                     }
                 })
                 .catch(function(error) {
-                    showStatus(knowledgeStatus, 'Ошибка при добавлении данных: ' + error, false);
+                    showStatus(knowledgeStatus, '❌ Ошибка при добавлении данных: ' + error, false);
                 });
             });
             
@@ -3099,10 +3421,10 @@
                     a.click();
                     window.URL.revokeObjectURL(url);
                     document.body.removeChild(a);
-                    showStatus(downloadStatus, 'База знаний по предмету "' + subject + '" успешно скачана!');
+                    showStatus(downloadStatus, '✅ База знаний по предмету "' + subject + '" успешно скачана!');
                 })
                 .catch(function(error) {
-                    showStatus(downloadStatus, 'Ошибка при скачивании: ' + error.message, false);
+                    showStatus(downloadStatus, '❌ Ошибка при скачивании: ' + error.message, false);
                 });
             });
             
