@@ -55,6 +55,8 @@ class APIKeyManager:
                     return keys
             except Exception as e:
                 print(f"❌ Ошибка загрузки ключей: {e}")
+                # Создаем пустой список при ошибке
+                return []
         
         # Если файла нет, используем ключ из config.py
         from config import get_api_key
@@ -92,6 +94,9 @@ class APIKeyManager:
                 }
             }
             
+            # Создаем директорию если не существует
+            self.config_file.parent.mkdir(parents=True, exist_ok=True)
+            
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -101,6 +106,7 @@ class APIKeyManager:
         """Добавление нового ключа"""
         api_key = api_key.strip()
         if not api_key:
+            print(f"❌ Ключ пустой: {name}")
             return False
         
         # Проверяем, нет ли уже такого ключа
@@ -112,7 +118,7 @@ class APIKeyManager:
         
         limit = self.daily_limit if limit_type == "standard" else self.extended_limit
         
-        self.keys.append({
+        new_key = {
             'key': api_key,
             'usage': 0,
             'last_reset': datetime.now().isoformat(),
@@ -123,7 +129,9 @@ class APIKeyManager:
             'is_active': True,
             'total_requests': 0,
             'key_hash': key_hash
-        })
+        }
+        
+        self.keys.append(new_key)
         
         self._save_keys()
         print(f"✅ Добавлен ключ: {name} (лимит: {limit} запросов/день)")
@@ -163,7 +171,7 @@ class APIKeyManager:
         """Запись использования ключа"""
         for key_data in self.keys:
             if key_data['key'] == api_key:
-                key_data['usage'] += 1
+                key_data['usage'] = key_data.get('usage', 0) + 1
                 key_data['total_requests'] = key_data.get('total_requests', 0) + 1
                 break
         self._save_keys()
@@ -217,6 +225,7 @@ class APIKeyManager:
         def check_reset_loop():
             while True:
                 try:
+                    # Проверяем сброс каждую минуту
                     current_time = datetime.now().strftime("%H:%M")
                     if current_time == self.reset_time:
                         self._check_daily_reset(force=True)
@@ -314,15 +323,22 @@ class APIKeyManager:
     
     def delete_key(self, key_name: str):
         """Удаление ключа"""
+        original_count = len(self.keys)
         self.keys = [k for k in self.keys if k['name'] != key_name]
-        self._save_keys()
-        print(f"✅ Ключ {key_name} удален")
-        return True
+        
+        if len(self.keys) < original_count:
+            self._save_keys()
+            print(f"✅ Ключ {key_name} удален")
+            return True
+        else:
+            print(f"❌ Ключ {key_name} не найден")
+            return False
     
     def toggle_key_active(self, key_name: str, is_active: bool):
         """Включение/выключение ключа"""
         for key in self.keys:
             if key['name'] == key_name:
+                old_status = key.get('is_active', True)
                 key['is_active'] = is_active
                 self._save_keys()
                 status = "активирован" if is_active else "деактивирован"
@@ -356,9 +372,33 @@ class APIKeyManager:
         print(f"✅ Импортировано ключей: {imported_count}")
         return imported_count
     
+    def validate_model(self, model: str) -> bool:
+        """Упрощенная валидация модели - разрешаем любые строки"""
+        if not model or not isinstance(model, str):
+            print(f"❌ Ошибка: Модель должна быть строкой")
+            return False
+        
+        # Минимальная проверка: строка не пустая
+        if len(model.strip()) < 3:
+            print(f"❌ Ошибка: Название модели слишком короткое")
+            return False
+        
+        # Проверяем наличие двоеточия (обычно формат model:free)
+        if ':' not in model:
+            print(f"⚠️ Предупреждение: Модель '{model}' не содержит двоеточия (обычно формат: model:free)")
+            # Всё равно разрешаем - может быть кастомная модель
+        
+        print(f"✅ Модель принята: {model}")
+        return True
+    
     def set_model(self, model: str):
-        """Установка модели по умолчанию"""
-        self.model = model
+        """Установка модели по умолчанию - принимаем любую строку"""
+        if not model or not isinstance(model, str):
+            print(f"❌ Ошибка: Неверное название модели")
+            return False
+        
+        # Просто устанавливаем модель
+        self.model = model.strip()
         
         # Обновляем конфигурацию
         from config import load_config, save_config
@@ -367,22 +407,151 @@ class APIKeyManager:
         if 'openrouter' not in config:
             config['openrouter'] = {}
         
-        config['openrouter']['model'] = model
-        save_config(config)
+        config['openrouter']['model'] = self.model
         
-        self._save_keys()
-        print(f"✅ Модель установлена: {model}")
-        return True
+        try:
+            save_config(config)
+            self._save_keys()
+            print(f"✅ Модель установлена: {self.model}")
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка установки модели: {e}")
+            return False
     
     def force_reset_all(self):
         """Принудительный сброс всех счетчиков"""
         for key in self.keys:
+            old_usage = key.get('usage', 0)
             key['usage'] = 0
             key['last_reset'] = datetime.now().isoformat()
+            print(f"🔄 Сброс ключа {key['name']}: {old_usage} → 0")
         
         self._save_keys()
-        print(f"✅ Принудительный сброс всех ключей выполнено")
+        print(f"✅ Принудительный сброс всех ключей выполнен")
         return True
+    
+    def import_keys_from_text(self, keys_text: str):
+        """Импорт ключей из текста (альтернативный метод)"""
+        imported_count = 0
+        
+        lines = keys_text.strip().split('\n')
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            
+            # Пробуем разные форматы
+            parts = []
+            
+            # Формат 1: ключ, название, лимит
+            if ',' in line:
+                parts = [p.strip() for p in line.split(',')]
+                api_key = parts[0] if len(parts) > 0 else ''
+                name = parts[1] if len(parts) > 1 else f"key_{imported_count+1}"
+                limit_type = parts[2] if len(parts) > 2 else "standard"
+            
+            # Формат 2: только ключ (определяем по префиксу или длине)
+            elif 'sk-or-' in line or len(line) > 30:
+                api_key = line
+                name = f"imported_key_{imported_count+1}"
+                limit_type = "standard"
+            
+            else:
+                continue
+            
+            # Проверяем базовую валидность ключа
+            if not api_key or len(api_key.strip()) < 20:
+                print(f"⚠️ Пропускаем невалидный ключ в строке {line_num}")
+                continue
+            
+            if self.add_key(api_key, name, limit_type):
+                imported_count += 1
+        
+        print(f"✅ Импортировано ключей из текста: {imported_count}")
+        return imported_count
+    
+    def get_known_models(self) -> List[str]:
+        """Получение списка известных моделей (для справки)"""
+        return [
+            "meta-llama/llama-3.3-70b-instruct:free",
+            "meta-llama/llama-3.2-3b-instruct:free",
+            "meta-llama/llama-3.2-1b-instruct:free",
+            "meta-llama/llama-3.1-8b-instruct:free",
+            "qwen/qwen2.5-7b-instruct:free",
+            "qwen/qwen2.5-14b-instruct:free",
+            "google/gemma-2-2b-it:free",
+            "google/gemma-2-9b-it:free",
+            "microsoft/phi-3.5-mini-instruct:free",
+            "deepseek/deepseek-chat-v3-0324:free"
+        ]
+    
+    def test_model_connection(self, model: str, api_key: str = None) -> Dict:
+        """Тестирование подключения к конкретной модели"""
+        try:
+            if not api_key:
+                api_key = self.get_next_key()
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            test_data = {
+                "model": model,
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 5
+            }
+            
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=test_data,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "model": model,
+                    "status": "available",
+                    "message": "Модель доступна и работает"
+                }
+            elif response.status_code == 400:
+                return {
+                    "success": True,
+                    "model": model,
+                    "status": "invalid_model",
+                    "message": "Модель не найдена или недоступна"
+                }
+            elif response.status_code == 401:
+                return {
+                    "success": True,
+                    "model": model,
+                    "status": "invalid_key",
+                    "message": "Ключ API недействителен"
+                }
+            else:
+                return {
+                    "success": True,
+                    "model": model,
+                    "status": "error",
+                    "message": f"Ошибка: {response.status_code}"
+                }
+                
+        except requests.exceptions.Timeout:
+            return {
+                "success": True,
+                "model": model,
+                "status": "timeout",
+                "message": "Таймаут подключения"
+            }
+        except Exception as e:
+            return {
+                "success": True,
+                "model": model,
+                "status": "connection_error",
+                "message": f"Ошибка соединения: {str(e)}"
+            }
 
 # Глобальный экземпляр
 key_manager = APIKeyManager()
