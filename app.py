@@ -2,7 +2,6 @@
 # Исправлены ошибки добавления и скачивания уроков, добавлены младшие классы 1-4
 # Реализована массовая загрузка уроков через drag & drop
 # Добавлено редактирование и удаление уроков
-# Исправлены блокировки активации AI-учителя
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -28,10 +27,6 @@ from key_manager import get_key_manager
 from typing import Optional
 import uuid
 from functools import wraps
-import sys
-import signal
-from threading import Thread, Event
-import queue
 
 # Настройка Flask и SocketIO
 app = Flask(__name__, static_folder='static')
@@ -170,10 +165,6 @@ key_manager = get_key_manager()
 
 # Данные учеников для комнат
 room_student_data = defaultdict(dict)
-
-# Система мониторинга блокировок
-blockage_monitor = {}
-room_last_activity = defaultdict(lambda: 0)
 
 # Отладочный режим
 DEBUG_LLM = True
@@ -759,142 +750,56 @@ def setup_llm_manager():
     llm_manager.register_room_callback('global', global_llm_callback)
     debug_log("LLM Manager настроен с улучшенным callback")
 
-def _force_unblock_room(room_id):
-    """Принудительная разблокировка комнаты"""
+def _fast_room_initialization(room_id):
+    """Быстрая инициализация комнаты с учетом типа (ученик или обычный)"""
     try:
-        # 1. Сбрасываем все состояния
-        room_ai_activated[room_id] = True
-        
-        # 2. Пересоздаем DialogueManager если нужно
+        # ВСЕГДА создаем DialogueManager если его нет
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
             room_dialogue[room_id] = DialogueManager(socketio)
             room_dialogue[room_id].room_id = room_id
-            room_dialogue[room_id].set_llm_mode(room_llm_mode.get(room_id, get_llm_mode()))
+            debug_log(f"Создан DialogueManager для комнаты {room_id}")
         
-        # 3. Отправляем приветственное сообщение
-        greeting = "Система восстановлена. Привет! Я ваш AI-учитель. Давайте начнем урок!"
+        # Определяем, является ли это комната ученика
+        is_student_room = False
+        student_data = None
         
-        # 4. Отправляем через WebSocket
-        socketio.emit('ai_teacher_activated', {
-            'room_id': room_id,
-            'message': 'AI-учитель восстановлен после блокировки'
-        }, room=room_id)
+        # Проверяем наличие данных ученика для этой комнаты
+        if room_id in room_student_data and room_student_data[room_id]:
+            is_student_room = True
+            student_data = room_student_data[room_id]
+            debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
+            
+            # Передаем данные ученика в DialogueManager
+            room_dialogue[room_id].set_student_data(student_data)
+            
+            # Если есть предмет, устанавливаем его
+            if 'subject' in student_data and student_data['subject']:
+                room_dialogue[room_id].current_subject = student_data['subject']
+                debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
+            else:
+                # Если предмет не указан, определяем из имени комнаты
+                if room_id.startswith('student_'):
+                    # Формат: student_предмет_имя_идентификатор
+                    parts = room_id.split('_')
+                    if len(parts) > 1:
+                        room_dialogue[room_id].current_subject = parts[1]
+                        debug_log(f"🔥 Предмет определен из имени комнаты: {parts[1]}")
         
-        # 5. Озвучиваем приветствие
-        socketio.start_background_task(lambda: delayed_welcome(room_id, greeting, 1))
-        
-        debug_log(f"✅ Комната {room_id} принудительно разблокирована")
-        return True
-        
-    except Exception as e:
-        debug_log(f"❌ Ошибка принудительной разблокировки: {e}")
-        return False
-
-def _fast_room_initialization(room_id):
-    """Быстрая и надежная инициализация комнаты с защитой от блокировок"""
-    try:
-        debug_log(f"🚀 Начало инициализации комнаты {room_id}")
-        
-        # 1. Проверяем и создаем базовые состояния если их нет
-        if room_id not in room_ai_activated:
-            room_ai_activated[room_id] = False
-        
-        if room_id not in room_llm_mode:
-            room_llm_mode[room_id] = get_llm_mode()
-        
+        # Устанавливаем аватар
         if room_id not in room_current_avatar:
             room_current_avatar[room_id] = 'teacher'
         
-        # 2. Проверяем, не инициализирован ли уже DialogueManager
-        if room_id in room_dialogue and room_dialogue[room_id] is not None:
-            # Проверяем, не завис ли он
-            try:
-                # Простая проверка - если есть метод, вызываем его
-                if hasattr(room_dialogue[room_id], 'room_id'):
-                    debug_log(f"✅ DialogueManager уже инициализирован для {room_id}")
-                    return True
-            except:
-                # Если есть ошибка, пересоздаем
-                room_dialogue[room_id] = None
-                debug_log(f"⚠️ DialogueManager поврежден, будет пересоздан для {room_id}")
+        # Устанавливаем режим LLM
+        if room_dialogue[room_id]:
+            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
-        # 3. Создаем новый DialogueManager с таймаутом
-        def create_dialogue_with_timeout():
-            try:
-                room_dialogue[room_id] = DialogueManager(socketio)
-                room_dialogue[room_id].room_id = room_id
-                room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-                debug_log(f"✅ DialogueManager создан для {room_id}")
-                return True
-            except Exception as e:
-                debug_log(f"❌ Ошибка создания DialogueManager: {e}")
-                room_dialogue[room_id] = None
-                return False
-        
-        # Запускаем в отдельном потоке с таймаутом
-        import threading
-        result = [False]
-        
-        def worker():
-            try:
-                result[0] = create_dialogue_with_timeout()
-            except:
-                result[0] = False
-        
-        thread = threading.Thread(target=worker)
-        thread.daemon = True
-        thread.start()
-        thread.join(timeout=5)  # 5 секунд таймаут
-        
-        if not result[0]:
-            debug_log(f"⚠️ Таймаут инициализации DialogueManager для {room_id}")
-            # Создаем минимальный объект чтобы избежать ошибок
-            class MinimalDialogue:
-                def __init__(self, room_id):
-                    self.room_id = room_id
-                    self.llm_mode = room_llm_mode.get(room_id, get_llm_mode())
-                    self.conversation_history = []
-                    self.current_state = "initial"
-                    self.selected_lesson = None
-                    self.lesson_started = False
-                    self.current_subject = None
-                    
-                def set_llm_mode(self, mode):
-                    self.llm_mode = mode
-                    
-                def is_lesson_started(self):
-                    return self.lesson_started
-            
-            room_dialogue[room_id] = MinimalDialogue(room_id)
-            debug_log(f"✅ Создан минимальный DialogueManager для {room_id}")
-        
-        # 4. Устанавливаем данные ученика если есть
-        if room_id in room_student_data and room_student_data[room_id]:
-            if hasattr(room_dialogue[room_id], 'set_student_data'):
-                try:
-                    room_dialogue[room_id].set_student_data(room_student_data[room_id])
-                    debug_log(f"🔥 Данные ученика установлены для комнаты {room_id}")
-                except Exception as e:
-                    debug_log(f"⚠️ Ошибка установки данных ученика: {e}")
-        
-        debug_log(f"✅ Инициализация завершена для комнаты {room_id}")
+        debug_log(f"✅ Инициализация завершена для комнаты {room_id} (ученик: {is_student_room})")
         return True
         
     except Exception as e:
-        debug_log(f"❌ Критическая ошибка инициализации комнаты {room_id}: {e}")
+        debug_log(f"❌ Ошибка инициализации комнаты {room_id}: {e}")
         import traceback
         traceback.print_exc()
-        
-        # Минимальная инициализация чтобы избежать полного краха
-        if room_id not in room_ai_activated:
-            room_ai_activated[room_id] = False
-        if room_id not in room_dialogue:
-            class MinimalDialogue:
-                def __init__(self):
-                    self.room_id = room_id
-                    self.conversation_history = []
-            room_dialogue[room_id] = MinimalDialogue()
-        
         return False
 
 def clean_text_for_speech(text: str) -> str:
@@ -1335,114 +1240,6 @@ def get_student_next_lesson(student_id, subject):
         return None
 
 # =============================================================================
-# СИСТЕМЫ МОНИТОРИНГА И ВОССТАНОВЛЕНИЯ
-# =============================================================================
-
-def monitor_room_blockage():
-    """Мониторинг блокировок комнат"""
-    while True:
-        try:
-            current_time = time.time()
-            for room_id in list(room_ai_activated.keys()):
-                # Проверяем, есть ли участники, но AI не активирован
-                if (room_id in room_participants and 
-                    len(room_participants[room_id]) > 0 and 
-                    not room_ai_activated[room_id]):
-                    
-                    # Проверяем, сколько времени комната в таком состоянии
-                    if room_id not in blockage_monitor:
-                        blockage_monitor[room_id] = current_time
-                    
-                    blockage_time = current_time - blockage_monitor[room_id]
-                    
-                    # Если комната заблокирована более 10 секунд
-                    if blockage_time > 10:
-                        print(f"⚠️ ВНИМАНИЕ: Комната {room_id} заблокирована {blockage_time:.1f} секунд")
-                        print(f"   Участники: {len(room_participants.get(room_id, []))}")
-                        print(f"   AI активирован: {room_ai_activated.get(room_id)}")
-                        
-                        # Пытаемся восстановить
-                        try:
-                            _force_unblock_room(room_id)
-                            blockage_monitor.pop(room_id, None)
-                            print(f"✅ Восстановление комнаты {room_id}")
-                        except Exception as e:
-                            print(f"❌ Ошибка восстановления: {e}")
-                else:
-                    # Сбрасываем таймер, если все ок
-                    blockage_monitor.pop(room_id, None)
-            
-            time.sleep(5)  # Проверяем каждые 5 секунд
-        except Exception as e:
-            print(f"Ошибка в мониторе блокировок: {e}")
-            time.sleep(10)
-
-def check_room_health():
-    """Проверка здоровья комнат"""
-    while True:
-        try:
-            current_time = time.time()
-            for room_id in list(room_participants.keys()):
-                if room_id in room_participants and room_participants[room_id]:
-                    # Если есть участники, но нет активности 30 секунд
-                    last_active = room_last_activity.get(room_id, 0)
-                    if current_time - last_active > 30:
-                        debug_log(f"⚠️ Комната {room_id} неактивна {current_time - last_active:.0f} секунд")
-                        
-                        # Отправляем ping
-                        socketio.emit('health_check', {
-                            'room_id': room_id,
-                            'timestamp': current_time
-                        }, room=room_id)
-            
-            time.sleep(15)  # Проверяем каждые 15 секунд
-        except Exception as e:
-            debug_log(f"Ошибка проверки здоровья: {e}")
-            time.sleep(30)
-
-def cleanup_stuck_rooms():
-    """Очистка зависших комнат"""
-    while True:
-        try:
-            current_time = time.time()
-            rooms_to_cleanup = []
-            
-            # Находим комнаты без участников
-            for room_id in list(room_participants.keys()):
-                if not room_participants[room_id]:
-                    # Если комната пуста более 5 минут
-                    if room_id in room_last_activity:
-                        if current_time - room_last_activity[room_id] > 300:  # 5 минут
-                            rooms_to_cleanup.append(room_id)
-                    else:
-                        # Если нет записи активности, проверяем по времени создания
-                        # (это потребует дополнительного отслеживания времени создания)
-                        pass
-            
-            # Очищаем старые комнаты
-            for room_id in rooms_to_cleanup:
-                try:
-                    # Очищаем все данные комнаты
-                    if room_id in room_participants:
-                        del room_participants[room_id]
-                    if room_id in room_dialogue:
-                        del room_dialogue[room_id]
-                    if room_id in room_ai_activated:
-                        del room_ai_activated[room_id]
-                    if room_id in room_student_data:
-                        del room_student_data[room_id]
-                    
-                    debug_log(f"🧹 Очищена старая комната: {room_id}")
-                except Exception as e:
-                    debug_log(f"⚠️ Ошибка очистки комнаты {room_id}: {e}")
-            
-            time.sleep(60)  # Проверяем каждую минуту
-            
-        except Exception as e:
-            debug_log(f"Ошибка в cleanup_stuck_rooms: {e}")
-            time.sleep(120)
-
-# =============================================================================
 # SOCKET.IO HANDLERS
 # =============================================================================
 
@@ -1509,9 +1306,6 @@ def handle_join_room(data):
                 print(f"⚠️ Ошибка отправки истории: {e}")
         
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
-        
-        # Обновляем активность комнаты
-        room_last_activity[room_id] = time.time()
         
         # 🔥 ДЛЯ КОМНАТ УЧЕНИКОВ: Отправляем приветствие с предложением начать урок
         if (room_id in room_student_data and 
@@ -1854,64 +1648,31 @@ def handle_activate_ai_teacher(data):
     debug_log(f"Запрос активации AI-учителя для комнаты {room_id} от {sid}")
     
     try:
-        # 1. Устанавливаем флаг активации
         room_ai_activated[room_id] = True
         
-        # 2. Убеждаемся, что комната инициализирована
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            debug_log(f"⚠️ DialogueManager отсутствует, инициализируем...")
-            success = _fast_room_initialization(room_id)
-            if not success:
-                debug_log(f"❌ Не удалось инициализировать комнату {room_id}")
-                # Пробуем минимальную активацию
-                greeting = "Привет! Я ваш AI-учитель. Система загружается..."
-                speak_text(room_id, greeting, voice_type='female', is_teacher=True)
-                
-                emit('ai_teacher_activated', {
-                    'room_id': room_id,
-                    'message': 'AI-учитель активирован (упрощенный режим)'
-                }, room=room_id)
-                return
+            room_dialogue[room_id] = DialogueManager(socketio)
+            room_dialogue[room_id].room_id = room_id
+            debug_log(f"Создан DialogueManager при активации для {room_id}")
         
-        # 3. Устанавливаем режим LLM
-        if room_id in room_dialogue and room_dialogue[room_id]:
-            try:
-                if hasattr(room_dialogue[room_id], 'set_llm_mode'):
-                    room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-            except Exception as e:
-                debug_log(f"⚠️ Ошибка установки режима LLM: {e}")
+        room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
-        # 4. Отправляем приветствие
         greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
+        speak_text(room_id, greeting, voice_type='female', is_teacher=True)
         
-        # 5. Отправляем событие активации
         emit('ai_teacher_activated', {
             'room_id': room_id,
             'message': 'AI-учитель успешно активирован'
         }, room=room_id)
         
-        # 6. Озвучиваем приветствие с задержкой
-        socketio.start_background_task(lambda: delayed_welcome(room_id, greeting, 2))
-        
-        debug_log(f"✅ AI-учитель успешно активирован в комнате {room_id}")
+        debug_log(f"AI-учитель успешно активирован в комнате {room_id}")
         
     except Exception as e:
         print(f"❌ Ошибка активации AI-учителя: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # Все равно отправляем успешный ответ, чтобы клиент не завис
-        emit('ai_teacher_activated', {
+        emit('activate_ai_error', {
             'room_id': room_id,
-            'message': 'AI-учитель активирован (с ошибками в системе)'
-        }, room=room_id)
-        
-        # Пробуем минимальное приветствие
-        try:
-            simple_greeting = "Привет! Я ваш учитель."
-            speak_text(room_id, simple_greeting, voice_type='female', is_teacher=True)
-        except:
-            pass
+            'error': f'Ошибка активации: {str(e)}'
+        }, to=sid)
 
 @socketio.on('set_llm_mode')
 def handle_set_llm_mode(data):
@@ -2974,7 +2735,7 @@ def add_lesson():
             subject_dir = class_dir / subject
             subject_dir.mkdir(parents=True, exist_ok=True)
             lesson_dir = subject_dir
-        
+            
         filename = f"lesson_{title.lower().replace(' ', '_')}.txt"
         lesson_path = lesson_dir / filename
         
@@ -5354,42 +5115,6 @@ def view_lessons():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/room/heartbeat', methods=['POST'])
-def room_heartbeat():
-    """Endpoint для heartbeat от клиентов"""
-    try:
-        data = request.json
-        room_id = data.get('room_id')
-        
-        if room_id:
-            room_last_activity[room_id] = time.time()
-            return jsonify({"success": True, "timestamp": time.time()})
-        
-        return jsonify({"success": False, "error": "No room_id"})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/room/force_unblock/<room_id>', methods=['POST'])
-@teacher_required
-def force_unblock_room_api(room_id):
-    """Принудительная разблокировка комнаты (для админа)"""
-    try:
-        success = _force_unblock_room(room_id)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "message": f"Комната {room_id} разблокирована",
-                "room_id": room_id
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": f"Не удалось разблокировать комнату {room_id}"
-            })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
 # =============================================================================
 # ЗАПУСК СЕРВЕРА
 # =============================================================================
@@ -5399,27 +5124,19 @@ if __name__ == '__main__':
     
     setup_llm_manager()
     
-    # Запускаем мониторинг блокировок
-    import threading
-    monitor_thread = threading.Thread(target=monitor_room_blockage, daemon=True)
-    monitor_thread.start()
-    
-    # Запускаем проверку здоровья
-    health_thread = threading.Thread(target=check_room_health, daemon=True)
-    health_thread.start()
-    
-    # Запускаем очистку старых комнат
-    cleanup_thread = threading.Thread(target=cleanup_stuck_rooms, daemon=True)
-    cleanup_thread.start()
-    
-    debug_log("Мониторинг блокировок запущен")
+    debug_log("Проверка конфигурации SocketIO...")
     debug_log(f"Async mode: {socketio.async_mode}")
+    debug_log(f"Server: {socketio.server}")
+    
+    debug_log("Предварительная инициализация системных комнат...")
+    system_rooms = ['default']
+    for room in system_rooms:
+        _fast_room_initialization(room)
     
     socketio.run(
         app, 
         host='0.0.0.0', 
         port=5000, 
         debug=True, 
-        allow_unsafe_werkzeug=True,
-        use_reloader=False  # Отключаем reloader для стабильности
+        allow_unsafe_werkzeug=True
     )
