@@ -4,6 +4,7 @@ Flask-SocketIO==5.3.4
 python-engineio==4.5.1
 python-socketio==5.8.0
 eventlet==0.33.3
+psutil==5.9.6
 
 # Обработка изображений и медиа
 Pillow==10.0.0
