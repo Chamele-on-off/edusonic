@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zindaki Academy AI - Ваш персональный AI-репетитор от Zindaki Academy</title>
+    <title>Zindaki Academy AI - Ваш персональный AI-репетитор</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -17,10 +17,7 @@
             --success: #48BB78;
             --warning: #ED8936;
             --web3: #F59E0B;
-            --zindaki-primary: #3a5a78;
-            --zindaki-accent: #c5a258;
             --gradient: linear-gradient(135deg, var(--primary), var(--secondary));
-            --zindaki-gradient: linear-gradient(135deg, var(--zindaki-primary), var(--zindaki-accent));
         }
         
         * {
@@ -72,17 +69,6 @@
             white-space: nowrap;
         }
         
-        .zindaki-badge {
-            background: var(--zindaki-gradient);
-            color: white;
-            padding: 0.2rem 0.6rem;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            margin-left: 0.5rem;
-            vertical-align: middle;
-            font-weight: 600;
-        }
-        
         .nav-links {
             display: flex;
             gap: 2rem;
@@ -125,29 +111,6 @@
             align-items: center;
             flex-wrap: wrap;
             justify-content: flex-end;
-        }
-        
-        .btn-zindaki {
-            background: var(--zindaki-gradient);
-            color: white;
-            border: none;
-            padding: 0.7rem 1.2rem;
-            border-radius: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            box-shadow: 0 4px 15px rgba(58, 90, 120, 0.3);
-            white-space: nowrap;
-        }
-        
-        .btn-zindaki:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(58, 90, 120, 0.4);
         }
         
         .btn-web3 {
@@ -302,53 +265,13 @@
             line-height: 1.2;
         }
         
-        .hero-subtitle {
+        .hero p {
             font-size: clamp(1.1rem, 2.5vw, 1.5rem);
-            margin-bottom: 0.5rem;
+            margin-bottom: 2.5rem;
             color: white;
             opacity: 0.9;
             font-weight: 300;
             line-height: 1.5;
-        }
-        
-        .hero-description {
-            font-size: 1.2rem;
-            margin-bottom: 2.5rem;
-            color: rgba(255,255,255,0.85);
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        
-        .zindaki-partner {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.8rem;
-            background: rgba(255,255,255,0.15);
-            padding: 0.8rem 1.5rem;
-            border-radius: 50px;
-            margin-top: 1rem;
-            border: 1px solid rgba(255,255,255,0.3);
-            backdrop-filter: blur(10px);
-        }
-        
-        .zindaki-logo {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-weight: 600;
-            color: white;
-        }
-        
-        .zindaki-logo-icon {
-            width: 30px;
-            height: 30px;
-            background: var(--zindaki-gradient);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1rem;
         }
         
         .cta-buttons {
@@ -369,76 +292,6 @@
         .btn-conference:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(255, 123, 156, 0.4);
-        }
-        
-        /* Zindaki Banner */
-        .zindaki-banner {
-            background: var(--zindaki-gradient);
-            color: white;
-            padding: 3rem 2rem;
-            text-align: center;
-            margin: 0;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .zindaki-banner:before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(255,255,255,0.1)" d="M0,0 L100,0 L100,100 L0,100 Z"></path></svg>');
-            background-size: cover;
-        }
-        
-        .zindaki-content {
-            position: relative;
-            z-index: 2;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-        
-        .zindaki-banner h3 {
-            font-size: clamp(1.5rem, 3vw, 2rem);
-            margin-bottom: 1rem;
-            line-height: 1.3;
-        }
-        
-        .zindaki-banner p {
-            font-size: clamp(1rem, 2vw, 1.2rem);
-            margin-bottom: 2rem;
-            opacity: 0.9;
-            line-height: 1.5;
-        }
-        
-        .zindaki-stats {
-            display: flex;
-            justify-content: center;
-            gap: 3rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
-        }
-        
-        .zindaki-stat {
-            text-align: center;
-            flex: 1;
-            min-width: 150px;
-        }
-        
-        .zindaki-stat-number {
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            font-weight: 700;
-            color: white;
-            display: block;
-            line-height: 1;
-        }
-        
-        .zindaki-stat-label {
-            font-size: 1rem;
-            color: rgba(255,255,255,0.9);
-            margin-top: 0.5rem;
         }
         
         /* Features Section */
@@ -1266,7 +1119,7 @@
                 font-size: 2.5rem;
             }
             
-            .hero-subtitle, .hero-description {
+            .hero p {
                 font-size: 1.2rem;
             }
             
@@ -1340,11 +1193,11 @@
                 font-size: 1rem;
             }
             
-            .conference-stats, .zindaki-stats {
+            .conference-stats {
                 gap: 1.5rem;
             }
             
-            .stat-number, .zindaki-stat-number {
+            .stat-number {
                 font-size: 2rem;
             }
             
@@ -1364,11 +1217,11 @@
                 padding: 2rem 1rem;
             }
             
-            .zindaki-banner, .web3-banner {
+            .web3-banner {
                 padding: 2rem 1rem;
             }
             
-            .zindaki-banner h3, .web3-banner h3 {
+            .web3-banner h3 {
                 font-size: 1.5rem;
             }
             
@@ -1389,11 +1242,11 @@
                 padding: 100px 1rem 1rem;
             }
             
-            .conference-stats, .zindaki-stats {
+            .conference-stats {
                 gap: 1rem;
             }
             
-            .stat-item, .zindaki-stat {
+            .stat-item {
                 min-width: 120px;
             }
             
@@ -1444,7 +1297,7 @@
                 gap: 0.5rem;
             }
             
-            .btn-web3, .btn-zindaki {
+            .btn-web3 {
                 padding: 0.5rem 1rem;
                 font-size: 0.8rem;
             }
@@ -1469,7 +1322,6 @@
             <a href="#" class="logo">
                 <i class="fas fa-robot"></i>
                 Zindaki Academy AI
-                <span class="zindaki-badge">by Zindaki Academy</span>
             </a>
             
             <div class="nav-links" id="navLinks">
@@ -1478,17 +1330,16 @@
                 <a href="#pricing">Тарифы</a>
                 <a href="#testimonials">Отзывы</a>
                 <a href="#conference">Попробовать</a>
-                <a href="#zindaki">О школе</a>
             </div>
             
             <div class="nav-buttons" id="navButtons">
-                <a href="https://zindaki-edu.ru" target="_blank" class="btn-zindaki">
-                    <i class="fas fa-graduation-cap"></i>
-                    Основной сайт школы
-                </a>
                 <a href="/investing.html" class="btn-web3">
                     <i class="fas fa-coins"></i>
-                    Школам/Инвесторам
+                    Школам/Инвесторам/Web3
+                </a>
+                <a href="/login" class="btn btn-secondary" style="background: rgba(255,255,255,0.9); color: var(--primary); border: 2px solid var(--primary);">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Войти в систему
                 </a>
                 <a href="/login" class="btn btn-primary">
                     <i class="fas fa-play"></i>
@@ -1513,64 +1364,26 @@
         <div class="particles" id="particles-js"></div>
         <div class="hero-content">
             <h1>Zindaki Academy AI</h1>
-            <p class="hero-subtitle">Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
-            <p class="hero-description">
-                Инновационный проект от <strong>Zindaki Academy</strong> - ведущей онлайн школы с семейным подходом. 
-                Мы объединяем лучшее из традиционного образования с передовыми технологиями ИИ.
-            </p>
-            
-            <div class="zindaki-partner">
-                <div class="zindaki-logo">
-                    <div class="zindaki-logo-icon">
-                        <i class="fas fa-graduation-cap"></i>
-                    </div>
-                    <span>Проект Zindaki Academy</span>
-                </div>
-            </div>
-            
+            <p>Ваш персональный AI-репетитор, который понимает вас с полуслова</p>
             <div class="cta-buttons">
                 <button id="tryFreeBtn" class="btn btn-conference">
                     <i class="fas fa-robot"></i> Попробовать бесплатно
                 </button>
                 <a href="#features" class="btn btn-secondary">Узнать больше →</a>
-                <a href="https://zindaki-edu.ru" target="_blank" class="btn btn-zindaki">
-                    <i class="fas fa-external-link-alt"></i> Посетить основной сайт
-                </a>
             </div>
         </div>
     </section>
 
-    <!-- Zindaki Academy Banner -->
-    <section class="zindaki-banner" id="zindaki">
-        <div class="zindaki-content">
-            <h3>🏫 Zindaki Academy - Наша основная школа</h3>
-            <p>
-                Zindaki Academy - это инновационная семейная онлайн школа иностранных языков и гуманитарных предметов. 
-                Мы создаем образовательные программы для всех возрастов с 2018 года и гордимся успехами наших студентов.
-            </p>
-            
-            <div class="zindaki-stats">
-                <div class="zindaki-stat">
-                    <span class="zindaki-stat-number">6+</span>
-                    <div class="zindaki-stat-label">Лет работы</div>
-                </div>
-                <div class="zindaki-stat">
-                    <span class="zindaki-stat-number">500+</span>
-                    <div class="zindaki-stat-label">Учеников</div>
-                </div>
-                <div class="zindaki-stat">
-                    <span class="zindaki-stat-number">15+</span>
-                    <div class="zindaki-stat-label">Программ</div>
-                </div>
-                <div class="zindaki-stat">
-                    <span class="zindaki-stat-number">94%</span>
-                    <div class="zindaki-stat-label">Успеваемость</div>
-                </div>
+    <!-- Web3 Banner -->
+    <section class="section">
+        <div class="web3-banner">
+            <div class="web3-content">
+                <h3>🚀 Инновации в образовании</h3>
+                <p>Узнайте о возможностях для учебных заведений, инвесторов и Web3-интеграции</p>
+                <a href="/investing.html" class="btn btn-primary" style="background: white; color: var(--web3);">
+                    <i class="fas fa-chart-line"></i> Для школ и инвесторов
+                </a>
             </div>
-            
-            <a href="https://zindaki-edu.ru" target="_blank" class="btn" style="background: white; color: var(--zindaki-primary); margin-top: 2rem;">
-                <i class="fas fa-graduation-cap"></i> Узнать больше о школе
-            </a>
         </div>
     </section>
 
@@ -1629,12 +1442,11 @@
         <div class="demo-container">
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
                 Представьте: вместо скучного чтения учебника - живой диалог с умным помощником, который всегда терпеливо объяснит сложную тему и найдет именно те слова, которые вы поймете.
-                <strong>Это инновация от Zindaki Academy!</strong>
             </p>
             <div class="demo-visual">
                 <div style="text-align: center;">
                     <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8; margin-bottom: 1rem;"></i>
-                    <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор от Zindaki Academy. Давай вместе разберем эту интересную тему!"</p>
+                    <p style="font-size: 1.1rem; opacity: 0.9;">"Привет! Я твой AI-репетитор. Давай вместе разберем эту интересную тему!"</p>
                 </div>
             </div>
             <button id="tryNowBtn" class="btn btn-primary" style="background: white; color: var(--primary);">Попробовать прямо сейчас</button>
@@ -1647,8 +1459,6 @@
         <div class="demo-container">
             <p style="max-width: 800px; margin-bottom: 2rem; font-size: 1.2rem; text-align: center;">
                 Не верите, что это работает? Убедитесь сами! Запустите демо-версию и пообщайтесь с AI-репетитором. Задавайте вопросы по любому школьному предмету - вы удивитесь, насколько это легко и эффективно!
-                <br><br>
-                <strong>Все ученики Zindaki Academy получают специальные условия!</strong>
             </p>
             
             <div class="conference-demo">
@@ -1664,10 +1474,6 @@
                     <div class="stat-item">
                         <span class="stat-number">24/7</span>
                         <div class="stat-label">Всегда на связи</div>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">100%</span>
-                        <div class="stat-label">Учеников Zindaki Academy</div>
                     </div>
                 </div>
                 
@@ -1747,7 +1553,7 @@
                                 </div>
                                 <div class="demo-preview-text">
                                     <h3>Готов к обучению!</h3>
-                                    <p>Нажмите для запуска полноценного виртуального класса с AI-репетитором от Zindaki Academy</p>
+                                    <p>Нажмите для запуска полноценного виртуального класса с AI-репетитором</p>
                                 </div>
                             </div>
                         </div>
@@ -1789,7 +1595,6 @@
         <div class="pricing-tabs">
             <button class="tab-btn active" data-tab="individual">Для учеников</button>
             <button class="tab-btn" data-tab="family">Для семьи</button>
-            <button class="tab-btn" data-tab="zindaki">Для учеников Zindaki Academy</button>
         </div>
         
         <!-- Individual Pricing -->
@@ -1861,37 +1666,6 @@
                 <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Лучший выбор</a>
             </div>
         </div>
-        
-        <!-- Zindaki Academy Pricing -->
-        <div id="zindaki-pricing" class="pricing-grid pricing-container">
-            <div class="pricing-card">
-                <h3 style="color: var(--zindaki-primary);">Zindaki Basic</h3>
-                <div class="price" style="color: var(--zindaki-primary);">Бесплатно <span>/для учеников</span></div>
-                <ul class="pricing-features">
-                    <li><strong>Только для учеников Zindaki Academy</strong></li>
-                    <li>Безлимитные занятия по языкам</li>
-                    <li>Индивидуальная программа обучения</li>
-                    <li>Подготовка к урокам в школе</li>
-                    <li>Домашние задания и проверка</li>
-                    <li>Синхронизация с учебным планом</li>
-                </ul>
-                <a href="https://zindaki-edu.ru" target="_blank" class="btn" style="width: 100%; background: var(--zindaki-gradient); color: white; text-decoration: none; display: block; text-align: center;">Стать учеником школы</a>
-            </div>
-            <div class="pricing-card popular">
-                <h3 style="color: var(--zindaki-primary);">Zindaki Premium</h3>
-                <div class="price" style="color: var(--zindaki-primary);">490 ₽ <span>/месяц</span></div>
-                <ul class="pricing-features">
-                    <li><strong>Специальный тариф для учеников</strong></li>
-                    <li>Всё из пакета Zindaki Basic</li>
-                    <li>Все школьные предметы</li>
-                    <li>Подготовка к ЕГЭ/ОГЭ</li>
-                    <li>Расширенная практика</li>
-                    <li>Персональный куратор</li>
-                    <li>Эксклюзивные материалы</li>
-                </ul>
-                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Активировать тариф</a>
-            </div>
-        </div>
     </section>
 
     <!-- Testimonials Section -->
@@ -1900,13 +1674,13 @@
         <div class="testimonials-grid">
             <div class="testimonial-card">
                 <div class="testimonial-text">
-                    "Сначала не верил, что компьютер может нормально объяснять математику. Но после первого же занятия понял - это работает! Объясняет даже лучше, чем некоторые учителя в школе. Особенно удобно для учеников Zindaki Academy!"
+                    "Сначала не верил, что компьютер может нормально объяснять математику. Но после первого же занятия понял - это работает! Объясняет даже лучше, чем некоторые учителя в школе."
                 </div>
                 <div class="testimonial-author">
                     <div class="author-avatar">АС</div>
                     <div class="author-info">
                         <h4>Алексей Смирнов</h4>
-                        <p>Ученик 9 класса Zindaki Academy</p>
+                        <p>Ученик 9 класса, Москва</p>
                     </div>
                 </div>
             </div>
@@ -1918,34 +1692,21 @@
                     <div class="author-avatar">МК</div>
                     <div class="author-info">
                         <h4>Марина Ковалева</h4>
-                        <p>Мама ученицы 8 класса Zindaki Academy</p>
+                        <p>Мама ученицы 8 класса</p>
                     </div>
                 </div>
             </div>
             <div class="testimonial-card">
                 <div class="testimonial-text">
-                    "Занимаюсь английским с AI-репетитором каждый вечер. Очень нравится, что можно практиковать произношение и сразу получать обратную связь. За 2 месяца подтянул язык с начального до уверенного intermediate. Спасибо Zindaki Academy!"
+                    "Занимаюсь английским с AI-репетитором каждый вечер. Очень нравится, что можно практиковать произношение и сразу получать обратную связь. За 2 месяца подтянул язык с начального до уверенного intermediate."
                 </div>
                 <div class="testimonial-author">
                     <div class="author-avatar">ДИ</div>
                     <div class="author-info">
                         <h4>Дмитрий Иванов</h4>
-                        <p>Студент Zindaki Academy, Санкт-Петербург</p>
+                        <p>Студент, Санкт-Петербург</p>
                     </div>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Web3 Banner -->
-    <section class="section">
-        <div class="web3-banner">
-            <div class="web3-content">
-                <h3>🚀 Инновации в образовании</h3>
-                <p>Узнайте о возможностях для учебных заведений, инвесторов и Web3-интеграции. Zindaki Academy - лидер в внедрении технологий в образование.</p>
-                <a href="/investing.html" class="btn btn-primary" style="background: white; color: var(--web3);">
-                    <i class="fas fa-chart-line"></i> Для школ и инвесторов
-                </a>
             </div>
         </div>
     </section>
@@ -1955,7 +1716,7 @@
         <div class="cta-content">
             <h2 class="section-title" style="color: white;">Готовы начать учиться с удовольствием?</h2>
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Присоединяйтесь к тысячам учеников Zindaki Academy, которые уже открыли для себя новый способ обучения. Запустите демо-версию прямо сейчас!
+                Присоединяйтесь к тысячам учеников, которые уже открыли для себя новый способ обучения. Запустите демо-версию прямо сейчас!
             </p>
             <div class="cta-buttons-large">
                 <button id="ctaDemoBtn" class="btn btn-primary btn-large" style="background: white; color: var(--accent); text-decoration: none;">
@@ -1964,8 +1725,8 @@
                 <a href="/login" class="btn btn-secondary btn-large" style="border-color: white; color: white; text-decoration: none;">
                     <i class="fas fa-sign-in-alt"></i> Войти в систему
                 </a>
-                <a href="https://zindaki-edu.ru" target="_blank" class="btn btn-zindaki btn-large" style="padding: 1.2rem 2.5rem; text-decoration: none;">
-                    <i class="fas fa-graduation-cap"></i> Перейти на сайт школы
+                <a href="/investing.html" class="btn-web3 btn-large" style="padding: 1.2rem 2.5rem; text-decoration: none;">
+                    <i class="fas fa-coins"></i> Для школ и инвесторов
                 </a>
             </div>
         </div>
@@ -1976,11 +1737,11 @@
         <div class="footer-content">
             <div class="footer-column">
                 <h3>Zindaki Academy AI</h3>
-                <p>Инновационная платформа для голосового обучения с искусственным интеллектом от Zindaki Academy. Сделаем образование доступным и увлекательным для каждого ребенка!</p>
+                <p>Инновационная платформа для голосового обучения с искусственным интеллектом. Сделаем образование доступным и увлекательным для каждого ребенка!</p>
                 <div class="social-links">
-                    <a href="https://t.me/zindakiequipe" target="_blank"><i class="fab fa-telegram"></i></a>
-                    <a href="https://vk.com/zindakiacademy" target="_blank"><i class="fab fa-vk"></i></a>
-                    <a href="https://youtube.com/@zindakiacademy" target="_blank"><i class="fab fa-youtube"></i></a>
+                    <a href="https://t.me/edusonic_ai" target="_blank"><i class="fab fa-telegram"></i></a>
+                    <a href="https://vk.com/edusonic_ai" target="_blank"><i class="fab fa-vk"></i></a>
+                    <a href="https://youtube.com/edusonic_ai" target="_blank"><i class="fab fa-youtube"></i></a>
                 </div>
             </div>
             <div class="footer-column">
@@ -2004,20 +1765,18 @@
                 </ul>
             </div>
             <div class="footer-column">
-                <h3>Zindaki Academy</h3>
+                <h3>Компания</h3>
                 <ul>
-                    <li><a href="https://zindaki-edu.ru" target="_blank">Основной сайт</a></li>
-                    <li><a href="https://zindaki-edu.ru#programs">Программы школы</a></li>
-                    <li><a href="https://zindaki-edu.ru#teachers">Преподаватели</a></li>
-                    <li><a href="https://zindaki-edu.ru#success">Успехи студентов</a></li>
                     <li><a href="/investing.html">Для инвесторов</a></li>
+                    <li><a href="/investing.html">Для школ</a></li>
+                    <li><a href="/investing.html">Web3 технологии</a></li>
+                    <li><a href="#">Блог</a></li>
+                    <li><a href="#">Контакты</a></li>
                 </ul>
             </div>
         </div>
         <div class="copyright">
-            © 2024 Zindaki Academy AI. Проект Zindaki Academy. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
-            <br>
-            <span style="font-size: 0.8rem; opacity: 0.6;">Основной сайт: <a href="https://zindaki-edu.ru" style="color: rgba(255,255,255,0.7);">zindaki-edu.ru</a></span>
+            © 2024 Zindaki Academy AI. С любовью к образованию. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
         </div>
     </footer>
 
