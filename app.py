@@ -1,7 +1,6 @@
-# app.py - AI Teacher System (ИСПРАВЛЕННАЯ ВЕРСИЯ)
-# Исправлены ошибки добавления и скачивания уроков, добавлены младшие классы 1-4
-# Реализована массовая загрузка уроков через drag & drop
-# Добавлено редактирование и удаление уроков
+# app.py - AI Teacher System (ИСПРАВЛЕННАЯ ВЕРСИЯ С ОПТИМИЗАЦИЕЙ МНОЖЕСТВА КОМНАТ)
+# Исправлены блокировки при создании множества комнат
+# Оптимизирована инициализация и добавлена очистка неактивных комнат
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -27,10 +26,14 @@ from key_manager import get_key_manager
 from typing import Optional
 import uuid
 from functools import wraps
+import sys
+import atexit
+from threading import Timer, Semaphore
+import psutil
 
 # Настройка Flask и SocketIO
 app = Flask(__name__, static_folder='static')
-app.secret_key = 'ai-teacher-secret-key-2024'  # Секретный ключ для сессий
+app.secret_key = 'ai-teacher-secret-key-2024'
 
 socketio = SocketIO(
     app, 
@@ -39,12 +42,13 @@ socketio = SocketIO(
     ping_timeout=60,
     ping_interval=25,
     max_http_buffer_size=1e8,
-    logger=True,
-    engineio_logger=True
+    logger=False,
+    engineio_logger=False,
+    async_handlers=True
 )
 
-# Убедитесь что это ПЕРВАЯ строка после создания socketio
-socketio.async_mode = 'threading'
+# Ограничитель параллельной инициализации комнат
+init_semaphore = Semaphore(10)  # Не более 10 одновременных инициализаций
 
 # Ручная настройка CORS
 @app.after_request
@@ -71,7 +75,7 @@ for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR, USERS_DIR
 LESSONS_DEMO_DIR = LESSONS_DIR / "demo"
 LESSONS_STUDENTS_DIR = LESSONS_DIR / "students" 
 LESSONS_GENERATED_DIR = LESSONS_DIR / "generated"
-LESSONS_TRASH_DIR = LESSONS_DIR / "trash"  # Папка для корзины
+LESSONS_TRASH_DIR = LESSONS_DIR / "trash"
 for folder in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_TRASH_DIR]:
     os.makedirs(folder, exist_ok=True)
 
@@ -100,9 +104,8 @@ def create_lessons_structure():
             subject_dir = class_dir / subject
             subject_dir.mkdir(parents=True, exist_ok=True)
             
-            # Создаем примерные уроки если папка пуста
             if not any(subject_dir.glob("*.txt")):
-                for i in range(1, 4):  # Создаем 3 примерных урока
+                for i in range(1, 4):
                     lesson_number = f"{i:02d}"
                     sample_lesson = subject_dir / f"lesson_{lesson_number}_introduction.txt"
                     if not sample_lesson.exists():
@@ -123,7 +126,6 @@ def create_lessons_structure():
 Желаем успехов в обучении!
 """)
 
-# Создаем структуру при запуске
 create_lessons_structure()
 
 # Глобальные состояния
@@ -138,24 +140,24 @@ room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
 room_current_avatar = defaultdict(lambda: 'woman')
+room_last_activity = defaultdict(lambda: time.time())
 
 # PeerJS tracking
-room_peer_ids = defaultdict(dict)  # room_id -> {socket_id: peer_id}
+room_peer_ids = defaultdict(dict)
 
 # Кэш для визуализаций
 diagram_cache = {}
-# Очереди визуализаций для каждой комнаты
 room_visualization_queue = defaultdict(list)
-# Флаг активной визуализации для каждой комната
 room_visualization_active = defaultdict(bool)
 
-# Очереди ответов LLM для polling
+# Очереди ответов LLM
 room_llm_responses = defaultdict(list)
 room_last_poll_time = defaultdict(lambda: 0)
-
-# Улучшенная система отслеживания запросов
 room_llm_pending_requests = defaultdict(dict)
 room_last_llm_update = defaultdict(lambda: 0)
+
+# Данные учеников
+room_student_data = defaultdict(dict)
 
 # Менеджер локальной LLM
 llm_manager = get_llm_manager()
@@ -163,17 +165,15 @@ llm_manager = get_llm_manager()
 # Менеджер ключей API
 key_manager = get_key_manager()
 
-# Данные учеников для комнат
-room_student_data = defaultdict(dict)
-
-# Отладочный режим
+# Настройки очистки
+ROOM_TIMEOUT = 3600  # 1 час неактивности
+MAX_ROOMS = 100  # Максимальное количество комнат в памяти
 DEBUG_LLM = True
 
 def debug_log(message):
     if DEBUG_LLM:
         print(f"🔧 [LLM_DEBUG] {message}")
 
-# Функция для сериализации Path объектов
 def json_serialize_paths(obj):
     """Рекурсивная сериализация объектов Path для JSON"""
     if isinstance(obj, Path):
@@ -238,7 +238,6 @@ def save_user_data(user_data):
     try:
         user_id = user_data['user_id']
         user_file = USERS_DIR / f"{user_id}.json"
-        
         with open(user_file, 'w', encoding='utf-8') as f:
             json.dump(user_data, f, ensure_ascii=False, indent=2)
         return True
@@ -247,21 +246,16 @@ def save_user_data(user_data):
         return False
 
 def authenticate_user(username, password, role):
-    """Аутентификация пользователя - ТОЛЬКО существующие пользователи"""
+    """Аутентификация пользователя"""
     try:
-        # Поиск пользователя по username и role
         for user_file in USERS_DIR.glob("*.json"):
             with open(user_file, 'r', encoding='utf-8') as f:
                 user_data = json.load(f)
-                
                 if (user_data.get('username') == username and 
                     user_data.get('role') == role and 
                     user_data.get('password') == password):
                     return user_data
-        
-        # Если пользователь не найден - ВОЗВРАЩАЕМ None
         return None
-        
     except Exception as e:
         print(f"Authentication error: {e}")
         return None
@@ -280,7 +274,6 @@ def create_new_student(username, password):
             'profile_complete': False,
             'student_data': None
         }
-        
         if save_user_data(user_data):
             return user_data
         return None
@@ -301,7 +294,6 @@ def create_new_teacher(username, password):
             'last_login': datetime.now().isoformat(),
             'profile_complete': True
         }
-        
         if save_user_data(user_data):
             return user_data
         return None
@@ -320,7 +312,6 @@ def update_student_profile(user_id, student_data):
         user_data['profile_complete'] = True
         user_data['profile_updated'] = datetime.now().isoformat()
         
-        # Сохраняем также в отдельный файл ученика
         student_id = student_data.get('student_id')
         if student_id:
             save_student_data(student_data)
@@ -336,12 +327,10 @@ def update_student_profile(user_id, student_data):
 
 @app.route('/')
 def home():
-    """Основная страница - лендинг"""
     return render_template('landing.html')
 
 @app.route('/login')
 def login():
-    """Страница входа"""
     if 'user_id' in session:
         if session.get('role') == 'teacher':
             return redirect('/teacher')
@@ -351,7 +340,6 @@ def login():
 
 @app.route('/auth/login', methods=['POST'])
 def auth_login():
-    """Обработка входа"""
     try:
         data = request.json
         username = data.get('username', '').strip()
@@ -379,25 +367,21 @@ def auth_login():
             })
         else:
             return jsonify({"success": False, "error": "Неверный логин или пароль"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": f"Ошибка входа: {str(e)}"})
 
 @app.route('/logout')
 def logout():
-    """Выход из системы"""
     session.clear()
     return redirect('/login')
 
 @app.route('/logout', methods=['POST'])
 def logout_post():
-    """Выход из системы (POST запрос)"""
     session.clear()
     return jsonify({"success": True, "message": "Успешный выход"})
 
 @app.route('/api/auth/check')
 def check_auth():
-    """Проверка статуса авторизации"""
     if 'user_id' in session:
         user_data = load_user_data(session['user_id'])
         if user_data:
@@ -410,7 +394,6 @@ def check_auth():
 
 @app.route('/investing.html')
 def investing():
-    """Страница для инвесторов"""
     return render_template('investing.html')
 
 # =============================================================================
@@ -420,14 +403,12 @@ def investing():
 @app.route('/teacher')
 @teacher_required
 def teacher():
-    """Страница учителя (личный кабинет)"""
     user_data = load_user_data(session['user_id'])
     return render_template('teacher.html', user=user_data)
 
 @app.route('/student')
 @student_required
 def student():
-    """Страница ученика (личный кабинет)"""
     user_data = load_user_data(session['user_id'])
     
     if not user_data.get('profile_complete', False):
@@ -439,14 +420,12 @@ def student():
 @app.route('/student_profile')
 @student_required
 def student_profile():
-    """Страница заполнения профиля ученика"""
     user_data = load_user_data(session['user_id'])
     return render_template('student_profile.html', user=user_data)
 
 @app.route('/auth/complete-profile', methods=['POST'])
 @student_required
 def complete_profile():
-    """Завершение заполнения профиля ученика"""
     try:
         data = request.json
         user_id = session['user_id']
@@ -460,9 +439,7 @@ def complete_profile():
         }
         
         if update_student_profile(user_id, student_data):
-            # 🔥 НОВОЕ: Создаем начальный прогресс для ученика
             initialize_student_progress(student_data['student_id'], student_data['education_level'])
-            
             return jsonify({
                 "success": True,
                 "message": "Профиль успешно сохранен",
@@ -470,7 +447,6 @@ def complete_profile():
             })
         else:
             return jsonify({"success": False, "error": "Ошибка сохранения профиля"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": f"Ошибка: {str(e)}"})
 
@@ -481,7 +457,6 @@ def complete_profile():
 @app.route('/api/users')
 @teacher_required
 def get_all_users():
-    """Получение списка всех пользователей"""
     try:
         users = []
         for user_file in USERS_DIR.glob("*.json"):
@@ -494,7 +469,6 @@ def get_all_users():
                     'created_at': user_data.get('created_at'),
                     'last_login': user_data.get('last_login')
                 })
-        
         return jsonify({"success": True, "users": users})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -502,7 +476,6 @@ def get_all_users():
 @app.route('/api/users/create', methods=['POST'])
 @teacher_required
 def create_user():
-    """Создание нового пользователя (только для учителя)"""
     try:
         data = request.json
         username = data.get('username', '').strip()
@@ -512,14 +485,12 @@ def create_user():
         if not username or not password:
             return jsonify({"success": False, "error": "Заполните все поля"})
         
-        # Проверяем, не существует ли уже пользователь с таким именем
         for user_file in USERS_DIR.glob("*.json"):
             with open(user_file, 'r', encoding='utf-8') as f:
                 existing_user = json.load(f)
                 if existing_user.get('username') == username:
                     return jsonify({"success": False, "error": "Пользователь с таким логином уже существует"})
         
-        # Создаем пользователя
         if role == 'student':
             user_data = create_new_student(username, password)
         elif role == 'teacher':
@@ -535,147 +506,23 @@ def create_user():
             })
         else:
             return jsonify({"success": False, "error": "Ошибка создания пользователя"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": f"Ошибка: {str(e)}"})
 
 @app.route('/api/users/<user_id>', methods=['DELETE'])
 @teacher_required
 def delete_user(user_id):
-    """Удаление пользователя"""
     try:
         user_file = USERS_DIR / f"{user_id}.json"
         
         if not user_file.exists():
             return jsonify({"success": False, "error": "Пользователь не найден"})
         
-        # Не позволяем удалить самого себя
         if session.get('user_id') == user_id:
             return jsonify({"success": False, "error": "Нельзя удалить свой собственный аккаунт"})
         
         user_file.unlink()
         return jsonify({"success": True, "message": "Пользователь удален"})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-# =============================================================================
-# API ДЛЯ УПРАВЛЕНИЯ УЧЕНИКАМИ
-# =============================================================================
-
-@app.route('/api/students')
-@teacher_required
-def get_all_students():
-    """Получение списка всех учеников"""
-    try:
-        students = []
-        for user_file in USERS_DIR.glob("*.json"):
-            with open(user_file, 'r', encoding='utf-8') as f:
-                user_data = json.load(f)
-                if user_data.get('role') == 'student' and user_data.get('profile_complete', False):
-                    students.append({
-                        'user_id': user_data['user_id'],
-                        'username': user_data['username'],
-                        'student_data': user_data.get('student_data', {}),
-                        'created_at': user_data.get('created_at'),
-                        'last_login': user_data.get('last_login')
-                    })
-        
-        return jsonify({"success": True, "students": students})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/students/export')
-@teacher_required
-def export_students_data():
-    """Экспорт всех данных учеников"""
-    try:
-        import zipfile
-        import tempfile
-        
-        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-        
-        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-            for user_file in USERS_DIR.glob("*.json"):
-                with open(user_file, 'r', encoding='utf-8') as f:
-                    user_data = json.load(f)
-                    if user_data.get('role') == 'student':
-                        zipf.write(user_file, f"users/{user_file.name}")
-            
-            for student_file in STUDENTS_DIR.glob("*.json"):
-                zipf.write(student_file, f"students/{student_file.name}")
-            
-            # Добавляем прогресс учеников
-            for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
-                zipf.write(progress_file, f"progress/{progress_file.name}")
-        
-        temp_zip.close()
-        
-        return send_file(
-            temp_zip.name,
-            as_attachment=True,
-            download_name=f"students_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-            mimetype='application/zip'
-        )
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_user_id>')
-@teacher_required
-def get_student_details(student_user_id):
-    """Получение детальной информации об ученике"""
-    try:
-        user_data = load_user_data(student_user_id)
-        if not user_data or user_data.get('role') != 'student':
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        # Загружаем прогресс ученика
-        progress_data = {}
-        progress_file = STUDENT_PROGRESS_DIR / f"{user_data.get('student_data', {}).get('student_id', '')}.json"
-        if progress_file.exists():
-            with open(progress_file, 'r', encoding='utf-8') as f:
-                progress_data = json.load(f)
-        
-        return jsonify({
-            "success": True,
-            "student": {
-                'user_id': user_data['user_id'],
-                'username': user_data['username'],
-                'student_data': user_data.get('student_data', {}),
-                'created_at': user_data.get('created_at'),
-                'last_login': user_data.get('last_login'),
-                'rooms': user_data.get('student_data', {}).get('rooms', []),
-                'progress': progress_data
-            }
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/profile')
-@student_required
-def get_student_profile():
-    """Получение профиля ученика"""
-    try:
-        user_data = load_user_data(session['user_id'])
-        if not user_data:
-            return jsonify({"success": False, "error": "Пользователь не найден"})
-        
-        # Загружаем прогресс ученика
-        progress_data = {}
-        student_id = user_data.get('student_data', {}).get('student_id', '')
-        if student_id:
-            progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
-            if progress_file.exists():
-                with open(progress_file, 'r', encoding='utf-8') as f:
-                    progress_data = json.load(f)
-        
-        return jsonify({
-            "success": True,
-            "student_data": user_data.get('student_data', {}),
-            "profile_complete": user_data.get('profile_complete', False),
-            "user_id": session['user_id'],
-            "progress": progress_data
-        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -683,29 +530,106 @@ def get_student_profile():
 # ОСНОВНЫЕ ФУНКЦИИ СИСТЕМЫ
 # =============================================================================
 
+def cleanup_inactive_rooms():
+    """Очистка неактивных комнат"""
+    try:
+        current_time = time.time()
+        rooms_to_remove = []
+        
+        for room_id, last_active in room_last_activity.items():
+            if (current_time - last_active > ROOM_TIMEOUT and 
+                len(room_participants.get(room_id, [])) == 0):
+                rooms_to_remove.append(room_id)
+        
+        for room_id in rooms_to_remove:
+            try:
+                if room_id in room_dialogue:
+                    del room_dialogue[room_id]
+                if room_id in room_participants:
+                    del room_participants[room_id]
+                if room_id in room_student_data:
+                    del room_student_data[room_id]
+                if room_id in room_speech_data:
+                    del room_speech_data[room_id]
+                if room_id in room_ai_activated:
+                    del room_ai_activated[room_id]
+                if room_id in room_llm_mode:
+                    del room_llm_mode[room_id]
+                if room_id in room_teacher_speaking:
+                    del room_teacher_speaking[room_id]
+                if room_id in room_practice_active:
+                    del room_practice_active[room_id]
+                if room_id in room_current_question_index:
+                    del room_current_question_index[room_id]
+                if room_id in room_current_avatar:
+                    del room_current_avatar[room_id]
+                if room_id in room_llm_responses:
+                    del room_llm_responses[room_id]
+                if room_id in room_llm_pending_requests:
+                    del room_llm_pending_requests[room_id]
+                if room_id in room_last_activity:
+                    del room_last_activity[room_id]
+                
+                debug_log(f"✅ Очищена неактивная комната: {room_id}")
+            except Exception as e:
+                debug_log(f"⚠️ Ошибка очистки комнаты {room_id}: {e}")
+        
+        return len(rooms_to_remove)
+    except Exception as e:
+        debug_log(f"❌ Ошибка очистки комнат: {e}")
+        return 0
+
+def periodic_cleanup():
+    """Периодическая очистка неактивных комнат"""
+    try:
+        cleaned = cleanup_inactive_rooms()
+        if cleaned > 0:
+            debug_log(f"🧹 Периодическая очистка: удалено {cleaned} комнат")
+        
+        # Ограничение количества комнат в памяти
+        if len(room_participants) > MAX_ROOMS:
+            # Удаляем самые старые комнаты
+            rooms_sorted = sorted(room_last_activity.items(), key=lambda x: x[1])
+            rooms_to_remove = rooms_sorted[:len(room_participants) - MAX_ROOMS]
+            for room_id, _ in rooms_to_remove:
+                if len(room_participants.get(room_id, [])) == 0:
+                    try:
+                        # Очищаем комнату
+                        if room_id in room_dialogue:
+                            del room_dialogue[room_id]
+                        if room_id in room_participants:
+                            del room_participants[room_id]
+                        debug_log(f"🧹 Удалена старая комната для оптимизации: {room_id}")
+                    except Exception as e:
+                        debug_log(f"⚠️ Ошибка удаления старой комнаты: {e}")
+    except Exception as e:
+        debug_log(f"❌ Ошибка периодической очистки: {e}")
+    
+    # Повторяем каждые 10 минут
+    Timer(600, periodic_cleanup).start()
+
 def handle_disconnected_session(sid):
     """Безопасная обработка отключенных сессий"""
     try:
         for room_id, participants in room_participants.items():
             if sid in participants:
                 participants.remove(sid)
-                print(f"🔧 Удален отключенный участник {sid} из комнаты {room_id}")
+                debug_log(f"🔧 Удален отключенный участник {sid} из комнаты {room_id}")
                 emit('participants_update', {'count': len(participants)}, room=room_id)
                 
         for room_id, peers in room_peer_ids.items():
             if sid in peers:
                 del peers[sid]
-                print(f"🔧 Удален peer_id для отключенного участника {sid}")
-                
+                debug_log(f"🔧 Удален peer_id для отключенного участника {sid}")
     except Exception as e:
-        print(f"⚠️ Ошибка очистки отключенной сессии {sid}: {e}")
+        debug_log(f"⚠️ Ошибка очистки отключенной сессии {sid}: {e}")
 
 def setup_llm_manager():
-    """Настройка менеджера LLM с улучшенным callback"""
+    """Настройка менеджера LLM"""
     llm_manager.start()
     
     def global_llm_callback(request_id, response, room_id, original_request_id=None):
-        """Глобальный обработчик ответов от LLM с немедленной доставкой"""
+        """Глобальный обработчик ответов от LLM"""
         debug_log(f"Получен ответ для комнаты {room_id}: {response[:100]}...")
         
         target_request_id = original_request_id
@@ -716,7 +640,6 @@ def setup_llm_manager():
                     break
         
         if not target_request_id:
-            print(f"⚠️ Не найден исходный request_id для manager_id: {request_id}")
             target_request_id = f"unknown_{int(time.time() * 1000)}"
         
         room_llm_responses[room_id].append({
@@ -743,64 +666,81 @@ def setup_llm_manager():
                 if resp['request_id'] == target_request_id:
                     resp['delivered_via_websocket'] = True
                     break
-                    
         except Exception as e:
-            print(f"⚠️ Не удалось отправить через WebSocket: {e}. Ответ сохранен для polling.")
+            debug_log(f"⚠️ Не удалось отправить через WebSocket: {e}")
     
     llm_manager.register_room_callback('global', global_llm_callback)
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты с учетом типа (ученик или обычный)"""
-    try:
-        # ВСЕГДА создаем DialogueManager если его нет
-        if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            debug_log(f"Создан DialogueManager для комнаты {room_id}")
-        
-        # Определяем, является ли это комната ученика
-        is_student_room = False
-        student_data = None
-        
-        # Проверяем наличие данных ученика для этой комнаты
-        if room_id in room_student_data and room_student_data[room_id]:
-            is_student_room = True
-            student_data = room_student_data[room_id]
-            debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
+    """Быстрая инициализация комнаты с ограничением"""
+    with init_semaphore:
+        try:
+            # Обновляем время активности
+            room_last_activity[room_id] = time.time()
             
-            # Передаем данные ученика в DialogueManager
-            room_dialogue[room_id].set_student_data(student_data)
+            # Минимальная инициализация
+            if room_id not in room_ai_activated:
+                room_ai_activated[room_id] = False
             
-            # Если есть предмет, устанавливаем его
-            if 'subject' in student_data and student_data['subject']:
-                room_dialogue[room_id].current_subject = student_data['subject']
-                debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
-            else:
-                # Если предмет не указан, определяем из имени комнаты
-                if room_id.startswith('student_'):
-                    # Формат: student_предмет_имя_идентификатор
+            if room_id not in room_llm_mode:
+                room_llm_mode[room_id] = get_llm_mode()
+            
+            if room_id not in room_current_avatar:
+                room_current_avatar[room_id] = 'teacher'
+            
+            # Ленивая инициализация DialogueManager
+            if room_id not in room_dialogue:
+                room_dialogue[room_id] = None
+            
+            # Если это комната ученика, устанавливаем данные
+            if room_id in room_student_data and room_student_data[room_id]:
+                student_data = room_student_data[room_id]
+                debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
+                
+                # Создаем DialogueManager если нужно
+                if room_dialogue[room_id] is None:
+                    room_dialogue[room_id] = DialogueManager(socketio)
+                    room_dialogue[room_id].room_id = room_id
+                
+                room_dialogue[room_id].set_student_data(student_data)
+                
+                if 'subject' in student_data and student_data['subject']:
+                    room_dialogue[room_id].current_subject = student_data['subject']
+                    debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
+                elif room_id.startswith('student_'):
                     parts = room_id.split('_')
                     if len(parts) > 1:
                         room_dialogue[room_id].current_subject = parts[1]
                         debug_log(f"🔥 Предмет определен из имени комнаты: {parts[1]}")
-        
-        # Устанавливаем аватар
-        if room_id not in room_current_avatar:
-            room_current_avatar[room_id] = 'teacher'
-        
-        # Устанавливаем режим LLM
-        if room_dialogue[room_id]:
-            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-        
-        debug_log(f"✅ Инициализация завершена для комнаты {room_id} (ученик: {is_student_room})")
-        return True
-        
+            
+            # Устанавливаем режим LLM
+            if room_dialogue[room_id] is not None:
+                room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+            
+            debug_log(f"✅ Быстрая инициализация завершена для комнаты {room_id}")
+            return True
+        except Exception as e:
+            debug_log(f"❌ Ошибка инициализации комнаты {room_id}: {e}")
+            return False
+
+def delayed_full_init(room_id):
+    """Отложенная полная инициализация комнаты"""
+    time.sleep(1)  # Даем время на установление соединения
+    try:
+        if room_id in room_dialogue and room_dialogue[room_id] is None:
+            with init_semaphore:
+                room_dialogue[room_id] = DialogueManager(socketio)
+                room_dialogue[room_id].room_id = room_id
+                room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+                
+                # Устанавливаем данные ученика если есть
+                if room_id in room_student_data and room_student_data[room_id]:
+                    room_dialogue[room_id].set_student_data(room_student_data[room_id])
+                
+                debug_log(f"✅ Выполнена отложенная полная инициализация комнаты {room_id}")
     except Exception as e:
-        debug_log(f"❌ Ошибка инициализации комнаты {room_id}: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        debug_log(f"❌ Ошибка отложенной инициализации {room_id}: {e}")
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -839,7 +779,6 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     cleaned_text = clean_text_for_speech(text)
     
     if not cleaned_text.strip():
-        print(f"⚠️ Текст пуст после очистки: {text[:100]}...")
         return
         
     if is_teacher:
@@ -881,7 +820,7 @@ def text_to_speech(text, lang='ru'):
         mp3_fp.seek(0)
         return base64.b64encode(mp3_fp.read()).decode('utf-8')
     except Exception as e:
-        print(f"Error in text_to_speech: {e}")
+        debug_log(f"Error in text_to_speech: {e}")
         return None
 
 def save_student_data(student_data):
@@ -895,7 +834,6 @@ def save_student_data(student_data):
         if 'conference_id' not in student_data:
             conference_id = str(int(time.time() * 1000))
             student_data['conference_id'] = conference_id
-            debug_log(f"Создан идентификатор конференции для ученика {student_data.get('name')}: {conference_id}")
         
         student_data['last_updated'] = datetime.now().isoformat()
         
@@ -907,7 +845,7 @@ def save_student_data(student_data):
         
         return student_id
     except Exception as e:
-        print(f"Error saving student data: {e}")
+        debug_log(f"Error saving student data: {e}")
         return None
 
 def load_student_data(student_id):
@@ -922,7 +860,7 @@ def load_student_data(student_id):
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading student data: {e}")
+        debug_log(f"Error loading student data: {e}")
         return None
 
 def find_student_by_name(name):
@@ -935,7 +873,7 @@ def find_student_by_name(name):
                     return data
         return None
     except Exception as e:
-        print(f"Error finding student: {e}")
+        debug_log(f"Error finding student: {e}")
         return None
 
 def update_student_data(student_id, updates):
@@ -950,7 +888,7 @@ def update_student_data(student_id, updates):
         
         return save_student_data(current_data) is not None
     except Exception as e:
-        print(f"Error updating student data: {e}")
+        debug_log(f"Error updating student data: {e}")
         return False
 
 def create_student_conference(student_data, subject=None):
@@ -958,27 +896,22 @@ def create_student_conference(student_data, subject=None):
     try:
         conference_id = str(int(time.time() * 1000))
         
-        # Определяем предмет
         if subject:
             room_subject = subject
         elif 'subject' in student_data:
             room_subject = student_data['subject']
         else:
-            # По умолчанию первый предмет ученика
             room_subject = 'математика'
         
-        # Формируем room_id с предметом
         student_name = student_data.get('name', 'ученик').replace(' ', '_').lower()
         room_id = f"student_{room_subject}_{student_name}_{conference_id}"
         
-        # Сохраняем данные ученика для комнаты С ПРЕДМЕТОМ
         room_student_data[room_id] = {
             **student_data,
             'subject': room_subject,
             'conference_id': conference_id
         }
         
-        # Инициализируем комнату с ПРЕДМЕТОМ
         _fast_room_initialization(room_id)
         
         debug_log(f"Создана комната {room_id} для ученика {student_data.get('name')}, предмет: {room_subject}")
@@ -988,13 +921,12 @@ def create_student_conference(student_data, subject=None):
             'conference_url': f'/conference?room={room_id}',
             'student_data': room_student_data[room_id]
         }
-        
     except Exception as e:
         debug_log(f"❌ Ошибка создания студенческой конференции: {e}")
         return None
 
 def create_student_rooms(student_data):
-    """Автоматически создает комнаты для ученика с ОБЯЗАТЕЛЬНЫМ предметом"""
+    """Автоматически создает комнаты для ученика"""
     try:
         student_id = student_data.get('student_id')
         student_name = student_data.get('name')
@@ -1007,7 +939,6 @@ def create_student_rooms(student_data):
             conference_id = str(int(time.time() * 1000))
             student_data['conference_id'] = conference_id
         
-        # Предметы по умолчанию с русскими названиями
         subjects = [
             'математика', 'физика', 'химия', 'биология', 
             'история', 'обществознание', 'литература', 'русский язык', 
@@ -1017,20 +948,17 @@ def create_student_rooms(student_data):
         created_rooms = []
         
         for subject in subjects:
-            # Формируем понятный room_id
             room_name = f"student_{subject}_{student_name.replace(' ', '_').lower()}_{conference_id}"
             
-            # Сохраняем с предметом
             room_student_data[room_name] = {
                 'name': student_name,
                 'age': student_data.get('age'),
                 'education_level': student_data.get('education_level'),
-                'subject': subject,  # КРИТИЧЕСКИ ВАЖНО: Устанавливаем предмет
+                'subject': subject,
                 'student_id': student_id,
                 'conference_id': conference_id
             }
             
-            # Инициализируем DialogueManager для комнаты
             _fast_room_initialization(room_name)
             
             debug_log(f"Создана комната {room_name} для ученика {student_name}, предмет: {subject}")
@@ -1052,9 +980,8 @@ def create_student_rooms(student_data):
         
         debug_log(f"Создано {len(created_rooms)} комнат для ученика {student_name} с ID: {conference_id}")
         return True
-        
     except Exception as e:
-        print(f"❌ Ошибка создания комнат для ученика: {e}")
+        debug_log(f"❌ Ошибка создания комнат для ученика: {e}")
         return False
 
 # =============================================================================
@@ -1066,7 +993,6 @@ def initialize_student_progress(student_id, education_level):
     try:
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         
-        # Базовая структура прогресса
         progress_data = {
             "student_id": student_id,
             "education_level": education_level,
@@ -1075,7 +1001,6 @@ def initialize_student_progress(student_id, education_level):
             "subjects": {}
         }
         
-        # Загружаем структуру уроков для этого класса
         class_dir = LESSONS_STUDENTS_DIR / f"{education_level}_class"
         if class_dir.exists():
             for subject_dir in class_dir.iterdir():
@@ -1091,15 +1016,13 @@ def initialize_student_progress(student_id, education_level):
                         "progress_percent": 0
                     }
         
-        # Сохраняем прогресс
         with open(progress_file, 'w', encoding='utf-8') as f:
             json.dump(progress_data, f, ensure_ascii=False, indent=2)
         
-        print(f"✅ Инициализирован прогресс для ученика {student_id} ({education_level} класс)")
+        debug_log(f"✅ Инициализирован прогресс для ученика {student_id} ({education_level} класс)")
         return True
-        
     except Exception as e:
-        print(f"❌ Ошибка инициализации прогресс: {e}")
+        debug_log(f"❌ Ошибка инициализации прогресс: {e}")
         return False
 
 def update_student_lesson_progress(student_id, subject, lesson_id, completed=True):
@@ -1108,7 +1031,6 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         
         if not progress_file.exists():
-            # Создаем новый файл прогресса
             student_data = load_student_data(student_id)
             if student_data:
                 initialize_student_progress(student_id, student_data.get('education_level', '5'))
@@ -1118,7 +1040,6 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
         with open(progress_file, 'r', encoding='utf-8') as f:
             progress_data = json.load(f)
         
-        # Инициализируем прогресс по предмету если нужно
         if subject not in progress_data["subjects"]:
             progress_data["subjects"][subject] = {
                 "completed_lessons": [],
@@ -1128,7 +1049,6 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
                 "progress_percent": 0
             }
         
-        # Обновляем прогресс
         subject_progress = progress_data["subjects"][subject]
         
         if completed and lesson_id not in subject_progress["completed_lessons"]:
@@ -1136,7 +1056,6 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
             subject_progress["current_lesson"] = lesson_id
             subject_progress["last_accessed"] = datetime.now().isoformat()
             
-            # Обновляем общее количество уроков
             lesson_count = 0
             class_dir = LESSONS_STUDENTS_DIR / f"{progress_data.get('education_level', '5')}_class"
             if class_dir.exists():
@@ -1146,7 +1065,6 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
             
             subject_progress["total_lessons"] = lesson_count
         
-        # Сохраняем
         try:
             with open(progress_file, 'w', encoding='utf-8') as f:
                 json.dump(progress_data, f, ensure_ascii=False, indent=2)
@@ -1155,7 +1073,6 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
             debug_log(f"❌ Ошибка сохранения прогресса: {e}")
         
         return True
-        
     except Exception as e:
         debug_log(f"❌ Ошибка обновления прогресса: {e}")
         return False
@@ -1175,11 +1092,9 @@ def get_student_lessons_by_class(student_class):
                 lessons_by_subject[subject_name] = []
                 
                 for lesson_file in subject_dir.glob("*.txt"):
-                    # Извлекаем информацию об уроке из имени файла
                     lesson_name = lesson_file.stem
                     lesson_number = 0
                     
-                    # Пытаемся извлечь номер урока из имени файла
                     match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
                     if match:
                         lesson_number = int(match.group(1))
@@ -1196,13 +1111,11 @@ def get_student_lessons_by_class(student_class):
                     
                     lessons_by_subject[subject_name].append(lesson_data)
                 
-                # Сортируем уроки по номеру
                 lessons_by_subject[subject_name].sort(key=lambda x: x['lesson_number'])
         
         return lessons_by_subject
-        
     except Exception as e:
-        print(f"❌ Ошибка получения уроков по классу: {e}")
+        debug_log(f"❌ Ошибка получения уроков по классу: {e}")
         return {}
 
 def get_student_next_lesson(student_id, subject):
@@ -1220,23 +1133,19 @@ def get_student_next_lesson(student_id, subject):
         subject_progress = progress_data.get("subjects", {}).get(subject, {})
         completed_lessons = subject_progress.get("completed_lessons", [])
         
-        # Получаем все уроки по предмету
         lessons_by_subject = get_student_lessons_by_class(student_class)
         subject_lessons = lessons_by_subject.get(subject, [])
         
         if not subject_lessons:
             return None
         
-        # Ищем первый незавершенный урок
         for lesson in subject_lessons:
             if lesson['id'] not in completed_lessons:
                 return lesson
         
-        # Если все уроки завершены, возвращаем первый урок
         return subject_lessons[0] if subject_lessons else None
-        
     except Exception as e:
-        print(f"❌ Ошибка получения следующего урока: {e}")
+        debug_log(f"❌ Ошибка получения следующего урока: {e}")
         return None
 
 # =============================================================================
@@ -1262,17 +1171,11 @@ def handle_join_room(data):
     debug_log(f"Попытка присоединения к комнате {room_id}, peer_id: {peer_id}")
     
     try:
+        # Обновляем время активности
+        room_last_activity[room_id] = time.time()
+        
         if room_id not in room_participants:
             room_participants[room_id] = set()
-
-        if room_id not in room_ai_activated:
-            room_ai_activated[room_id] = False
-
-        if room_id not in room_llm_mode:
-            room_llm_mode[room_id] = get_llm_mode()
-
-        # 🔥 ВАЖНО: Инициализация перед join_room
-        _fast_room_initialization(room_id)
 
         join_room(room_id)
         room_participants[room_id].add(request.sid)
@@ -1282,11 +1185,8 @@ def handle_join_room(data):
                 room_peer_ids[room_id] = {}
             room_peer_ids[room_id][request.sid] = peer_id
         
-        if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            debug_log(f"Экстренное создание DialogueManager для {room_id} после join")
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+        # Быстрая инициализация
+        _fast_room_initialization(room_id)
         
         if peer_id:
             emit('participant_joined', {
@@ -1297,32 +1197,33 @@ def handle_join_room(data):
         try:
             emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
         except Exception as e:
-            print(f"⚠️ Ошибка отправки аватара: {e}")
+            debug_log(f"⚠️ Ошибка отправки аватара: {e}")
         
         if room_id in room_speech_data and room_speech_data[room_id]:
             try:
                 emit('speech_history', {'history': room_speech_data[room_id]}, to=request.sid)
             except Exception as e:
-                print(f"⚠️ Ошибка отправки истории: {e}")
+                debug_log(f"⚠️ Ошибка отправки истории: {e}")
         
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
-        # 🔥 ДЛЯ КОМНАТ УЧЕНИКОВ: Отправляем приветствие с предложением начать урок
-        if (room_id in room_student_data and 
-            room_student_data[room_id] and 
-            len(room_participants[room_id]) == 1):
+        # Отложенная полная инициализация для первой сессии
+        if len(room_participants[room_id]) == 1:
+            socketio.start_background_task(delayed_full_init, room_id)
             
-            student_data = room_student_data[room_id]
-            student_name = student_data.get('name', 'ученик')
-            subject = student_data.get('subject', 'предмету')
-            
-            # Проверяем, что это не демо-комната
-            if not room_id.startswith('demo_') and not room_id == 'default':
-                # Формируем приветствие как в демо-комнатах
+            # Приветствие для комнат учеников
+            if (room_id in room_student_data and 
+                room_student_data[room_id] and 
+                not room_id.startswith('demo_') and 
+                room_id != 'default'):
+                
+                student_data = room_student_data[room_id]
+                student_name = student_data.get('name', 'ученик')
+                subject = student_data.get('subject', 'предмету')
+                
                 welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
                 welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
                 
-                # Отправляем через WebSocket для отображения
                 socketio.emit('student_welcome_message', {
                     'room_id': room_id,
                     'student_name': student_name,
@@ -1331,25 +1232,23 @@ def handle_join_room(data):
                     'prompt_ready': True
                 }, room=room_id)
                 
-                # Озвучиваем приветствие с небольшой задержкой
                 socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message))
         
         elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
-            # Для обычных комнат
             greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
             socketio.start_background_task(lambda: delayed_welcome(room_id, greeting))
         
         debug_log(f"Успешное присоединение к комнате {room_id}, участников: {len(room_participants[room_id])}")
         
     except Exception as e:
-        print(f"❌ Критическая ошибка при присоединении к комнате {room_id}: {e}")
+        debug_log(f"❌ Критическая ошибка при присоединении к комнате {room_id}: {e}")
         try:
             emit('room_error', {
                 'room_id': room_id,
                 'error': f'Join room failed: {str(e)}'
             }, to=request.sid)
         except:
-            print("⚠️ Не удалось отправить ошибку - клиент уже отключен")
+            debug_log("⚠️ Не удалось отправить ошибку - клиент уже отключен")
 
 def delayed_welcome(room_id, message, delay=2):
     """Отправляет приветствие с задержкой"""
@@ -1358,13 +1257,11 @@ def delayed_welcome(room_id, message, delay=2):
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
-    """Отправляет текущий аватар комнаты"""
     room_id = data['room_id']
     emit('current_avatar', {'avatar_name': room_current_avatar[room_id]}, to=request.sid)
 
 @socketio.on('client_start_animation')
 def handle_client_start_animation(data):
-    """Обработчик команды запуска анимации от учителя"""
     room_id = data['room_id']
     avatar_name = data['avatar_name']
     debug_log(f"Получена команда запуска анимации для комнаты {room_id}, аватар: {avatar_name}")
@@ -1375,7 +1272,6 @@ def handle_client_start_animation(data):
 
 @socketio.on('avatar_changed')
 def handle_avatar_changed(data):
-    """Обработчик смены аватара"""
     room_id = data['room_id']
     avatar_name = data['avatar_name']
     debug_log(f"Смена аватара в комнате {room_id} на {avatar_name}")
@@ -1392,7 +1288,6 @@ def handle_generate_speech(data):
 
 @socketio.on('student_answer')
 def handle_student_answer(data):
-    """Обработчик ответов ученика во время практики с последовательной генерацией"""
     room_id = data['room_id']
     answer = data['answer']
     user_sid = request.sid
@@ -1481,7 +1376,6 @@ def handle_student_answer(data):
 
 @socketio.on('student_message')
 def handle_student_message(data):
-    """Обработчик сообщений от ученика через текстовое поле"""
     room_id = data['room_id']
     message = data['message']
     user_sid = request.sid
@@ -1505,11 +1399,13 @@ def handle_student_message(data):
 
 @socketio.on('recognized_speech')
 def handle_recognized_speech(data):
-    """Обработчик распознанной речи"""
     room_id = data['room_id']
     text = data['text']
     user_sid = request.sid
 
+    # Обновляем время активности
+    room_last_activity[room_id] = time.time()
+    
     if not room_ai_activated.get(room_id, False):
         return
         
@@ -1616,11 +1512,9 @@ def handle_recognized_speech(data):
                 
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
-            # 🔥 КРИТИЧЕСКИ ВАЖНОЕ ИСПРАВЛЕНИЕ: Если урок начался, но клиент не получил lesson_started — отправляем его
             if dialogue.is_lesson_started():
                 lesson_data = dialogue.get_selected_lesson()
                 if lesson_data and not lesson_data.get('lesson_started_emitted', False):
-                    # Помечаем, что событие отправлено
                     lesson_data['lesson_started_emitted'] = True
                     emit('lesson_started', {
                         'lesson_id': lesson_data['id'],
@@ -1630,7 +1524,6 @@ def handle_recognized_speech(data):
                     }, room=room_id)
                     debug_log(f"📢 ДОПОЛНИТЕЛЬНО отправлено 'lesson_started' для комнаты {room_id}")
                     
-                    # Отправляем первый абзац
                     first_paragraph = dialogue._get_next_paragraph()
                     if first_paragraph:
                         emit('speech_text', {
@@ -1668,7 +1561,7 @@ def handle_activate_ai_teacher(data):
         debug_log(f"AI-учитель успешно активирован в комнате {room_id}")
         
     except Exception as e:
-        print(f"❌ Ошибка активации AI-учителя: {e}")
+        debug_log(f"❌ Ошибка активации AI-учителя: {e}")
         emit('activate_ai_error', {
             'room_id': room_id,
             'error': f'Ошибка активации: {str(e)}'
@@ -1693,7 +1586,6 @@ def handle_set_llm_mode(data):
 
 @socketio.on('llm_response_ready')
 def handle_llm_response_ready(data):
-    """Обработчик готовых ответов от LLM (для асинхронной обработка)"""
     room_id = data['room_id']
     question = data['question']
     answer = data['answer']
@@ -1716,7 +1608,6 @@ def handle_llm_response_ready(data):
 
 @socketio.on('practice_started')
 def handle_practice_started(data):
-    """Обработчик начала фазы практики"""
     room_id = data['room_id']
     room_practice_active[room_id] = True
     room_current_question_index[room_id] = 0
@@ -1725,7 +1616,6 @@ def handle_practice_started(data):
 
 @socketio.on('practice_ended')
 def handle_practice_ended(data):
-    """Обработчик завершения фазы практики"""
     room_id = data['room_id']
     room_practice_active[room_id] = False
     room_current_question_index[room_id] = 0
@@ -1734,7 +1624,6 @@ def handle_practice_ended(data):
 
 @socketio.on('visualization_generated')
 def handle_visualization_generated(data):
-    """Обработчик готовых визуализаций - ТОЛЬКО SVG"""
     room_id = data['room_id']
     
     debug_log(f"Получена SVG инфографика для комнаты {room_id}: {data['topic'][:100]}...")
@@ -1749,7 +1638,6 @@ def handle_visualization_generated(data):
 
 @socketio.on('get_llm_status')
 def handle_get_llm_status(data):
-    """WebSocket обработчик получения статуса LLM"""
     room_id = data['room_id']
     
     if room_id in room_dialogue:
@@ -1761,7 +1649,6 @@ def handle_get_llm_status(data):
 
 @socketio.on('set_llm_priority')
 def handle_set_llm_priority(data):
-    """WebSocket установка приоритета"""
     room_id = data['room_id']
     priority = data['priority']
     
@@ -1788,7 +1675,6 @@ def handle_set_llm_priority(data):
 
 @socketio.on('get_llm_priority_status')
 def handle_get_llm_priority_status(data):
-    """WebSocket получение статуса приоритета"""
     room_id = data['room_id']
     
     if room_id in room_dialogue:
@@ -1800,7 +1686,6 @@ def handle_get_llm_priority_status(data):
 
 @socketio.on('async_llm_request')
 def handle_async_llm_request(data):
-    """Обработчик асинхронных запросов к LLM с улучшенным отслеживанием"""
     room_id = data['room_id']
     prompt = data['prompt']
     system_prompt = data.get('system_prompt', '')
@@ -1845,7 +1730,6 @@ def handle_async_llm_request(data):
 
 @socketio.on('llm_async_response')
 def handle_llm_async_response(data):
-    """Обработчик асинхронных ответов от LLM"""
     room_id = data['room_id']
     response = data['response']
     request_id = data['request_id']
@@ -1868,7 +1752,6 @@ def handle_llm_async_response(data):
 
 @socketio.on('generate_visualization')
 def handle_generate_visualization(data):
-    """Обработчик запроса генерации инфографики - НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ SVG"""
     room_id = data['room_id']
     topic = data.get('topic', '')
     context = data.get('context', '')
@@ -1878,7 +1761,6 @@ def handle_generate_visualization(data):
     
     debug_log(f"WebSocket генерация SVG инфографики для комнаты {room_id}: {topic[:100]}...")
     
-    # НЕМЕДЛЕННАЯ ГЕНЕРАЦИЯ И ОТПРАВКА SVG
     try:
         from llm import LLMIntegration
         llm = LLMIntegration()
@@ -1886,7 +1768,6 @@ def handle_generate_visualization(data):
         result = llm.generate_infographic(topic, context)
         svg_code = result["svg_code"] if result and result.get("success") else generate_svg_code(topic, context)
         
-        # НЕМЕДЛЕННО отправляем инфографику
         emit('visualization_generated', {
             'room_id': room_id,
             'topic': topic,
@@ -1899,7 +1780,6 @@ def handle_generate_visualization(data):
         
     except Exception as e:
         debug_log(f"❌ Ошибка немедленной генерации SVG инфографики: {e}")
-        # Fallback
         emit('visualization_generated', {
             'room_id': room_id,
             'topic': topic,
@@ -1957,11 +1837,9 @@ def conference():
                          lesson_id=lesson_id)
 
 def add_visualization_to_queue(room_id, topic, context):
-    """Добавляет инфографику в очередь для комнаты - ТОЛЬКО SVG"""
     if room_id not in room_visualization_queue:
         room_visualization_queue[room_id] = []
     
-    # Генерируем только SVG инфографику
     svg_code = generate_svg_code(topic, context)
     
     visualization_data = {
@@ -1982,7 +1860,6 @@ def add_visualization_to_queue(room_id, topic, context):
 
 @app.route('/api/poll_visualization', methods=['POST', 'GET'])
 def poll_visualization():
-    """Endpoint для polling визуализаций - ТОЛЬКО SVG"""
     try:
         if request.method == 'POST':
             data = request.json
@@ -2013,13 +1890,11 @@ def poll_visualization():
             "processed": False,
             "queue_length": len(room_visualization_queue.get(room_id, []))
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/visualization_queue_status', methods=['GET'])
 def visualization_queue_status():
-    """Статус очереди визуализаций - ТОЛЬКО SVG"""
     room_id = request.args.get('room_id', 'default')
     
     return jsonify({
@@ -2031,7 +1906,6 @@ def visualization_queue_status():
     })
 
 def generate_svg_code(topic: str, context: str = "") -> str:
-    """Генерация SVG инфографики через LLM"""
     debug_log(f"Генерация SVG инфографики для: {topic[:100]}...")
     
     try:
@@ -2047,11 +1921,9 @@ def generate_svg_code(topic: str, context: str = "") -> str:
             return svg_code
         else:
             debug_log("❌ LLM не вернул SVG инфографику")
-            
     except Exception as e:
-        print(f"❌ Ошибка генерации SVG инфографики: {e}")
+        debug_log(f"❌ Ошибка генерации SVG инфографики: {e}")
     
-    # Fallback - простая SVG схема
     return f'''
 <svg width="600" height="300" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%" height="100%" fill="#f8fafc"/>
@@ -2066,7 +1938,6 @@ def generate_svg_code(topic: str, context: str = "") -> str:
 
 @app.route('/api/generate_diagram', methods=['POST'])
 def generate_diagram():
-    """Генерация инфографики через LLM - ТОЛЬКО SVG"""
     try:
         data = request.json
         topic = data.get('topic', '')
@@ -2084,13 +1955,11 @@ def generate_diagram():
             "queue_position": len(room_visualization_queue.get(room_id, [])),
             "topic": topic
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['POST'])
 def set_llm_priority_route():
-    """Установка приоритета моделей LLM"""
     try:
         data = request.json
         priority = data.get('priority')
@@ -2111,13 +1980,11 @@ def set_llm_priority_route():
             })
         else:
             return jsonify({"success": False, "error": "Failed to save priority"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['GET'])
 def get_llm_priority_route():
-    """Получение текущего приоритета моделей LLM"""
     try:
         priority = get_llm_priority()
         return jsonify({
@@ -2129,7 +1996,6 @@ def get_llm_priority_route():
 
 @app.route('/api/llm/priority_status')
 def get_llm_priority_status():
-    """Получение статуса приоритетов"""
     room_id = request.args.get('room_id', 'default')
     
     if room_id in room_dialogue:
@@ -2144,7 +2010,6 @@ def get_llm_priority_status():
 
 @app.route('/api/llm/available_priorities')
 def get_available_priorities():
-    """Получение доступных приоритетов"""
     return jsonify({
         "success": True,
         "priorities": [
@@ -2173,7 +2038,6 @@ def get_available_priorities():
 
 @app.route('/api/llm/status')
 def get_llm_status():
-    """Получение статуса LLM моделей"""
     room_id = request.args.get('room_id', 'default')
     
     if room_id in room_dialogue:
@@ -2188,7 +2052,6 @@ def get_llm_status():
 
 @app.route('/api/llm/local_status')
 def get_local_llm_status():
-    """Получение статуса локальной модели"""
     try:
         local_llm = llm_manager.local_llm
         status = local_llm.get_status()
@@ -2205,7 +2068,6 @@ def get_local_llm_status():
 
 @app.route('/api/llm_manager/status')
 def get_llm_manager_status():
-    """Получение статуса менеджера LLM"""
     try:
         status = llm_manager.get_status()
         return jsonify({
@@ -2217,7 +2079,6 @@ def get_llm_manager_status():
 
 @app.route('/api/llm/poll_response', methods=['POST'])
 def poll_llm_response():
-    """Улучшенный polling endpoint для получения ответов от LLM"""
     try:
         data = request.json
         room_id = data.get('room_id', 'default')
@@ -2252,13 +2113,11 @@ def poll_llm_response():
             "queue_size": len(room_llm_responses.get(room_id, [])),
             "pending_requests": len(room_llm_pending_requests.get(room_id, {}))
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/clear_queue', methods=['POST'])
 def clear_llm_queue():
-    """Очистка очереди ответов LLM"""
     try:
         data = request.json
         room_id = data.get('room_id', 'default')
@@ -2278,7 +2137,6 @@ def clear_llm_queue():
 
 @app.route('/api/llm/model', methods=['POST'])
 def set_llm_model():
-    """Установка модели LLM для комнаты"""
     try:
         data = request.json
         model = data.get('model')
@@ -2292,13 +2150,11 @@ def set_llm_model():
             return jsonify({"success": True, "model": model, "room": room_id})
         
         return jsonify({"success": False, "error": "Room not found"})
-    
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/models', methods=['GET'])
 def get_llm_models():
-    """Получение списка доступных моделей LLM"""
     models = [
         {"id": "llama", "name": "Llama 3.3 8B", "description": "Мощная и быстрая модель от Meta", "provider": "openrouter"},
         {"id": "llama3", "name": "Llama 3.3 8B Instruct", "description": "Инструктивная версия Llama 3.3", "provider": "openrouter"},
@@ -2310,7 +2166,6 @@ def get_llm_models():
 
 @app.route('/api/config/llm_mode', methods=['GET'])
 def get_llm_mode_api():
-    """Получение текущего режима работы LLM"""
     try:
         config = load_config()
         return jsonify({
@@ -2323,7 +2178,6 @@ def get_llm_mode_api():
 
 @app.route('/api/config/llm_mode', methods=['POST'])
 def set_llm_mode_api():
-    """Установка режима работы LLM"""
     try:
         data = request.json
         mode = data.get('mode')
@@ -2349,13 +2203,11 @@ def set_llm_mode_api():
             })
         else:
             return jsonify({"success": False, "error": "Failed to save config"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/knowledge/stats', methods=['GET'])
 def get_knowledge_stats():
-    """Получение статистики базы знаний для комнаты"""
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
@@ -2373,7 +2225,6 @@ def get_knowledge_stats():
 
 @app.route('/api/knowledge/search', methods=['GET'])
 def search_knowledge():
-    """Поиск в базе знаний"""
     room_id = request.args.get('room_id', 'default')
     query = request.args.get('query', '')
     max_results = int(request.args.get('max_results', 5))
@@ -2395,7 +2246,6 @@ def search_knowledge():
 
 @app.route('/api/knowledge/llm_answers', methods=['GET'])
 def get_llm_answers():
-    """Получение списка ответов LLM для предмета"""
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
@@ -2413,25 +2263,20 @@ def get_llm_answers():
 
 @app.route('/api/lesson_content/<lesson_id>')
 def get_lesson_content(lesson_id):
-    """Получение содержания урока"""
     try:
-        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА ПОИСКА УРОКОВ В НОВОЙ СТРУКТУРЕ ПАПОК
         possible_paths = []
         
-        # Проверяем уроки для всех классов
         for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
             lesson_file = class_dir / f"{lesson_id}.txt"
             if lesson_file.exists():
                 possible_paths.append(lesson_file)
             
-            # Проверяем в подпапках предметов
             for subject_dir in class_dir.iterdir():
                 if subject_dir.is_dir():
                     lesson_file = subject_dir / f"{lesson_id}.txt"
                     if lesson_file.exists():
                         possible_paths.append(lesson_file)
         
-        # Другие папки
         possible_paths.extend([
             LESSONS_DEMO_DIR / f"{lesson_id}.txt",
             LESSONS_GENERATED_DIR / f"{lesson_id}.txt",
@@ -2484,17 +2329,14 @@ def get_lesson_content(lesson_id):
             "paragraph_count": len(paragraphs),
             "file_path": str(lesson_file.relative_to(LESSONS_DIR))
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/lessons')
 def get_available_lessons():
-    """Получение списка доступных уроков"""
     try:
         lessons = {}
         
-        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Загружаем уроки из всех папок
         lesson_dirs = [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]
         
         for lesson_dir in lesson_dirs:
@@ -2508,7 +2350,6 @@ def get_available_lessons():
                     if subject not in lessons:
                         lessons[subject] = []
                     
-                    # Определяем тип урока по папке
                     if lesson_dir == LESSONS_DEMO_DIR:
                         lesson_type = "demo"
                     elif lesson_dir == LESSONS_STUDENTS_DIR:
@@ -2526,18 +2367,16 @@ def get_available_lessons():
                         'full_path': str(lesson_file)
                     })
                 except Exception as e:
-                    print(f"Ошибка загрузки урока {lesson_file}: {e}")
+                    debug_log(f"Ошибка загрузки урока {lesson_file}: {e}")
         
         return jsonify({
             "success": True,
             "lessons": lessons
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 def _detect_subject(filename: str) -> str:
-    """Определяет предмет по названию файла"""
     filename_lower = filename.lower()
     if any(word in filename_lower for word in ['math', 'математика', 'алгебра', 'геометрия']):
         return "математика"
@@ -2560,7 +2399,6 @@ def _detect_subject(filename: str) -> str:
 
 @app.route('/api/practice_content/<lesson_id>')
 def get_practice_content(lesson_id):
-    """Получение практических заданий для урока"""
     try:
         practice_file = PRACTICE_DIR / f"{lesson_id}.json"
         if not practice_file.exists():
@@ -2575,13 +2413,11 @@ def get_practice_content(lesson_id):
             'content': content,
             'question_count': len(content.get('questions', []))
         })
-        
     except Exception as e:
         return jsonify({"error": str(e), "success": False}), 500
 
 @app.route('/api/practice_files')
 def get_practice_files():
-    """Получение списка файлов практики"""
     try:
         practice_files = []
         for practice_file in PRACTICE_DIR.glob("*.json"):
@@ -2595,13 +2431,11 @@ def get_practice_files():
             "success": True,
             "files": practice_files
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/practice_txt_files')
 def get_practice_txt_files():
-    """Получение списка TXT файлов практики"""
     try:
         txt_files = []
         for txt_file in PRACTICE_DIR.glob("*.txt"):
@@ -2616,13 +2450,11 @@ def get_practice_txt_files():
             "files": txt_files,
             "total_files": len(txt_files)
         })
-        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/upload_practice', methods=['POST'])
 def upload_practice():
-    """Загрузка файла практики"""
     try:
         if 'file' not in request.files:
             return jsonify({"success": False, "error": "No file provided"})
@@ -2642,13 +2474,11 @@ def upload_practice():
             })
         else:
             return jsonify({"success": False, "error": "Invalid file type. Only JSON allowed"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/delete_practice/<filename>')
 def delete_practice(filename):
-    """Удаление файла практики"""
     try:
         practice_file = PRACTICE_DIR / filename
         if not practice_file.exists():
@@ -2659,13 +2489,11 @@ def delete_practice(filename):
             "success": True,
             "message": f"File {filename} deleted successfully"
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/add_knowledge', methods=['POST'])
 def add_knowledge():
-    """Добавление знаний в базу"""
     try:
         data = request.json
         subject = data.get('subject', 'общее')
@@ -2707,13 +2535,11 @@ def add_knowledge():
             json.dump(knowledge_data, f, ensure_ascii=False, indent=2)
         
         return jsonify({"success": True, "subject": subject, "added_items": len(lines)})
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/add_lesson', methods=['POST'])
 def add_lesson():
-    """Добавление нового урока"""
     try:
         data = request.json
         subject = data.get('subject', 'общее')
@@ -2724,11 +2550,9 @@ def add_lesson():
         if not title or not content:
             return jsonify({"success": False, "error": "Title and content are required"})
         
-        # 🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Сохраняем в соответствующую папку класса
         if class_level == 'demo':
             lesson_dir = LESSONS_DEMO_DIR
         else:
-            # Создаем папку класса и предмета если их нет
             class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
             class_dir.mkdir(parents=True, exist_ok=True)
             
@@ -2743,13 +2567,11 @@ def add_lesson():
             f.write(content)
         
         return jsonify({"success": True, "filename": filename, "subject": subject, "title": title, "class_level": class_level})
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/add_practice', methods=['POST'])
 def add_practice():
-    """Добавление практических заданий"""
     try:
         data = request.json
         lesson_id = data.get('lesson_id', '')
@@ -2764,13 +2586,11 @@ def add_practice():
             json.dump(practice_data, f, ensure_ascii=False, indent=2)
         
         return jsonify({"success": True, "lesson_id": lesson_id, "question_count": len(practice_data.get('questions', []))})
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/download_knowledge')
 def download_knowledge():
-    """Скачивание базы знаний"""
     subject = request.args.get('subject', 'обществознание')
     knowledge_file = MATERIALS_DIR / f"{subject}_knowledge.json"
     llm_answers_file = MATERIALS_DIR / f"{subject}_llm_answers.json"
@@ -2800,12 +2620,18 @@ def download_knowledge():
 
 @app.route('/api/download_lessons')
 def download_lessons():
-    """Скачивание всех уроков"""
     lesson_files = []
     for lesson_dir in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]:
         if lesson_dir.exists():
-            for lesson_file in lesson_dir.glob("*.txt"):
-                lesson_files.append(lesson_file)
+            if lesson_dir == LESSONS_STUDENTS_DIR:
+                for class_folder in lesson_dir.glob("*_class"):
+                    if class_folder.is_dir():
+                        for subject_folder in class_folder.iterdir():
+                            if subject_folder.is_dir():
+                                lesson_files.extend(subject_folder.glob("*.txt"))
+            else:
+                for lesson_file in lesson_dir.glob("*.txt"):
+                    lesson_files.append(lesson_file)
     
     if not lesson_files:
         return jsonify({"success": False, "error": "Уроки не найдены"})
@@ -2817,11 +2643,9 @@ def download_lessons():
     
     with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
         for lesson_file in lesson_files:
-            # Сохраняем с информацией о типу урока в пути
             if lesson_file.parent == LESSONS_DEMO_DIR:
                 zip_path = f"demo/{lesson_file.name}"
             elif lesson_file.parent == LESSONS_STUDENTS_DIR:
-                # Сохраняем структуру классов
                 rel_path = lesson_file.relative_to(LESSONS_STUDENTS_DIR)
                 zip_path = f"students/{rel_path}"
             elif lesson_file.parent == LESSONS_GENERATED_DIR:
@@ -2841,7 +2665,6 @@ def download_lessons():
 
 @app.route('/api/download_practice')
 def download_practice():
-    """Скачивание всех практических заданий"""
     if not any(PRACTICE_DIR.iterdir()):
         return jsonify({"success": False, "error": "Практические задания не найдены"})
     
@@ -2865,7 +2688,6 @@ def download_practice():
 
 @app.route('/api/download_practice_txt')
 def download_practice_txt():
-    """Скачивание практических заданий в текстовом формате"""
     try:
         practice_txt_files = list(PRACTICE_DIR.glob("*.txt"))
         
@@ -2889,13 +2711,11 @@ def download_practice_txt():
             download_name="ai_teacher_practice_txt.zip",
             mimetype='application/zip'
         )
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/config/keys', methods=['GET'])
 def get_api_keys():
-    """Получение текущих API ключей"""
     try:
         config = load_config()
         return jsonify({
@@ -2910,7 +2730,6 @@ def get_api_keys():
 
 @app.route('/api/config/keys', methods=['POST'])
 def set_api_key():
-    """Установка API ключа"""
     try:
         data = request.json
         provider = data.get('provider')
@@ -2932,13 +2751,11 @@ def set_api_key():
             })
         else:
             return jsonify({"success": False, "error": "Failed to update API key"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/config/test', methods=['POST'])
 def test_api_key():
-    """Тестирование API ключа"""
     try:
         data = request.json
         provider = data.get('provider')
@@ -2985,7 +2802,6 @@ def test_api_key():
                 "message": f"Ключ {provider} может быть неверным (код: {response.status_code})",
                 "valid": False
             })
-            
     except Exception as e:
         return jsonify({
             "success": True,
@@ -2995,7 +2811,6 @@ def test_api_key():
 
 @app.route('/api/force_visualization', methods=['POST'])
 def force_visualization():
-    """Принудительная генерация SVG инфографики для тестирования"""
     try:
         data = request.json
         room_id = data.get('room_id', 'default')
@@ -3012,13 +2827,11 @@ def force_visualization():
             "topic": topic,
             "queue_length": len(room_visualization_queue.get(room_id, []))
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/health')
 def health_check():
-    """Проверка здоровья системы"""
     try:
         local_status = llm_manager.local_llm.get_status()
         openrouter_available = bool(get_api_key('openrouter'))
@@ -3048,7 +2861,6 @@ def health_check():
 
 @app.route('/api/llm/debug_openrouter')
 def debug_openrouter():
-    """Диагностика проблем с OpenRouter"""
     try:
         from llm import LLMIntegration
         llm = LLMIntegration()
@@ -3070,7 +2882,6 @@ def debug_openrouter():
             "success": True,
             "status": status
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3081,7 +2892,6 @@ def debug_openrouter():
 @app.route('/api/keys/status', methods=['GET'])
 @teacher_required
 def get_keys_status():
-    """Получение статуса API ключей"""
     try:
         key_manager = get_key_manager()
         stats = key_manager.get_usage_stats()
@@ -3095,7 +2905,6 @@ def get_keys_status():
 @app.route('/api/keys/add', methods=['POST'])
 @teacher_required
 def add_api_key_route():
-    """Добавление нового API ключа"""
     try:
         data = request.json
         api_key = data.get('api_key')
@@ -3122,7 +2931,6 @@ def add_api_key_route():
 @app.route('/api/keys/set_reset_time', methods=['POST'])
 @teacher_required
 def set_reset_time():
-    """Установка времени сброса"""
     try:
         data = request.json
         reset_time = data.get('reset_time')
@@ -3146,7 +2954,6 @@ def set_reset_time():
 @app.route('/api/keys/force_reset', methods=['POST'])
 @teacher_required
 def force_reset_keys():
-    """Принудительный сброс всех счетчиков"""
     try:
         key_manager = get_key_manager()
         key_manager.force_reset_all()
@@ -3161,7 +2968,6 @@ def force_reset_keys():
 @app.route('/api/keys/upload', methods=['POST'])
 @teacher_required
 def upload_keys_file():
-    """Загрузка ключей из TXT файла"""
     try:
         if 'file' not in request.files:
             return jsonify({"success": False, "error": "No file provided"})
@@ -3189,7 +2995,6 @@ def upload_keys_file():
 @app.route('/api/keys/set_model', methods=['POST'])
 @teacher_required
 def set_openrouter_model():
-    """Установка модели OpenRouter"""
     try:
         data = request.json
         model = data.get('model')
@@ -3213,7 +3018,6 @@ def set_openrouter_model():
 @app.route('/api/keys/toggle', methods=['POST'])
 @teacher_required
 def toggle_key_active():
-    """Включение/выключение ключа"""
     try:
         data = request.json
         key_name = data.get('key_name')
@@ -3239,7 +3043,6 @@ def toggle_key_active():
 @app.route('/api/keys/set_limit', methods=['POST'])
 @teacher_required
 def set_key_limit():
-    """Установка лимита для ключа"""
     try:
         data = request.json
         key_name = data.get('key_name')
@@ -3265,7 +3068,6 @@ def set_key_limit():
 @app.route('/api/keys/delete', methods=['POST'])
 @teacher_required
 def delete_key():
-    """Удаление ключа"""
     try:
         data = request.json
         key_name = data.get('key_name')
@@ -3289,7 +3091,6 @@ def delete_key():
 @app.route('/api/keys/advanced_stats', methods=['GET'])
 @teacher_required
 def get_keys_advanced_stats():
-    """Расширенная статистика ключей"""
     try:
         key_manager = get_key_manager()
         stats = key_manager.get_usage_stats()
@@ -3303,7 +3104,6 @@ def get_keys_advanced_stats():
 
 @app.route('/api/student/save', methods=['POST'])
 def save_student():
-    """Сохранение данных ученика с автоматическим созданием комнат"""
     try:
         data = request.json
         student_data = {
@@ -3351,13 +3151,11 @@ def save_student():
             return jsonify(response_data)
         else:
             return jsonify({"success": False, "error": "Ошибка сохранения данных"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/student/<student_id>')
 def get_student(student_id):
-    """Получение данных ученика"""
     try:
         student_data = load_student_data(student_id)
         if student_data:
@@ -3369,7 +3167,6 @@ def get_student(student_id):
 
 @app.route('/api/student/<student_id>/update', methods=['POST'])
 def update_student(student_id):
-    """Обновление данных ученика"""
     try:
         data = request.json
         if update_student_data(student_id, data):
@@ -3381,7 +3178,6 @@ def update_student(student_id):
 
 @app.route('/api/student/<student_id>/rooms')
 def get_student_rooms(student_id):
-    """Получение списка комнат ученика"""
     try:
         student_data = load_student_data(student_id)
         if not student_data:
@@ -3401,7 +3197,6 @@ def get_student_rooms(student_id):
 
 @app.route('/api/student/<student_id>/room/<subject>')
 def get_student_room(student_id, subject):
-    """Получение конкретной комнаты ученика по предмету"""
     try:
         student_data = load_student_data(student_id)
         if not student_data:
@@ -3423,13 +3218,11 @@ def get_student_room(student_id, subject):
             })
         else:
             return jsonify({"success": False, "error": f"Комната для предмета {subject} не найдена"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/student/<student_id>/lessons')
 def get_student_lessons(student_id):
-    """Получение истории уроков ученика"""
     try:
         student_data = load_student_data(student_id)
         if not student_data:
@@ -3447,7 +3240,6 @@ def get_student_lessons(student_id):
 
 @app.route('/api/student/<student_id>/add-lesson', methods=['POST'])
 def add_student_lesson(student_id):
-    """Добавление урока в историю ученика"""
     try:
         data = request.json
         student_data = load_student_data(student_id)
@@ -3474,14 +3266,12 @@ def add_student_lesson(student_id):
             return jsonify({"success": True, "message": "Урок добавлен в историю"})
         else:
             return jsonify({"success": False, "error": "Ошибка сохранения"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/student/create-conference', methods=['POST'])
 @student_required  
 def create_student_conference_route():
-    """Создает конференцию для ученика с указанием предмета"""
     try:
         data = request.json
         subject = data.get('subject')
@@ -3502,7 +3292,6 @@ def create_student_conference_route():
             })
         else:
             return jsonify({"success": False, "error": "Ошибка создания конференции"})
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3513,7 +3302,6 @@ def create_student_conference_route():
 @app.route('/api/student/lessons-by-class', methods=['GET'])
 @student_required
 def get_lessons_by_class():
-    """Получение уроков для класса ученика"""
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data or not user_data.get('student_data'):
@@ -3521,10 +3309,8 @@ def get_lessons_by_class():
         
         student_class = user_data['student_data'].get('education_level', '5')
         
-        # Получаем уроки для этого класса
         lessons_by_subject = get_student_lessons_by_class(student_class)
         
-        # Получаем прогресс ученика
         student_id = user_data['student_data'].get('student_id')
         progress_data = {}
         if student_id:
@@ -3533,7 +3319,6 @@ def get_lessons_by_class():
                 with open(progress_file, 'r', encoding='utf-8') as f:
                     progress_data = json.load(f)
         
-        # Формируем ответ с прогрессом
         result = {}
         for subject, lessons in lessons_by_subject.items():
             subject_progress = progress_data.get("subjects", {}).get(subject, {})
@@ -3541,10 +3326,8 @@ def get_lessons_by_class():
             total_lessons = len(lessons)
             completed_count = len(completed_lessons)
             
-            # Сортируем уроки по номеру
             sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
             
-            # Форматируем уроки для ответа
             formatted_lessons = []
             for lesson in sorted_lessons:
                 is_completed = lesson['id'] in completed_lessons
@@ -3559,7 +3342,6 @@ def get_lessons_by_class():
                     'type': 'student'
                 })
             
-            # Находим следующий урок
             next_lesson = None
             for lesson in formatted_lessons:
                 if not lesson['completed']:
@@ -3585,7 +3367,6 @@ def get_lessons_by_class():
 @app.route('/api/lesson/start-specific', methods=['POST'])
 @student_required
 def start_specific_lesson():
-    """Начало конкретного урока по ID"""
     try:
         data = request.json
         lesson_id = data.get('lesson_id')
@@ -3599,12 +3380,10 @@ def start_specific_lesson():
         
         dialogue = room_dialogue[room_id]
         
-        # Загружаем данные ученика
         user_data = load_user_data(session['user_id'])
         if user_data and user_data.get('student_data'):
             dialogue.set_student_data(user_data['student_data'])
         
-        # Ищем урок во всех предметах
         selected_lesson = None
         for subject_lessons in dialogue.lessons.values():
             for lesson in subject_lessons:
@@ -3617,27 +3396,22 @@ def start_specific_lesson():
         if not selected_lesson:
             return jsonify({"success": False, "error": "Урок не найден"})
         
-        # Устанавливаем выбранный урок
         dialogue.selected_lesson = selected_lesson
         dialogue.current_subject = selected_lesson.get('subject')
         dialogue.lesson_started = True
         dialogue.current_state = "lesson_reading"
         
-        # Загружаем содержание урока
         lesson_content = dialogue._load_lesson_content(selected_lesson.get('file_path'))
         dialogue.lesson_content = lesson_content
         dialogue.current_paragraph = 0
         
-        # Инициализируем базу знаний
         if dialogue.current_subject:
             from knowledge.knowledge_base import KnowledgeBase
             dialogue.knowledge_base = KnowledgeBase(dialogue.current_subject)
         
-        # Очищаем историю диалога
         dialogue.conversation_history = []
         dialogue.conversation_context = []
         
-        # Обновляем прогресс ученика
         student_id = user_data.get('student_data', {}).get('student_id')
         if student_id:
             update_student_lesson_progress(
@@ -3658,14 +3432,12 @@ def start_specific_lesson():
             },
             "first_paragraph": lesson_content[0] if lesson_content else None
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/student/progress', methods=['GET'])
 @student_required
 def get_student_progress_api():
-    """Получение прогресса ученика по всем предметам"""
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data or not user_data.get('student_data'):
@@ -3674,17 +3446,14 @@ def get_student_progress_api():
         student_id = user_data['student_data'].get('student_id')
         student_class = user_data['student_data'].get('education_level', '5')
         
-        # Загружаем прогресс из файла
         progress_data = {}
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         if progress_file.exists():
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
         
-        # Получаем уроки для класса
         lessons_by_subject = get_student_lessons_by_class(student_class)
         
-        # Формируем результат с прогрессом по каждому предмету
         result = {
             'student_id': student_id,
             'student_class': student_class,
@@ -3693,7 +3462,6 @@ def get_student_progress_api():
         }
         
         for subject_name in lessons_by_subject.keys():
-            # Прогресс из файла
             subject_progress = progress_data.get("subjects", {}).get(subject_name, {
                 "completed_lessons": [],
                 "current_lesson": None,
@@ -3705,7 +3473,6 @@ def get_student_progress_api():
             completed_count = len(subject_progress.get("completed_lessons", []))
             total_lessons = len(lessons_by_subject.get(subject_name, []))
             
-            # Находим следующий урок
             next_lesson = None
             subject_lessons = lessons_by_subject.get(subject_name, [])
             for lesson in subject_lessons:
@@ -3722,7 +3489,6 @@ def get_student_progress_api():
                 'next_lesson': next_lesson
             }
         
-        # Общая статистика
         total_completed = sum(subj['completed_lessons'] for subj in result['subjects'].values())
         total_lessons = sum(subj['total_lessons'] for subj in result['subjects'].values())
         
@@ -3734,15 +3500,12 @@ def get_student_progress_api():
         }
         
         return jsonify({"success": True, "progress": result})
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ ИСПРАВЛЕННЫЙ API: Получение структуры папок уроков
 @app.route('/api/lessons/structure', methods=['GET'])
 @teacher_required
 def get_lessons_structure():
-    """Получение структуры папок уроков с исправленной сериализацией"""
     try:
         structure = {
             'demo': [],
@@ -3750,7 +3513,6 @@ def get_lessons_structure():
             'students': {}
         }
         
-        # Демо уроки
         demo_lessons = []
         for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
             demo_lessons.append({
@@ -3761,7 +3523,6 @@ def get_lessons_structure():
             })
         structure['demo'] = demo_lessons
         
-        # Авто-генерированные уроки
         generated_lessons = []
         for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
             generated_lessons.append({
@@ -3772,7 +3533,6 @@ def get_lessons_structure():
             })
         structure['generated'] = generated_lessons
         
-        # Структура по классам
         for class_dir in sorted(LESSONS_STUDENTS_DIR.glob("*_class")):
             if class_dir.is_dir():
                 class_name = class_dir.name
@@ -3791,7 +3551,6 @@ def get_lessons_structure():
                             })
                         structure['students'][class_name][subject_name] = lesson_files
         
-        # Используем специальную сериализацию
         serialized_structure = json_serialize_paths(structure)
         
         return jsonify({
@@ -3799,21 +3558,15 @@ def get_lessons_structure():
             "structure": serialized_structure
         })
     except Exception as e:
-        print(f"❌ Ошибка получения структуры уроков: {e}")
-        import traceback
-        traceback.print_exc()
+        debug_log(f"❌ Ошибка получения структуры уроков: {e}")
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ ИСПРАВЛЕННЫЙ API: Создание примерных уроков
 @app.route('/api/lessons/create-sample', methods=['POST'])
 @teacher_required
 def create_sample_lessons():
-    """Создание примерных уроков для всех классов и предметов"""
     try:
         created_count = 0
         
-        # 🔥 ИСПРАВЛЕНИЕ: Создаем демо уроки в правильной папке
-        # Создаем демо-уроки
         demo_subjects = ['математика', 'физика', 'химия', 'биология', 'история', 'литература']
         for subject in demo_subjects:
             lesson_file = LESSONS_DEMO_DIR / f"demo_{subject}_введение.txt"
@@ -3836,16 +3589,13 @@ def create_sample_lessons():
 """)
                 created_count += 1
         
-        # Создаем уроки для всех классов
         for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
             if class_dir.is_dir():
                 class_level = class_dir.name.replace("_class", "")
                 
                 for subject_dir in class_dir.iterdir():
                     if subject_dir.is_dir():
-                        # Проверяем, есть ли уже уроки в папке
                         if not any(subject_dir.glob("*.txt")):
-                            # Создаем 3 примерных урока
                             for i in range(1, 4):
                                 lesson_file = subject_dir / f"lesson_{i:02d}_введение.txt"
                                 if not lesson_file.exists():
@@ -3872,11 +3622,9 @@ def create_sample_lessons():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ API: Добавление демо-урока (всегда в папку demo)
 @app.route('/api/add_demo_lesson', methods=['POST'])
 @teacher_required
 def add_demo_lesson():
-    """Добавление демо-урока (всегда в папку demo)"""
     try:
         data = request.json
         title = data.get('title', '')
@@ -3886,10 +3634,8 @@ def add_demo_lesson():
         if not title or not content:
             return jsonify({"success": False, "error": "Название и содержание урока обязательны"})
         
-        # ВСЕГДА создаем в папке demo
         lesson_dir = LESSONS_DEMO_DIR
         
-        # Получаем следующий номер для демо-урока
         existing_lessons = list(lesson_dir.glob("demo_*.txt"))
         demo_numbers = []
         for lesson in existing_lessons:
@@ -3899,7 +3645,6 @@ def add_demo_lesson():
         
         next_number = max(demo_numbers) + 1 if demo_numbers else 1
         
-        # Формируем имя файла с префиксом demo_
         title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
         title_slug = re.sub(r'\s+', '_', title_slug)
         title_slug = title_slug[:50]
@@ -3907,7 +3652,6 @@ def add_demo_lesson():
         filename = f"demo_{next_number:02d}_{subject}_{title_slug}.txt"
         lesson_path = lesson_dir / filename
         
-        # Сохраняем урок
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
@@ -3920,20 +3664,16 @@ def add_demo_lesson():
             "lesson_number": next_number,
             "file_path": str(lesson_path.relative_to(LESSONS_DIR))
         })
-        
     except Exception as e:
-        print(f"❌ Ошибка при добавлении демо-урока: {e}")
+        debug_log(f"❌ Ошибка при добавлении демо-урока: {e}")
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ API: Получение списка всех уроков для редактирования
 @app.route('/api/lessons/list', methods=['GET'])
 @teacher_required
 def get_all_lessons_list():
-    """Получение списка всех уроков для редактирования"""
     try:
         lessons = []
         
-        # Демо уроки
         for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
             lessons.append({
                 'type': 'demo',
@@ -3947,7 +3687,6 @@ def get_all_lessons_list():
                 'can_delete': True
             })
         
-        # Авто-генерированные уроки
         for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
             lessons.append({
                 'type': 'generated',
@@ -3961,7 +3700,6 @@ def get_all_lessons_list():
                 'can_delete': True
             })
         
-        # Уроки по классам
         for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
             if class_dir.is_dir():
                 class_name = class_dir.name.replace("_class", "")
@@ -3981,7 +3719,6 @@ def get_all_lessons_list():
                                 'can_delete': True
                             })
         
-        # Сортируем по дате изменения (новые сверху)
         lessons.sort(key=lambda x: x['modified'], reverse=True)
         
         return jsonify({
@@ -3989,17 +3726,13 @@ def get_all_lessons_list():
             "total": len(lessons),
             "lessons": lessons
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ API: Получение содержимого урока для редактирования
 @app.route('/api/lesson/edit/<path:lesson_path>', methods=['GET'])
 @teacher_required
 def get_lesson_for_edit(lesson_path):
-    """Получение содержимого урока для редактирования"""
     try:
-        # Создаем полный путь к файлу
         full_path = LESSONS_DIR / lesson_path
         
         if not full_path.exists():
@@ -4015,15 +3748,12 @@ def get_lesson_for_edit(lesson_path):
             "size": len(content),
             "filename": full_path.name
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ API: Сохранение отредактированного урока
 @app.route('/api/lesson/save', methods=['POST'])
 @teacher_required
 def save_edited_lesson():
-    """Сохранение отредактированного урока"""
     try:
         data = request.json
         lesson_path = data.get('lesson_path')
@@ -4032,18 +3762,15 @@ def save_edited_lesson():
         if not lesson_path or content is None:
             return jsonify({"success": False, "error": "Не указаны данные урока"})
         
-        # Создаем полный путь к файлу
         full_path = LESSONS_DIR / lesson_path
         
         if not full_path.exists():
             return jsonify({"success": False, "error": "Урок не найден"})
         
-        # Создаем резервную копию
-        backup_path = full_path.with_suffix('.txt.backup')
         import shutil
+        backup_path = full_path.with_suffix('.txt.backup')
         shutil.copy2(full_path, backup_path)
         
-        # Сохраняем изменения
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
@@ -4052,15 +3779,12 @@ def save_edited_lesson():
             "message": "Урок успешно сохранен",
             "backup_created": str(backup_path.name)
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ API: Удаление урока
 @app.route('/api/lesson/delete', methods=['POST'])
 @teacher_required
 def delete_lesson():
-    """Удаление урока"""
     try:
         data = request.json
         lesson_path = data.get('lesson_path')
@@ -4068,15 +3792,12 @@ def delete_lesson():
         if not lesson_path:
             return jsonify({"success": False, "error": "Не указан путь к уроку"})
         
-        # Создаем полный путь к файлу
         full_path = LESSONS_DIR / lesson_path
         
         if not full_path.exists():
             return jsonify({"success": False, "error": "Урок не найден"})
         
-        # Проверяем, не является ли это системным файлом
         if full_path.name.startswith('demo_') or 'generated' in str(full_path):
-            # Создаем резервную копию в корзине
             trash_dir = LESSONS_DIR / 'trash'
             trash_dir.mkdir(exist_ok=True)
             backup_path = trash_dir / full_path.name
@@ -4089,22 +3810,18 @@ def delete_lesson():
                 "backup_path": str(backup_path)
             })
         else:
-            # Удаляем файл
             full_path.unlink()
             
             return jsonify({
                 "success": True,
                 "message": "Урок удален"
             })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ API: Получение уроков для редактирования по фильтру
 @app.route('/api/lessons/edit', methods=['GET'])
 @teacher_required
 def get_lessons_for_edit():
-    """Получение уроков для редактирования с фильтрами"""
     try:
         class_filter = request.args.get('class', 'all')
         subject_filter = request.args.get('subject', 'all')
@@ -4112,7 +3829,6 @@ def get_lessons_for_edit():
         
         lessons = []
         
-        # Демо уроки
         if class_filter in ['all', 'demo']:
             for lesson_file in LESSONS_DEMO_DIR.glob("*.txt"):
                 if search_query and search_query.lower() not in lesson_file.name.lower():
@@ -4128,7 +3844,6 @@ def get_lessons_for_edit():
                     'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                 })
         
-        # Авто-генерированные уроки
         if class_filter in ['all', 'generated']:
             for lesson_file in LESSONS_GENERATED_DIR.glob("*.txt"):
                 if search_query and search_query.lower() not in lesson_file.name.lower():
@@ -4144,7 +3859,6 @@ def get_lessons_for_edit():
                     'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                 })
         
-        # Уроки по классам
         if class_filter == 'all' or class_filter.isdigit():
             for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
                 if class_dir.is_dir():
@@ -4174,7 +3888,6 @@ def get_lessons_for_edit():
                                     'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                                 })
         
-        # Сортируем по дате изменения (новые сверху)
         lessons.sort(key=lambda x: x['modified'], reverse=True)
         
         return jsonify({
@@ -4182,7 +3895,6 @@ def get_lessons_for_edit():
             "total": len(lessons),
             "lessons": lessons
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -4193,7 +3905,6 @@ def get_lessons_for_edit():
 @app.route('/api/student/set-avatar', methods=['POST'])
 @student_required
 def set_student_avatar():
-    """Сохранение предпочтения аватара ученика"""
     try:
         data = request.json
         student_id = data.get('student_id')
@@ -4202,26 +3913,22 @@ def set_student_avatar():
         if not student_id or not avatar_name:
             return jsonify({"success": False, "error": "Не указаны данные"})
         
-        # Обновляем данные ученика
         student_data = load_student_data(student_id)
         if student_data:
             student_data['preferred_avatar'] = avatar_name
             save_student_data(student_data)
         
         return jsonify({"success": True, "message": "Аватар сохранен"})
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/student/get-room/<subject>')
 @student_required
 def get_student_room_for_subject(subject):
-    """Получение комнаты ученика для предмета"""
     try:
         user_data = load_user_data(session['user_id'])
         student_data = user_data.get('student_data', {})
         
-        # Ищем существующую комнату для этого предмета
         student_rooms = student_data.get('rooms', [])
         for room in student_rooms:
             if room.get('subject') == subject:
@@ -4230,13 +3937,11 @@ def get_student_room_for_subject(subject):
                     "room": room
                 })
         
-        # Если комнаты нет, создаем новую
         conference_id = student_data.get('conference_id', str(int(time.time() * 1000)))
         student_class = student_data.get('education_level', '5')
         student_name = student_data.get('name', '').replace(' ', '_').lower()
         room_name = f"student_{subject}_{student_name}_{conference_id}"
         
-        # Сохраняем данные ученика для комнаты
         room_student_data[room_name] = {
             **student_data,
             'subject': subject
@@ -4253,14 +3958,12 @@ def get_student_room_for_subject(subject):
             },
             "newly_created": True
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/room/register-student', methods=['POST'])
 @student_required
 def register_student_room():
-    """Регистрация комнаты с данными ученика"""
     try:
         data = request.json
         room_id = data.get('room_id')
@@ -4271,17 +3974,13 @@ def register_student_room():
         if not room_id or not student_data:
             return jsonify({"success": False, "error": "Не указаны данные"})
         
-        # Сохраняем данные ученика для комнаты
         room_student_data[room_id] = student_data
         
-        # Инициализируем диалог менеджер с данными ученика
         _fast_room_initialization(room_id)
         
-        # Устанавливаем урок если указан
         if lesson_id and lesson_id != 'next':
             dialogue = room_dialogue.get(room_id)
             if dialogue:
-                # Ищем урок
                 selected_lesson = None
                 for subject_lessons in dialogue.lessons.values():
                     for lesson in subject_lessons:
@@ -4297,7 +3996,6 @@ def register_student_room():
                     dialogue.lesson_started = True
                     dialogue.current_state = "lesson_reading"
                     
-                    # Загружаем содержание урока
                     lesson_content = dialogue._load_lesson_content(selected_lesson.get('file_path'))
                     dialogue.lesson_content = lesson_content
                     dialogue.current_paragraph = 0
@@ -4307,19 +4005,16 @@ def register_student_room():
             "message": "Комната зарегистрирована",
             "room_id": room_id
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/student/available-lessons', methods=['GET'])
 @student_required
 def get_student_available_lessons():
-    """Получение доступных уроков для ученика с учетом прогресса"""
     try:
         user_data = load_user_data(session['user_id'])
         student_class = user_data['student_data'].get('education_level', '5')
         
-        # Используем комнату default для получения данных
         room_id = "default"
         if room_id not in room_dialogue:
             room_dialogue[room_id] = DialogueManager(socketio)
@@ -4327,16 +4022,13 @@ def get_student_available_lessons():
         dialogue = room_dialogue[room_id]
         dialogue.set_student_data(user_data['student_data'])
         
-        # Получаем уроки через метод dialogue
         lessons_data = dialogue.get_lessons_for_student_api()
         
         if lessons_data.get("success", False):
             return jsonify(lessons_data)
         else:
-            # Fallback: получаем уроки напрямую
             lessons_by_subject = get_student_lessons_by_class(student_class)
             
-            # Получаем прогресс
             student_id = user_data['student_data'].get('student_id')
             progress_data = {}
             if student_id:
@@ -4356,7 +4048,6 @@ def get_student_available_lessons():
                 subject_progress = progress_data.get("subjects", {}).get(subject_name, {})
                 completed_ids = subject_progress.get("completed_lessons", [])
                 
-                # Сортируем уроки
                 sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
                 
                 subject_lessons = []
@@ -4382,7 +4073,6 @@ def get_student_available_lessons():
                 })
             
             return jsonify(result)
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -4393,7 +4083,6 @@ def get_student_available_lessons():
 @app.route('/api/admin/create_all_student_rooms')
 @teacher_required
 def create_all_student_rooms():
-    """Админская функция для создания комнат всем существующим ученикам"""
     try:
         created_count = 0
         error_count = 0
@@ -4410,7 +4099,6 @@ def create_all_student_rooms():
                     else:
                         error_count += 1
                         debug_log(f"Ошибка создания комнат для {student_data.get('name')}")
-                        
             except Exception as e:
                 debug_log(f"Ошибка обработки файла {student_file}: {e}")
                 error_count += 1
@@ -4421,14 +4109,12 @@ def create_all_student_rooms():
             "created": created_count,
             "errors": error_count
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/admin/update_student_conference_ids')
 @teacher_required
 def update_student_conference_ids():
-    """Обновляет conference_id для всех существующих учеников"""
     try:
         updated_count = 0
         for student_file in STUDENTS_DIR.glob("*.json"):
@@ -4444,7 +4130,6 @@ def update_student_conference_ids():
                     
                     updated_count += 1
                     debug_log(f"Обновлен ученик {student_data.get('name')}")
-                        
             except Exception as e:
                 debug_log(f"Ошибка обработки файла {student_file}: {e}")
         
@@ -4453,13 +4138,11 @@ def update_student_conference_ids():
             "message": f"Обновлено {updated_count} учеников",
             "updated_count": updated_count
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/room/initialize', methods=['POST'])
 def force_room_initialization():
-    """Принудительная инициализация комнаты"""
     try:
         data = request.json
         room_id = data.get('room_id')
@@ -4480,13 +4163,11 @@ def force_room_initialization():
                 "success": False,
                 "error": f"Не удалось инициализировать комнату {room_id}"
             })
-            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/room/status/<room_id>')
 def get_room_status(room_id):
-    """Получение статуса комнаты"""
     try:
         status = {
             "room_id": room_id,
@@ -4502,7 +4183,6 @@ def get_room_status(room_id):
 
 @app.route('/api/room/health/<room_id>')
 def room_health(room_id):
-    """Проверка здоровья комнаты"""
     try:
         health_status = {
             'room_id': room_id,
@@ -4522,11 +4202,8 @@ def room_health(room_id):
 
 @app.route('/api/debug/create-test-users')
 def create_test_users_route():
-    """Создание тестовых пользователей для отладки"""
     try:
-        # Учитель
         teacher = create_new_teacher('teacher', '123456')
-        # Ученик  
         student = create_new_student('student', '123456')
         
         return jsonify({
@@ -4540,7 +4217,6 @@ def create_test_users_route():
 
 @app.route('/debug/routes')
 def debug_routes():
-    """Отладочная информация о маршрутах"""
     routes = []
     for rule in app.url_map.iter_rules():
         routes.append({
@@ -4552,7 +4228,6 @@ def debug_routes():
 
 @app.route('/test-conference')
 def test_conference():
-    """Тестовый маршрут для проверки открытия конференции"""
     return render_template('conference.html', 
                          room_id='test_room', 
                          embed=False,
@@ -4562,7 +4237,6 @@ def test_conference():
 
 @app.route('/test-student-flow')
 def test_student_flow():
-    """Тестовая страница для проверки потока ученика"""
     return """
     <!DOCTYPE html>
     <html>
@@ -4599,12 +4273,79 @@ def test_student_flow():
     """
 
 # =============================================================================
-# НОВЫЕ ОТЛАДОЧНЫЕ МАРШРУТЫ
+# ДИАГНОСТИЧЕСКИЕ API
 # =============================================================================
+
+@app.route('/api/debug/system_status')
+@teacher_required
+def system_status():
+    """Диагностика состояния системы"""
+    try:
+        status = {
+            "total_rooms": len(room_participants),
+            "active_rooms": sum(1 for p in room_participants.values() if len(p) > 0),
+            "dialogue_managers": sum(1 for d in room_dialogue.values() if d is not None),
+            "llm_manager_queue": llm_manager.get_queue_size(),
+            "thread_count": threading.active_count(),
+            "memory_usage": psutil.Process().memory_info().rss / 1024 / 1024 if 'psutil' in sys.modules else 0,
+            "room_details": []
+        }
+        
+        for room_id in list(room_participants.keys())[:10]:
+            status["room_details"].append({
+                "room_id": room_id,
+                "participants": len(room_participants.get(room_id, [])),
+                "has_dialogue": room_id in room_dialogue and room_dialogue[room_id] is not None,
+                "ai_activated": room_ai_activated.get(room_id, False),
+                "last_activity": room_last_activity.get(room_id, 0)
+            })
+        
+        return jsonify({
+            "success": True,
+            "status": status,
+            "timestamp": time.time()
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/debug/fix_blocked_rooms')
+@teacher_required
+def fix_blocked_rooms():
+    """Ручное исправление заблокированных комнат"""
+    try:
+        fixed_count = 0
+        
+        for room_id in list(room_dialogue.keys()):
+            if room_dialogue[room_id] is not None:
+                dialogue = room_dialogue[room_id]
+                
+                dialogue.waiting_for_answer = False
+                dialogue.lesson_started = False
+                dialogue.practice_active = False
+                
+                room_practice_active[room_id] = False
+                room_teacher_speaking[room_id] = False
+                room_speaking[room_id] = False
+                
+                fixed_count += 1
+                debug_log(f"Исправлена комната {room_id}")
+        
+        for room_id in list(room_llm_pending_requests.keys()):
+            if len(room_llm_pending_requests[room_id]) > 10:
+                requests = list(room_llm_pending_requests[room_id].items())
+                requests.sort(key=lambda x: x[1]['timestamp'], reverse=True)
+                room_llm_pending_requests[room_id] = dict(requests[:10])
+        
+        return jsonify({
+            "success": True,
+            "message": f"Исправлено {fixed_count} комнат",
+            "fixed_count": fixed_count
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/debug/room/<room_id>')
 def debug_room_info(room_id):
-    """Отладочная информация о комнате"""
     info = {
         "success": True,
         "room_id": room_id,
@@ -4623,11 +4364,9 @@ def debug_room_info(room_id):
 @app.route('/api/debug/student-lessons')
 @student_required
 def debug_student_lessons_route():
-    """Отладка уроков для текущего ученика"""
     user_data = load_user_data(session['user_id'])
     student_class = user_data['student_data'].get('education_level', '5')
     
-    # Используем комнату default для проверки
     room_id = "default"
     if room_id not in room_dialogue:
         room_dialogue[room_id] = DialogueManager(socketio)
@@ -4637,7 +4376,6 @@ def debug_student_lessons_route():
     
     lessons_data = dialogue.get_lessons_for_student_api()
     
-    # Проверяем наличие папок
     class_dir = LESSONS_STUDENTS_DIR / f"{student_class}_class"
     class_exists = class_dir.exists()
     
@@ -4657,7 +4395,6 @@ def debug_student_lessons_route():
 
 @app.route('/test-student-room')
 def test_student_room():
-    """Тестирование комнаты ученика с предметом"""
     student_data = {
         'name': 'Тестовый Ученик',
         'education_level': '5',
@@ -4665,7 +4402,6 @@ def test_student_room():
         'student_id': 'test123'
     }
     
-    # Создаем комнату с предметом
     conference = create_student_conference(student_data, 'математика')
     
     if conference:
@@ -4688,7 +4424,6 @@ def test_student_room():
 @app.route('/api/add_lesson_with_class', methods=['POST'])
 @teacher_required
 def add_lesson_with_class():
-    """Добавление нового урока с учетом класса (ИСПРАВЛЕННАЯ ВЕРСИЯ)"""
     try:
         data = request.json
         subject = data.get('subject', 'общее')
@@ -4702,26 +4437,21 @@ def add_lesson_with_class():
         if not subject or subject == "Выберите класс сначала":
             return jsonify({"success": False, "error": "Выберите предмет"})
         
-        # Определяем папку для сохранения
         if class_level == 'demo':
             lesson_dir = LESSONS_DEMO_DIR
         elif class_level == 'generated':
             lesson_dir = LESSONS_GENERATED_DIR
         else:
-            # Проверяем, существует ли класс
             if class_level not in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']:
                 return jsonify({"success": False, "error": "Неверный класс"})
             
-            # Создаем папку класса если ее нет
             class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
             class_dir.mkdir(parents=True, exist_ok=True)
             
-            # Создаем папку предмета если ее нет
             subject_dir = class_dir / subject
             subject_dir.mkdir(parents=True, exist_ok=True)
             lesson_dir = subject_dir
         
-        # Получаем следующий номер урока
         existing_lessons = list(lesson_dir.glob("lesson_*.txt"))
         lesson_numbers = []
         for lesson in existing_lessons:
@@ -4731,7 +4461,6 @@ def add_lesson_with_class():
         
         next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
         
-        # Формируем имя файла (исправляем регулярное выражение)
         title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
         title_slug = re.sub(r'\s+', '_', title_slug)
         title_slug = title_slug[:50]
@@ -4739,7 +4468,6 @@ def add_lesson_with_class():
         filename = f"lesson_{next_number:02d}_{title_slug}.txt"
         lesson_path = lesson_dir / filename
         
-        # Сохраняем урок
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
@@ -4752,17 +4480,13 @@ def add_lesson_with_class():
             "lesson_number": next_number,
             "file_path": str(lesson_path.relative_to(LESSONS_DIR))
         })
-        
     except Exception as e:
-        print(f"❌ Ошибка при добавлении урока: {e}")
-        import traceback
-        traceback.print_exc()
+        debug_log(f"❌ Ошибка при добавлении урока: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/lessons/next_number', methods=['GET'])
 @teacher_required
 def get_next_lesson_number():
-    """Получение следующего номера урока для класса и предмета"""
     try:
         class_level = request.args.get('class', 'demo')
         subject = request.args.get('subject', 'общее')
@@ -4770,20 +4494,17 @@ def get_next_lesson_number():
         if not class_level or not subject or subject == "Выберите класс сначала":
             return jsonify({"success": False, "error": "Укажите класс и предмет"})
         
-        # Определяем папку
         if class_level == 'demo':
             lesson_dir = LESSONS_DEMO_DIR
         elif class_level == 'generated':
             lesson_dir = LESSONS_GENERATED_DIR
         else:
-            # Проверяем существование папки класса и предмета
             class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
             if not class_dir.exists():
                 return jsonify({"success": False, "error": f"Класс {class_level} не найден"})
             
             lesson_dir = class_dir / subject
             if not lesson_dir.exists():
-                # Папка предмета не существует, но мы ее не создаем - просто возвращаем 1
                 return jsonify({
                     "success": True,
                     "class_level": class_level,
@@ -4792,7 +4513,6 @@ def get_next_lesson_number():
                     "total_lessons": 0
                 })
         
-        # Получаем существующие номера уроков
         existing_lessons = list(lesson_dir.glob("lesson_*.txt"))
         lesson_numbers = []
         for lesson in existing_lessons:
@@ -4809,47 +4529,38 @@ def get_next_lesson_number():
             "next_number": next_number,
             "total_lessons": len(existing_lessons)
         })
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/download_lessons_by_class', methods=['GET'])
 @teacher_required
 def download_lessons_by_class():
-    """Скачивание уроков по классу (ИСПРАВЛЕННАЯ ВЕРСИЯ)"""
     try:
         class_level = request.args.get('class', 'all')
         
         lesson_files = []
         
         if class_level == 'all':
-            # Все уроки
             for lesson_dir in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LESSONS_DIR]:
                 if lesson_dir.exists():
                     if lesson_dir == LESSONS_STUDENTS_DIR:
-                        # Рекурсивно собираем все файлы из папок классов
                         for class_folder in lesson_dir.glob("*_class"):
                             if class_folder.is_dir():
                                 for subject_folder in class_folder.iterdir():
                                     if subject_folder.is_dir():
                                         lesson_files.extend(subject_folder.glob("*.txt"))
                     else:
-                        # Обычные уроки
                         for lesson_file in lesson_dir.glob("*.txt"):
                             lesson_files.append(lesson_file)
         elif class_level == 'demo':
-            # Демо уроки
             if LESSONS_DEMO_DIR.exists():
                 lesson_files = list(LESSONS_DEMO_DIR.glob("*.txt"))
         elif class_level == 'generated':
-            # Авто-генерированные уроки
             if LESSONS_GENERATED_DIR.exists():
                 lesson_files = list(LESSONS_GENERATED_DIR.glob("*.txt"))
         else:
-            # Уроки конкретного класса
             class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
             if class_dir.exists():
-                # Рекурсивно собираем все файлы из папок предметов
                 for subject_dir in class_dir.iterdir():
                     if subject_dir.is_dir():
                         lesson_files.extend(subject_dir.glob("*.txt"))
@@ -4864,13 +4575,11 @@ def download_lessons_by_class():
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
             for lesson_file in lesson_files:
-                # Сохраняем структуру папок
                 if lesson_file.parent == LESSONS_DEMO_DIR:
                     zip_path = f"demo/{lesson_file.name}"
                 elif lesson_file.parent == LESSONS_GENERATED_DIR:
                     zip_path = f"generated/{lesson_file.name}"
                 elif LESSONS_STUDENTS_DIR in lesson_file.parents:
-                    # Сохраняем полный путь от LESSONS_STUDENTS_DIR
                     rel_path = lesson_file.relative_to(LESSONS_STUDENTS_DIR)
                     zip_path = f"students/{rel_path}"
                 else:
@@ -4879,7 +4588,6 @@ def download_lessons_by_class():
         
         temp_zip.close()
         
-        # Имя файла в зависимости от класса
         if class_level == 'all':
             filename = "all_lessons.zip"
         elif class_level == 'demo':
@@ -4895,7 +4603,6 @@ def download_lessons_by_class():
             download_name=filename,
             mimetype='application/zip'
         )
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -4906,7 +4613,6 @@ def download_lessons_by_class():
 @app.route('/api/bulk_upload_lessons', methods=['POST'])
 @teacher_required
 def bulk_upload_lessons():
-    """Массовая загрузка уроков (drag & drop)"""
     try:
         if 'files' not in request.files:
             return jsonify({"success": False, "error": "Файлы не найдены"})
@@ -4935,20 +4641,16 @@ def bulk_upload_lessons():
                     })
                     continue
                 
-                # Читаем содержимое файла
                 content = file.read().decode('utf-8')
                 filename = secure_filename(file.filename)
                 
-                # Определяем класс и предмет из имени файла
-                class_level = "5"  # По умолчанию
-                subject = "общее"  # По умолчанию
+                class_level = "5"
+                subject = "общее"
                 title = filename.replace('.txt', '').replace('_', ' ').title()
                 
-                # Пытаемся определить класс и предмет из имени файла
                 if '_' in filename:
                     parts = filename.split('_')
                     if len(parts) >= 2:
-                        # Первая часть может быть классом
                         if parts[0] in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', 'demo', 'generated']:
                             class_level = parts[0]
                             subject = parts[1] if len(parts) > 1 else "общее"
@@ -4956,13 +4658,11 @@ def bulk_upload_lessons():
                         else:
                             subject = parts[0]
                 
-                # Создаем папку для сохранения
                 if class_level == 'demo':
                     lesson_dir = LESSONS_DEMO_DIR
                 elif class_level == 'generated':
                     lesson_dir = LESSONS_GENERATED_DIR
                 else:
-                    # Создаем папку класса и предмета
                     class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
                     class_dir.mkdir(parents=True, exist_ok=True)
                     
@@ -4970,7 +4670,6 @@ def bulk_upload_lessons():
                     subject_dir.mkdir(parents=True, exist_ok=True)
                     lesson_dir = subject_dir
                 
-                # Получаем следующий номер урока
                 existing_lessons = list(lesson_dir.glob("*.txt"))
                 lesson_numbers = []
                 for lesson in existing_lessons:
@@ -4980,7 +4679,6 @@ def bulk_upload_lessons():
                 
                 next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
                 
-                # Формируем имя файла
                 title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
                 title_slug = re.sub(r'\s+', '_', title_slug)
                 title_slug = title_slug[:50]
@@ -4988,7 +4686,6 @@ def bulk_upload_lessons():
                 new_filename = f"lesson_{next_number:02d}_{title_slug}.txt"
                 lesson_path = lesson_dir / new_filename
                 
-                # Сохраняем файл
                 with open(lesson_path, 'w', encoding='utf-8') as f:
                     f.write(content)
                 
@@ -5002,7 +4699,6 @@ def bulk_upload_lessons():
                     "status": "success",
                     "path": str(lesson_path.relative_to(LESSONS_DIR))
                 })
-                
             except Exception as e:
                 results["failed"] += 1
                 results["details"].append({
@@ -5012,7 +4708,6 @@ def bulk_upload_lessons():
                 })
         
         return jsonify(results)
-        
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -5023,7 +4718,6 @@ def bulk_upload_lessons():
 @app.route('/api/view_lessons', methods=['GET'])
 @teacher_required
 def view_lessons():
-    """Просмотр уроков по фильтрам"""
     try:
         class_level = request.args.get('class', 'all')
         subject = request.args.get('subject', 'all')
@@ -5031,11 +4725,9 @@ def view_lessons():
         lessons = []
         
         if class_level == 'all':
-            # Все уроки
             for lesson_dir in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR]:
                 if lesson_dir.exists():
                     if lesson_dir == LESSONS_STUDENTS_DIR:
-                        # Уроки по классам
                         for class_folder in lesson_dir.glob("*_class"):
                             if class_folder.is_dir():
                                 class_name = class_folder.name.replace("_class", "")
@@ -5053,7 +4745,6 @@ def view_lessons():
                                                     "modified": datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                                                 })
                     else:
-                        # Демо и сгенерированные уроки
                         class_name = "demo" if lesson_dir == LESSONS_DEMO_DIR else "generated"
                         for lesson_file in lesson_dir.glob("*.txt"):
                             lessons.append({
@@ -5065,7 +4756,6 @@ def view_lessons():
                                 "modified": datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                             })
         else:
-            # Конкретный класс
             if class_level == 'demo':
                 lesson_dir = LESSONS_DEMO_DIR
             elif class_level == 'generated':
@@ -5076,7 +4766,6 @@ def view_lessons():
                     return jsonify({"success": True, "lessons": []})
                 
                 if subject == 'all':
-                    # Все предметы этого класса
                     for subject_folder in class_dir.iterdir():
                         if subject_folder.is_dir():
                             subject_name = subject_folder.name
@@ -5090,7 +4779,6 @@ def view_lessons():
                                     "modified": datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                                 })
                 else:
-                    # Конкретный предмет
                     subject_dir = class_dir / subject
                     if subject_dir.exists():
                         for lesson_file in subject_dir.glob("*.txt"):
@@ -5103,7 +4791,6 @@ def view_lessons():
                                 "modified": datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
                             })
         
-        # Сортируем по классу и предмету
         lessons.sort(key=lambda x: (x["class"], x["subject"], x["filename"]))
         
         return jsonify({
@@ -5111,7 +4798,119 @@ def view_lessons():
             "total": len(lessons),
             "lessons": lessons
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# API ДЛЯ УПРАВЛЕНИЯ УЧЕНИКАМИ
+# =============================================================================
+
+@app.route('/api/students')
+@teacher_required
+def get_all_students():
+    try:
+        students = []
+        for user_file in USERS_DIR.glob("*.json"):
+            with open(user_file, 'r', encoding='utf-8') as f:
+                user_data = json.load(f)
+                if user_data.get('role') == 'student' and user_data.get('profile_complete', False):
+                    students.append({
+                        'user_id': user_data['user_id'],
+                        'username': user_data['username'],
+                        'student_data': user_data.get('student_data', {}),
+                        'created_at': user_data.get('created_at'),
+                        'last_login': user_data.get('last_login')
+                    })
         
+        return jsonify({"success": True, "students": students})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/students/export')
+@teacher_required
+def export_students_data():
+    try:
+        import zipfile
+        import tempfile
+        
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+            for user_file in USERS_DIR.glob("*.json"):
+                with open(user_file, 'r', encoding='utf-8') as f:
+                    user_data = json.load(f)
+                    if user_data.get('role') == 'student':
+                        zipf.write(user_file, f"users/{user_file.name}")
+            
+            for student_file in STUDENTS_DIR.glob("*.json"):
+                zipf.write(student_file, f"students/{student_file.name}")
+            
+            for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
+                zipf.write(progress_file, f"progress/{progress_file.name}")
+        
+        temp_zip.close()
+        
+        return send_file(
+            temp_zip.name,
+            as_attachment=True,
+            download_name=f"students_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mimetype='application/zip'
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/<student_user_id>')
+@teacher_required
+def get_student_details(student_user_id):
+    try:
+        user_data = load_user_data(student_user_id)
+        if not user_data or user_data.get('role') != 'student':
+            return jsonify({"success": False, "error": "Ученик не найден"})
+        
+        progress_data = {}
+        progress_file = STUDENT_PROGRESS_DIR / f"{user_data.get('student_data', {}).get('student_id', '')}.json"
+        if progress_file.exists():
+            with open(progress_file, 'r', encoding='utf-8') as f:
+                progress_data = json.load(f)
+        
+        return jsonify({
+            "success": True,
+            "student": {
+                'user_id': user_data['user_id'],
+                'username': user_data['username'],
+                'student_data': user_data.get('student_data', {}),
+                'created_at': user_data.get('created_at'),
+                'last_login': user_data.get('last_login'),
+                'rooms': user_data.get('student_data', {}).get('rooms', []),
+                'progress': progress_data
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/student/profile')
+@student_required
+def get_student_profile():
+    try:
+        user_data = load_user_data(session['user_id'])
+        if not user_data:
+            return jsonify({"success": False, "error": "Пользователь не найден"})
+        
+        progress_data = {}
+        student_id = user_data.get('student_data', {}).get('student_id', '')
+        if student_id:
+            progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+            if progress_file.exists():
+                with open(progress_file, 'r', encoding='utf-8') as f:
+                    progress_data = json.load(f)
+        
+        return jsonify({
+            "success": True,
+            "student_data": user_data.get('student_data', {}),
+            "profile_complete": user_data.get('profile_complete', False),
+            "user_id": session['user_id'],
+            "progress": progress_data
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -5120,18 +4919,21 @@ def view_lessons():
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("Запуск ИСПРАВЛЕННОЙ AI Teacher системы с уроками по классам...")
+    debug_log("🚀 Запуск ОПТИМИЗИРОВАННОЙ AI Teacher системы...")
     
     setup_llm_manager()
     
-    debug_log("Проверка конфигурации SocketIO...")
-    debug_log(f"Async mode: {socketio.async_mode}")
-    debug_log(f"Server: {socketio.server}")
+    # Запускаем периодическую очистку
+    periodic_cleanup()
     
-    debug_log("Предварительная инициализация системных комнат...")
-    system_rooms = ['default']
+    # Инициализируем системные комнаты
+    system_rooms = ['default', 'demo_room', 'test_room']
     for room in system_rooms:
         _fast_room_initialization(room)
+    
+    debug_log(f"✅ Система готова. Async mode: {socketio.async_mode}")
+    debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
+    debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
     
     socketio.run(
         app, 
