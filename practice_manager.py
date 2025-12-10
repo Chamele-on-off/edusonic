@@ -7,6 +7,10 @@ import time
 import threading
 import queue
 
+def debug_log(message):
+    """Логирование для отладки"""
+    print(f"🔥 [PRACTICE] {message}")
+
 class PracticeManager:
     def __init__(self, llm_integration):
         self.llm = llm_integration
@@ -17,6 +21,13 @@ class PracticeManager:
         
         # 🔥 НОВОЕ: Данные ученика для адаптации сложности
         self.student_data = {}
+        self.is_language_subject = False
+        self.target_language = None
+        self.language_level = 'beginner'
+        
+        # 🔥 НОВОЕ: Менеджеры для разных типов практики
+        self.language_practice_manager = None
+        self.current_practice_type = 'general'  # 'general' или 'language'
         
         # ОЧЕРЕДИ ДЛЯ АСИНХРОННОЙ ГЕНЕРАЦИИ
         self.question_queue = queue.Queue()  # Очередь готовых вопросов
@@ -30,39 +41,155 @@ class PracticeManager:
         self.generation_active = False
         
         self.practice_dir.mkdir(parents=True, exist_ok=True)
+        
+        debug_log("✅ PracticeManager инициализирован")
+
+    def set_student_data(self, student_data: Dict):
+        """Устанавливает данные ученика"""
+        self.student_data = student_data or {}
+        debug_log(f"👤 Установлены данные ученика: {student_data.get('name', 'неизвестно')}")
+
+    def _is_language_subject(self, subject: str) -> bool:
+        """Определяет, является ли предмет языковым"""
+        language_subjects = [
+            'английский язык', 'english', 'английский',
+            'французский язык', 'french', 'французский',
+            'немецкий язык', 'german', 'немецкий',
+            'испанский язык', 'spanish', 'испанский',
+            'китайский язык', 'chinese', 'китайский'
+        ]
+        
+        subject_lower = subject.lower()
+        for lang_subj in language_subjects:
+            if lang_subj in subject_lower:
+                return True
+        
+        return False
+
+    def _extract_target_language(self, subject: str) -> str:
+        """Извлекает целевой язык из названия предмета"""
+        subject_lower = subject.lower()
+        
+        if 'английский' in subject_lower or 'english' in subject_lower:
+            return 'english'
+        elif 'французский' in subject_lower or 'french' in subject_lower:
+            return 'french'
+        elif 'немецкий' in subject_lower or 'german' in subject_lower:
+            return 'german'
+        elif 'испанский' in subject_lower or 'spanish' in subject_lower:
+            return 'spanish'
+        elif 'китайский' in subject_lower or 'chinese' in subject_lower:
+            return 'chinese'
+        else:
+            return 'english'  # По умолчанию
 
     def initialize_practice_generation(self, lesson_context: str, subject: str):
         """Инициализирует практику и ЗАРАНЕЕ начинает генерацию вопросов"""
         self.current_lesson_context = lesson_context
         self.current_subject = subject
-        self.current_lesson_summary = self._generate_lesson_summary(lesson_context)
-        self.generated_questions = []
-        self.current_question_index = 0
         
-        # Очищаем очередь от предыдущих вопросов
-        while not self.question_queue.empty():
-            try:
-                self.question_queue.get_nowait()
-            except queue.Empty:
-                break
+        # 🔥 НОВОЕ: Определяем тип практики
+        self.is_language_subject = self._is_language_subject(subject)
+        self.target_language = self._extract_target_language(subject) if self.is_language_subject else None
         
-        print(f"🎯 Инициализирована генерация практики для предмета: {subject}")
-        print(f"📝 Максимальное количество вопросов: {self.max_questions}")
+        # Определяем уровень ученика для языковой практики
+        if self.is_language_subject and self.student_data:
+            age = int(self.student_data.get('age', 12))
+            if age <= 10:
+                self.language_level = 'beginner'
+            elif age <= 14:
+                self.language_level = 'intermediate'
+            else:
+                self.language_level = 'advanced'
         
-        # 🔥 НОВОЕ: Логируем данные ученика для отладки
-        if self.student_data:
-            age = self.student_data.get('age', 'неизвестен')
-            level = self.student_data.get('level', 'неизвестен')
-            print(f"👤 Данные ученика: возраст {age} лет, {level} класс")
+        debug_log(f"🎯 Инициализация практики. Предмет: {subject}, Языковой: {self.is_language_subject}")
         
-        # ЗАПУСКАЕМ АСИНХРОННУЮ ГЕНЕРАЦИЮ ВОПРОСОВ СРАЗУ
-        self._start_async_generation()
-        
-        # Генерируем ПЕРВЫЙ вопрос СИНХРОННО для немедленного старта
-        first_question = self.generate_single_question()
-        if first_question:
-            self.question_queue.put(first_question)
-            print(f"✅ Первый вопрос готов: {first_question[:80]}...")
+        if self.is_language_subject:
+            # Инициализируем языковую практику
+            self.current_practice_type = 'language'
+            
+            # 🔥 ОТКЛЮЧАЕМ: Не используем LanguagePracticeManager пока он не готов
+            # Вместо этого используем улучшенную версию существующего менеджера
+            debug_log("🔧 Использую улучшенный режим для языковых предметов")
+            
+            self.current_lesson_summary = self._generate_language_lesson_summary(lesson_context)
+            self.generated_questions = []
+            self.current_question_index = 0
+            
+            # Очищаем очередь
+            while not self.question_queue.empty():
+                try:
+                    self.question_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Запускаем асинхронную генерацию
+            self._start_async_generation()
+            
+            # Первый вопрос синхронно
+            first_question = self.generate_single_language_question()
+            if first_question:
+                self.question_queue.put(first_question)
+                debug_log(f"✅ Первый языковой вопрос готов: {first_question[:80]}...")
+        else:
+            # Общая практика для неязыковых предметов
+            self.current_practice_type = 'general'
+            self.current_lesson_summary = self._generate_lesson_summary(lesson_context)
+            self.generated_questions = []
+            self.current_question_index = 0
+            
+            # Очищаем очередь
+            while not self.question_queue.empty():
+                try:
+                    self.question_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            debug_log(f"🎯 Инициализирована генерация практики для предмета: {subject}")
+            debug_log(f"📝 Максимальное количество вопросов: {self.max_questions}")
+            
+            # 🔥 Логируем данные ученика для отладки
+            if self.student_data:
+                age = self.student_data.get('age', 'неизвестен')
+                level = self.student_data.get('level', 'неизвестен')
+                debug_log(f"👤 Данные ученика: возраст {age} лет, {level} класс")
+            
+            # ЗАПУСКАЕМ АСИНХРОННУЮ ГЕНЕРАЦИЮ ВОПРОСОВ СРАЗУ
+            self._start_async_generation()
+            
+            # Генерируем ПЕРВЫЙ вопрос СИНХРОННО для немедленного старта
+            first_question = self.generate_single_question()
+            if first_question:
+                self.question_queue.put(first_question)
+                debug_log(f"✅ Первый вопрос готов: {first_question[:80]}...")
+
+    def _generate_language_lesson_summary(self, lesson_context: str) -> str:
+        """Генерирует краткое содержание урока для языковой практики"""
+        try:
+            prompt = f"""
+            Создай КРАТКОЕ содержание этого языкового урока для практических упражнений.
+            Выдели ключевые слова, фразы и грамматические конструкции.
+            
+            ТЕКСТ УРОКА: {lesson_context[:1500]}
+            ЯЗЫК: {self.target_language}
+            УРОВЕНЬ: {self.language_level}
+            
+            Верни только краткое содержание (максимум 300 слов).
+            Включи:
+            1. Ключевые слова и фразы
+            2. Основные грамматические правила
+            3. Примеры диалогов или предложений
+            """
+            
+            summary = self.llm.query(
+                question=prompt,
+                context="",
+                subject=f"{self.target_language} language"
+            )
+            return summary if summary and len(summary) > 50 else lesson_context[:500] + "..."
+        except Exception as e:
+            debug_log(f"❌ Ошибка генерации языкового содержания: {e}")
+            return lesson_context[:500] + "..."
 
     def _start_async_generation(self):
         """Запускает фоновую генерацию вопросов"""
@@ -73,7 +200,7 @@ class PracticeManager:
         self.generation_active = True
         
         def generate_questions_worker():
-            print("🔄 Фоновая генерация вопросов запущена...")
+            debug_log("🔄 Фоновая генерация вопросов запущена...")
             
             while (not self.stop_generation and 
                    self.generation_active and 
@@ -82,71 +209,39 @@ class PracticeManager:
                 try:
                     # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит перед генерацией
                     if len(self.generated_questions) >= self.max_questions:
-                        print("🏁 Достигнут лимит вопросов в фоновой генерации")
+                        debug_log("🏁 Достигнут лимит вопросов в фоновой генерации")
                         break
                     
                     # Генерируем следующий вопрос
-                    next_question = self.generate_single_question()
+                    if self.is_language_subject:
+                        next_question = self.generate_single_language_question()
+                    else:
+                        next_question = self.generate_single_question()
                     
                     if next_question:
                         self.question_queue.put(next_question)
-                        print(f"✅ Фоново сгенерирован вопрос {len(self.generated_questions)}/{self.max_questions}: {next_question[:80]}...")
+                        debug_log(f"✅ Фоново сгенерирован вопрос {len(self.generated_questions)}/{self.max_questions}")
                     
                     # Небольшая пауза между генерацией
                     time.sleep(1)
                     
                 except Exception as e:
-                    print(f"❌ Ошибка в фоновой генерации: {e}")
+                    debug_log(f"❌ Ошибка в фоновой генерации: {e}")
                     time.sleep(2)  # Пауза при ошибке
             
-            print("🏁 Фоновая генерация вопросов завершена")
+            debug_log("🏁 Фоновая генерация вопросов завершена")
             self.generation_active = False
         
         # Запускаем в отдельном потоке
         self.generation_thread = threading.Thread(target=generate_questions_worker, daemon=True)
         self.generation_thread.start()
 
-    def get_next_question(self, timeout: float = 10.0) -> Optional[str]:
-        """Получает следующий вопрос из очереди (с ожиданием если нужно)"""
-        try:
-            # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит вопросов
-            if len(self.generated_questions) >= self.max_questions:
-                print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
-                return None
-            
-            # Пытаемся взять вопрос из очереди без ожидания
-            try:
-                question = self.question_queue.get_nowait()
-                print(f"✅ Вопрос взят из очереди (в очереди еще: {self.question_queue.qsize()})")
-                return question
-            except queue.Empty:
-                pass
-            
-            # Если очередь пуста, пробуем сгенерировать СИНХРОННО
-            print("⚠️ Очередь вопросов пуста, синхронная генерация...")
-            question = self.generate_single_question()
-            
-            if question:
-                print(f"✅ Синхронно сгенерирован вопрос: {question[:80]}...")
-                return question
-            else:
-                # Если синхронная генерация не удалась, используем fallback
-                fallback = self._get_fallback_question(ensure_unique=True)
-                print(f"🔄 Использован fallback вопрос: {fallback[:80]}...")
-                return fallback
-                
-        except Exception as e:
-            print(f"❌ Ошибка получения следующего вопроса: {e}")
-            fallback = self._get_fallback_question(ensure_unique=True)
-            print(f"🔄 Использован fallback после ошибки: {fallback[:80]}...")
-            return fallback
-
     def generate_single_question(self) -> Optional[str]:
-        """Генерирует один ТЕСТОВЫЙ вопрос с вариантами ответов A, B, C, D"""
+        """Генерирует один ТЕСТОВЫЙ вопрос с вариантами ответов A, B, C, D (для неязыковых предметов)"""
         try:
             # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит вопросов
             if len(self.generated_questions) >= self.max_questions:
-                print(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
+                debug_log(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
                 return None
             
             # 🔥 ОБНОВЛЕННЫЙ ПРОМТ: Генерируем ТЕСТОВЫЙ вопрос с вариантами
@@ -155,6 +250,8 @@ class PracticeManager:
             
             МАТЕРИАЛ УРОКА:
             {self.current_lesson_summary}
+            
+            ПРЕДМЕТ: {self.current_subject}
             
             ТРЕБОВАНИЯ К ВОПРОСУ:
             1. ВОПРОС ДОЛЖЕН БЫТЬ ИСКЛЮЧИТЕЛЬНО ПО СОДЕРЖАНИЮ ЭТОГО УРОКА
@@ -195,26 +292,193 @@ class PracticeManager:
                         self.generated_questions.append({
                             "question": question_text,
                             "generated_at": time.time(),
-                            "type": "test_question"
+                            "type": "test_question",
+                            "subject": self.current_subject
                         })
                         return question_text
             
             # 🔥 FALLBACK: Если не получился тестовый вопрос - обычный вопрос
             fallback = self._get_fallback_question(ensure_unique=True)
-            print(f"🔄 Использован fallback вопрос: {fallback[:80]}...")
+            debug_log(f"🔄 Использован fallback вопрос: {fallback[:80]}...")
             return fallback
             
         except Exception as e:
-            print(f"❌ Ошибка генерации тестового вопроса: {e}")
+            debug_log(f"❌ Ошибка генерации тестового вопроса: {e}")
             fallback = self._get_fallback_question(ensure_unique=True)
-            print(f"🔄 Использован fallback после ошибки: {fallback[:80]}...")
+            debug_log(f"🔄 Использован fallback после ошибки: {fallback[:80]}...")
+            return fallback
+
+    def generate_single_language_question(self) -> Optional[str]:
+        """Генерирует один вопрос для языковой практики"""
+        try:
+            if len(self.generated_questions) >= self.max_questions:
+                return None
+            
+            # Выбираем тип языкового упражнения в зависимости от уровня
+            exercise_types_by_level = {
+                'beginner': ['vocabulary', 'simple_translation', 'fill_blank'],
+                'intermediate': ['grammar', 'dialogue', 'sentence_building'],
+                'advanced': ['composition', 'error_correction', 'debate']
+            }
+            
+            available_types = exercise_types_by_level.get(self.language_level, ['vocabulary', 'translation'])
+            
+            import random
+            exercise_type = random.choice(available_types)
+            
+            prompt = self._create_language_exercise_prompt(exercise_type)
+            
+            llm_response = self.llm.query(
+                question=prompt,
+                context="",
+                subject=f"{self.target_language} language"
+            )
+            
+            if llm_response and len(llm_response.strip()) > 30:
+                question_text = llm_response.strip()
+                
+                if self._is_question_unique(question_text):
+                    self.generated_questions.append({
+                        "question": question_text,
+                        "generated_at": time.time(),
+                        "type": f"language_{exercise_type}",
+                        "subject": self.current_subject,
+                        "language": self.target_language,
+                        "level": self.language_level
+                    })
+                    return question_text
+            
+            # Fallback для языкового вопроса
+            fallback = self._get_language_fallback_question(exercise_type, ensure_unique=True)
+            return fallback
+            
+        except Exception as e:
+            debug_log(f"❌ Ошибка генерации языкового вопроса: {e}")
+            return self._get_language_fallback_question('vocabulary', ensure_unique=True)
+
+    def _create_language_exercise_prompt(self, exercise_type: str) -> str:
+        """Создает промт для языкового упражнения"""
+        prompts = {
+            'vocabulary': f"""
+            Создай упражнение на словарный запас для {self.target_language}.
+            
+            Уровень: {self.language_level}
+            Тема урока: {self.current_lesson_summary[:200]}
+            
+            Создай упражнение одного из видов:
+            1. Сопоставление слов с переводами
+            2. Заполнение пропусков в предложениях
+            3. Выбор правильного перевода
+            
+            Верни упражнение в формате:
+            [Текст упражнения с четкой инструкцией]
+            
+            Используй смесь русского и {self.target_language} соответственно уровню {self.language_level}.
+            """,
+            
+            'translation': f"""
+            Создай упражнение на перевод для {self.target_language}.
+            
+            Уровень: {self.language_level}
+            Тема: {self.current_lesson_summary[:200]}
+            
+            Создай 3 предложения для перевода с русского на {self.target_language}.
+            Предложения должны соответствовать уровню {self.language_level}.
+            
+            Формат:
+            Переведите на {self.target_language}:
+            1. [Предложение на русском]
+            2. [Предложение на русском]
+            3. [Предложение на русском]
+            """,
+            
+            'grammar': f"""
+            Создай грамматическое упражнение для {self.target_language}.
+            
+            Уровень: {self.language_level}
+            Тема урока: {self.current_lesson_summary[:200]}
+            
+            Создай упражнение на отработку грамматического правила.
+            Включи инструкцию на русском и пример.
+            
+            Пример для beginner level:
+            Поставьте глагол в правильную форму:
+            I (to be) ___ a student. -> I am a student.
+            """,
+            
+            'fill_blank': f"""
+            Создай упражнение "fill in the blanks" для {self.target_language}.
+            
+            Уровень: {self.language_level}
+            Тема: {self.current_lesson_summary[:200]}
+            
+            Создай текст с 3-5 пропусками.
+            Пропуски должны быть ключевыми словами по теме.
+            
+            Формат:
+            Заполните пропуски подходящими словами:
+            [Текст с пропусками обозначенными как ______]
+            """
+        }
+        
+        return prompts.get(exercise_type, prompts['vocabulary'])
+
+    def get_next_question(self, timeout: float = 10.0) -> Optional[str]:
+        """Получает следующий вопрос из очереди (с ожиданием если нужно)"""
+        try:
+            # ВАЖНОЕ ИЗМЕНЕНИЕ: Проверяем лимит вопросов
+            if len(self.generated_questions) >= self.max_questions:
+                debug_log(f"🏁 Достигнут лимит вопросов: {len(self.generated_questions)}/{self.max_questions}")
+                return None
+            
+            # Пытаемся взять вопрос из очереди без ожидания
+            try:
+                question = self.question_queue.get_nowait()
+                debug_log(f"✅ Вопрос взят из очереди (в очереди еще: {self.question_queue.qsize()})")
+                return question
+            except queue.Empty:
+                pass
+            
+            # Если очередь пуста, пробуем сгенерировать СИНХРОННО
+            debug_log("⚠️ Очередь вопросов пуста, синхронная генерация...")
+            
+            if self.is_language_subject:
+                question = self.generate_single_language_question()
+            else:
+                question = self.generate_single_question()
+            
+            if question:
+                debug_log(f"✅ Синхронно сгенерирован вопрос: {question[:80]}...")
+                return question
+            else:
+                # Если синхронная генерация не удалась, используем fallback
+                if self.is_language_subject:
+                    fallback = self._get_language_fallback_question('vocabulary', ensure_unique=True)
+                else:
+                    fallback = self._get_fallback_question(ensure_unique=True)
+                
+                debug_log(f"🔄 Использован fallback вопрос: {fallback[:80]}...")
+                return fallback
+                
+        except Exception as e:
+            debug_log(f"❌ Ошибка получения следующего вопроса: {e}")
+            
+            if self.is_language_subject:
+                fallback = self._get_language_fallback_question('vocabulary', ensure_unique=True)
+            else:
+                fallback = self._get_fallback_question(ensure_unique=True)
+            
+            debug_log(f"🔄 Использован fallback после ошибки: {fallback[:80]}...")
             return fallback
 
     def evaluate_and_continue(self, student_answer: str, current_question: str) -> Tuple[str, Optional[str]]:
         """Оценивает ответ и возвращает feedback + следующий вопрос с учетом возраста"""
         try:
             # 1. Сначала оцениваем ответ (это быстро)
-            feedback = self.evaluate_single_answer(student_answer, current_question)
+            if self.is_language_subject:
+                feedback = self.evaluate_language_answer(student_answer, current_question)
+            else:
+                feedback = self.evaluate_single_answer(student_answer, current_question)
             
             # 2. Параллельно получаем следующий вопрос
             next_question = self.get_next_question()
@@ -222,15 +486,20 @@ class PracticeManager:
             return feedback, next_question
             
         except Exception as e:
-            print(f"❌ Ошибка в evaluate_and_continue: {e}")
+            debug_log(f"❌ Ошибка в evaluate_and_continue: {e}")
             # ИСПРАВЛЕННЫЙ FALLBACK ДЛЯ ПРАКТИКИ
             feedback = "Спасибо за ответ! Переходим к следующему вопросу."
-            age = self.student_data.get('age', '12')
-            next_question = self._get_fallback_question_for_age(age, ensure_unique=True)
+            
+            if self.is_language_subject:
+                next_question = self._get_language_fallback_question('vocabulary', ensure_unique=True)
+            else:
+                age = self.student_data.get('age', '12')
+                next_question = self._get_fallback_question_for_age(age, ensure_unique=True)
+            
             return feedback, next_question
 
     def evaluate_single_answer(self, student_answer: str, question: str) -> str:
-        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ ученика через LLM (все как раньше)"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ ученика через LLM"""
         try:
             if not student_answer or len(student_answer.strip()) < 2:
                 return "Ответ слишком короткий. Пожалуйста, попробуйте ответить более развернуто."
@@ -264,9 +533,46 @@ class PracticeManager:
             return evaluation
             
         except Exception as e:
-            print(f"❌ Ошибка оценки ответа: {e}")
+            debug_log(f"❌ Ошибка оценки ответа: {e}")
             # ИСПРАВЛЕННЫЙ FALLBACK
             return "Спасибо за ответ! Переходим к следующему вопросу."
+
+    def evaluate_language_answer(self, student_answer: str, question: str) -> str:
+        """Оценивает ответ на языковое упражнение"""
+        try:
+            if not student_answer or len(student_answer.strip()) < 1:
+                return "Ответ слишком короткий. Попробуйте ответить на изучаемом языке."
+            
+            prompt = f"""
+            Оцени ответ ученика на языковое упражнение.
+            
+            ЯЗЫК: {self.target_language}
+            УРОВЕНЬ: {self.language_level}
+            УПРАЖНЕНИЕ: {question}
+            ОТВЕТ УЧЕНИКА: {student_answer}
+            
+            Дай конструктивную обратную связь на русском.
+            Учитывай уровень {self.language_level}.
+            Если есть ошибки - мягко исправь их.
+            Похвали за правильные элементы.
+            
+            Верни только обратную связь (2-3 предложения).
+            """
+            
+            feedback = self.llm.query(
+                question=prompt,
+                context="",
+                subject=f"{self.target_language} language"
+            )
+            
+            if feedback and len(feedback.strip()) > 20:
+                return feedback
+            
+            return "Спасибо за ответ! Продолжайте практиковать язык."
+            
+        except Exception as e:
+            debug_log(f"❌ Ошибка оценки языкового ответа: {e}")
+            return "Спасибо за ответ! Это хорошая практика."
 
     def _generate_correct_answer_for_test(self, question: str) -> Optional[str]:
         """Генерирует правильный ответ на тестовый вопрос"""
@@ -289,7 +595,7 @@ class PracticeManager:
             return llm_response.strip() if llm_response else None
             
         except Exception as e:
-            print(f"❌ Ошибка генерации правильного ответа для теста: {e}")
+            debug_log(f"❌ Ошибка генерации правильного ответа для теста: {e}")
             return None
 
     def _generate_correct_answer(self, question: str) -> Optional[str]:
@@ -300,6 +606,7 @@ class PracticeManager:
             
             ВОПРОС: {question}
             КОНТЕКСТ: {self.current_lesson_summary}
+            ПРЕДМЕТ: {self.current_subject}
             
             Верни только краткий правильный ответ.
             """
@@ -312,11 +619,11 @@ class PracticeManager:
             return llm_response.strip() if llm_response else None
             
         except Exception as e:
-            print(f"❌ Ошибка генерации правильного ответа: {e}")
+            debug_log(f"❌ Ошибка генерации правильного ответа: {e}")
             return None
 
     def _evaluate_with_llm_context(self, student_answer: str, question: str, correct_answer: str) -> str:
-        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ через LLM (все как раньше)"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Оценивает ответ через LLM"""
         try:
             # 🔥 НОВОЕ: Получаем данные ученика для персонализации
             age = self.student_data.get('age', '12')
@@ -367,7 +674,7 @@ class PracticeManager:
             return evaluation if evaluation else f"Спасибо за ответ! Правильный ответ: {correct_answer}"
             
         except Exception as e:
-            print(f"❌ Ошибка оценки через LLM: {e}")
+            debug_log(f"❌ Ошибка оценки через LLM: {e}")
             return f"Спасибо за ответ! Правильный ответ: {correct_answer}"
 
     def stop_async_generation(self):
@@ -422,6 +729,7 @@ class PracticeManager:
             Выдели только ключевые понятия и основные идеи.
             
             ТЕКСТ: {lesson_context[:1500]}
+            ПРЕДМЕТ: {self.current_subject}
             
             Верни только краткое содержание (максимум 300 слов).
             """
@@ -433,7 +741,7 @@ class PracticeManager:
             )
             return summary if summary and len(summary) > 50 else lesson_context[:500] + "..."
         except Exception as e:
-            print(f"❌ Ошибка генерации краткого содержания: {e}")
+            debug_log(f"❌ Ошибка генерации краткого содержания: {e}")
             return lesson_context[:500] + "..."
 
     def _get_fallback_question_for_age(self, age: int, ensure_unique: bool = False) -> str:
@@ -447,8 +755,10 @@ class PracticeManager:
             age_group = "old"
         
         # Возрастные вопросы для разных предметов
-        age_questions = {
-            "обществознание": {
+        subject_lower = self.current_subject.lower()
+        
+        if 'обществознание' in subject_lower or 'общество' in subject_lower:
+            age_questions = {
                 "young": [
                     "Что такое семья и зачем она нужна?",
                     "Как нужно вести себя в школе?",
@@ -470,8 +780,11 @@ class PracticeManager:
                     "Объясни взаимосвязь экономики, политики и социальной сферы.",
                     "Какие глобальные проблемы современного общества ты можешь назвать?"
                 ]
-            },
-            "математика": {
+            }
+            questions = age_questions.get(age_group, age_questions["middle"])
+            
+        elif 'математика' in subject_lower or 'алгебра' in subject_lower or 'геометрия' in subject_lower:
+            age_questions = {
                 "young": [
                     "Посчитай, сколько будет 5 + 3?",
                     "Что такое цифры и зачем они нужны?",
@@ -493,8 +806,11 @@ class PracticeManager:
                     "Сравни различные подходы к решению этой проблемы.",
                     "Какие практические применения имеет эта математическая концепция?"
                 ]
-            },
-            "история": {
+            }
+            questions = age_questions.get(age_group, age_questions["middle"])
+            
+        elif 'история' in subject_lower:
+            age_questions = {
                 "young": [
                     "Кто такие древние люди и как они жили?",
                     "Что такое Родина и почему ее нужно любить?",
@@ -516,152 +832,35 @@ class PracticeManager:
                     "Какие альтернативные исторические развития возможны были?",
                     "Как исторический контекст влияет на интерпретацию событий?"
                 ]
-            },
-            "физика": {
+            }
+            questions = age_questions.get(age_group, age_questions["middle"])
+            
+        else:
+            # Базовый набор вопросов для любого предмета
+            general_questions = {
                 "young": [
-                    "Что такое сила и как она действует?",
-                    "Почему предметы падают на землю?",
-                    "Что такое свет и тень?",
-                    "Как работает магнит?",
-                    "Почему летает воздушный шар?"
+                    "Объясни самое главное, что мы сегодня узнали.",
+                    "Что тебе больше всего понравилось в уроке?",
+                    "Как можно использовать эти знания в жизни?",
+                    "Что было самым интересным?",
+                    "О чем бы ты хотел узнать больше?"
                 ],
                 "middle": [
-                    "Как работает основной физический принцип, который мы рассмотрели?",
-                    "Объясни физический смысл изученного явления.",
-                    "Где в повседневной жизни мы встречаемся с этим физическим законом?",
-                    "Какие практические применения имеет это физическое открытие?",
-                    "В чем заключается научная важность изученного физического явления?"
+                    "Объясни основную идею изученного материала.",
+                    "В чем заключается главная мысль этого урока?",
+                    "Какие ключевые понятия мы сегодня изучили?",
+                    "Как можно применить эти знания на практике?",
+                    "Почему эта тема важна для понимания предмета?"
                 ],
                 "old": [
-                    "Выведи основное уравнение изученного физического закона.",
-                    "Проанализируй границы применимости этой физической теории.",
-                    "Сравни различные физические модели объяснения этого явления.",
-                    "Какие экспериментальные подтверждения существуют для этой теории?",
-                    "Как эта физическая концепция связана с другими разделами физики?"
-                ]
-            },
-            "химия": {
-                "young": [
-                    "Что такое вещества и какие они бывают?",
-                    "Почему вода важна для жизни?",
-                    "Что такое воздух и из чего он состоит?",
-                    "Как отличить твердое тело от жидкости?",
-                    "Что такое раствор и как его получить?"
-                ],
-                "middle": [
-                    "Опиши основные химические процессы из урока.",
-                    "В чем особенность химических свойств изученных элементов?",
-                    "Как протекает химическая реакция, которую мы изучали?",
-                    "Какое практическое значение имеют эти химические процессы?",
-                    "Объясни взаимосвязь между строением и свойствами химических веществ."
-                ],
-                "old": [
-                    "Составь уравнение химической реакции и расставь коэффициенты.",
-                    "Проанализируй механизм протекания этой химической реакции.",
-                    "Сравни химические свойства изученных элементов и соединений.",
-                    "Какие промышленные применения имеет этот химический процесс?",
-                    "Объясни с позиций электронного строения свойства этого вещества."
-                ]
-            },
-            "биология": {
-                "young": [
-                    "Что такое растения и животные?",
-                    "Почему нужно мыть руки перед едой?",
-                    "Как растут цветы?",
-                    "Что такое семья животных?",
-                    "Почему птицы улетают на юг?"
-                ],
-                "middle": [
-                    "Каковы основные биологические процессы, которые мы изучили?",
-                    "Опиши строение и функции биологических структур из урока.",
-                    "Как взаимодействуют различные биологические системы?",
-                    "В чем биологическое значение изученных процессов?",
-                    "Какие адаптации организмов мы рассмотрели и в чем их смысл?"
-                ],
-                "old": [
-                    "Проанализируй эволюционные предпосылки изученного биологического явления.",
-                    "Сравни строение и функции различных биологических систем.",
-                    "Каковы молекулярные механизмы этого биологического процесса?",
-                    "Как это биологическое явление связано с экологией?",
-                    "Какие практические применения в медицине имеет это биологическое знание?"
-                ]
-            },
-            "литература": {
-                "young": [
-                    "О чем эта сказка/рассказ?",
-                    "Кто главный герой и какой он?",
-                    "Чему учит эта история?",
-                    "Какие поступки героя тебе понравились?",
-                    "Как бы ты поступил на месте героя?"
-                ],
-                "middle": [
-                    "В чем основная идея или тема произведения, которое мы обсуждали?",
-                    "Охарактеризуй главных героев изученного произведения.",
-                    "Как автор раскрывает основные темы в произведении?",
-                    "В чем художественное своеобразие этого литературного произведения?",
-                    "Какие нравственные проблемы поднимает автор в произведении?"
-                ],
-                "old": [
-                    "Проанализируйте художественные средства, использованные автором.",
-                    "Сравните различные интерпретации этого литературного произведения.",
-                    "Как исторический контекст влияет на понимание произведения?",
-                    "Каковы философские аспекты поднятых в произведении проблем?",
-                    "Как творчество этого автора связано с литературным направлением его эпохи?"
-                ]
-            },
-            "русский язык": {
-                "young": [
-                    "Что такое буквы и звуки?",
-                    "Как правильно писать свое имя?",
-                    "Что такое предложение?",
-                    "Как отличить гласные от согласных?",
-                    "Зачем нужны знаки препинания?"
-                ],
-                "middle": [
-                    "Объясни основное грамматическое правило, которое мы изучили.",
-                    "В чем особенности применения этого правила на практике?",
-                    "Какие исключения существуют из изученного правила?",
-                    "Как правильно использовать изученные языковые конструкции?",
-                    "Почему это грамматическое правило важно для правильной речи?"
-                ],
-                "old": [
-                    "Проанализируйте стилистические особенности этого текста.",
-                    "Сравните употребление этой грамматической конструкции в разных стилях речи.",
-                    "Каковы исторические предпосылки этого языкового явления?",
-                    "Как это правило связано с системой языка в целом?",
-                    "Какие трудности возникают при практическом применении этого правила?"
+                    "Проанализируйте основные концепции изученного материала.",
+                    "Каковы практические применения этих знаний?",
+                    "Сравните изученные понятия с ранее известными.",
+                    "Какие перспективы развития этой темы вы видите?",
+                    "Как эти знания связаны с другими областями науки?"
                 ]
             }
-        }
-        
-        # Базовый набор вопросов для любого предмета
-        general_questions = {
-            "young": [
-                "Объясни самое главное, что мы сегодня узнали.",
-                "Что тебе больше всего понравилось в уроке?",
-                "Как можно использовать эти знания в жизни?",
-                "Что было самым интересным?",
-                "О чем бы ты хотел узнать больше?"
-            ],
-            "middle": [
-                "Объясни основную идею изученного материала.",
-                "В чем заключается главная мысль этого урока?",
-                "Какие ключевые понятия мы сегодня изучили?",
-                "Как можно применить эти знания на практике?",
-                "Почему эта тема важна для понимания предмета?"
-            ],
-            "old": [
-                "Проанализируйте основные концепции изученного материала.",
-                "Каковы практические применения этих знаний?",
-                "Сравните изученные понятия с ранее известными.",
-                "Какие перспективы развития этой темы вы видите?",
-                "Как эти знания связаны с другими областями науки?"
-            ]
-        }
-        
-        # Получаем вопросы для текущего предмета и возраста
-        subject_questions = age_questions.get(self.current_subject, {})
-        questions = subject_questions.get(age_group, general_questions.get(age_group, ["Расскажи об основном понятии из урока?"]))
+            questions = general_questions.get(age_group, ["Расскажи об основном понятии из урока?"])
         
         if ensure_unique and self.generated_questions:
             # Ищем вопрос, которого еще не было
@@ -679,10 +878,50 @@ class PracticeManager:
         import random
         return random.choice(questions)
 
+    def _get_language_fallback_question(self, exercise_type: str, ensure_unique: bool = False) -> str:
+        """Fallback вопросы для языковой практики"""
+        fallback_questions = {
+            'vocabulary': [
+                f"Назови 3 слова на {self.target_language} по теме урока.",
+                f"Как переводится слово 'привет' на {self.target_language}?",
+                f"Составь простое предложение на {self.target_language}.",
+                f"Какие слова на {self.target_language} ты запомнил из урока?"
+            ],
+            'translation': [
+                f"Переведи на {self.target_language}: 'Меня зовут...'",
+                f"Как сказать 'Спасибо' на {self.target_language}?",
+                f"Переведи: 'Я учу {self.target_language}'.",
+                f"Как будет 'До свидания' на {self.target_language}?"
+            ],
+            'grammar': [
+                f"Составь вопрос на {self.target_language}.",
+                f"Поставь глагол в правильную форму для {self.language_level} уровня.",
+                f"Исправь ошибку в предложении на {self.target_language}.",
+                f"Составь отрицательное предложение на {self.target_language}."
+            ],
+            'fill_blank': [
+                f"Заполни пропуск: 'I ___ a student.' (am/is/are)",
+                f"Вставь правильное слово: 'My name ___ John.'",
+                f"Заполни пропуск в предложении на {self.target_language}.",
+                f"Выбери правильный вариант для заполнения пропуска."
+            ]
+        }
+        
+        questions = fallback_questions.get(exercise_type, fallback_questions['vocabulary'])
+        
+        if ensure_unique and self.generated_questions:
+            existing_questions = [q["question"] for q in self.generated_questions]
+            for question in questions:
+                if question not in existing_questions:
+                    return question
+        
+        import random
+        return random.choice(questions)
+
     def _get_fallback_question(self, ensure_unique: bool = False) -> str:
         """Старый метод для обратной совместимости"""
-        age = self.student_data.get('age', '12')
-        return self._get_fallback_question_for_age(int(age), ensure_unique)
+        age = int(self.student_data.get('age', 12)) if self.student_data else 12
+        return self._get_fallback_question_for_age(age, ensure_unique)
 
     def has_more_questions(self) -> bool:
         """Проверяет, можно ли генерировать еще вопросы"""
@@ -698,6 +937,9 @@ class PracticeManager:
         self.current_lesson_context = ""
         self.current_lesson_summary = ""
         self.current_subject = ""
+        self.is_language_subject = False
+        self.target_language = None
+        self.language_level = 'beginner'
         self.generated_questions = []
         self.current_question_index = 0
         while not self.question_queue.empty():
@@ -705,7 +947,7 @@ class PracticeManager:
                 self.question_queue.get_nowait()
             except queue.Empty:
                 break
-        print("🔄 Менеджер практики сброшен")
+        debug_log("🔄 Менеджер практики сброшен")
 
     def get_current_question(self) -> Optional[str]:
         """Возвращает текущий вопрос"""
@@ -717,6 +959,7 @@ class PracticeManager:
         """🔥 ОБНОВЛЕННЫЙ МЕТОД: Возвращает статистику по практике"""
         question_types = {}
         test_questions_count = 0
+        language_questions_count = 0
         
         for q in self.generated_questions:
             q_type = q.get("type", "unknown")
@@ -724,11 +967,13 @@ class PracticeManager:
             
             if q_type == "test_question":
                 test_questions_count += 1
+            elif "language_" in q_type:
+                language_questions_count += 1
         
-        age = self.student_data.get('age', 'неизвестен')
-        level = self.student_data.get('level', 'неизвестен')
+        age = self.student_data.get('age', 'неизвестен') if self.student_data else 'неизвестен'
+        level = self.student_data.get('level', 'неизвестен') if self.student_data else 'неизвестен'
         
-        return {
+        stats = {
             "total_questions": len(self.generated_questions),
             "max_questions": self.max_questions,
             "questions_in_queue": self.question_queue.qsize(),
@@ -737,31 +982,45 @@ class PracticeManager:
             "has_more_questions": self.has_more_questions(),
             "question_types": question_types,
             "test_questions_count": test_questions_count,
+            "language_questions_count": language_questions_count,
             "lesson_summary_length": len(self.current_lesson_summary),
             # 🔥 НОВОЕ: Статистика по адаптации
             "student_data": {
                 "age": age,
                 "level": level
             },
-            "test_questions_percentage": round((test_questions_count / len(self.generated_questions)) * 100, 1) if self.generated_questions else 0
+            "practice_type": "language" if self.is_language_subject else "general",
+            "target_language": self.target_language if self.is_language_subject else None,
+            "language_level": self.language_level if self.is_language_subject else None
         }
+        
+        if self.generated_questions:
+            stats["test_questions_percentage"] = round((test_questions_count / len(self.generated_questions)) * 100, 1)
+            stats["language_questions_percentage"] = round((language_questions_count / len(self.generated_questions)) * 100, 1)
+        else:
+            stats["test_questions_percentage"] = 0
+            stats["language_questions_percentage"] = 0
+        
+        return stats
 
 
 # Создаем глобальный экземпляр для тестирования
 if __name__ == "__main__":
     # Тестирование базовой функциональности
-    print("🧪 Тестирование PracticeManager с тестовыми вопросами...")
+    print("🧪 Тестирование PracticeManager с улучшенной языковой поддержкой...")
     
     # Создаем mock LLM для тестирования
     class MockLLM:
         def query(self, question, context, subject):
-            return """Какая форма правления существует в современной России?
+            return """Тестовый вопрос по английскому языку.
 
-Варианты ответов:
-A) Монархия
-B) Республика
-C) Диктатура
-D) Анархия"""
+Выберите правильный перевод слова "дом":
+A) house
+B) home  
+C) building
+D) apartment
+
+Правильный ответ: A) house"""
     
     # Тестируем менеджер практики
     pm = PracticeManager(MockLLM())
@@ -773,15 +1032,27 @@ D) Анархия"""
         'level': '5'
     }
     
-    # Тест инициализации
-    pm.initialize_practice_generation("Урок о формах правления в разных странах", "обществознание")
+    # Тест для языкового предмета
+    print("\n📚 Тест для английского языка:")
+    pm.initialize_practice_generation("Урок о базовых словах на английском: hello, goodbye, thank you", "английский язык")
     
     # Тест генерации вопроса
-    question = pm.generate_single_question()
-    print(f"📝 Сгенерированный тестовый вопрос:\n{question}")
+    question = pm.generate_single_language_question()
+    print(f"📝 Сгенерированный языковой вопрос:\n{question}")
     
     # Тест статистики
     stats = pm.get_practice_stats()
     print(f"📊 Статистика практики: {stats}")
     
-    print("✅ Тестирование PracticeManager завершено!")
+    # Сброс и тест для неязыкового предмета
+    pm.reset()
+    print("\n📚 Тест для математики:")
+    pm.initialize_practice_generation("Урок о сложении и вычитании", "математика")
+    
+    question = pm.generate_single_question()
+    print(f"📝 Сгенерированный вопрос по математике:\n{question}")
+    
+    stats = pm.get_practice_stats()
+    print(f"📊 Статистика практики: {stats}")
+    
+    print("\n✅ Тестирование PracticeManager завершено!")
