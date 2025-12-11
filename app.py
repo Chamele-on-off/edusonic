@@ -1,5 +1,5 @@
 # app.py - AI Teacher System с поддержкой языковых уроков
-# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ЯЗЫКОВОЙ ПОДДЕРЖКОЙ
+# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ЯЗЫКОВОЙ ПОДДЕРЖКОЙ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -771,35 +771,72 @@ def reset_speaking_state(room_id, is_teacher=False):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 # =============================================================================
-# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ
+# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ОПТИМИЗАЦИЕЙ
 # =============================================================================
 
-def text_to_speech(text, lang='auto'):
-    """🔥 УЛУЧШЕННАЯ ВЕРСИЯ: Автоматическое определение языка"""
+def is_foreign_text(text):
+    """🔥 СУПЕР-БЫСТРАЯ проверка на иностранный текст"""
+    if not text:
+        return False
+    
+    # Быстрая проверка первых 200 символов
+    sample = text[:200]
+    
+    # 1. Ищем латинские буквы
+    if not re.search(r'[a-zA-Z]', sample):
+        return False  # Нет латинских букв - точно не иностранный
+    
+    # 2. Игнорируем общепринятые английские слова в русском контексте
+    common_english_in_russian = ['ok', 'hello', 'hi', 'yes', 'no', 'bye', 'sorry', 'please', 'thank you', 'okay']
+    words = re.findall(r'\b[a-zA-Z]{2,}\b', sample.lower())
+    
+    if not words:
+        return False
+    
+    # Подсчитываем уникальные НЕ общепринятые слова
+    foreign_words = [w for w in words if w not in common_english_in_russian]
+    unique_foreign_words = set(foreign_words)
+    
+    # Если есть хотя бы 2 уникальных НЕ общепринятых английских слова
+    if len(unique_foreign_words) >= 2:
+        return True
+    
+    # Или если есть длинное иностранное слово (более 4 букв)
+    long_foreign_words = [w for w in foreign_words if len(w) > 4]
+    if len(long_foreign_words) > 0:
+        return True
+    
+    return False
+
+def text_to_speech(text, lang='ru'):
+    """🔥 ОПТИМИЗИРОВАННАЯ ВЕРСИЯ: Быстрое озвучивание с опциональным автоопределением"""
     try:
         if not text.strip():
             return None
             
-        # Определяем язык по наличию кириллицы
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Автоопределение ТОЛЬКО если явно запрошено
         if lang == 'auto':
-            # Удаляем спецсимволы и цифры для чистого анализа
-            clean_text = re.sub(r'[^a-zA-Zа-яА-ЯёЁ\s]', '', text)
-            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', clean_text))
-            has_latin = bool(re.search(r'[a-zA-Z]', clean_text))
+            # Быстрая проверка - есть ли латинские буквы?
+            has_latin = bool(re.search(r'[a-zA-Z]', text))
+            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', text))
             
-            # 🔥 Если есть и кириллица, и латиница - смешанный режим
-            if has_cyrillic and has_latin:
+            # Если ЕСТЬ латиница И кириллица - смешанный режим
+            if has_latin and has_cyrillic:
                 return text_to_speech_mixed(text)
-            
-            # 🔥 Определяем основной язык
-            lang = 'ru' if has_cyrillic else 'en'
+            # Если ТОЛЬКО латиница - английский
+            elif has_latin and not has_cyrillic:
+                lang = 'en'
+            # По умолчанию - русский (для ТОЛЬКО кириллицы или цифр/знаков)
+            else:
+                lang = 'ru'
         
-        # Стандартная генерация речи
+        # 🔥 БЫСТРАЯ ГЕНЕРАЦИЯ БЕЗ ДОПОЛНИТЕЛЬНОГО АНАЛИЗА
         tts = gTTS(text=text, lang=lang, slow=False, lang_check=False)
         mp3_fp = io.BytesIO()
         tts.write_to_fp(mp3_fp)
         mp3_fp.seek(0)
         return base64.b64encode(mp3_fp.read()).decode('utf-8')
+        
     except Exception as e:
         debug_log(f"Error in text_to_speech: {e}")
         # Fallback - используем русский язык
@@ -814,9 +851,10 @@ def text_to_speech(text, lang='auto'):
             return None
 
 def text_to_speech_mixed(text):
-    """🔥 НОВАЯ ФУНКЦИЯ: Озвучивание смешанного текста"""
+    """🔥 ОПТИМИЗИРОВАННАЯ ФУНКЦИЯ: Озвучивание смешанного текста"""
     try:
-        # 🔥 ШАБЛОН: ищем последовательности букв одного языка
+        # 🔥 ОПТИМИЗИРОВАННЫЙ ШАБЛОН: ищем последовательности букв одного языка
+        # Разбиваем по границам языка (кириллица/латиница)
         pattern = r'([а-яА-ЯёЁ][а-яА-ЯёЁ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
         fragments = re.findall(pattern, text)
         
@@ -830,7 +868,7 @@ def text_to_speech_mixed(text):
             if not fragment:
                 continue
                 
-            # Определяем язык фрагмента
+            # Определяем язык фрагмента - быстрая проверка
             has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', fragment))
             lang = 'ru' if has_cyrillic else 'en'
             
@@ -841,17 +879,17 @@ def text_to_speech_mixed(text):
                 chunk_fp.seek(0)
                 audio_chunks.append(chunk_fp.read())
                 
-                # 🔥 КОРОТКАЯ ПАУЗА МЕЖДУ ФРАГМЕНТАМИ (100ms silence)
-                silence = bytes([0] * 1600)  # 100ms при 16kHz
+                # 🔥 КОРОТКАЯ ПАУЗА МЕЖДУ ФРАГМЕНТАМИ (50ms silence)
+                silence = bytes([0] * 800)  # 50ms при 16kHz
                 audio_chunks.append(silence)
                 
             except Exception as e:
-                debug_log(f"Error processing fragment '{fragment}': {e}")
+                debug_log(f"Error processing fragment '{fragment[:30]}...': {e}")
                 continue
         
         if audio_chunks:
             # 🔥 УБИРАЕМ ПОСЛЕДНЮЮ ПАУЗУ
-            if audio_chunks[-1] == bytes([0] * 1600):
+            if audio_chunks[-1] == bytes([0] * 800):
                 audio_chunks.pop()
                 
             combined_audio = b''.join(audio_chunks)
@@ -862,8 +900,8 @@ def text_to_speech_mixed(text):
         debug_log(f"Error in text_to_speech_mixed: {e}")
         return text_to_speech(text, 'ru')
 
-def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """🔥 ОБНОВЛЕННАЯ ФУНКЦИЯ: Озвучивает текст с поддержкой языков"""
+def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
+    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с оптимизацией производительности"""
     if not text.strip():
         return
         
@@ -878,8 +916,32 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    # 🔥 ИСПОЛЬЗУЕМ УЛУЧШЕННУЮ ВЕРСИЮ С АВТООПРЕДЕЛЕНИЕМ ЯЗЫКА
-    audio_data = text_to_speech(cleaned_text, lang='auto')
+    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
+    # 1. Если force_lang указан - используем его (самый быстрый путь)
+    # 2. Иначе определяем только если есть латинские буквы
+    # 3. По умолчанию - русский (самый частый случай)
+    
+    audio_data = None
+    
+    if force_lang:
+        # 🔥 ЯВНО УКАЗАН ЯЗЫК - САМЫЙ БЫСТРЫЙ ПУТЬ
+        audio_data = text_to_speech(cleaned_text, lang=force_lang)
+    else:
+        # 🔥 БЫСТРАЯ ЭВРИСТИКА: проверяем только на латинские буквы
+        # Это ДЕШЕВО - просто поиск по регулярке
+        has_latin = bool(re.search(r'[a-zA-Z]', cleaned_text))
+        
+        if not has_latin:
+            # 🔥 ТОЛЬКО РУССКИЙ ТЕКСТ - БЫСТРЫЙ ПУТЬ
+            audio_data = text_to_speech(cleaned_text, lang='ru')
+        else:
+            # Есть латинские буквы - нужна более точная проверка
+            if is_foreign_text(cleaned_text):
+                # 🔥 ЕСТЬ ИНОСТРАННЫЙ ТЕКСТ - автоопределение
+                audio_data = text_to_speech(cleaned_text, lang='auto')
+            else:
+                # 🔥 ТОЛЬКО ОБЩЕПРИНЯТЫЕ СЛОВА - РУССКИЙ
+                audio_data = text_to_speech(cleaned_text, lang='ru')
     
     if audio_data:
         emit('speech_audio', {
@@ -888,7 +950,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             'timestamp': time.time(),
             'voice_type': voice_type,
             'is_teacher': is_teacher,
-            'language_mixed': 'auto'  # 🔥 НОВОЕ ПОЛЕ: указываем что использовалось автоопределение
+            'optimized': True  # 🔥 Флаг что использовалась оптимизация
         }, room=room_id)
         
         if not skip_history:
@@ -897,13 +959,13 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 'timestamp': time.time(),
                 'type': 'generated',
                 'voice_type': voice_type,
-                'is_teacher': is_teacher,
-                'language_mixed': True  # 🔥 ФЛАГ СМЕШАННОГО ЯЗЫКА
+                'is_teacher': is_teacher
             })
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
     
-    speech_duration = max(2, len(cleaned_text) * 0.1)
+    # 🔥 Более точная длительность речи
+    speech_duration = max(1.5, len(cleaned_text) * 0.08)  # Уменьшили коэффициент
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
 def save_student_data(student_data):
@@ -932,7 +994,7 @@ def save_student_data(student_data):
         return None
 
 def load_student_data(student_id):
-    """Загружает данные ученика из JSON файла"""
+    """Загружает данные ученика из JSON файл"""
     try:
         filename = f"{student_id}.json"
         filepath = STUDENTS_DIR / filename
@@ -1336,7 +1398,8 @@ def handle_join_room(data):
 def delayed_welcome(room_id, message, delay=2):
     """Отправляет приветствие с задержкой"""
     time.sleep(delay)
-    speak_text(room_id, message, voice_type='female', is_teacher=True)
+    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ: приветствие всегда на русском
+    speak_text(room_id, message, voice_type='female', is_teacher=True, force_lang='ru')
 
 @socketio.on('get_current_avatar')
 def handle_get_current_avatar(data):
@@ -1367,6 +1430,7 @@ def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
     voice_type = data.get('voice', 'male')
+    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
     speak_text(room_id, text, voice_type)
 
 @socketio.on('student_answer')
@@ -1399,7 +1463,8 @@ def handle_student_answer(data):
                 'sid': 'teacher',
                 'is_teacher': True
             }, room=room_id)
-            speak_text(room_id, response, voice_type='female', is_teacher=True)
+            # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+            speak_text(room_id, response, voice_type='female', is_teacher=True, force_lang='ru')
             emit('practice_ended', {}, room=room_id)
         return
 
@@ -1419,6 +1484,7 @@ def handle_student_answer(data):
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         return
 
@@ -1443,6 +1509,7 @@ def handle_student_answer(data):
                 'is_teacher': True
             }, room=room_id)
             
+            # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
             
             if not room_dialogue[room_id].practice_active:
@@ -1535,6 +1602,7 @@ def handle_recognized_speech(data):
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
+                    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
                 else:
                     practice_msg = "Урок завершен. Переходим к практике."
@@ -1543,7 +1611,7 @@ def handle_recognized_speech(data):
                         'sid': 'teacher', 
                         'is_teacher': True
                     }, room=room_id)
-                    speak_text(room_id, practice_msg, voice_type='female', is_teacher=True)
+                    speak_text(room_id, practice_msg, voice_type='female', is_teacher=True, force_lang='ru')
                 return
         
         if any(word in text.lower() for word in ["стоп", "останови", "хватит", "закончи"]):
@@ -1565,6 +1633,7 @@ def handle_recognized_speech(data):
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
+                # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
             response = dialogue.process_input(text)
@@ -1593,6 +1662,7 @@ def handle_recognized_speech(data):
                     'is_teacher': True
                 }, room=room_id)
                 
+                # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
             if dialogue.is_lesson_started():
@@ -1634,7 +1704,8 @@ def handle_activate_ai_teacher(data):
         room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
         
         greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-        speak_text(room_id, greeting, voice_type='female', is_teacher=True)
+        # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+        speak_text(room_id, greeting, voice_type='female', is_teacher=True, force_lang='ru')
         
         emit('ai_teacher_activated', {
             'room_id': room_id,
@@ -1687,6 +1758,7 @@ def handle_llm_response_ready(data):
         'is_teacher': True
     }, room=room_id)
     
+    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
     speak_text(room_id, answer, voice_type='female', is_teacher=True)
 
 @socketio.on('practice_started')
@@ -1831,6 +1903,7 @@ def handle_llm_async_response(data):
             'is_teacher': True
         }, room=room_id)
         
+        # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
         speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('generate_visualization')
@@ -5192,6 +5265,7 @@ if __name__ == '__main__':
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
     debug_log(f"🔥 Добавлена поддержка билингвального озвучивания")
+    debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена быстрая проверка языка")
     
     socketio.run(
         app, 
