@@ -1,6 +1,5 @@
-# app.py - AI Teacher System (ИСПРАВЛЕННАЯ ВЕРСИЯ С ОПТИМИЗАЦИЕЙ МНОЖЕСТВА КОМНАТ)
-# Исправлены блокировки при создании множества комнат
-# Оптимизирована инициализация и добавлена очистка неактивных комнат
+# app.py - AI Teacher System с поддержкой языковых уроков
+# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ЯЗЫКОВОЙ ПОДДЕРЖКОЙ
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -771,8 +770,100 @@ def reset_speaking_state(room_id, is_teacher=False):
         room_teacher_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
+# =============================================================================
+# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ
+# =============================================================================
+
+def text_to_speech(text, lang='auto'):
+    """🔥 УЛУЧШЕННАЯ ВЕРСИЯ: Автоматическое определение языка"""
+    try:
+        if not text.strip():
+            return None
+            
+        # Определяем язык по наличию кириллицы
+        if lang == 'auto':
+            # Удаляем спецсимволы и цифры для чистого анализа
+            clean_text = re.sub(r'[^a-zA-Zа-яА-ЯёЁ\s]', '', text)
+            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', clean_text))
+            has_latin = bool(re.search(r'[a-zA-Z]', clean_text))
+            
+            # 🔥 Если есть и кириллица, и латиница - смешанный режим
+            if has_cyrillic and has_latin:
+                return text_to_speech_mixed(text)
+            
+            # 🔥 Определяем основной язык
+            lang = 'ru' if has_cyrillic else 'en'
+        
+        # Стандартная генерация речи
+        tts = gTTS(text=text, lang=lang, slow=False, lang_check=False)
+        mp3_fp = io.BytesIO()
+        tts.write_to_fp(mp3_fp)
+        mp3_fp.seek(0)
+        return base64.b64encode(mp3_fp.read()).decode('utf-8')
+    except Exception as e:
+        debug_log(f"Error in text_to_speech: {e}")
+        # Fallback - используем русский язык
+        try:
+            tts = gTTS(text=text, lang='ru', slow=False, lang_check=False)
+            mp3_fp = io.BytesIO()
+            tts.write_to_fp(mp3_fp)
+            mp3_fp.seek(0)
+            return base64.b64encode(mp3_fp.read()).decode('utf-8')
+        except Exception as e2:
+            debug_log(f"Fallback error in text_to_speech: {e2}")
+            return None
+
+def text_to_speech_mixed(text):
+    """🔥 НОВАЯ ФУНКЦИЯ: Озвучивание смешанного текста"""
+    try:
+        # 🔥 ШАБЛОН: ищем последовательности букв одного языка
+        pattern = r'([а-яА-ЯёЁ][а-яА-ЯёЁ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
+        fragments = re.findall(pattern, text)
+        
+        if not fragments:
+            return text_to_speech(text, 'ru')  # Fallback
+        
+        audio_chunks = []
+        
+        for fragment in fragments:
+            fragment = fragment.strip()
+            if not fragment:
+                continue
+                
+            # Определяем язык фрагмента
+            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', fragment))
+            lang = 'ru' if has_cyrillic else 'en'
+            
+            try:
+                tts = gTTS(text=fragment, lang=lang, slow=False, lang_check=False)
+                chunk_fp = io.BytesIO()
+                tts.write_to_fp(chunk_fp)
+                chunk_fp.seek(0)
+                audio_chunks.append(chunk_fp.read())
+                
+                # 🔥 КОРОТКАЯ ПАУЗА МЕЖДУ ФРАГМЕНТАМИ (100ms silence)
+                silence = bytes([0] * 1600)  # 100ms при 16kHz
+                audio_chunks.append(silence)
+                
+            except Exception as e:
+                debug_log(f"Error processing fragment '{fragment}': {e}")
+                continue
+        
+        if audio_chunks:
+            # 🔥 УБИРАЕМ ПОСЛЕДНЮЮ ПАУЗУ
+            if audio_chunks[-1] == bytes([0] * 1600):
+                audio_chunks.pop()
+                
+            combined_audio = b''.join(audio_chunks)
+            return base64.b64encode(combined_audio).decode('utf-8')
+        
+        return None
+    except Exception as e:
+        debug_log(f"Error in text_to_speech_mixed: {e}")
+        return text_to_speech(text, 'ru')
+
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False):
-    """Озвучивает текст и добавляет его в историю"""
+    """🔥 ОБНОВЛЕННАЯ ФУНКЦИЯ: Озвучивает текст с поддержкой языков"""
     if not text.strip():
         return
         
@@ -787,14 +878,17 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    audio_data = text_to_speech(cleaned_text, lang='ru')
+    # 🔥 ИСПОЛЬЗУЕМ УЛУЧШЕННУЮ ВЕРСИЮ С АВТООПРЕДЕЛЕНИЕМ ЯЗЫКА
+    audio_data = text_to_speech(cleaned_text, lang='auto')
+    
     if audio_data:
         emit('speech_audio', {
             'audio': audio_data,
             'text': cleaned_text,
             'timestamp': time.time(),
             'voice_type': voice_type,
-            'is_teacher': is_teacher
+            'is_teacher': is_teacher,
+            'language_mixed': 'auto'  # 🔥 НОВОЕ ПОЛЕ: указываем что использовалось автоопределение
         }, room=room_id)
         
         if not skip_history:
@@ -803,25 +897,14 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 'timestamp': time.time(),
                 'type': 'generated',
                 'voice_type': voice_type,
-                'is_teacher': is_teacher
+                'is_teacher': is_teacher,
+                'language_mixed': True  # 🔥 ФЛАГ СМЕШАННОГО ЯЗЫКА
             })
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
     
     speech_duration = max(2, len(cleaned_text) * 0.1)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
-
-def text_to_speech(text, lang='ru'):
-    """Преобразует текст в аудио (base64)"""
-    try:
-        tts = gTTS(text=text, lang=lang, slow=False)
-        mp3_fp = io.BytesIO()
-        tts.write_to_fp(mp3_fp)
-        mp3_fp.seek(0)
-        return base64.b64encode(mp3_fp.read()).decode('utf-8')
-    except Exception as e:
-        debug_log(f"Error in text_to_speech: {e}")
-        return None
 
 def save_student_data(student_data):
     """Сохраняет данные ученика в JSON файл"""
@@ -1074,7 +1157,7 @@ def update_student_lesson_progress(student_id, subject, lesson_id, completed=Tru
         
         return True
     except Exception as e:
-        debug_log(f"❌ Ошибка обновления прогресса: {e}")
+        debug_log(f"❌ Ошибка обновления прогресс: {e}")
         return False
 
 def get_student_lessons_by_class(student_class):
@@ -3899,6 +3982,117 @@ def get_lessons_for_edit():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
+# 🔥 НОВЫЕ API ДЛЯ ЯЗЫКОВОЙ ПОДДЕРЖКИ
+# =============================================================================
+
+@app.route('/api/language/settings', methods=['POST'])
+@student_required
+def set_language_settings():
+    """Устанавливает настройки языка для ученика"""
+    try:
+        data = request.json
+        student_id = data.get('student_id')
+        language_level = data.get('language_level', 'beginner')
+        bilingual_ratio = data.get('bilingual_ratio', 0.3)
+        
+        if not student_id:
+            return jsonify({"success": False, "error": "Не указан student_id"})
+        
+        student_data = load_student_data(student_id)
+        if student_data:
+            student_data['language_level'] = language_level
+            student_data['bilingual_ratio'] = bilingual_ratio
+            save_student_data(student_data)
+            
+            return jsonify({
+                "success": True,
+                "message": f"Установлен уровень языка: {language_level}, соотношение: {bilingual_ratio*100}%",
+                "language_level": language_level,
+                "bilingual_ratio": bilingual_ratio
+            })
+        else:
+            return jsonify({"success": False, "error": "Ученик не найден"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/language/generate-exercise', methods=['POST'])
+def generate_language_exercise():
+    """Генерация языкового упражнения"""
+    try:
+        data = request.json
+        topic = data.get('topic', 'greetings')
+        exercise_type = data.get('type', 'vocabulary')
+        target_language = data.get('language', 'english')
+        level = data.get('level', 'beginner')
+        room_id = data.get('room_id', 'default')
+        
+        # Используем существующую LLM через менеджер
+        prompt = f"""
+        Создай упражнение по языку для ученика.
+        
+        ТИП УПРАЖНЕНИЯ: {exercise_type}
+        ЯЗЫК: {target_language}
+        ТЕМА: {topic}
+        УРОВЕНЬ: {level}
+        
+        Создай упражнение соответствующего типа:
+        - Для 'vocabulary': словарный запас, сопоставление слов
+        - Для 'translation': перевод с русского на {target_language}
+        - Для 'dialogue': диалог на {target_language}
+        - Для 'grammar': грамматическое упражнение
+        
+        Упражнение должно быть понятным для уровня {level}.
+        Верни только упражнение без дополнительных комментариев.
+        """
+        
+        llm_response = llm_manager.submit_request(
+            prompt=prompt,
+            system_prompt="Ты - учитель языка. Создай полезное упражнение.",
+            max_tokens=500,
+            room_id=room_id
+        )
+        
+        return jsonify({
+            "success": True,
+            "exercise": llm_response if llm_response else "Упражнение будет создано в процессе урока.",
+            "type": exercise_type,
+            "language": target_language,
+            "level": level
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/language/test-speech', methods=['POST'])
+def test_speech_synthesis():
+    """Тестирование смешанного озвучивания"""
+    try:
+        data = request.json
+        text = data.get('text', 'Hello, привет! My name is Иван.')
+        room_id = data.get('room_id', 'default')
+        
+        if not text:
+            return jsonify({"success": False, "error": "Текст обязателен"})
+        
+        # Тестируем новую функцию смешанного озвучивания
+        audio_data = text_to_speech(text, lang='auto')
+        
+        if audio_data:
+            return jsonify({
+                "success": True,
+                "message": "Синтез речи успешен",
+                "text": text,
+                "audio_length": len(audio_data),
+                "has_cyrillic": bool(re.search(r'[а-яА-ЯёЁ]', text)),
+                "has_latin": bool(re.search(r'[a-zA-Z]', text))
+            })
+        else:
+            return jsonify({"success": False, "error": "Ошибка синтеза речи"})
+            
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
 # НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ АВАТАРОМ И КОМНАТАМИ
 # =============================================================================
 
@@ -4915,11 +5109,74 @@ def get_student_profile():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
+# 🔥 НОВЫЕ API ДЛЯ ЯЗЫКОВОЙ АВТОДЕТЕКЦИИ
+# =============================================================================
+
+@app.route('/api/language/detect-subject', methods=['POST'])
+def detect_language_subject():
+    """Определяет, является ли предмет языковым"""
+    try:
+        data = request.json
+        subject = data.get('subject', '')
+        
+        if not subject:
+            return jsonify({"success": False, "error": "Предмет не указан"})
+        
+        # Список языковых предметов
+        language_subjects = [
+            'английский язык', 'english', 'английский',
+            'французский язык', 'french', 'французский',
+            'немецкий язык', 'german', 'немецкий',
+            'испанский язык', 'spanish', 'испанский',
+            'китайский язык', 'chinese', 'китайский',
+            'итальянский язык', 'italian', 'итальянский',
+            'японский язык', 'japanese', 'японский',
+            'корейский язык', 'korean', 'корейский'
+        ]
+        
+        subject_lower = subject.lower()
+        is_language = False
+        detected_language = None
+        
+        for lang_subj in language_subjects:
+            if lang_subj in subject_lower:
+                is_language = True
+                # Определяем конкретный язык
+                if 'английский' in lang_subj or 'english' in lang_subj:
+                    detected_language = 'english'
+                elif 'французский' in lang_subj or 'french' in lang_subj:
+                    detected_language = 'french'
+                elif 'немецкий' in lang_subj or 'german' in lang_subj:
+                    detected_language = 'german'
+                elif 'испанский' in lang_subj or 'spanish' in lang_subj:
+                    detected_language = 'spanish'
+                elif 'китайский' in lang_subj or 'chinese' in lang_subj:
+                    detected_language = 'chinese'
+                else:
+                    detected_language = 'english'  # По умолчанию
+                break
+        
+        return jsonify({
+            "success": True,
+            "subject": subject,
+            "is_language_subject": is_language,
+            "detected_language": detected_language,
+            "suggested_settings": {
+                "bilingual_ratio": 0.3,
+                "level": "beginner",
+                "exercise_types": ["vocabulary", "translation", "dialogue"]
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
 # ЗАПУСК СЕРВЕРА
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("🚀 Запуск ОПТИМИЗИРОВАННОЙ AI Teacher системы...")
+    debug_log("🚀 Запуск AI Teacher системы с поддержкой языковых уроков...")
     
     setup_llm_manager()
     
@@ -4934,6 +5191,7 @@ if __name__ == '__main__':
     debug_log(f"✅ Система готова. Async mode: {socketio.async_mode}")
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
+    debug_log(f"🔥 Добавлена поддержка билингвального озвучивания")
     
     socketio.run(
         app, 
