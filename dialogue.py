@@ -11,6 +11,14 @@ import time
 import threading
 from practice_manager import PracticeManager
 
+# 🔥 ИМПОРТ ДЛЯ ЯЗЫКОВОЙ ИНТЕГРАЦИИ
+try:
+    from language_integration import LanguageIntegration, is_language_subject, get_language_settings
+    LANGUAGE_SUPPORT_ENABLED = True
+except ImportError:
+    LANGUAGE_SUPPORT_ENABLED = False
+    debug_log("⚠️ language_integration.py не найден, языковая поддержка отключена")
+
 def debug_log(message):
     """Логирование для отладки"""
     print(f"🔥 [DIALOGUE] {message}")
@@ -103,6 +111,8 @@ class DialogueManager:
             'russian': 'русский язык',
             'english': 'английский язык',
             'french': 'французский язык',
+            'german': 'немецкий язык',
+            'spanish': 'испанский язык',
             'geography': 'география',
             'informatics': 'информатика'
         }
@@ -117,6 +127,13 @@ class DialogueManager:
         self.visualization_counter = 0
         self.paragraphs_since_last_viz = 0
         self.viz_paragraph_interval = 2
+        
+        # 🔥 НОВЫЕ ПОЛЯ ДЛЯ ЯЗЫКОВОЙ ПОДДЕРЖКИ
+        self.is_language_subject = False
+        self.target_language = 'english'
+        self.language_level = 'beginner'  # beginner, intermediate, advanced
+        self.bilingual_ratio = 0.3  # 30% иностранного по умолчанию
+        self.language_practice_manager = None
         
         self._load_lessons()
         
@@ -272,24 +289,26 @@ class DialogueManager:
         # Предметы по классам
         subjects_by_class = {
             "5": ["математика", "география", "биология", "русский язык", "литература", 
-                  "английский язык", "французский язык", "история", "информатика"],
+                  "английский язык", "французский язык", "немецкий язык", "испанский язык", 
+                  "история", "информатика"],
             "6": ["математика", "география", "биология", "русский язык", "литература",
-                  "английский язык", "французский язык", "история", "обществознание", "информатика"],
+                  "английский язык", "французский язык", "немецкий язык", "испанский язык",
+                  "история", "обществознание", "информатика"],
             "7": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
-                  "литература", "английский язык", "французский язык", "история",
-                  "обществознание", "информатика"],
+                  "литература", "английский язык", "французский язык", "немецкий язык", "испанский язык",
+                  "история", "обществознание", "информатика"],
             "8": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
-                  "литература", "английский язык", "французский язык", "история",
-                  "обществознание", "информатика", "химия"],
+                  "литература", "английский язык", "французский язык", "немецкий язык", "испанский язык",
+                  "история", "обществознание", "информатика", "химия"],
             "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
-                  "литература", "английский язык", "французский язык", "история",
-                  "обществознание", "информатика", "химия"],
+                  "литература", "английский язык", "французский язык", "немецкий язык", "испанский язык",
+                  "история", "обществознание", "информатика", "химия"],
             "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
-                   "литература", "английский язык", "французский язык", "история",
-                   "обществознание", "информатика", "химия"],
+                   "литература", "английский язык", "французский язык", "немецкий язык", "испанский язык",
+                   "история", "обществознание", "информатика", "химия"],
             "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
-                   "литература", "английский язык", "французский язык", "история",
-                   "обществознание", "информатика", "химия"]
+                   "литература", "английский язык", "французский язык", "немецкий язык", "испанский язык",
+                   "история", "обществознание", "информатика", "химия"]
         }
         
         subjects = subjects_by_class.get(class_level, [])
@@ -430,6 +449,10 @@ class DialogueManager:
             return "английский язык"
         elif any(word in filename_lower for word in ['французский']):
             return "французский язык"
+        elif any(word in filename_lower for word in ['немецкий']):
+            return "немецкий язык"
+        elif any(word in filename_lower for word in ['испанский']):
+            return "испанский язык"
         elif any(word in filename_lower for word in ['география']):
             return "география"
         elif any(word in filename_lower for word in ['информатика']):
@@ -826,7 +849,7 @@ class DialogueManager:
         
         return True
 
-    def generate_lesson_on_demand(self, topic: str) -> Optional[dict]:
+    def generate_lesson_on_demand(self, topic: str, is_language: bool = False) -> Optional[dict]:
         """🔥 ОБНОВЛЕННЫЙ: Генерирует урок по запрошенной теме с ПРОВЕРОЧНЫМИ ВОПРОСАМИ"""
         try:
             debug_log(f"🎯 Генерация урока по теме: {topic}")
@@ -836,8 +859,18 @@ class DialogueManager:
             level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
-            # 🔥 ОБНОВЛЕННЫЙ: Формируем промпт для генерации урока с ПРОВЕРОЧНЫМИ ВОПРОСАМИ
-            system_prompt = f"""Ты - эксперт по созданию образовательных материалов.
+            # 🔥 ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - ИСПОЛЬЗУЕМ СПЕЦИАЛЬНЫЙ ПРОМПТ
+            if is_language and LANGUAGE_SUPPORT_ENABLED:
+                system_prompt = LanguageIntegration.create_bilingual_lesson_prompt(
+                    topic=topic,
+                    target_language=self.target_language,
+                    level=self.language_level,
+                    bilingual_ratio=self.bilingual_ratio
+                )
+                debug_log(f"🎯 Используем языковой промт для уровня {self.language_level}")
+            else:
+                # 🔥 ОБНОВЛЕННЫЙ: Формируем промпт для генерации урока с ПРОВЕРОЧНЫМИ ВОПРОСАМИ
+                system_prompt = f"""Ты - эксперт по созданию образовательных материалов.
 
 ВАЖНЫЕ ПАРАМЕТРЫ УЧЕНИКА:
 - Имя: {name}
@@ -918,8 +951,14 @@ class DialogueManager:
                 'subject': subject,
                 'class_level': self.student_data.get('education_level', 'general') if self.has_student_data else 'general',
                 'lesson_number': 999,
-                'full_path': f"generated/{filename}"
+                'full_path': f"generated/{filename}",
+                'is_language': is_language
             }
+            
+            if is_language:
+                lesson_data['target_language'] = self.target_language
+                lesson_data['language_level'] = self.language_level
+                lesson_data['bilingual_ratio'] = self.bilingual_ratio
             
             if subject not in self.lessons:
                 self.lessons[subject] = []
@@ -966,8 +1005,14 @@ class DialogueManager:
                 if topic and len(topic) > 2:
                     debug_log(f"🎯 Обнаружен запрос на генерацию урока по теме: '{topic}'")
                     
+                    # 🔥 ПРОВЕРЯЕМ, ЯЗЫКОВОЙ ЛИ ЭТО УРОК
+                    is_language = False
+                    if self.is_language_subject and self.target_language:
+                        is_language = True
+                        debug_log(f"🎯 Это языковой урок: {self.target_language}, уровень {self.language_level}")
+                    
                     # ГЕНЕРИРУЕМ И СОХРАНЯЕМ УРОК
-                    generated_lesson = self.generate_lesson_on_demand(topic)
+                    generated_lesson = self.generate_lesson_on_demand(topic, is_language=is_language)
                     if generated_lesson:
                         debug_log(f"✅ Урок успешно сгенерирован и сохранен: {generated_lesson['id']}")
                         
@@ -1000,6 +1045,14 @@ class DialogueManager:
             self.current_state = "lesson_reading"
             self.current_paragraph = 0
             
+            # 🔥 ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - УСТАНАВЛИВАЕМ НАСТРОЙКИ
+            if lesson_data.get('is_language', False):
+                self.is_language_subject = True
+                self.target_language = lesson_data.get('target_language', 'english')
+                self.language_level = lesson_data.get('language_level', 'beginner')
+                self.bilingual_ratio = lesson_data.get('bilingual_ratio', 0.3)
+                debug_log(f"🎯 Начинаем языковой урок: {self.target_language}, уровень {self.language_level}")
+            
             # ВКЛЮЧАЕМ АВТОМАТИЧЕСКУЮ ВИЗУАЛИЗАЦИЮ
             self.enable_visualization()
             
@@ -1026,7 +1079,9 @@ class DialogueManager:
                     'lesson_id': lesson_data['id'],
                     'title': lesson_data['title'],
                     'subject': self.current_subject,
-                    'is_generated': True
+                    'is_generated': True,
+                    'is_language': lesson_data.get('is_language', False),
+                    'target_language': self.target_language if lesson_data.get('is_language') else None
                 }, room=self.room_id)
                 debug_log(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
             
@@ -1178,6 +1233,35 @@ class DialogueManager:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         text_lower = text.lower().strip()
         
+        # 🔥 ПЕРВОЕ: Проверяем, не нужен ли языковой урок
+        if self.current_subject and not self.lesson_started:
+            # Используем language_integration если доступен
+            if LANGUAGE_SUPPORT_ENABLED:
+                is_language = is_language_subject(self.current_subject)
+            else:
+                is_language = self._detect_language_subject_local(self.current_subject)
+                
+            if is_language and not self.is_language_subject:
+                self.is_language_subject = True
+                if LANGUAGE_SUPPORT_ENABLED:
+                    lang_settings = get_language_settings(
+                        self.current_subject, 
+                        int(self.student_data.get('age', 12)) if self.has_student_data else 12
+                    )
+                    self.target_language = lang_settings.get('target_language', 'english')
+                    self.language_level = lang_settings.get('level', 'beginner')
+                    self.bilingual_ratio = lang_settings.get('bilingual_ratio', 0.3)
+                else:
+                    self.target_language = self._extract_target_language_local(self.current_subject)
+                    self._set_student_language_settings()
+                debug_log(f"🎯 Обнаружен языковой предмет: {self.current_subject}, язык: {self.target_language}")
+        
+        # 🔥 ВТОРОЕ: Проверяем запрос на языковой урок
+        if (self.is_language_subject and 
+            not self.lesson_started and
+            self._check_for_language_lesson_generation(text_lower)):
+            return None  # Урок будет сгенерирован
+        
         # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ 1: Обработка первого входа ученика
         if (self.has_student_data and 
             self.current_subject and 
@@ -1302,6 +1386,128 @@ class DialogueManager:
         
         return None
 
+    def _detect_language_subject_local(self, subject: str) -> bool:
+        """Локальная детекция языкового предмета"""
+        language_subjects = [
+            'английский язык', 'english', 'английский',
+            'французский язык', 'french', 'французский',
+            'немецкий язык', 'german', 'немецкий',
+            'испанский язык', 'spanish', 'испанский',
+            'китайский язык', 'chinese', 'китайский',
+            'итальянский язык', 'italian', 'итальянский'
+        ]
+        
+        subject_lower = subject.lower()
+        for lang_subj in language_subjects:
+            if lang_subj in subject_lower:
+                return True
+        
+        return False
+
+    def _extract_target_language_local(self, subject: str) -> str:
+        """Локальное извлечение целевого языка"""
+        subject_lower = subject.lower()
+        
+        if 'английский' in subject_lower or 'english' in subject_lower:
+            return 'english'
+        elif 'французский' in subject_lower or 'french' in subject_lower:
+            return 'french'
+        elif 'немецкий' in subject_lower or 'german' in subject_lower:
+            return 'german'
+        elif 'испанский' in subject_lower or 'spanish' in subject_lower:
+            return 'spanish'
+        elif 'китайский' in subject_lower or 'chinese' in subject_lower:
+            return 'chinese'
+        elif 'итальянский' in subject_lower or 'italian' in subject_lower:
+            return 'italian'
+        else:
+            return 'english'
+
+    def _set_student_language_settings(self):
+        """Устанавливает настройки языка на основе данных ученика"""
+        if not self.has_student_data:
+            return
+            
+        # 🔥 ОПРЕДЕЛЯЕМ УРОВЕНЬ ЯЗЫКА НА ОСНОВЕ ВОЗРАСТА
+        age = int(self.student_data.get('age', 12))
+        if age <= 10:
+            self.language_level = 'beginner'
+            self.bilingual_ratio = 0.3  # 30% иностранного
+        elif age <= 14:
+            self.language_level = 'intermediate'
+            self.bilingual_ratio = 0.5  # 50% иностранного
+        else:
+            self.language_level = 'advanced'
+            self.bilingual_ratio = 0.7  # 70% иностранного
+            
+        debug_log(f"🎯 Установлены языковые настройки: уровень {self.language_level}, {int(self.bilingual_ratio*100)}% иностранного")
+
+    def _check_for_language_lesson_generation(self, text_lower: str) -> bool:
+        """Проверяет, нужен ли языковой урок"""
+        if not self.current_subject:
+            return False
+            
+        # Проверяем, это языковой предмет
+        if not self.is_language_subject:
+            if LANGUAGE_SUPPORT_ENABLED:
+                self.is_language_subject = is_language_subject(self.current_subject)
+            else:
+                self.is_language_subject = self._detect_language_subject_local(self.current_subject)
+                
+        if not self.is_language_subject:
+            return False
+            
+        # Извлекаем целевой язык
+        if LANGUAGE_SUPPORT_ENABLED:
+            self.target_language = get_language_settings(
+                self.current_subject, 
+                int(self.student_data.get('age', 12)) if self.has_student_data else 12
+            ).get('target_language', 'english')
+        else:
+            self.target_language = self._extract_target_language_local(self.current_subject)
+        
+        # Устанавливаем настройки языка для ученика
+        if not self.has_student_data:
+            self._set_student_language_settings()
+        elif LANGUAGE_SUPPORT_ENABLED:
+            lang_settings = get_language_settings(
+                self.current_subject,
+                int(self.student_data.get('age', 12))
+            )
+            self.language_level = lang_settings.get('level', 'beginner')
+            self.bilingual_ratio = lang_settings.get('bilingual_ratio', 0.3)
+        
+        # Проверяем шаблоны для генерации языкового урока
+        patterns = [
+            r'хочу изучить (.+)',
+            r'урок по (.+)',
+            r'тема (.+)',
+            r'изучаем (.+)',
+            r'начнем с (.+)'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                topic = match.group(1).strip()
+                topic = re.sub(r'[.?]$', '', topic)
+                if topic and len(topic) > 2:
+                    debug_log(f"🎯 Запрос на языковой урок по теме: '{topic}'")
+                    
+                    # 🔥 ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ПРОМТ ДЛЯ ЯЗЫКОВ
+                    is_language = True
+                    
+                    # Генерируем урок
+                    generated_lesson = self.generate_lesson_on_demand(
+                        topic, 
+                        is_language=is_language
+                    )
+                    
+                    if generated_lesson:
+                        return True
+                        
+        return False
+
     def auto_suggest_lessons_for_student(self) -> str:
         """🔥 УЛУЧШЕННЫЙ: Автоматически предлагает уроки по предмету ученика"""
         if not self.has_student_data or not self.current_subject:
@@ -1319,7 +1525,7 @@ class DialogueManager:
         # 2. Если не нашли, пробуем найти в общей структуре
         if not lessons:
             lessons = self.lessons.get(subject, [])
-            debug_log(f"🔥 Урокы не найдены через ученика, пробуем общие: {len(lessons)}")
+            debug_log(f"🔥 Уроки не найдены через ученика, пробуем общие: {len(lessons)}")
         
         if not lessons:
             # 🔥 ВАЖНО: Формируем понятное сообщение для ученика
@@ -1630,7 +1836,9 @@ class DialogueManager:
                     'lesson_id': self.selected_lesson['id'],
                     'title': self.selected_lesson['title'],
                     'subject': self.current_subject,
-                    'is_generated': self.selected_lesson.get('type') == 'generated'
+                    'is_generated': self.selected_lesson.get('type') == 'generated',
+                    'is_language': self.selected_lesson.get('is_language', False),
+                    'target_language': self.target_language if self.selected_lesson.get('is_language') else None
                 }, room=self.room_id)
             
             # Персонализированное начало
@@ -1823,9 +2031,20 @@ class DialogueManager:
         if hasattr(self.practice_manager, 'student_data'):
             self.practice_manager.student_data = self.student_data
         
-        # Инициализируем менеджер практики с асинхронной генерации
-        lesson_context = " ".join(self.lesson_content)
-        self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
+        # 🔥 ДЛЯ ЯЗЫКОВЫХ ПРЕДМЕТОВ: устанавливаем специальные настройки
+        if self.is_language_subject and hasattr(self.practice_manager, 'initialize_language_practice'):
+            lesson_context = " ".join(self.lesson_content)
+            self.practice_manager.initialize_language_practice(
+                lesson_context=lesson_context,
+                subject=self.current_subject,
+                target_language=self.target_language,
+                level=self.language_level
+            )
+            debug_log(f"🎯 Запущена языковая практика: {self.target_language}, уровень {self.language_level}")
+        else:
+            # Стандартная инициализация практики
+            lesson_context = " ".join(self.lesson_content)
+            self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
         
         # Уведомляем клиентов о начале практики
         if self.room_id:
@@ -1911,10 +2130,14 @@ class DialogueManager:
                 return "Отлично! Вы ответили на все вопросы практики. Урок завершен!"
         
         # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД: оценка + следующий вопрос
-        feedback, next_question = self.practice_manager.evaluate_and_continue(
-            student_answer, 
-            current_question["question"]
-        )
+        if self.is_language_subject and hasattr(self.practice_manager, 'evaluate_language_answer'):
+            feedback = self.practice_manager.evaluate_language_answer(student_answer, current_question["question"])
+            next_question = self.practice_manager.get_next_question()
+        else:
+            feedback, next_question = self.practice_manager.evaluate_and_continue(
+                student_answer, 
+                current_question["question"]
+            )
         
         # 🔥 АДАПТИРУЕМ ОБРАТНУЮ СВЯЗЬ ДЛЯ УЧЕНИКА
         if self.has_student_data:
@@ -1959,6 +2182,12 @@ class DialogueManager:
         self.current_subject = None
         self.lesson_content = []
         self.current_paragraph = 0
+        
+        # 🔥 СБРАСЫВАЕМ ЯЗЫКОВЫЕ НАСТРОЙКИ
+        self.is_language_subject = False
+        self.target_language = 'english'
+        self.language_level = 'beginner'
+        self.bilingual_ratio = 0.3
         
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
@@ -2117,6 +2346,12 @@ class DialogueManager:
         # Сброс данных ученика
         self.student_data = {}
         self.has_student_data = False
+        
+        # 🔥 СБРОС ЯЗЫКОВЫХ НАСТРОЕК
+        self.is_language_subject = False
+        self.target_language = 'english'
+        self.language_level = 'beginner'
+        self.bilingual_ratio = 0.3
 
     def get_available_subjects(self) -> List[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
@@ -2571,7 +2806,13 @@ class DialogueManager:
             "available_classes": list(self.lessons_by_class.keys()),
             "student_class_lessons": self.get_available_subjects_for_student(),
             "student_progress": student_progress,
-            "next_lesson": self.get_next_lesson_for_student(self.current_subject) if self.current_subject else None
+            "next_lesson": self.get_next_lesson_for_student(self.current_subject) if self.current_subject else None,
+            # 🔥 НОВОЕ: Информация о языковой поддержке
+            "is_language_subject": self.is_language_subject,
+            "target_language": self.target_language,
+            "language_level": self.language_level,
+            "bilingual_ratio": self.bilingual_ratio,
+            "language_support_enabled": LANGUAGE_SUPPORT_ENABLED
         }
 
     def export_conversation_history(self) -> List[Dict]:
