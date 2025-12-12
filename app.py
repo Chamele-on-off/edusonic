@@ -1,5 +1,5 @@
-# app.py - AI Teacher System с поддержкой технических и естественнонаучных предметов
-# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ФОРМУЛАМИ И ТЕХНИЧЕСКОЙ ПРАКТИКОЙ
+# app.py - AI Teacher System с поддержкой языковых уроков
+# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ЯЗЫКОВОЙ ПОДДЕРЖКОЙ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -771,7 +771,7 @@ def reset_speaking_state(room_id, is_teacher=False):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 # =============================================================================
-# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ФОРМУЛ И ОПТИМИЗАЦИЕЙ
+# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ОПТИМИЗАЦИЕЙ
 # =============================================================================
 
 def is_foreign_text(text):
@@ -814,20 +814,15 @@ def text_to_speech(text, lang='ru'):
         if not text.strip():
             return None
             
-        # 🔥 ОЧИСТКА ФОРМУЛ ПЕРЕД ОЗВУЧИВАНИЕМ
-        # Удаляем LaTeX формулы перед синтезом речи
-        text_for_speech = re.sub(r'\$\$.*?\$\$', 'формула', text)
-        text_for_speech = re.sub(r'\\\(.*?\\\)', 'формула', text_for_speech)
-        
         # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Автоопределение ТОЛЬКО если явно запрошено
         if lang == 'auto':
             # Быстрая проверка - есть ли латинские буквы?
-            has_latin = bool(re.search(r'[a-zA-Z]', text_for_speech))
-            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', text_for_speech))
+            has_latin = bool(re.search(r'[a-zA-Z]', text))
+            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', text))
             
             # Если ЕСТЬ латиница И кириллица - смешанный режим
             if has_latin and has_cyrillic:
-                return text_to_speech_mixed(text_for_speech)
+                return text_to_speech_mixed(text)
             # Если ТОЛЬКО латиница - английский
             elif has_latin and not has_cyrillic:
                 lang = 'en'
@@ -836,7 +831,7 @@ def text_to_speech(text, lang='ru'):
                 lang = 'ru'
         
         # 🔥 БЫСТРАЯ ГЕНЕРАЦИЯ БЕЗ ДОПОЛНИТЕЛЬНОГО АНАЛИЗА
-        tts = gTTS(text=text_for_speech, lang=lang, slow=False, lang_check=False)
+        tts = gTTS(text=text, lang=lang, slow=False, lang_check=False)
         mp3_fp = io.BytesIO()
         tts.write_to_fp(mp3_fp)
         mp3_fp.seek(0)
@@ -1299,78 +1294,6 @@ def get_student_next_lesson(student_id, subject):
         return None
 
 # =============================================================================
-# 🔥 НОВЫЕ ФУНКЦИИ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-# =============================================================================
-
-def detect_technical_subject(subject: str) -> dict:
-    """Быстрая проверка - является ли предмет техническим"""
-    try:
-        if not subject:
-            return {"is_technical": False, "is_science": False, "subject_type": "general"}
-        
-        subject_lower = subject.lower()
-        
-        # 🔥 БЫСТРАЯ ПРОВЕРКА ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-        technical_subjects = {
-            'математика': 'math',
-            'алгебра': 'math', 
-            'геометрия': 'math',
-            'физика': 'science',
-            'химия': 'science',
-            'биология': 'science',
-            'информатика': 'tech',
-            'программирование': 'tech',
-            'компьютерные науки': 'tech',
-            'инженерия': 'tech',
-            'технология': 'tech',
-            'астрономия': 'science',
-            'статистика': 'math'
-        }
-        
-        # 🔥 ОПТИМИЗИРОВАННЫЙ ПОИСК
-        for tech_subj, subj_type in technical_subjects.items():
-            if tech_subj in subject_lower:
-                is_science = subj_type == 'science'
-                return {
-                    "is_technical": True,
-                    "is_science": is_science,
-                    "subject_type": subj_type,
-                    "subject": subject,
-                    "requires_formulas": subj_type in ['math', 'science'],
-                    "requires_diagrams": subj_type in ['math', 'science', 'tech']
-                }
-        
-        return {"is_technical": False, "is_science": False, "subject_type": "general"}
-    except Exception as e:
-        debug_log(f"⚠️ Ошибка определения технического предмета: {e}")
-        return {"is_technical": False, "is_science": False, "subject_type": "general"}
-
-def extract_formulas_from_text(text: str) -> list:
-    """Извлекает формулы из текста"""
-    try:
-        if not text:
-            return []
-        
-        formulas = []
-        
-        # 🔥 ИЩЕМ ФОРМУЛЫ В ФОРМАТЕ $$
-        latex_formulas = re.findall(r'\$\$(.*?)\$\$', text, re.DOTALL)
-        formulas.extend([{"type": "latex", "formula": f.strip()} for f in latex_formulas])
-        
-        # 🔥 ИЩЕМ ФОРМУЛЫ В ФОРМАТЕ \( \)
-        inline_formulas = re.findall(r'\\\((.*?)\\\)', text, re.DOTALL)
-        formulas.extend([{"type": "inline", "formula": f.strip()} for f in inline_formulas])
-        
-        # 🔥 ИЩЕМ ПРОСТЫЕ ФОРМУЛЫ С РАВЕНСТВОМ
-        simple_formulas = re.findall(r'([A-Za-zα-ωΑ-Ω0-9\+\-\*/=^_]+?=[A-Za-zα-ωΑ-Ω0-9\+\-\*/=^_]+)', text)
-        formulas.extend([{"type": "simple", "formula": f.strip()} for f in simple_formulas if len(f) < 50])
-        
-        return formulas
-    except Exception as e:
-        debug_log(f"⚠️ Ошибка извлечения формул: {e}")
-        return []
-
-# =============================================================================
 # SOCKET.IO HANDLERS
 # =============================================================================
 
@@ -1443,23 +1366,13 @@ def handle_join_room(data):
                 student_name = student_data.get('name', 'ученик')
                 subject = student_data.get('subject', 'предмету')
                 
-                # 🔥 ПРОВЕРЯЕМ ТИП ПРЕДМЕТА
-                tech_info = detect_technical_subject(subject)
-                
-                if tech_info["is_technical"]:
-                    welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-                    welcome_message += "Это технический предмет, поэтому будем работать с формулами и задачами. "
-                    welcome_message += "Если ты готов начать, скажи 'готов начать'."
-                else:
-                    welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-                    welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
+                welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
+                welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
                 
                 socketio.emit('student_welcome_message', {
                     'room_id': room_id,
                     'student_name': student_name,
                     'subject': subject,
-                    'is_technical': tech_info["is_technical"],
-                    'is_science': tech_info["is_science"],
                     'message': welcome_message,
                     'prompt_ready': True
                 }, room=room_id)
@@ -2030,95 +1943,6 @@ def handle_generate_visualization(data):
             'timestamp': time.time(),
             'type': 'fallback'
         }, room=room_id)
-
-# =============================================================================
-# 🔥 НОВЫЕ SOCKET.IO HANDLERS ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-# =============================================================================
-
-@socketio.on('detect_formulas')
-def handle_detect_formulas(data):
-    """Обнаружение формул в тексте"""
-    try:
-        room_id = data.get('room_id', 'default')
-        text = data.get('text', '')
-        
-        if not text:
-            return
-        
-        formulas = extract_formulas_from_text(text)
-        
-        if formulas:
-            debug_log(f"📐 Обнаружено {len(formulas)} формул в тексте")
-            
-            emit('formulas_detected', {
-                'room_id': room_id,
-                'text': text[:200] + '...' if len(text) > 200 else text,
-                'formulas': formulas,
-                'formula_count': len(formulas),
-                'has_latex': any(f['type'] == 'latex' for f in formulas)
-            }, room=room_id)
-        
-    except Exception as e:
-        debug_log(f"⚠️ Ошибка обнаружения формул: {e}")
-
-@socketio.on('request_technical_exercise')
-def handle_request_technical_exercise(data):
-    """Запрос технического упражнения"""
-    try:
-        room_id = data.get('room_id', 'default')
-        subject = data.get('subject', '')
-        exercise_type = data.get('type', 'problem')
-        
-        if not subject:
-            return
-        
-        # Проверяем, является ли предмет техническим
-        tech_info = detect_technical_subject(subject)
-        
-        if not tech_info.get("is_technical", False):
-            emit('technical_exercise_response', {
-                'room_id': room_id,
-                'success': False,
-                'message': 'Это не технический предмет'
-            }, room=room_id)
-            return
-        
-        # Генерируем техническое упражнение
-        prompt = f"""
-        Создай техническое упражнение для ученика.
-        
-        ПРЕДМЕТ: {subject}
-        ТИП УПРАЖНЕНИЯ: {exercise_type}
-        УРОВЕНЬ: средний
-        
-        🔥 ТРЕБОВАНИЯ:
-        1. Упражнение должно проверять понимание материала
-        2. Добавь числовые данные если нужно
-        3. Сделай задачу реалистичной
-        4. Предоставь правильный ответ
-        
-        Верни упражнение в формате:
-        ЗАДАЧА: [формулировка задачи]
-        ВОПРОС: [конкретный вопрос]
-        ОТВЕТ: [правильный ответ с объяснением]
-        """
-        
-        llm_request_id = llm_manager.submit_request(
-            prompt=prompt,
-            system_prompt="Ты - эксперт по техническим предметам. Создай качественное упражнение.",
-            max_tokens=500,
-            room_id=room_id
-        )
-        
-        emit('technical_exercise_queued', {
-            'room_id': room_id,
-            'request_id': llm_request_id,
-            'subject': subject,
-            'exercise_type': exercise_type
-        }, room=room_id)
-        
-    except Exception as e:
-        debug_log(f"❌ Ошибка запроса технического упражнения: {e}")
 
 # =============================================================================
 # API ЭНДПОИНТЫ
@@ -4231,240 +4055,118 @@ def get_lessons_for_edit():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЕ API ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И ФОРМУЛ
+# 🔥 НОВЫЕ API ДЛЯ ЯЗЫКОВОЙ ПОДДЕРЖКИ
 # =============================================================================
 
-@app.route('/api/technical/detect-subject', methods=['POST'])
-def detect_technical_subject_api():
-    """Определяет, является ли предмет техническим"""
+@app.route('/api/language/settings', methods=['POST'])
+@student_required
+def set_language_settings():
+    """Устанавливает настройки языка для ученика"""
     try:
         data = request.json
-        subject = data.get('subject', '')
+        student_id = data.get('student_id')
+        language_level = data.get('language_level', 'beginner')
+        bilingual_ratio = data.get('bilingual_ratio', 0.3)
         
-        if not subject:
-            return jsonify({"success": False, "error": "Предмет не указан"})
+        if not student_id:
+            return jsonify({"success": False, "error": "Не указан student_id"})
         
-        tech_info = detect_technical_subject(subject)
-        
-        return jsonify({
-            "success": True,
-            "subject": subject,
-            "is_technical": tech_info["is_technical"],
-            "is_science": tech_info["is_science"],
-            "subject_type": tech_info["subject_type"],
-            "requires_formulas": tech_info["requires_formulas"],
-            "requires_diagrams": tech_info["requires_diagrams"]
-        })
-        
+        student_data = load_student_data(student_id)
+        if student_data:
+            student_data['language_level'] = language_level
+            student_data['bilingual_ratio'] = bilingual_ratio
+            save_student_data(student_data)
+            
+            return jsonify({
+                "success": True,
+                "message": f"Установлен уровень языка: {language_level}, соотношение: {bilingual_ratio*100}%",
+                "language_level": language_level,
+                "bilingual_ratio": bilingual_ratio
+            })
+        else:
+            return jsonify({"success": False, "error": "Ученик не найден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/technical/extract-formulas', methods=['POST'])
-def extract_formulas_api():
-    """Извлекает формулы из текста"""
+@app.route('/api/language/generate-exercise', methods=['POST'])
+def generate_language_exercise():
+    """Генерация языкового упражнения"""
     try:
         data = request.json
-        text = data.get('text', '')
-        
-        if not text:
-            return jsonify({"success": False, "error": "Текст не указан"})
-        
-        formulas = extract_formulas_from_text(text)
-        
-        return jsonify({
-            "success": True,
-            "text_preview": text[:200] + '...' if len(text) > 200 else text,
-            "formulas": formulas,
-            "formula_count": len(formulas),
-            "has_latex": any(f['type'] == 'latex' for f in formulas),
-            "has_inline": any(f['type'] == 'inline' for f in formulas)
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/technical/generate-exercise', methods=['POST'])
-def generate_technical_exercise_api():
-    """Генерирует техническое упражнение"""
-    try:
-        data = request.json
-        subject = data.get('subject', '')
-        exercise_type = data.get('type', 'problem')
-        difficulty = data.get('difficulty', 'medium')
+        topic = data.get('topic', 'greetings')
+        exercise_type = data.get('type', 'vocabulary')
+        target_language = data.get('language', 'english')
+        level = data.get('level', 'beginner')
         room_id = data.get('room_id', 'default')
         
-        if not subject:
-            return jsonify({"success": False, "error": "Предмет не указан"})
-        
-        # Проверяем, является ли предмет техническим
-        tech_info = detect_technical_subject(subject)
-        
-        if not tech_info["is_technical"]:
-            return jsonify({
-                "success": False,
-                "error": f"Предмет '{subject}' не является техническим",
-                "suggested_subjects": ['математика', 'физика', 'химия', 'информатика']
-            })
-        
-        # 🔥 ГЕНЕРИРУЕМ ТЕХНИЧЕСКОЕ УПРАЖНЕНИЕ
+        # Используем существующую LLM через менеджер
         prompt = f"""
-        Создай техническое упражнение для ученика.
+        Создай упражнение по языку для ученика.
         
-        ПРЕДМЕТ: {subject}
         ТИП УПРАЖНЕНИЯ: {exercise_type}
-        СЛОЖНОСТЬ: {difficulty}
-        ФОРМАТ: русский язык
+        ЯЗЫК: {target_language}
+        ТЕМА: {topic}
+        УРОВЕНЬ: {level}
         
-        🔥 ТРЕБОВАНИЯ:
-        1. Упражнение должно проверять понимание материала
-        2. Добавь числовые данные если нужно
-        3. Сделай задачу реалистичной и интересной
-        4. Предоставь правильный ответ с объяснением
-        5. Используй формулы если уместно
+        Создай упражнение соответствующего типа:
+        - Для 'vocabulary': словарный запас, сопоставление слов
+        - Для 'translation': перевод с русского на {target_language}
+        - Для 'dialogue': диалог на {target_language}
+        - Для 'grammar': грамматическое упражнение
         
-        🔥 ФОРМАТ ОТВЕТА:
-        ЗАДАЧА: [формулировка задачи]
-        ВОПРОС: [конкретный вопрос]
-        ОТВЕТ: [правильный ответ с объяснением]
-        
-        Верни только упражнение в указанном формате.
+        Упражнение должно быть понятным для уровня {level}.
+        Верни только упражнение без дополнительных комментариев.
         """
         
-        llm_request_id = llm_manager.submit_request(
+        llm_response = llm_manager.submit_request(
             prompt=prompt,
-            system_prompt="Ты - эксперт по техническим предметам. Создай качественное упражнение.",
-            max_tokens=800,
+            system_prompt="Ты - учитель языка. Создай полезное упражнение.",
+            max_tokens=500,
             room_id=room_id
         )
         
         return jsonify({
             "success": True,
-            "request_id": llm_request_id,
-            "message": "Техническое упражнение генерируется",
-            "subject": subject,
-            "exercise_type": exercise_type,
-            "difficulty": difficulty
+            "exercise": llm_response if llm_response else "Упражнение будет создано в процессе урока.",
+            "type": exercise_type,
+            "language": target_language,
+            "level": level
         })
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/technical/render-formula', methods=['POST'])
-def render_formula_api():
-    """Простой рендеринг формул"""
+@app.route('/api/language/test-speech', methods=['POST'])
+def test_speech_synthesis():
+    """Тестирование смешанного озвучивания"""
     try:
         data = request.json
-        formula = data.get('formula', '')
-        formula_type = data.get('type', 'latex')
+        text = data.get('text', 'Hello, привет! My name is Иван.')
+        room_id = data.get('room_id', 'default')
         
-        if not formula:
-            return jsonify({"success": False, "error": "Формула не указана"})
+        if not text:
+            return jsonify({"success": False, "error": "Текст обязателен"})
         
-        # 🔥 ПРОСТАЯ ПРОВЕРКА ФОРМУЛЫ
-        if formula_type == 'latex':
-            # Для LaTeX просто возвращаем текст
+        # Тестируем новую функцию смешанного озвучивания
+        audio_data = text_to_speech(text, lang='auto')
+        
+        if audio_data:
             return jsonify({
                 "success": True,
-                "formula": formula,
-                "type": "latex",
-                "display": f"$${formula}$$",
-                "is_valid": True
-            })
-        elif formula_type == 'simple':
-            # Для простых формул
-            return jsonify({
-                "success": True,
-                "formula": formula,
-                "type": "simple",
-                "display": formula,
-                "is_valid": True
+                "message": "Синтез речи успешен",
+                "text": text,
+                "audio_length": len(audio_data),
+                "has_cyrillic": bool(re.search(r'[а-яА-ЯёЁ]', text)),
+                "has_latin": bool(re.search(r'[a-zA-Z]', text))
             })
         else:
-            return jsonify({"success": False, "error": "Неизвестный тип формулы"})
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/technical/sample-exercises', methods=['GET'])
-def get_sample_technical_exercises():
-    """Получает примерные технические упражнения"""
-    try:
-        subject = request.args.get('subject', 'математика')
-        
-        sample_exercises = {
-            'математика': [
-                {
-                    "problem": "Реши уравнение: 2x + 5 = 15",
-                    "question": "Найди значение x",
-                    "answer": "x = 5",
-                    "explanation": "2x + 5 = 15 → 2x = 10 → x = 5"
-                },
-                {
-                    "problem": "Найди площадь прямоугольника со сторонами 4 см и 6 см",
-                    "question": "Какова площадь?",
-                    "answer": "24 см²",
-                    "explanation": "S = a * b = 4 * 6 = 24 см²"
-                }
-            ],
-            'физика': [
-                {
-                    "problem": "Рассчитай скорость, если путь 100 метров пройден за 20 секунд",
-                    "question": "Какова скорость?",
-                    "answer": "5 м/с",
-                    "explanation": "v = s / t = 100 / 20 = 5 м/с"
-                },
-                {
-                    "problem": "Сила тяжести действует на тело массой 10 кг",
-                    "question": "Найди силу тяжести",
-                    "answer": "98 Н",
-                    "explanation": "F = m * g = 10 * 9.8 = 98 Н"
-                }
-            ],
-            'химия': [
-                {
-                    "problem": "Сколько молекул воды содержится в 18 граммах воды?",
-                    "question": "Рассчитай количество молекул",
-                    "answer": "6.02 × 10²³ молекул",
-                    "explanation": "M(H₂O) = 18 г/моль, n = 1 моль, N = 6.02 × 10²³"
-                },
-                {
-                    "problem": "Напиши уравнение реакции горения метана",
-                    "question": "Какое уравнение?",
-                    "answer": "CH₄ + 2O₂ → CO₂ + 2H₂O",
-                    "explanation": "Метан реагирует с кислородом с образованием углекислого газа и воды"
-                }
-            ],
-            'информатика': [
-                {
-                    "problem": "Напиши алгоритм для нахождения максимального числа в массиве",
-                    "question": "Опиши алгоритм",
-                    "answer": "1. Инициализируй max = первый элемент\n2. Для каждого элемента сравни с max\n3. Если элемент > max, обнови max\n4. Верни max",
-                    "explanation": "Линейный поиск максимального элемента"
-                },
-                {
-                    "problem": "Переведи число 42 из десятичной в двоичную систему",
-                    "question": "Какое двоичное представление?",
-                    "answer": "101010",
-                    "explanation": "42 = 32 + 8 + 2 = 2⁵ + 2³ + 2¹ = 101010₂"
-                }
-            ]
-        }
-        
-        exercises = sample_exercises.get(subject, [])
-        
-        return jsonify({
-            "success": True,
-            "subject": subject,
-            "exercises": exercises,
-            "count": len(exercises),
-            "is_technical": True
-        })
-        
+            return jsonify({"success": False, "error": "Ошибка синтеза речи"})
+            
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# API ДЛЯ УПРАВЛЕНИЯ АВАТАРОМ И КОМНАТАМИ
+# НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ АВАТАРОМ И КОМНАТАМИ
 # =============================================================================
 
 @app.route('/api/student/set-avatar', methods=['POST'])
@@ -5480,11 +5182,74 @@ def get_student_profile():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
+# 🔥 НОВЫЕ API ДЛЯ ЯЗЫКОВОЙ АВТОДЕТЕКЦИИ
+# =============================================================================
+
+@app.route('/api/language/detect-subject', methods=['POST'])
+def detect_language_subject():
+    """Определяет, является ли предмет языковым"""
+    try:
+        data = request.json
+        subject = data.get('subject', '')
+        
+        if not subject:
+            return jsonify({"success": False, "error": "Предмет не указан"})
+        
+        # Список языковых предметов
+        language_subjects = [
+            'английский язык', 'english', 'английский',
+            'французский язык', 'french', 'французский',
+            'немецкий язык', 'german', 'немецкий',
+            'испанский язык', 'spanish', 'испанский',
+            'китайский язык', 'chinese', 'китайский',
+            'итальянский язык', 'italian', 'итальянский',
+            'японский язык', 'japanese', 'японский',
+            'корейский язык', 'korean', 'корейский'
+        ]
+        
+        subject_lower = subject.lower()
+        is_language = False
+        detected_language = None
+        
+        for lang_subj in language_subjects:
+            if lang_subj in subject_lower:
+                is_language = True
+                # Определяем конкретный язык
+                if 'английский' in lang_subj or 'english' in lang_subj:
+                    detected_language = 'english'
+                elif 'французский' in lang_subj or 'french' in lang_subj:
+                    detected_language = 'french'
+                elif 'немецкий' in lang_subj or 'german' in lang_subj:
+                    detected_language = 'german'
+                elif 'испанский' in lang_subj or 'spanish' in lang_subj:
+                    detected_language = 'spanish'
+                elif 'китайский' in lang_subj or 'chinese' in lang_subj:
+                    detected_language = 'chinese'
+                else:
+                    detected_language = 'english'  # По умолчанию
+                break
+        
+        return jsonify({
+            "success": True,
+            "subject": subject,
+            "is_language_subject": is_language,
+            "detected_language": detected_language,
+            "suggested_settings": {
+                "bilingual_ratio": 0.3,
+                "level": "beginner",
+                "exercise_types": ["vocabulary", "translation", "dialogue"]
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
 # ЗАПУСК СЕРВЕРА
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("🚀 Запуск AI Teacher системы с поддержкой технических предметов...")
+    debug_log("🚀 Запуск AI Teacher системы с поддержкой языковых уроков...")
     
     setup_llm_manager()
     
@@ -5499,8 +5264,8 @@ if __name__ == '__main__':
     debug_log(f"✅ Система готова. Async mode: {socketio.async_mode}")
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
-    debug_log(f"🔥 Добавлена поддержка технических предметов и формул")
-    debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена быстрая проверка технических предметов")
+    debug_log(f"🔥 Добавлена поддержка билингвального озвучивания")
+    debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена быстрая проверка языка")
     
     socketio.run(
         app, 
