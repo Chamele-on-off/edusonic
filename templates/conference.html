@@ -9,6 +9,8 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <!-- MathJax для формул -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js" async></script>
     <style>
         :root {
             --primary: #7E76F9;
@@ -25,6 +27,8 @@
             --board-border: #E6E9EF;
             --board-shadow: rgba(0, 0, 0, 0.1);
             --visualization-bg: #ffffff;
+            --formula-bg: #f8f9ff;
+            --formula-text: #2c3e50;
         }
         
         * {
@@ -180,6 +184,88 @@
             resize: both;
             min-width: 400px;
             min-height: 300px;
+        }
+        
+        /* Контейнер для формул */
+        .formula-container {
+            background: var(--formula-bg);
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            overflow-x: auto;
+            position: relative;
+            font-family: 'Cambria Math', 'Latin Modern Math', 'STIX', serif;
+        }
+        
+        .formula-container .formula-title {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .formula-container .formula-content {
+            font-size: 18px;
+            line-height: 1.6;
+            color: var(--formula-text);
+            text-align: center;
+        }
+        
+        .formula-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--primary);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .technical-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: var(--success);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        /* Стили для MathJax формул */
+        .math-container {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        mjx-container {
+            display: inline-block;
+            margin: 0;
+            padding: 5px;
+            vertical-align: middle;
+        }
+        
+        .math-inline {
+            display: inline;
+            margin: 0 3px;
+        }
+        
+        .math-block {
+            display: block;
+            margin: 15px auto;
+            text-align: center;
+            max-width: 100%;
+            overflow-x: auto;
         }
         
         .window-header {
@@ -1151,6 +1237,48 @@
             font-size: 12px;
         }
 
+        /* Стили для MathJax */
+        .MJX-TEX {
+            font-size: 1.1em !important;
+        }
+        
+        .math-tex {
+            display: inline-block;
+            padding: 2px 5px;
+            background: rgba(126, 118, 249, 0.05);
+            border-radius: 4px;
+            border-left: 3px solid var(--primary);
+        }
+        
+        /* Индикатор технического предмета */
+        .subject-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, var(--success), #2ecc71);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 100;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(76, 201, 240, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .formula-detected {
+            animation: formulaPulse 2s infinite;
+        }
+        
+        @keyframes formulaPulse {
+            0% { box-shadow: 0 0 0 0 rgba(126, 118, 249, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(126, 118, 249, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(126, 118, 249, 0); }
+        }
+
         @media (max-width: 768px) {
             #header {
                 padding: 10px 15px;
@@ -1172,6 +1300,15 @@
             .text-widget {
                 padding: 16px;
                 max-width: 400px;
+            }
+            
+            .formula-container {
+                padding: 15px;
+                margin: 10px 0;
+            }
+            
+            .formula-container .formula-content {
+                font-size: 16px;
             }
             
             .board-toolbar {
@@ -1264,6 +1401,13 @@
                 width: 150px;
                 height: 150px;
             }
+            
+            .subject-indicator {
+                top: 15px;
+                right: 15px;
+                padding: 6px 12px;
+                font-size: 11px;
+            }
 
             /* Адаптивность для слайдов */
             .slide-container {
@@ -1288,6 +1432,15 @@
             .text-widget {
                 padding: 12px;
                 max-width: 300px;
+            }
+            
+            .formula-container {
+                padding: 12px;
+                margin: 8px 0;
+            }
+            
+            .formula-container .formula-content {
+                font-size: 14px;
             }
             
             #teacher-video-container {
@@ -1393,6 +1546,13 @@
             .thinking-text {
                 font-size: 14px;
                 padding: 8px 16px;
+            }
+            
+            .subject-indicator {
+                top: 10px;
+                right: 10px;
+                padding: 5px 10px;
+                font-size: 10px;
             }
 
             .slide-container {
@@ -1547,6 +1707,12 @@
             <!-- Particles Background -->
             <div id="particles-background"></div>
             
+            <!-- Индикатор технического предмета -->
+            <div id="subject-indicator" class="subject-indicator">
+                <i class="fas fa-calculator"></i>
+                <span id="subject-name">Технический предмет</span>
+            </div>
+            
             <!-- Новый индикатор размышления -->
             <div class="thinking-indicator" id="thinking-indicator">
                 <div class="orb"></div>
@@ -1590,6 +1756,9 @@
                     </button>
                     <button class="toolbar-btn" id="visualization-tool" title="Визуализация">
                         <i class="fas fa-chart-bar"></i>
+                    </button>
+                    <button class="toolbar-btn" id="formula-tool" title="Формулы">
+                        <i class="fas fa-square-root-alt"></i>
                     </button>
                     <div class="toolbar-separator"></div>
                     <button class="toolbar-btn" id="clear-text" title="Очистить текст">
@@ -1687,10 +1856,13 @@
                 </div>
                 <div class="board-toolbar">
                     <div class="visualization-tabs">
-                        <!-- Только SVG вкладка -->
                         <div class="visualization-tab active" data-tab="svg">
                             <i class="fas fa-shapes"></i>
                             SVG Инфографика
+                        </div>
+                        <div class="visualization-tab" data-tab="formulas">
+                            <i class="fas fa-square-root-alt"></i>
+                            Формулы
                         </div>
                     </div>
                 </div>
@@ -1700,6 +1872,14 @@
                             <div class="visualization-placeholder">
                                 <i class="fas fa-shapes"></i>
                                 <p>SVG инфографика будет сгенерирована автоматически во время урока</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="visualization-container" id="formulas-tab" style="display: none;">
+                        <div id="formulas-container">
+                            <div class="visualization-placeholder">
+                                <i class="fas fa-square-root-alt"></i>
+                                <p>Формулы будут отображаться здесь во время технического урока</p>
                             </div>
                         </div>
                     </div>
@@ -1732,6 +1912,9 @@
                 <div id="auto-continue-status">⏰ Автопродолжение: выкл</div>
                 <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
                     <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
+                </div>
+                <div id="subject-type-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
+                    <i class="fas fa-book"></i> Предмет: <span id="subject-type-text">Ожидание...</span>
                 </div>
             </div>
             
@@ -2109,6 +2292,7 @@
         const drawToolBtn = document.getElementById('draw-tool');
         const answerToolBtn = document.getElementById('answer-tool');
         const visualizationToolBtn = document.getElementById('visualization-tool');
+        const formulaToolBtn = document.getElementById('formula-tool');
         const clearDrawingBtn = document.getElementById('clear-drawing');
         const clearTextBtn = document.getElementById('clear-text');
         const answerInputContainer = document.getElementById('answer-input-container');
@@ -2124,6 +2308,7 @@
         const speechStatus = document.getElementById('speech-status');
         const autoContinueStatus = document.getElementById('auto-continue-status');
         const svgDiagram = document.getElementById('svg-diagram');
+        const formulasContainer = document.getElementById('formulas-container');
         const visualizationTabs = document.querySelectorAll('.visualization-tab');
         const llmStatus = document.getElementById('llm-status');
         const llmStatusText = document.getElementById('llm-status-text');
@@ -2132,6 +2317,10 @@
         const speechDisplay = document.getElementById('speech-display');
         const speechText = document.getElementById('speech-text');
         const thinkingIndicator = document.getElementById('thinking-indicator');
+        const subjectIndicator = document.getElementById('subject-indicator');
+        const subjectName = document.getElementById('subject-name');
+        const subjectTypeStatus = document.getElementById('subject-type-status');
+        const subjectTypeText = document.getElementById('subject-type-text');
 
         // Глобальные переменные
         let userStream = null;
@@ -2151,6 +2340,8 @@
         let currentAvatarAspectRatio = 1;
         let isLessonActive = false;
         let audioContext = null;
+        let isTechnicalSubject = false;
+        let currentSubject = '';
         
         // Анимация аватара - переменные
         let currentAvatar = 'teacher';
@@ -2180,6 +2371,7 @@
         let isVisualizationWindowOpen = false;
         let visualizationQueue = [];
         let isProcessingVisualization = false;
+        let formulaElements = [];
         
         // Переменные для перетаскивания окон
         let isDraggingWindow = false;
@@ -2211,10 +2403,14 @@
         let autoContinueEnabled = false;
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
-        let autoContinuePaused = false; // НОВАЯ ПЕРЕМЕННАЯ: флаг приостановки автопродолжения
+        let autoContinuePaused = false;
 
         // НОВАЯ ПЕРЕМЕННАЯ: флаг ожидания ответа на команду продолжения
         let awaitingContinueResponse = false;
+
+        // MathJax загрузка
+        let mathjaxLoaded = false;
+        let mathjaxProcessing = false;
 
         // Упрощенная система активации AI-учителя
         let roomActivationState = {
@@ -2361,33 +2557,45 @@
             }
         }
 
-        // УПРОЩЕННАЯ ПРОВЕРКА ГОТОВНОСТИ - ВСЕГДА ВОЗВРАЩАЕТ TRUE
-        function checkRoomActivationReady() {
-            // УПРОЩЕНИЕ: Сервер всегда готов, поэтому возвращаем true
-            return true;
+        // MathJax функции
+        function loadMathJaxIfNeeded() {
+            if (mathjaxLoaded) return;
+            
+            // MathJax уже загружен через CDN в head
+            mathjaxLoaded = true;
+            console.log('MathJax загружен');
         }
 
-        function updateActivationButton() {
-            const button = document.getElementById('activate-ai-btn');
-            if (!button) return;
+        function renderMathInElement(element) {
+            if (!mathjaxLoaded || mathjaxProcessing) return;
             
-            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
-            if (aiTeacherWasActivated) {
-                button.style.display = 'none';
-                return;
+            mathjaxProcessing = true;
+            
+            setTimeout(() => {
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise([element]).catch(err => {
+                        console.log('MathJax typeset error:', err);
+                        mathjaxProcessing = false;
+                    }).then(() => {
+                        mathjaxProcessing = false;
+                    });
+                } else {
+                    mathjaxProcessing = false;
+                }
+            }, 150);
+        }
+
+        function renderTechnicalText(text, element) {
+            // Проверяем формулы
+            if (text.includes('$$') || text.includes('\\(')) {
+                // Загружаем MathJax если нужно
+                loadMathJaxIfNeeded();
+                
+                // Рендерим формулы
+                setTimeout(() => {
+                    renderMathInElement(element);
+                }, 100);
             }
-            
-            // УПРОЩЕНИЕ: Всегда показываем кнопку, так как сервер всегда готов
-            button.style.display = 'block';
-            button.disabled = false;
-            button.innerHTML = 'Activate AI-Teacher';
-            console.log('✅ Кнопка активации готова для комнаты:', roomId);
-        }
-
-        // УПРОЩЕННАЯ ФУНКЦИЯ - НЕ ИСПОЛЬЗУЕТСЯ
-        function setActivationState(key, value) {
-            console.log(`🔧 Состояние активации: ${key} = ${value}`);
-            // УПРОЩЕНИЕ: Не используем сложную логику состояний
         }
 
         // Функции для отображения распознанной речи
@@ -2484,6 +2692,80 @@
                     resetAutoContinueTimer();
                 }
             }
+        }
+
+        // Функции управления техническими предметами
+        function setTechnicalSubject(subjectName, isTechnical) {
+            currentSubject = subjectName;
+            isTechnicalSubject = isTechnical;
+            
+            if (subjectName) {
+                subjectTypeText.textContent = subjectName;
+                
+                if (isTechnical) {
+                    // Технический предмет
+                    subjectTypeStatus.innerHTML = '<i class="fas fa-calculator" style="color: var(--success);"></i> Предмет: <span style="color: var(--success); font-weight: 600;">' + subjectName + ' (Технический)</span>';
+                    
+                    // Показываем индикатор технического предмета
+                    subjectIndicator.style.display = 'flex';
+                    subjectName.textContent = subjectName;
+                    
+                    // Добавляем кнопку формул в toolbar
+                    formulaToolBtn.style.display = 'flex';
+                    
+                    console.log('Технический предмет установлен:', subjectName);
+                } else {
+                    // Гуманитарный предмет
+                    subjectTypeStatus.innerHTML = '<i class="fas fa-book" style="color: var(--primary);"></i> Предмет: <span style="color: var(--primary);">' + subjectName + '</span>';
+                    
+                    // Скрываем индикатор технического предмета
+                    subjectIndicator.style.display = 'none';
+                    
+                    // Скрываем кнопку формул
+                    formulaToolBtn.style.display = 'none';
+                    
+                    console.log('Гуманитарный предмет установлен:', subjectName);
+                }
+            }
+        }
+
+        function displayFormulas(formulas) {
+            if (!isTechnicalSubject || !formulas || formulas.length === 0) return;
+            
+            // Переключаемся на вкладку формул
+            switchVisualizationTab('formulas');
+            
+            // Показываем окно визуализации
+            if (!isVisualizationWindowOpen) {
+                setTool('visualization');
+            }
+            
+            // Форматируем формулы
+            const formulasHTML = formulas.map((formula, index) => `
+                <div class="formula-container">
+                    <div class="technical-badge">
+                        <i class="fas fa-square-root-alt"></i> Формула ${index + 1}
+                    </div>
+                    <div class="formula-title">
+                        <i class="fas fa-calculator"></i>
+                        <span>${formula.title || 'Формула'}</span>
+                    </div>
+                    <div class="formula-content">
+                        ${formula.content}
+                    </div>
+                    ${formula.description ? `<div style="font-size: 14px; color: #666; margin-top: 10px; text-align: left;">${formula.description}</div>` : ''}
+                </div>
+            `).join('');
+            
+            formulasContainer.innerHTML = formulasHTML;
+            
+            // Рендерим формулы через MathJax
+            setTimeout(() => {
+                loadMathJaxIfNeeded();
+                if (window.MathJax && window.MathJax.typesetPromise) {
+                    window.MathJax.typesetPromise([formulasContainer]);
+                }
+            }, 500);
         }
 
         // Функции LLM системы
@@ -2829,10 +3111,16 @@
                 }
             });
             
-            // ТЕПЕРЬ ТОЛЬКО SVG ВКЛАДКА
+            // Показываем активную вкладку
+            const svgTab = document.getElementById('svg-tab');
+            const formulasTab = document.getElementById('formulas-tab');
+            
             if (tabName === 'svg') {
-                // Всегда показываем SVG вкладку
-                console.log('Активирована вкладка SVG инфографики');
+                svgTab.style.display = 'flex';
+                formulasTab.style.display = 'none';
+            } else if (tabName === 'formulas') {
+                svgTab.style.display = 'none';
+                formulasTab.style.display = 'flex';
             }
         }
 
@@ -3746,6 +4034,7 @@
             drawToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
             visualizationToolBtn.classList.remove('active');
+            formulaToolBtn.classList.remove('active');
             
             // answerInputContainer.style.display = 'none'; // УБИРАЕМ ЭТУ СРОКУ
             
@@ -3782,6 +4071,15 @@
                 isVisualizationWindowOpen = true;
                 bringWindowToFront(visualizationWindow);
                 console.log('📊 Активировано окно визуализации');
+            }
+            else if (tool === 'formula') {
+                formulaToolBtn.classList.add('active');
+                // Переключаем на вкладку формул в окне визуализации
+                if (!isVisualizationWindowOpen) {
+                    setTool('visualization');
+                }
+                switchVisualizationTab('formulas');
+                console.log('🧮 Активирована работа с формулами');
             }
         }
 
@@ -3873,7 +4171,7 @@
         // Демонстрация экрана
         async function shareScreen() {
             try {
-                const screenStream = await navig.mediaDevices.getDisplayMedia({
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({
                     video: true,
                     audio: true
                 });
@@ -4072,8 +4370,6 @@
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
-                // УПРОЩЕНИЕ: Не используем сложную логику состояний
-                
                 // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
                 
@@ -4107,8 +4403,6 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
-                // УПРОЩЕНИЕ: Не используем сложную логику состояний
-                
                 // Ждем инициализации PeerJS перед отправкой room_id
                 if (peerId) {
                     socket.emit('join_room', { 
@@ -4126,7 +4420,6 @@
                 initLlmSystem();
             });
             
-            // УПРОЩЕНИЕ: Простая обработка присоединения к комнате
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 participantsCount.textContent = data.count;
@@ -4157,7 +4450,6 @@
                 showVisualizationLoading();
                 
                 setTimeout(() => {
-                    // ОТКЛЮЧАЕМ Mermaid - используем только SVG
                     if (data.svg_code) {
                         displaySvgDiagram(data.svg_code, data.topic);
                         console.log('✅ SVG инфографика отображена');
@@ -4167,6 +4459,33 @@
                         console.warn('⚠️ SVG код отсутствует, используется fallback');
                     }
                 }, 500);
+            });
+            
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ ФОРМУЛ
+            socket.on('formulas_detected', (data) => {
+                console.log('📐 Получены формулы:', data.formulas ? data.formulas.length : 0, 'шт');
+                
+                if (data.subject) {
+                    setTechnicalSubject(data.subject, data.is_technical || false);
+                }
+                
+                if (data.formulas && data.formulas.length > 0) {
+                    displayFormulas(data.formulas);
+                }
+            });
+            
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ ТЕХНИЧЕСКОГО ПРЕДМЕТА
+            socket.on('technical_subject_set', (data) => {
+                console.log('🔬 Технический предмет установлен:', data.subject);
+                setTechnicalSubject(data.subject, true);
+            });
+            
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ ТЕХНИЧЕСКОЙ ПРАКТИКИ
+            socket.on('technical_practice_question', (data) => {
+                console.log('🧮 Технический вопрос для практики:', data.question);
+                if (data.subject) {
+                    setTechnicalSubject(data.subject, true);
+                }
             });
             
             // Обработчики для новых типов визуализации
@@ -4262,9 +4581,7 @@
             });
             
             socket.on('ai_teacher_available', () => {
-                if (devicesEnabled) {
-                    updateActivationButton();
-                }
+                updateActivationButton();
             });
             
             socket.on('ai_teacher_activated', () => {
@@ -4307,6 +4624,15 @@
                 isPracticeActive = false;
                 currentLesson = data;
                 currentParagraph = 0;
+                
+                // Устанавливаем тип предмета
+                if (data.subject) {
+                    const isTechnical = data.is_technical || 
+                        ['математика', 'алгебра', 'геометрия', 'физика', 'химия', 'биология', 'информатика'].some(
+                            subject => data.subject.toLowerCase().includes(subject)
+                        );
+                    setTechnicalSubject(data.subject, isTechnical);
+                }
                 
                 // РЕШЕНИЕ ПРОБЛЕМЫ №3: При старте урока не включаем автопродолжение автоматически
                 autoContinuePaused = true;
@@ -4490,7 +4816,6 @@
                 event.preventDefault();
                 event.stopPropagation();
                 
-                // УПРОЩЕНИЕ: Сервер всегда готов, не проверяем сложные состояния
                 if (socket && socket.connected) {
                     console.log('✅ Отправка запроса активации для комнаты:', roomId);
                     socket.emit('activate_ai_teacher', { room_id: roomId });
@@ -4544,8 +4869,6 @@
 
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
-            // УПРОЩЕНИЕ: Не используем сложную систему состояний
-            
             // Инициализация частиц фона
             initParticlesBackground();
             
@@ -4569,6 +4892,7 @@
             drawToolBtn.addEventListener('click', () => safeToolActivation('draw'));
             answerToolBtn.addEventListener('click', () => safeToolActivation('answer'));
             visualizationToolBtn.addEventListener('click', () => safeToolActivation('visualization'));
+            formulaToolBtn.addEventListener('click', () => safeToolActivation('formula'));
             
             document.getElementById('drawing-pen').addEventListener('click', () => setDrawingTool('pen'));
             document.getElementById('drawing-eraser').addEventListener('click', () => setDrawingTool('eraser'));
@@ -4655,6 +4979,9 @@
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
             
+            // Скрываем кнопку формул по умолчанию
+            formulaToolBtn.style.display = 'none';
+            
             // Принудительно показываем кнопку через 3 секунды
             setTimeout(forceShowActivateButton, 3000);
         });
@@ -4686,8 +5013,6 @@
                 console.log('✅ PeerJS подключен с ID:', id, 'для комнаты:', roomId);
                 peerId = id;
                 statusDiv.textContent = 'Подключение к конференции...';
-                
-                // УПРОЩЕНИЕ: Не используем сложную логику состояний
                 
                 // Сообщаем серверу о нашем peerId
                 if (socket && socket.connected) {
