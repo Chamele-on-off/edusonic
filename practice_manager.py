@@ -1,7 +1,7 @@
 """
 🔥 practice_manager.py
 Управление практическими занятиями для AI-учителя
-Поддержка языковых, технических и общих предметов
+Поддержка языковых и неязыковых предметов
 Минимальные изменения для максимальной совместимости
 """
 
@@ -30,30 +30,12 @@ class PracticeManager:
         # 🔥 ДАННЫЕ УЧЕНИКА ДЛЯ АДАПТАЦИИ
         self.student_data = {}
         self.is_language_subject = False
-        self.is_technical_subject = False
         self.target_language = None
         self.language_level = 'beginner'
         self.bilingual_ratio = 0.3
         
-        # 🔥 ТЕХНИЧЕСКИЕ НАСТРОЙКИ
-        self.technical_subjects = [
-            'математика', 'алгебра', 'геометрия', 'физика', 'химия', 
-            'биология', 'информатика', 'программирование', 'компьютерные науки',
-            'инженерия', 'технология', 'астрономия', 'статистика'
-        ]
-        
-        self.science_subjects = ['физика', 'химия', 'биология', 'география']
-        
-        self.technical_exercise_types = {
-            'problem_solving': ['реши задачу', 'вычисли', 'рассчитай', 'найди значение'],
-            'proof': ['докажи', 'объясни почему', 'покажи что'],
-            'analysis': ['проанализируй', 'сравни', 'оцени'],
-            'application': ['примени', 'используй', 'покажи как применить'],
-            'design': ['спроектируй', 'создай алгоритм', 'разработай схему']
-        }
-        
         # 🔥 МЕНЕДЖЕРЫ ДЛЯ РАЗНЫХ ТИПОВ ПРАКТИКИ
-        self.current_practice_type = 'general'  # 'general', 'language' или 'technical'
+        self.current_practice_type = 'general'  # 'general' или 'language'
         
         # 🔥 ТИПЫ ЯЗЫКОВЫХ УПРАЖНЕНИЙ ПО УРОВНЯМ
         self.language_exercise_types = {
@@ -84,67 +66,25 @@ class PracticeManager:
         debug_log(f"👤 Установлены данные ученика: {student_data.get('name', 'неизвестно')}")
 
     def _is_language_subject(self, subject: str) -> bool:
-        """⚡ ОПТИМИЗИРОВАННО: Определяет, является ли предмет языковым"""
+        """Определяет, является ли предмет языковым"""
+        language_subjects = [
+            'английский язык', 'english', 'английский',
+            'французский язык', 'french', 'французский',
+            'немецкий язык', 'german', 'немецкий',
+            'испанский язык', 'spanish', 'испанский',
+            'китайский язык', 'chinese', 'китайский',
+            'итальянский язык', 'italian', 'итальянский'
+        ]
+        
         if not subject:
             return False
             
         subject_lower = subject.lower()
+        for lang_subj in language_subjects:
+            if lang_subj in subject_lower:
+                return True
         
-        # 🔥 БЫСТРЫЕ ПРОВЕРКИ
-        if 'английский' in subject_lower or 'english' in subject_lower:
-            return True
-        if 'французский' in subject_lower or 'french' in subject_lower:
-            return True
-        if 'немецкий' in subject_lower or 'german' in subject_lower:
-            return True
-        if 'испанский' in subject_lower or 'spanish' in subject_lower:
-            return True
-        if 'китайский' in subject_lower or 'chinese' in subject_lower:
-            return True
-        if 'итальянский' in subject_lower or 'italian' in subject_lower:
-            return True
-        if 'язык' in subject_lower and len(subject_lower) > 5:
-            return True
-            
         return False
-
-    def _is_technical_subject(self, subject: str) -> bool:
-        """⚡ ОПТИМИЗИРОВАННО: Быстрая проверка - является ли предмет техническим"""
-        if not subject:
-            return False
-            
-        subject_lower = subject.lower()
-        
-        # 🔥 БЫСТРЫЕ ПРОВЕРКИ
-        if any(tech_subj in subject_lower for tech_subj in self.technical_subjects):
-            return True
-            
-        return False
-
-    def _is_science_subject(self, subject: str) -> bool:
-        """⚡ ОПТИМИЗИРОВАННО: Быстрая проверка - является ли предмет естественнонаучным"""
-        if not subject:
-            return False
-            
-        subject_lower = subject.lower()
-        
-        # 🔥 БЫСТРЫЕ ПРОВЕРКИ
-        if any(sci_subj in subject_lower for sci_subj in self.science_subjects):
-            return True
-            
-        return False
-
-    def _has_formulas(self, text: str) -> bool:
-        """⚡ СУПЕР-БЫСТРАЯ проверка наличия формул"""
-        if not text or len(text) < 10:
-            return False
-        
-        # 🔥 МИНИМАЛЬНЫЕ ПРОВЕРКИ
-        return ('$$' in text or 
-                '\\(' in text or 
-                '=' in text[:100] or
-                '→' in text or
-                any(c in text for c in '²³₀₁₂₃₄₅₆₇₈₉'))
 
     def _extract_target_language(self, subject: str) -> str:
         """Извлекает целевой язык из названия предмета"""
@@ -167,7 +107,7 @@ class PracticeManager:
 
     def _analyze_student_language_level(self, age: int = 12, self_assessment: str = '') -> Dict:
         """Анализирует и определяет уровень языка ученика"""
-        # 🔥 ОПТИМИЗИРОВАННЫЙ АЛГОРИТМ
+        # 🔥 ОСНОВНОЙ АЛГОРИТМ ПО ВОЗРАСТУ
         if age <= 10:
             suggested_level = 'beginner'
             bilingual_ratio = 0.3
@@ -203,9 +143,8 @@ class PracticeManager:
         self.current_lesson_context = lesson_context
         self.current_subject = subject
         
-        # 🔥 ОПТИМИЗИРОВАННОЕ ОПРЕДЕЛЕНИЕ ТИПА ПРАКТИКИ
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРАКТИКИ
         self.is_language_subject = self._is_language_subject(subject)
-        self.is_technical_subject = self._is_technical_subject(subject)
         
         if self.is_language_subject:
             # 🔥 ЯЗЫКОВАЯ ПРАКТИКА
@@ -227,14 +166,6 @@ class PracticeManager:
             debug_log(f"   Соотношение: {int(self.bilingual_ratio * 100)}% иностранного")
             
             self.current_lesson_summary = self._generate_language_lesson_summary(lesson_context)
-        
-        elif self.is_technical_subject:
-            # 🔥 ТЕХНИЧЕСКАЯ ПРАКТИКА
-            self.current_practice_type = 'technical'
-            debug_log(f"⚙️ Инициализация ТЕХНИЧЕСКОЙ практики для предмета: {subject}")
-            
-            self.current_lesson_summary = self._generate_technical_lesson_summary(lesson_context)
-        
         else:
             # 🔥 ОБЩАЯ ПРАКТИКА ДЛЯ НЕЯЗЫКОВЫХ ПРЕДМЕТОВ
             self.current_practice_type = 'general'
@@ -255,7 +186,7 @@ class PracticeManager:
         
         debug_log(f"📝 Максимальное количество вопросов: {self.max_questions}")
         
-        # 🔥 ЛОГИРУЕМ ДАННЫЕ УЧЕНИКА
+        # 🔥 ЛОГИРУЕМ ДАННЫЕ УЧЕНИКА ДЛЯ ОТЛАДКИ
         if self.student_data:
             age = self.student_data.get('age', 'неизвестен')
             level = self.student_data.get('level', 'неизвестен')
@@ -264,7 +195,7 @@ class PracticeManager:
         # 🔥 ЗАПУСКАЕМ АСИНХРОННУЮ ГЕНЕРАЦИЮ ВОПРОСОВ СРАЗУ
         self._start_async_generation()
         
-        # 🔥 ГЕНЕРИРУЕМ ПЕРВЫЙ ВОПРОС СИНХРОННО
+        # 🔥 ГЕНЕРИРУЕМ ПЕРВЫЙ ВОПРОС СИНХРОННО ДЛЯ НЕМЕДЛЕННОГО СТАРТА
         first_question = self._generate_first_question()
         if first_question:
             self.question_queue.put(first_question)
@@ -277,8 +208,6 @@ class PracticeManager:
         try:
             if self.is_language_subject:
                 return self.generate_single_language_question()
-            elif self.is_technical_subject:
-                return self.generate_technical_question()
             else:
                 return self.generate_single_question()
         except Exception as e:
@@ -313,34 +242,6 @@ class PracticeManager:
             return summary if summary and len(summary) > 50 else lesson_context[:500] + "..."
         except Exception as e:
             debug_log(f"❌ Ошибка генерации языкового содержания: {e}")
-            return lesson_context[:500] + "..."
-
-    def _generate_technical_lesson_summary(self, lesson_context: str) -> str:
-        """Генерирует краткое содержание урока для технической практики"""
-        try:
-            prompt = f"""
-            Создай КРАТКОЕ содержание этого технического урока для практических упражнений.
-            
-            ТЕКСТ УРОКА: {lesson_context[:1500]}
-            ПРЕДМЕТ: {self.current_subject}
-            
-            Выдели:
-            1. Ключевые формулы и уравнения
-            2. Основные понятия и определения
-            3. Примеры задач и их решений
-            4. Практические применения
-            
-            Верни только краткое содержание (максимум 300 слов).
-            """
-            
-            summary = self.llm.query(
-                question=prompt,
-                context="",
-                subject=self.current_subject
-            )
-            return summary if summary and len(summary) > 50 else lesson_context[:500] + "..."
-        except Exception as e:
-            debug_log(f"❌ Ошибка генерации технического содержания: {e}")
             return lesson_context[:500] + "..."
 
     def _generate_lesson_summary(self, lesson_context: str) -> str:
@@ -392,11 +293,9 @@ class PracticeManager:
                         debug_log("🏁 Достигнут лимит вопросов в фоновой генерации")
                         break
                     
-                    # 🔥 УМНЫЙ ВЫБОР ТИПА ВОПРОСА
+                    # Генерируем следующий вопрос
                     if self.is_language_subject:
                         next_question = self.generate_single_language_question()
-                    elif self.is_technical_subject:
-                        next_question = self.generate_technical_question()
                     else:
                         next_question = self.generate_single_question()
                     
@@ -433,7 +332,7 @@ class PracticeManager:
             level = self.student_data.get('level', '5')
             name = self.student_data.get('name', 'ученик')
             
-            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ
+            # 🔥 ОБНОВЛЕННЫЙ ПРОМТ С УЧЕТОМ ВОЗРАСТА
             prompt = f"""
             СОЗДАЙ ТЕСТОВЫЙ ВОПРОС ДЛЯ ПРОВЕРКИ ПОНИМАНИЯ УРОКА.
             
@@ -468,6 +367,9 @@ class PracticeManager:
             🔥 УЖЕ ЗАДАННЫЕ ВОПРОСЫ (НЕ ПОВТОРЯЙ!):
             {self._get_previous_questions_text()}
             
+            🔥 ПРИМЕР ДЛЯ ВОЗРАСТА {age} ЛЕТ:
+            Вопрос должен быть соответствующим сложности для {age} лет.
+            
             Верни только вопрос в указанном формате.
             """
             
@@ -490,13 +392,12 @@ class PracticeManager:
                         "type": "test_question" if is_test_question else "general_question",
                         "subject": self.current_subject,
                         "student_age": age,
-                        "student_level": level,
-                        "is_technical": self.is_technical_subject
+                        "student_level": level
                     }
                     self.generated_questions.append(question_data)
                     return question_text
             
-            # 🔥 FALLBACK
+            # 🔥 FALLBACK: Если не получился тестовый вопрос
             fallback = self._get_fallback_question_for_age(age, ensure_unique=True)
             debug_log(f"🔄 Использован fallback вопрос для возраста {age}: {fallback[:80]}...")
             return fallback
@@ -507,211 +408,6 @@ class PracticeManager:
             fallback = self._get_fallback_question_for_age(age, ensure_unique=True)
             debug_log(f"🔄 Использован fallback после ошибки: {fallback[:80]}...")
             return fallback
-
-    def generate_technical_question(self) -> Optional[str]:
-        """🔥 Генерирует технический вопрос"""
-        try:
-            # 🔥 ПРОВЕРКА ЛИМИТА
-            if len(self.generated_questions) >= self.max_questions:
-                debug_log(f"🏁 Достигнут лимит технических вопросов: {len(self.generated_questions)}/{self.max_questions}")
-                return None
-            
-            # 🔥 БЫСТРЫЙ ВЫБОР ТИПА ВОПРОСА ПО ПРЕДМЕТУ
-            import random
-            
-            subject_lower = self.current_subject.lower()
-            if 'математика' in subject_lower or 'алгебра' in subject_lower or 'геометрия' in subject_lower:
-                question_type = random.choice(['problem_solving', 'proof'])
-                requires_formula = True
-            elif 'физика' in subject_lower:
-                question_type = random.choice(['problem_solving', 'application'])
-                requires_formula = True
-            elif 'химия' in subject_lower:
-                question_type = random.choice(['problem_solving', 'analysis'])
-                requires_formula = True
-            elif 'информатика' in subject_lower:
-                question_type = random.choice(['design', 'application'])
-                requires_formula = False
-            else:
-                question_type = 'problem_solving'
-                requires_formula = False
-            
-            # 🔥 ГЕНЕРИРУЕМ ПРОМПТ
-            prompt = self._create_technical_question_prompt(question_type, requires_formula)
-            
-            # 🔥 БЫСТРЫЙ ЗАПРОС К LLM
-            llm_response = self.llm.query(
-                question=prompt,
-                context="",
-                subject=self.current_subject
-            )
-            
-            if llm_response and len(llm_response.strip()) > 50:
-                question_text = llm_response.strip()
-                
-                if self._is_question_unique(question_text):
-                    question_data = {
-                        "question": question_text,
-                        "generated_at": time.time(),
-                        "type": f"technical_{question_type}",
-                        "subject": self.current_subject,
-                        "is_technical": True,
-                        "requires_formula": requires_formula
-                    }
-                    self.generated_questions.append(question_data)
-                    return question_text
-            
-            # 🔥 FALLBACK ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-            fallback = self._get_technical_fallback_question()
-            debug_log(f"🔄 Использован технический fallback: {fallback[:80]}...")
-            return fallback
-            
-        except Exception as e:
-            debug_log(f"❌ Ошибка генерации технического вопроса: {e}")
-            fallback = self._get_technical_fallback_question()
-            return fallback
-
-    def _create_technical_question_prompt(self, question_type: str, requires_formula: bool) -> str:
-        """Создает промпт для технического вопроса"""
-        
-        # 🔥 ОПТИМИЗИРОВАННЫЙ БАЗОВЫЙ ПРОМПТ
-        base_prompt = f"""
-        СОЗДАЙ ТЕХНИЧЕСКИЙ ВОПРОС ПО ПРЕДМЕТУ {self.current_subject.upper()}
-        
-        КОНТЕКСТ УРОКА: {self.current_lesson_summary[:300]}
-        
-        🔥 ОБЩИЕ ТРЕБОВАНИЯ:
-        1. Вопрос должен проверять понимание материала урока
-        2. Будь конкретным и понятным
-        3. Учитывай возраст ученика ({self.student_data.get('age', 12)} лет)
-        4. Предоставь вариант правильного ответа
-        5. Вопрос не должен повторяться с предыдущими
-        
-        ТИП ВОПРОСА: {question_type}
-        """
-        
-        # 🔥 ДОПОЛНЕНИЯ ДЛЯ ФОРМУЛ
-        if requires_formula:
-            base_prompt += """
-            
-            🔥 ДЛЯ ФОРМУЛ:
-            - Используй формат: $$E = mc^2$$
-            - Объясняй что означает каждая переменная
-            - Используй индексы: H₂O, CO₂
-            """
-        
-        # 🔥 СПЕЦИАЛЬНЫЕ ФОРМАТЫ
-        if question_type == 'problem_solving':
-            base_prompt += """
-            
-            🔥 ФОРМАТ ДЛЯ ЗАДАЧИ:
-            Задача: [Краткая формулировка]
-            Дано: [Исходные данные]
-            Найти: [Что нужно найти]
-            
-            Подсказка: [Краткая подсказка]
-            
-            Пример ответа: [Числовой ответ или формула]
-            """
-        elif question_type == 'proof':
-            base_prompt += """
-            
-            🔥 ФОРМАТ ДЛЯ ДОКАЗАТЕЛЬСТВА:
-            Утверждение: [Что нужно доказать]
-            
-            Подсказка: [Направление для доказательства]
-            
-            Пример решения: [Ключевые шаги]
-            """
-        elif question_type == 'design':
-            base_prompt += """
-            
-            🔥 ФОРМАТ ДЛЯ ПРОЕКТИРОВАНИЯ:
-            Задача: [Что нужно спроектировать]
-            Требования: [Основные требования]
-            
-            Подсказка: [Подход к решению]
-            
-            Пример решения: [Ключевые идеи]
-            """
-        
-        base_prompt += "\n\n🔥 УЖЕ ЗАДАННЫЕ ВОПРОСЫ (НЕ ПОВТОРЯЙ!):"
-        base_prompt += self._get_previous_questions_text()
-        
-        base_prompt += "\n\nВерни только вопрос в указанном формате."
-        return base_prompt
-
-    def _get_technical_fallback_question(self) -> str:
-        """Fallback вопросы для технических предметов"""
-        import random
-        
-        fallback_questions = {
-            'математика': [
-                "Реши простое уравнение: 2x + 5 = 15",
-                "Найди площадь прямоугольника со сторонами 4 и 6",
-                "Вычисли: 15% от 200",
-                "Что такое простое число? Приведи пример"
-            ],
-            'физика': [
-                "Рассчитай скорость, если путь 100 метров пройден за 20 секунд",
-                "Что такое сила тяжести и как она рассчитывается?",
-                "Объясни разницу между массой и весом",
-                "Как работает рычаг? Приведи пример"
-            ],
-            'химия': [
-                "Что такое химическая реакция? Приведи пример",
-                "Какова формула воды?",
-                "Объясни разницу между кислотой и щелочью",
-                "Что такое периодическая таблица элементов?"
-            ],
-            'информатика': [
-                "Что такое алгоритм? Приведи пример",
-                "Объясни, как работает цикл в программировании",
-                "Что такое двоичная система счисления?",
-                "Как компьютер хранит информацию?"
-            ],
-            'биология': [
-                "Что такое фотосинтез?",
-                "Объясни строение клетки",
-                "Как работает пищеварительная система?",
-                "Что такое ДНК и зачем она нужна?"
-            ],
-            'геометрия': [
-                "Чему равна сумма углов треугольника?",
-                "Что такое теорема Пифагора?",
-                "Как найти площадь круга?",
-                "Чем отличается прямоугольник от квадрата?"
-            ]
-        }
-        
-        # Ищем подходящий вопрос
-        subject_lower = self.current_subject.lower()
-        for subject_key, questions in fallback_questions.items():
-            if subject_key in subject_lower:
-                # Выбираем уникальный вопрос если можно
-                if self.generated_questions:
-                    existing = [q["question"] for q in self.generated_questions]
-                    for q in questions:
-                        if q not in existing:
-                            return q
-                return random.choice(questions)
-        
-        # Общий технический fallback
-        general_tech = [
-            "Объясни основное понятие из сегодняшнего урока",
-            "Как применить изученный материал на практике?",
-            "Приведи пример использования этого знания",
-            "Что самое важное ты запомнил из урока?"
-        ]
-        
-        # Выбираем уникальный
-        if self.generated_questions:
-            existing = [q["question"] for q in self.generated_questions]
-            for q in general_tech:
-                if q not in existing:
-                    return q
-        
-        return random.choice(general_tech)
 
     def generate_single_language_question(self) -> Optional[str]:
         """Генерирует один вопрос для языковой практики"""
@@ -726,7 +422,7 @@ class PracticeManager:
             available_types = self.language_exercise_types.get(self.language_level, ['vocabulary', 'translation'])
             exercise_type = random.choice(available_types)
             
-            # 🔥 ГЕНЕРИРУЕМ ПРОМТ
+            # 🔥 ГЕНЕРИРУЕМ ПРОМТ ДЛЯ ЯЗЫКОВОГО УПРАЖНЕНИЯ
             prompt = self._create_language_exercise_prompt(exercise_type)
             
             llm_response = self.llm.query(
@@ -747,8 +443,7 @@ class PracticeManager:
                         "language": self.target_language,
                         "level": self.language_level,
                         "bilingual_ratio": self.bilingual_ratio,
-                        "student_age": self.student_data.get('age', 12) if self.student_data else 12,
-                        "is_technical": False
+                        "student_age": self.student_data.get('age', 12) if self.student_data else 12
                     }
                     self.generated_questions.append(question_data)
                     return question_text
@@ -800,6 +495,7 @@ class PracticeManager:
             ИЗУЧАЕМЫЙ ЯЗЫК: {self.target_language}
             УРОВЕНЬ: {self.language_level} ({settings['complexity']})
             ТЕМА УРОКА: {self.current_lesson_summary[:300]}
+            СООТНОШЕНИЕ ЯЗЫКОВ: {settings['language_mix']}
             
             Создай упражнение "Сопоставление слов с переводами".
             
@@ -808,6 +504,7 @@ class PracticeManager:
             2. {settings['examples']}
             3. {settings['hints']}
             4. Включи транскрипцию для новых слов
+            5. Слова должны быть полезными и практичными
             
             🔥 ФОРМАТ:
             [Инструкция на русском]
@@ -826,6 +523,9 @@ class PracticeManager:
             D. Перевод4
             E. Перевод5
             
+            🔥 ПРИМЕР ДЛЯ УРОВНЯ {self.language_level}:
+            {settings['examples']}
+            
             Верни только упражнение.
             """,
             
@@ -843,6 +543,7 @@ class PracticeManager:
             2. {settings['examples']}
             3. {settings['hints']}
             4. Предложения должны соответствовать теме урока
+            5. Учитывай уровень {self.language_level}
             
             🔥 ФОРМАТ:
             [Инструкция на русском]
@@ -853,6 +554,113 @@ class PracticeManager:
             2. [Предложение на русском]
             3. [Предложение на русском]
             
+            🔥 ПРИМЕР ДЛЯ УРОВНЯ {self.language_level}:
+            {settings['examples']}
+            
+            Верни только упражнение.
+            """,
+            
+            'fill_blank': f"""
+            СОЗДАЙ УПРАЖНЕНИЕ "FILL IN THE BLANKS"
+            
+            ИЗУЧАЕМЫЙ ЯЗЫК: {self.target_language}
+            УРОВЕНЬ: {self.language_level} ({settings['complexity']})
+            ТЕМА: {self.current_lesson_summary[:300]}
+            
+            Создай упражнение "Заполните пропуски подходящими словами".
+            
+            🔥 ТРЕБОВАНИЯ:
+            1. {settings['instructions']}
+            2. {settings['examples']}
+            3. {settings['hints']}
+            4. Текст должен соответствовать теме
+            5. Пропуски должны быть ключевыми словами
+            
+            🔥 ФОРМАТ:
+            [Инструкция на русском]
+            
+            Текст:
+            [Текст с 3-5 пропусками обозначенными как ______]
+            
+            Слова для выбора (если нужно):
+            [word1, word2, word3, ...]
+            
+            🔥 ПРИМЕР ДЛЯ УРОВНЯ {self.language_level}:
+            {settings['examples']}
+            
+            Верни только упражнение.
+            """,
+            
+            'dialogue': f"""
+            СОЗДАЙ ДИАЛОГОВОЕ УПРАЖНЕНИЕ
+            
+            ИЗУЧАЕМЫЙ ЯЗЫК: {self.target_language}
+            УРОВЕНЬ: {self.language_level} ({settings['complexity']})
+            ТЕМА: {self.current_lesson_summary[:300]}
+            
+            Создай упражнение с диалогом.
+            
+            🔥 ТРЕБОВАНИЯ:
+            1. {settings['instructions']}
+            2. {settings['examples']}
+            3. {settings['hints']}
+            4. Диалог должен быть естественным
+            5. Вопросы на понимание диалога
+            
+            🔥 ФОРМАТ:
+            [Инструкция на русском]
+            
+            Диалог:
+            A: [Реплика 1 на {self.target_language}]
+            B: [Реплика 2 на {self.target_language}]
+            A: [Реплика 3 на {self.target_language}]
+            B: [Реплика 4 на {self.target_language}]
+            
+            Вопросы:
+            1. [Вопрос на понимание]
+            2. [Вопрос на понимание]
+            
+            Задание:
+            [Задание для ученика]
+            
+            🔥 ПРИМЕР ДЛЯ УРОВНЯ {self.language_level}:
+            {settings['examples']}
+            
+            Верни только упражнение.
+            """,
+            
+            'grammar': f"""
+            СОЗДАЙ ГРАММАТИЧЕСКОЕ УПРАЖНЕНИЕ
+            
+            ИЗУЧАЕМЫЙ ЯЗЫК: {self.target_language}
+            УРОВЕНЬ: {self.language_level} ({settings['complexity']})
+            ТЕМА: {self.current_lesson_summary[:300]}
+            
+            Создай упражнение на грамматику.
+            
+            🔥 ТРЕБОВАНИЯ:
+            1. {settings['instructions']}
+            2. {settings['examples']}
+            3. {settings['hints']}
+            4. Объяснение правила на русском
+            5. Примеры на {self.target_language}
+            
+            🔥 ФОРМАТ:
+            [Инструкция на русском]
+            
+            Правило:
+            [Объяснение грамматического правила на русском]
+            
+            Примеры:
+            1. [Пример 1 на {self.target_language}]
+            2. [Пример 2 на {self.target_language}]
+            
+            Упражнение:
+            [Упражнение для ученика]
+            
+            🔥 ПРИМЕР ДЛЯ УРОВНЯ {self.language_level}:
+            {settings['examples']}
+            
             Верни только упражнение.
             """
         }
@@ -860,7 +668,7 @@ class PracticeManager:
         return exercise_prompts.get(exercise_type, exercise_prompts['vocabulary'])
 
     def get_next_question(self, timeout: float = 2.0) -> Optional[str]:
-        """🔥 ОПТИМИЗИРОВАННЫЙ: Получает следующий вопрос из очереди"""
+        """Получает следующий вопрос из очереди (с ожиданием если нужно)"""
         try:
             # 🔥 ПРОВЕРКА ЛИМИТА
             if len(self.generated_questions) >= self.max_questions:
@@ -875,11 +683,9 @@ class PracticeManager:
             except queue.Empty:
                 debug_log("⚠️ Очередь вопросов пуста, пробуем сгенерировать...")
             
-            # 🔥 УМНЫЙ ВЫБОР ТИПА ВОПРОСА
+            # 🔥 ЕСЛИ ОЧЕРЕДЬ ПУСТА, ГЕНЕРИРУЕМ СИНХРОННО
             if self.is_language_subject:
                 question = self.generate_single_language_question()
-            elif self.is_technical_subject:
-                question = self.generate_technical_question()
             else:
                 question = self.generate_single_question()
             
@@ -887,11 +693,9 @@ class PracticeManager:
                 debug_log(f"✅ Синхронно сгенерирован вопрос: {question[:80]}...")
                 return question
             
-            # 🔥 FALLBACK
+            # 🔥 ЕСЛИ СИНХРОННАЯ ГЕНЕРАЦИЯ НЕ УДАЛАСЬ, ИСПОЛЬЗУЕМ FALLBACK
             if self.is_language_subject:
                 fallback = self._get_language_fallback_question('vocabulary', ensure_unique=True)
-            elif self.is_technical_subject:
-                fallback = self._get_technical_fallback_question()
             else:
                 age = int(self.student_data.get('age', 12)) if self.student_data else 12
                 fallback = self._get_fallback_question_for_age(age, ensure_unique=True)
@@ -905,8 +709,6 @@ class PracticeManager:
             # 🔥 АВАРИЙНЫЙ FALLBACK
             if self.is_language_subject:
                 fallback = "Составьте предложение на изучаемом языке."
-            elif self.is_technical_subject:
-                fallback = "Объясни основное понятие из урока."
             else:
                 fallback = "Расскажите об основном понятии из урока."
             
@@ -916,15 +718,13 @@ class PracticeManager:
     def evaluate_and_continue(self, student_answer: str, current_question: str) -> Tuple[str, Optional[str]]:
         """Оценивает ответ и возвращает feedback + следующий вопрос"""
         try:
-            # 1. ОЦЕНИВАЕМ ОТВЕТ
+            # 1. ОЦЕНИВАЕМ ОТВЕТ (быстрая операция)
             if self.is_language_subject:
                 feedback = self.evaluate_language_answer(student_answer, current_question)
-            elif self.is_technical_subject:
-                feedback = self.evaluate_technical_answer(student_answer, current_question)
             else:
                 feedback = self.evaluate_single_answer(student_answer, current_question)
             
-            # 2. ПОЛУЧАЕМ СЛЕДУЮЩИЙ ВОПРОС
+            # 2. ПОЛУЧАЕМ СЛЕДУЮЩИЙ ВОПРОС (параллельно)
             next_question = self.get_next_question()
             
             return feedback, next_question
@@ -937,8 +737,6 @@ class PracticeManager:
             
             if self.is_language_subject:
                 next_question = self._get_language_fallback_question('vocabulary', ensure_unique=True)
-            elif self.is_technical_subject:
-                next_question = self._get_technical_fallback_question()
             else:
                 age = int(self.student_data.get('age', 12)) if self.student_data else 12
                 next_question = self._get_fallback_question_for_age(age, ensure_unique=True)
@@ -966,9 +764,11 @@ class PracticeManager:
             is_test_question = any(marker in question for marker in ["A)", "B)", "C)", "D)"])
             
             if is_test_question:
+                # 🔥 ТЕСТОВЫЙ ВОПРОС
                 correct_answer = self._generate_correct_answer_for_test(question)
                 evaluation = self._evaluate_test_answer(student_answer, question, correct_answer, age)
             else:
+                # 🔥 ОБЫЧНЫЙ ВОПРОС
                 correct_answer = self._generate_correct_answer(question)
                 evaluation = self._evaluate_general_answer(student_answer, question, correct_answer, age)
             
@@ -989,83 +789,6 @@ class PracticeManager:
         except Exception as e:
             debug_log(f"❌ Ошибка оценки ответа: {e}")
             return "Спасибо за ответ! Переходим к следующему вопросу."
-
-    def evaluate_technical_answer(self, student_answer: str, question: str) -> str:
-        """🔥 Оценивает ответ на технический вопрос"""
-        try:
-            if not student_answer or len(student_answer.strip()) < 1:
-                return "Ответ слишком короткий. Попробуй написать решение подробнее."
-            
-            # 🔥 ПРОВЕРКА НА КОМАНДЫ
-            command_words = ['продолжай', 'дальше', 'следующий', 'не знаю']
-            student_answer_lower = student_answer.lower()
-            if any(cmd in student_answer_lower for cmd in command_words):
-                return "Пожалуйста, попробуй решить задачу. Если не получается, скажи 'помоги'."
-            
-            # 🔥 ГЕНЕРИРУЕМ ПРАВИЛЬНЫЙ ОТВЕТ
-            correct_answer = self._generate_correct_technical_answer(question)
-            
-            # 🔥 ОЦЕНКА ЧЕРЕЗ LLM
-            prompt = f"""
-            Оцени ответ ученика на технический вопрос.
-            
-            ПРЕДМЕТ: {self.current_subject}
-            ВОПРОС: {question}
-            ПРАВИЛЬНЫЙ ОТВЕТ: {correct_answer}
-            ОТВЕТ УЧЕНИКА: {student_answer}
-            
-            🔥 ИНСТРУКЦИИ ДЛЯ ОЦЕНКИ:
-            1. Оцени правильность решения
-            2. Отметь правильные шаги
-            3. Мягко укажи на ошибки
-            4. Похвали за попытку
-            5. Будь поддерживающим
-            6. Максимум 2 предложения
-            
-            🔥 НЕ ИСПОЛЬЗУЙ:
-            - "Хороший вопрос"
-            - "Давайте разберем"
-            - "Мне нужно подумать"
-            
-            Верни только оценку.
-            """
-            
-            feedback = self.llm.query(prompt, "", self.current_subject)
-            
-            if feedback and len(feedback.strip()) > 20:
-                return feedback
-            
-            return f"Спасибо за решение! Правильный ответ: {correct_answer}"
-            
-        except Exception as e:
-            debug_log(f"❌ Ошибка оценки технического ответа: {e}")
-            return "Спасибо за ответ! Переходим к следующему вопросу."
-
-    def _generate_correct_technical_answer(self, question: str) -> str:
-        """Генерирует правильный ответ на технический вопрос"""
-        try:
-            prompt = f"""
-            Дай правильный ответ на технический вопрос.
-            
-            ПРЕДМЕТ: {self.current_subject}
-            ВОПРОС: {question}
-            
-            🔥 ТРЕБОВАНИЯ:
-            1. Будь кратким и точным
-            2. Для задач - покажи решение по шагам
-            3. Для доказательств - покажи ключевые шаги
-            4. Для вычислений - покажи формулу и результат
-            5. Используй понятный язык
-            
-            Верни только правильный ответ.
-            """
-            
-            answer = self.llm.query(prompt, "", self.current_subject)
-            return answer.strip() if answer else "Ответ не сгенерирован"
-            
-        except Exception as e:
-            debug_log(f"❌ Ошибка генерации технического ответа: {e}")
-            return "Не удалось сгенерировать ответ"
 
     def evaluate_language_answer(self, student_answer: str, question: str) -> str:
         """Оценивает ответ на языковое упражнение"""
@@ -1099,6 +822,11 @@ class PracticeManager:
             5. Будь добрым и поддерживающим
             6. Не критикуй резко
             7. Максимум 3 предложения
+            
+            🔥 ПРИМЕР ДЛЯ УРОВНЯ {self.language_level}:
+            - Beginner: "Молодец! Ты правильно использовал слово 'hello'. Попробуй добавить 'my name is'."
+            - Intermediate: "Хорошая попытка! Обрати внимание на порядок слов в предложении."
+            - Advanced: "Интересный ответ! Учти, что в этой ситуации лучше использовать Present Perfect."
             
             Верни только обратную связь.
             """
@@ -1141,6 +869,14 @@ class PracticeManager:
             5. Если ответ правильный - похвали
             6. Не используй сложные термины
             7. Максимум 2 предложения
+            
+            🔥 ФОРМАТ ОЦЕНКИ:
+            [Оценка ответа] [Объяснение если нужно] [Поддержка]
+            
+            Примеры:
+            - "Правильно! Молодец!"
+            - "Почти верно! Правильный ответ: B) Клетка."
+            - "Не совсем. Обрати внимание на..."
             
             Верни только оценку.
             """
@@ -1220,9 +956,13 @@ class PracticeManager:
             
             Какой ПРАВИЛЬНЫЙ ответ на этот тестовый вопрос?
             Укажи только правильный вариант (A, B, C или D) и краткое объяснение.
+            Объяснение должно быть понятным для ученика.
             
             Формат:
             [Правильный вариант]: [Краткое объяснение]
+            
+            Пример:
+            A) Клетка: Потому что клетка - это основная единица живых организмов.
             """
             
             llm_response = self.llm.query(
@@ -1247,6 +987,7 @@ class PracticeManager:
             ПРЕДМЕТ: {self.current_subject}
             
             Верни только краткий правильный ответ (1-2 предложения).
+            Ответ должен быть понятным для ученика.
             """
             
             llm_response = self.llm.query(
@@ -1531,7 +1272,6 @@ class PracticeManager:
         self.current_lesson_summary = ""
         self.current_subject = ""
         self.is_language_subject = False
-        self.is_technical_subject = False
         self.target_language = None
         self.language_level = 'beginner'
         self.bilingual_ratio = 0.3
@@ -1560,7 +1300,6 @@ class PracticeManager:
         question_types = {}
         test_questions_count = 0
         language_questions_count = 0
-        technical_questions_count = 0
         
         for q in self.generated_questions:
             q_type = q.get("type", "unknown")
@@ -1570,8 +1309,6 @@ class PracticeManager:
                 test_questions_count += 1
             elif "language_" in q_type:
                 language_questions_count += 1
-            elif "technical_" in q_type:
-                technical_questions_count += 1
         
         age = self.student_data.get('age', 'неизвестен') if self.student_data else 'неизвестен'
         level = self.student_data.get('level', 'неизвестен') if self.student_data else 'неизвестен'
@@ -1586,27 +1323,23 @@ class PracticeManager:
             "question_types": question_types,
             "test_questions_count": test_questions_count,
             "language_questions_count": language_questions_count,
-            "technical_questions_count": technical_questions_count,
             "lesson_summary_length": len(self.current_lesson_summary),
             "student_data": {
                 "age": age,
                 "level": level
             },
-            "practice_type": self.current_practice_type,
+            "practice_type": "language" if self.is_language_subject else "general",
             "target_language": self.target_language if self.is_language_subject else None,
             "language_level": self.language_level if self.is_language_subject else None,
-            "bilingual_ratio": self.bilingual_ratio if self.is_language_subject else None,
-            "is_technical_subject": self.is_technical_subject
+            "bilingual_ratio": self.bilingual_ratio if self.is_language_subject else None
         }
         
         if self.generated_questions:
             stats["test_questions_percentage"] = round((test_questions_count / len(self.generated_questions)) * 100, 1)
             stats["language_questions_percentage"] = round((language_questions_count / len(self.generated_questions)) * 100, 1)
-            stats["technical_questions_percentage"] = round((technical_questions_count / len(self.generated_questions)) * 100, 1)
         else:
             stats["test_questions_percentage"] = 0
             stats["language_questions_percentage"] = 0
-            stats["technical_questions_percentage"] = 0
         
         return stats
 
@@ -1629,7 +1362,6 @@ class PracticeManager:
                 "student_data": self.student_data,
                 "stats": self.get_practice_stats(),
                 "is_language_subject": self.is_language_subject,
-                "is_technical_subject": self.is_technical_subject,
                 "target_language": self.target_language,
                 "language_level": self.language_level
             }
@@ -1655,7 +1387,6 @@ class PracticeManager:
             self.generated_questions = session_data.get("generated_questions", [])
             self.student_data = session_data.get("student_data", {})
             self.is_language_subject = session_data.get("is_language_subject", False)
-            self.is_technical_subject = session_data.get("is_technical_subject", False)
             self.target_language = session_data.get("target_language")
             self.language_level = session_data.get("language_level", "beginner")
             
@@ -1671,16 +1402,7 @@ class PracticeManager:
 class MockLLM:
     """Mock LLM для тестирования"""
     def query(self, question, context, subject):
-        if "технический" in question:
-            return """Задача: Рассчитай скорость автомобиля
-Дано: Путь 100 метров, время 20 секунд
-Найти: Скорость в м/с
-
-Подсказка: Используй формулу скорости
-
-Пример ответа: 5 м/с"""
-        elif "языковой" in question:
-            return """Тестовый вопрос по английскому языку.
+        return """Тестовый вопрос по английскому языку.
 
 Выберите правильный перевод слова "дом":
 A) house
@@ -1689,21 +1411,11 @@ C) building
 D) apartment
 
 Правильный ответ: A) house"""
-        else:
-            return """Вопрос: Что такое фотосинтез?
-
-Варианты ответов:
-A) Процесс дыхания растений
-B) Процесс питания растений
-C) Процесс размножения растений
-D) Процесс роста растений
-
-Правильный ответ: B) Процесс питания растений"""
 
 
 # 🔥 ТЕСТИРОВАНИЕ
 if __name__ == "__main__":
-    print("🧪 Тестирование PracticeManager с поддержкой технических предметов...")
+    print("🧪 Тестирование PracticeManager с языковой поддержкой...")
     
     # Тестируем менеджер практики
     pm = PracticeManager(MockLLM())
@@ -1715,44 +1427,36 @@ if __name__ == "__main__":
         'level': '5'
     }
     
-    # Тест для технического предмета (физика)
-    print("\n⚙️ Тест для физики (технический предмет):")
-    pm.initialize_practice_generation("Урок о скорости и ускорении. Формулы: v = s/t, a = (v2-v1)/t", "физика")
-    time.sleep(1)
+    # Тест для языкового предмета
+    print("\n📚 Тест для английского языка:")
+    pm.initialize_practice_generation("Урок о базовых словах на английском: hello, goodbye, thank you", "английский язык")
+    time.sleep(2)  # Даем время на генерацию
     
     # Получаем вопрос
     question = pm.get_next_question()
-    print(f"📝 Полученный технический вопрос:\n{question}")
-    
-    # Тест оценки технического ответа
-    feedback, next_q = pm.evaluate_and_continue("5 м/с", question)
-    print(f"📝 Feedback: {feedback}")
+    print(f"📝 Полученный языковой вопрос:\n{question}")
     
     # Тест статистики
     stats = pm.get_practice_stats()
-    print(f"📊 Статистика технической практики: {stats}")
+    print(f"📊 Статистика языковой практики: {stats}")
     
-    # Сброс и тест для языкового предмета
-    pm.reset()
-    pm.student_data = {'age': '12', 'level': '5', 'name': 'Ученик'}
-    
-    print("\n📚 Тест для английского языка:")
-    pm.initialize_practice_generation("Урок о базовых словах на английском", "английский язык")
-    time.sleep(1)
-    
-    question = pm.get_next_question()
-    print(f"📝 Полученный языковой вопрос:\n{question}")
-    
-    # Тест для общего предмета
+    # Сброс и тест для неязыкового предмета
     pm.reset()
     pm.student_data = {'age': '14', 'level': '8', 'name': 'Старший ученик'}
     
-    print("\n📚 Тест для биологии:")
-    pm.initialize_practice_generation("Урок о фотосинтезе и дыхании растений", "биология")
-    time.sleep(1)
+    print("\n📚 Тест для математики:")
+    pm.initialize_practice_generation("Урок о сложении и вычитании дробей", "математика")
+    time.sleep(2)
     
     question = pm.get_next_question()
-    print(f"📝 Полученный общий вопрос:\n{question}")
+    print(f"📝 Полученный вопрос по математике:\n{question}")
+    
+    # Тест оценки ответа
+    feedback, next_q = pm.evaluate_and_continue("Я думаю, это A", question)
+    print(f"📝 Feedback: {feedback}")
+    
+    stats = pm.get_practice_stats()
+    print(f"📊 Статистика общей практики: {stats}")
     
     # Тест сохранения сессии
     saved = pm.save_practice_session()
