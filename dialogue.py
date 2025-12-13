@@ -55,8 +55,14 @@ class DialogueManager:
         self.progress_dir = Path("students_progress")
         self.progress_dir.mkdir(exist_ok=True)
         
+        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ОТЛОЖЕННАЯ ИНИЦИАЛИЗАЦИЯ!
+        self._llm = None  # Отложенная инициализация LLM
+        self._llm_lock = threading.Lock()  # Блокировка для потокобезопасности
+        self._lessons_loaded = False  # Флаг загрузки уроков
+        self._lessons_lock = threading.Lock()  # Блокировка для загрузки уроков
         self.knowledge_base = None
-        self.llm = LLMIntegration()
+        
+        # 🔥 ИНИЦИАЛИЗИРУЕМ ТОЛЬКО ПРОСТЫЕ ПОЛЯ
         self.conversation_counter = 0
         self.llm_query_mode = get_llm_mode()
         self.dialogue_settings = get_dialogue_settings()
@@ -65,8 +71,9 @@ class DialogueManager:
         self.conversation_context = []
         self.room_id = None
         
-        # Менеджер практики
-        self.practice_manager = PracticeManager(self.llm)
+        # Менеджер практики - тоже ленивая инициализация
+        self._practice_manager = None
+        self._practice_manager_lock = threading.Lock()
         
         # Новые поля для практики
         self.practice_active = False
@@ -135,7 +142,8 @@ class DialogueManager:
         self.bilingual_ratio = 0.3  # 30% иностранного по умолчанию
         self.language_practice_manager = None
         
-        self._load_lessons()
+        # 🔥 ИСПРАВЛЕНИЕ: НЕ ЗАГРУЖАЕМ УРОКИ СРАЗУ!
+        # self._load_lessons()  # УДАЛЕНО! Будет загружено лениво
         
         # Расширенные локальные шаблоны
         self.local_patterns = {
@@ -157,6 +165,39 @@ class DialogueManager:
             "расскажи о себе": ["Я цифровой преподаватель, созданный чтобы сделать образование доступным и интересным для всех!", 
                                "Моя задача - помочь вам учиться с удовольствием и пониманием."]
         }
+
+    @property
+    def llm(self):
+        """🔥 ЛЕНИВОЕ СВОЙСТВО: Инициализирует LLM только при первом обращении"""
+        if self._llm is None:
+            with self._llm_lock:
+                if self._llm is None:
+                    debug_log("🔄 Ленивая инициализация LLMIntegration...")
+                    self._llm = LLMIntegration()
+                    debug_log("✅ LLMIntegration инициализирован")
+        return self._llm
+
+    @property
+    def practice_manager(self):
+        """🔥 ЛЕНИВОЕ СВОЙСТВО: Инициализирует PracticeManager только при первом обращении"""
+        if self._practice_manager is None:
+            with self._practice_manager_lock:
+                if self._practice_manager is None:
+                    debug_log("🔄 Ленивая инициализация PracticeManager...")
+                    # Используем ленивый llm
+                    self._practice_manager = PracticeManager(self.llm)
+                    debug_log("✅ PracticeManager инициализирован")
+        return self._practice_manager
+
+    def _ensure_lessons_loaded(self):
+        """🔥 ЛЕНИВАЯ ЗАГРУЗКА: Загружает уроки только при первом обращении"""
+        if not self._lessons_loaded:
+            with self._lessons_lock:
+                if not self._lessons_loaded:
+                    debug_log("🔄 Ленивая загрузка уроков...")
+                    self._load_lessons()
+                    self._lessons_loaded = True
+                    debug_log("✅ Уроки загружены")
 
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка расширенной базы диалоговых шаблонов"""
@@ -184,7 +225,7 @@ class DialogueManager:
                 "хочу учиться": ["Отлично! Какой предмет тебя интересует?", "Супер! Давай выберем тему!"]
             },
             "subject_questions": {
-                "что преподаешь": ["У меня есть уроки по разным предметам! Что хочешь изучить?"]
+                "что преподаешь": ["У меня есть уроки по разным предметы! Что хочешь изучить?"]
             },
             "metadata": {
                 "version": "1.0",
@@ -632,6 +673,9 @@ class DialogueManager:
     def _handle_llm_dialogue(self, text: str, room_id: str = None) -> Optional[str]:
         """Гарантированная обработка диалога через LLM с ПЕРСОНАЛИЗАЦИЕЙ"""
         try:
+            # 🔥 ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ: инициализируем LLM при первом использовании
+            _ = self.llm  # Это инициализирует LLM если еще не инициализирован
+            
             # Собираем контекст диалога
             context = self._get_conversation_context()
             
@@ -853,6 +897,9 @@ class DialogueManager:
         """🔥 ОБНОВЛЕННЫЙ: Генерирует урок по запрошенной теме с ПРОВЕРОЧНЫМИ ВОПРОСАМИ"""
         try:
             debug_log(f"🎯 Генерация урока по теме: {topic}")
+            
+            # 🔥 ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ: инициализируем LLM при первом использовании
+            _ = self.llm  # Это инициализирует LLM если еще не инициализирован
             
             # 🔥 ОБНОВЛЕННЫЙ ПРОМПТ: Добавляем данные ученика и ТРЕБОВАНИЯ К ВОПРОСАМ
             age = self.student_data.get('age', '12')
@@ -1136,6 +1183,9 @@ class DialogueManager:
                 debug_log(f"🎨 Генерация SVG инфографики для: {text[:100]}...")
                 
                 if self.room_id and self.socketio:
+                    # 🔥 ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ: инициализируем LLM при первом использовании
+                    _ = self.llm  # Это инициализирует LLM если еще не инициализирован
+                    
                     # Генерируем SVG инфографику через LLM
                     infographic_result = self.llm.generate_infographic(text, context)
                     
@@ -1231,6 +1281,9 @@ class DialogueManager:
 
     def process_input(self, text: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
+        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ УРОКИ ПРИ ПЕРВОМ ИСПОЛЬЗОВАНИИ
+        self._ensure_lessons_loaded()
+        
         text_lower = text.lower().strip()
         
         # 🔥 ПЕРВОЕ: Проверяем, не нужен ли языковой урок
@@ -2209,7 +2262,7 @@ class DialogueManager:
         # 🔥 КРИТИЧЕСКОЕ ОБНОВЛЕНИЕ: ВСЕГДА передаем контекст урока
         current_context = ""
         if self.lesson_content and self.current_paragraph > 0:
-            # Берем последние 2-3 абзаца как контекст
+            # Берем последние 2-3 абзацы как контекст
             context_start = max(0, self.current_paragraph - 3)
             current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
         
@@ -2637,6 +2690,7 @@ class DialogueManager:
         return result
 
     def set_llm_model(self, model: str):
+        _ = self.llm  # Инициализируем если еще не инициализирован
         self.llm.set_model(model)
         debug_log(f"Установлена модель LLM: {model}")
 
