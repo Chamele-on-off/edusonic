@@ -47,7 +47,7 @@ socketio = SocketIO(
 )
 
 # Ограничитель параллельной инициализации комнат
-init_semaphore = Semaphore(10)  # Не более 10 одновременных инициализаций
+init_semaphore = Semaphore(50)  # Не более 10 одновременных инициализаций
 
 # Ручная настройка CORS
 @app.after_request
@@ -166,7 +166,7 @@ key_manager = get_key_manager()
 
 # Настройки очистки
 ROOM_TIMEOUT = 3600  # 1 час неактивности
-MAX_ROOMS = 100  # Максимальное количество комнат в памяти
+MAX_ROOMS = 200  # Максимальное количество комнат в памяти
 DEBUG_LLM = True
 
 def debug_log(message):
