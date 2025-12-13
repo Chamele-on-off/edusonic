@@ -27,7 +27,7 @@ import uuid
 from functools import wraps
 import sys
 import atexit
-from threading import Timer, Semaphore
+from threading import Timer, Semaphore, Lock
 import psutil
 
 # Настройка Flask и SocketIO
@@ -47,7 +47,8 @@ socketio = SocketIO(
 )
 
 # Ограничитель параллельной инициализации комнат
-init_semaphore = Semaphore(50)  # Не более 10 одновременных инициализаций
+init_semaphore = Semaphore(50)  # Не более 50 одновременных инициализаций
+dialogue_init_locks = defaultdict(Lock)  # Лок для инициализации DialogueManager в каждой комнате
 
 # Ручная настройка CORS
 @app.after_request
@@ -678,7 +679,7 @@ def _fast_room_initialization(room_id):
             # Обновляем время активности
             room_last_activity[room_id] = time.time()
             
-            # Минимальная инициализация
+            # Минимальная инициализация - НЕ создаем DialogueManager здесь
             if room_id not in room_ai_activated:
                 room_ai_activated[room_id] = False
             
@@ -688,34 +689,16 @@ def _fast_room_initialization(room_id):
             if room_id not in room_current_avatar:
                 room_current_avatar[room_id] = 'teacher'
             
-            # Ленивая инициализация DialogueManager
-            if room_id not in room_dialogue:
-                room_dialogue[room_id] = None
+            # DialogueManager будет создан лениво при необходимости
+            # Не создаем его здесь!
             
             # Если это комната ученика, устанавливаем данные
             if room_id in room_student_data and room_student_data[room_id]:
                 student_data = room_student_data[room_id]
                 debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
                 
-                # Создаем DialogueManager если нужно
-                if room_dialogue[room_id] is None:
-                    room_dialogue[room_id] = DialogueManager(socketio)
-                    room_dialogue[room_id].room_id = room_id
-                
-                room_dialogue[room_id].set_student_data(student_data)
-                
-                if 'subject' in student_data and student_data['subject']:
-                    room_dialogue[room_id].current_subject = student_data['subject']
-                    debug_log(f"🔥 Установлен предмет для ученика: {student_data['subject']}")
-                elif room_id.startswith('student_'):
-                    parts = room_id.split('_')
-                    if len(parts) > 1:
-                        room_dialogue[room_id].current_subject = parts[1]
-                        debug_log(f"🔥 Предмет определен из имени комнаты: {parts[1]}")
-            
-            # Устанавливаем режим LLM
-            if room_dialogue[room_id] is not None:
-                room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+                # DialogueManager будет создан позже при необходимости
+                # Не создаем его здесь!
             
             debug_log(f"✅ Быстрая инициализация завершена для комнаты {room_id}")
             return True
@@ -723,23 +706,41 @@ def _fast_room_initialization(room_id):
             debug_log(f"❌ Ошибка инициализации комнаты {room_id}: {e}")
             return False
 
-def delayed_full_init(room_id):
-    """Отложенная полная инициализация комнаты"""
-    time.sleep(1)  # Даем время на установление соединения
+def ensure_dialogue_manager_for_room(room_id):
+    """Гарантирует наличие DialogueManager для комнаты (создает при необходимости)"""
     try:
-        if room_id in room_dialogue and room_dialogue[room_id] is None:
-            with init_semaphore:
-                room_dialogue[room_id] = DialogueManager(socketio)
-                room_dialogue[room_id].room_id = room_id
-                room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
-                
-                # Устанавливаем данные ученика если есть
-                if room_id in room_student_data and room_student_data[room_id]:
-                    room_dialogue[room_id].set_student_data(room_student_data[room_id])
-                
-                debug_log(f"✅ Выполнена отложенная полная инициализация комнаты {room_id}")
+        # Проверяем, нужен ли нам DialogueManager
+        if room_id not in room_dialogue or room_dialogue[room_id] is None:
+            with dialogue_init_locks[room_id]:
+                # Двойная проверка после захвата лока
+                if room_id not in room_dialogue or room_dialogue[room_id] is None:
+                    debug_log(f"Создаем DialogueManager для комнаты {room_id}")
+                    
+                    # Создаем с базовой инициализацией
+                    dm = DialogueManager(socketio)
+                    dm.room_id = room_id
+                    dm.set_llm_mode(room_llm_mode[room_id])
+                    
+                    # Устанавливаем данные ученика если есть
+                    if room_id in room_student_data and room_student_data[room_id]:
+                        dm.set_student_data(room_student_data[room_id])
+                        
+                        if 'subject' in room_student_data[room_id] and room_student_data[room_id]['subject']:
+                            dm.current_subject = room_student_data[room_id]['subject']
+                            debug_log(f"🔥 Установлен предмет для ученика: {room_student_data[room_id]['subject']}")
+                        elif room_id.startswith('student_'):
+                            parts = room_id.split('_')
+                            if len(parts) > 1:
+                                dm.current_subject = parts[1]
+                                debug_log(f"🔥 Предмет определен из имени комнаты: {parts[1]}")
+                    
+                    room_dialogue[room_id] = dm
+                    debug_log(f"✅ DialogueManager создан для комнаты {room_id}")
+        
+        return room_dialogue[room_id] is not None
     except Exception as e:
-        debug_log(f"❌ Ошибка отложенной инициализации {room_id}: {e}")
+        debug_log(f"❌ Ошибка создания DialogueManager для {room_id}: {e}")
+        return False
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -1330,7 +1331,7 @@ def handle_join_room(data):
                 room_peer_ids[room_id] = {}
             room_peer_ids[room_id][request.sid] = peer_id
         
-        # Быстрая инициализация
+        # Быстрая инициализация - БЕЗ создания DialogueManager
         _fast_room_initialization(room_id)
         
         if peer_id:
@@ -1352,32 +1353,28 @@ def handle_join_room(data):
         
         emit('participants_update', {'count': len(room_participants[room_id])}, room=room_id)
         
-        # Отложенная полная инициализация для первой сессии
-        if len(room_participants[room_id]) == 1:
-            socketio.start_background_task(delayed_full_init, room_id)
+        # Приветствие для комнат учеников
+        if (room_id in room_student_data and 
+            room_student_data[room_id] and 
+            not room_id.startswith('demo_') and 
+            room_id != 'default'):
             
-            # Приветствие для комнат учеников
-            if (room_id in room_student_data and 
-                room_student_data[room_id] and 
-                not room_id.startswith('demo_') and 
-                room_id != 'default'):
-                
-                student_data = room_student_data[room_id]
-                student_name = student_data.get('name', 'ученик')
-                subject = student_data.get('subject', 'предмету')
-                
-                welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-                welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
-                
-                socketio.emit('student_welcome_message', {
-                    'room_id': room_id,
-                    'student_name': student_name,
-                    'subject': subject,
-                    'message': welcome_message,
-                    'prompt_ready': True
-                }, room=room_id)
-                
-                socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message))
+            student_data = room_student_data[room_id]
+            student_name = student_data.get('name', 'ученик')
+            subject = student_data.get('subject', 'предмету')
+            
+            welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
+            welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
+            
+            socketio.emit('student_welcome_message', {
+                'room_id': room_id,
+                'student_name': student_name,
+                'subject': subject,
+                'message': welcome_message,
+                'prompt_ready': True
+            }, room=room_id)
+            
+            socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message))
         
         elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
             greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
@@ -1452,6 +1449,10 @@ def handle_student_answer(data):
 
     if any(cmd in answer.lower() for cmd in ['стоп', 'останови', 'хватит', 'закончи']):
         debug_log(f"Команда остановки практики: {answer}")
+        # Создаем DialogueManager если нужно
+        if not ensure_dialogue_manager_for_room(room_id):
+            return
+            
         if room_id in room_dialogue:
             room_dialogue[room_id]._end_practice_session()
             room_practice_active[room_id] = False
@@ -1468,24 +1469,27 @@ def handle_student_answer(data):
             emit('practice_ended', {}, room=room_id)
         return
 
-    if room_id in room_dialogue:
-        dialogue = room_dialogue[room_id]
-        if not dialogue.waiting_for_answer:
-            debug_log(f"Система не ожидает ответа, игнорирую: {answer}")
-            return
+    # Создаем DialogueManager если нужно
+    if not ensure_dialogue_manager_for_room(room_id):
+        return
+        
+    dialogue = room_dialogue[room_id]
+    
+    if not dialogue.waiting_for_answer:
+        debug_log(f"Система не ожидает ответа, игнорирую: {answer}")
+        return
 
     if any(cmd in answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
         debug_log(f"Игнорирую команду вместо ответа: {answer}")
-        if room_id in room_dialogue:
-            response = room_dialogue[room_id]._evaluate_and_generate_next("")
-            if response:
-                emit('speech_text', {
-                    'text': f"Учитель: {response}",
-                    'sid': 'teacher',
-                    'is_teacher': True
-                }, room=room_id)
-                # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
-                speak_text(room_id, response, voice_type='female', is_teacher=True)
+        response = dialogue._evaluate_and_generate_next("")
+        if response:
+            emit('speech_text', {
+                'text': f"Учитель: {response}",
+                'sid': 'teacher',
+                'is_teacher': True
+            }, room=room_id)
+            # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+            speak_text(room_id, response, voice_type='female', is_teacher=True)
         return
 
     room_speech_data[room_id].append({
@@ -1495,34 +1499,33 @@ def handle_student_answer(data):
         'sid': user_sid
     })
     
-    if room_id in room_dialogue:
-        debug_log(f"Обработка ответа через диалог менеджер...")
+    debug_log(f"Обработка ответа через диалог менеджер...")
+    
+    response = dialogue._evaluate_and_generate_next(answer)
+    
+    if response:
+        debug_log(f"Ответ учителя: {response}")
         
-        response = room_dialogue[room_id]._evaluate_and_generate_next(answer)
+        emit('speech_text', {
+            'text': f"Учитель: {response}",
+            'sid': 'teacher',
+            'is_teacher': True
+        }, room=room_id)
         
-        if response:
-            debug_log(f"Ответ учителя: {response}")
-            
-            emit('speech_text', {
-                'text': f"Учитель: {response}",
-                'sid': 'teacher',
-                'is_teacher': True
-            }, room=room_id)
-            
-            # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
-            speak_text(room_id, response, voice_type='female', is_teacher=True)
-            
-            if not room_dialogue[room_id].practice_active:
-                room_practice_active[room_id] = False
-                room_current_question_index[room_id] = 0
-                emit('practice_ended', {}, room=room_id)
-                debug_log("Практика завершена")
-        else:
+        # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+        speak_text(room_id, response, voice_type='female', is_teacher=True)
+        
+        if not dialogue.practice_active:
             room_practice_active[room_id] = False
             room_current_question_index[room_id] = 0
-            room_dialogue[room_id].waiting_for_answer = False
             emit('practice_ended', {}, room=room_id)
-            debug_log("Практика завершена (response=None)")
+            debug_log("Практика завершена")
+    else:
+        room_practice_active[room_id] = False
+        room_current_question_index[room_id] = 0
+        dialogue.waiting_for_answer = False
+        emit('practice_ended', {}, room=room_id)
+        debug_log("Практика завершена (response=None)")
 
 @socketio.on('student_message')
 def handle_student_message(data):
@@ -1559,11 +1562,10 @@ def handle_recognized_speech(data):
     if not room_ai_activated.get(room_id, False):
         return
         
-    if room_id not in room_dialogue or room_dialogue[room_id] is None:
-        debug_log(f"DialogueManager отсутствует для комнаты {room_id}, пытаемся создать...")
-        if not _fast_room_initialization(room_id):
-            debug_log(f"Не удалось создать DialogueManager для {room_id}")
-            return
+    # Ленивое создание DialogueManager при необходимости
+    if not ensure_dialogue_manager_for_room(room_id):
+        debug_log(f"Не удалось создать DialogueManager для {room_id}")
+        return
 
     if room_teacher_speaking[room_id]:
         debug_log(f"Игнорирую речь ученика, так как учитель говорит: {text}")
@@ -1696,12 +1698,16 @@ def handle_activate_ai_teacher(data):
     try:
         room_ai_activated[room_id] = True
         
-        if room_id not in room_dialogue or room_dialogue[room_id] is None:
-            room_dialogue[room_id] = DialogueManager(socketio)
-            room_dialogue[room_id].room_id = room_id
-            debug_log(f"Создан DialogueManager при активации для {room_id}")
+        # Ленивое создание DialogueManager при необходимости
+        if not ensure_dialogue_manager_for_room(room_id):
+            emit('activate_ai_error', {
+                'room_id': room_id,
+                'error': 'Не удалось создать DialogueManager'
+            }, to=sid)
+            return
         
-        room_dialogue[room_id].set_llm_mode(room_llm_mode[room_id])
+        dialogue = room_dialogue[room_id]
+        dialogue.set_llm_mode(room_llm_mode[room_id])
         
         greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
         # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
@@ -1728,7 +1734,8 @@ def handle_set_llm_mode(data):
     
     if mode in ["traditional", "llm_first"]:
         room_llm_mode[room_id] = mode
-        if room_id in room_dialogue:
+        # Устанавливаем режим только если DialogueManager уже создан
+        if room_id in room_dialogue and room_dialogue[room_id] is not None:
             room_dialogue[room_id].set_llm_mode(mode)
         
         emit('llm_mode_changed', {
@@ -1795,7 +1802,7 @@ def handle_visualization_generated(data):
 def handle_get_llm_status(data):
     room_id = data['room_id']
     
-    if room_id in room_dialogue:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None:
         status = room_dialogue[room_id].llm.get_llm_status()
         emit('llm_status_update', {
             'room_id': room_id,
@@ -1816,7 +1823,7 @@ def handle_set_llm_priority(data):
         })
         return
     
-    if room_id in room_dialogue:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None:
         room_dialogue[room_id].llm.set_priority(priority)
         status = room_dialogue[room_id].llm.get_priority_status()
         
@@ -1832,7 +1839,7 @@ def handle_set_llm_priority(data):
 def handle_get_llm_priority_status(data):
     room_id = data['room_id']
     
-    if room_id in room_dialogue:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None:
         status = room_dialogue[room_id].llm.get_priority_status()
         emit('llm_priority_status', {
             'room_id': room_id,
@@ -1894,7 +1901,7 @@ def handle_llm_async_response(data):
     if room_id in room_llm_pending_requests and request_id in room_llm_pending_requests[room_id]:
         del room_llm_pending_requests[room_id][request_id]
     
-    if response and room_id in room_dialogue:
+    if response and room_id in room_dialogue and room_dialogue[room_id] is not None:
         room_dialogue[room_id].llm.handle_llm_response(request_id, response, room_id)
         
         emit('speech_text', {
@@ -2127,7 +2134,8 @@ def set_llm_priority_route():
         
         if success:
             for room_id in room_dialogue:
-                room_dialogue[room_id].llm.set_priority(priority)
+                if room_dialogue[room_id] is not None:
+                    room_dialogue[room_id].llm.set_priority(priority)
             
             return jsonify({
                 "success": True,
@@ -2154,7 +2162,7 @@ def get_llm_priority_route():
 def get_llm_priority_status():
     room_id = request.args.get('room_id', 'default')
     
-    if room_id in room_dialogue:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None:
         status = room_dialogue[room_id].llm.get_priority_status()
         return jsonify({
             "success": True,
@@ -2196,7 +2204,7 @@ def get_available_priorities():
 def get_llm_status():
     room_id = request.args.get('room_id', 'default')
     
-    if room_id in room_dialogue:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None:
         status = room_dialogue[room_id].llm.get_llm_status()
         return jsonify({
             "success": True,
@@ -2301,7 +2309,7 @@ def set_llm_model():
         if not model:
             return jsonify({"success": False, "error": "Model not specified"})
         
-        if room_id in room_dialogue:
+        if room_id in room_dialogue and room_dialogue[room_id] is not None:
             room_dialogue[room_id].set_llm_model(model)
             return jsonify({"success": True, "model": model, "room": room_id})
         
@@ -2349,7 +2357,7 @@ def set_llm_mode_api():
         if success:
             for room_id in room_llm_mode:
                 room_llm_mode[room_id] = mode
-                if room_id in room_dialogue:
+                if room_id in room_dialogue and room_dialogue[room_id] is not None:
                     room_dialogue[room_id].set_llm_mode(mode)
             
             return jsonify({
@@ -2367,7 +2375,7 @@ def get_knowledge_stats():
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
-    if room_id in room_dialogue:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None:
         stats = room_dialogue[room_id].get_knowledge_stats()
         if stats:
             return jsonify({
@@ -2388,7 +2396,7 @@ def search_knowledge():
     if not query:
         return jsonify({"success": False, "error": "Query parameter is required"})
     
-    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None and room_dialogue[room_id].knowledge_base:
         results = room_dialogue[room_id].knowledge_base.search_similar(query, max_results)
         return jsonify({
             "success": True,
@@ -2405,7 +2413,7 @@ def get_llm_answers():
     room_id = request.args.get('room_id', 'default')
     subject = request.args.get('subject', '')
     
-    if room_id in room_dialogue and room_dialogue[room_id].knowledge_base:
+    if room_id in room_dialogue and room_dialogue[room_id] is not None and room_dialogue[room_id].knowledge_base:
         answers = room_dialogue[room_id].knowledge_base.list_llm_answers()
         return jsonify({
             "success": True,
@@ -3531,8 +3539,9 @@ def start_specific_lesson():
         if not lesson_id or not room_id:
             return jsonify({"success": False, "error": "Не указан ID урока или комнаты"})
         
-        if room_id not in room_dialogue:
-            return jsonify({"success": False, "error": "Комната не найдена"})
+        # Создаем DialogueManager если нужно
+        if not ensure_dialogue_manager_for_room(room_id):
+            return jsonify({"success": False, "error": "Не удалось создать DialogueManager"})
         
         dialogue = room_dialogue[room_id]
         
@@ -4246,26 +4255,29 @@ def register_student_room():
         _fast_room_initialization(room_id)
         
         if lesson_id and lesson_id != 'next':
-            dialogue = room_dialogue.get(room_id)
-            if dialogue:
-                selected_lesson = None
-                for subject_lessons in dialogue.lessons.values():
-                    for lesson in subject_lessons:
-                        if lesson.get('id') == lesson_id:
-                            selected_lesson = lesson
-                            break
-                    if selected_lesson:
-                        break
+            # Создаем DialogueManager если нужно
+            if not ensure_dialogue_manager_for_room(room_id):
+                return jsonify({"success": False, "error": "Не удалось создать DialogueManager"})
                 
+            dialogue = room_dialogue[room_id]
+            selected_lesson = None
+            for subject_lessons in dialogue.lessons.values():
+                for lesson in subject_lessons:
+                    if lesson.get('id') == lesson_id:
+                        selected_lesson = lesson
+                        break
                 if selected_lesson:
-                    dialogue.selected_lesson = selected_lesson
-                    dialogue.current_subject = selected_lesson.get('subject')
-                    dialogue.lesson_started = True
-                    dialogue.current_state = "lesson_reading"
-                    
-                    lesson_content = dialogue._load_lesson_content(selected_lesson.get('file_path'))
-                    dialogue.lesson_content = lesson_content
-                    dialogue.current_paragraph = 0
+                    break
+            
+            if selected_lesson:
+                dialogue.selected_lesson = selected_lesson
+                dialogue.current_subject = selected_lesson.get('subject')
+                dialogue.lesson_started = True
+                dialogue.current_state = "lesson_reading"
+                
+                lesson_content = dialogue._load_lesson_content(selected_lesson.get('file_path'))
+                dialogue.lesson_content = lesson_content
+                dialogue.current_paragraph = 0
         
         return jsonify({
             "success": True,
@@ -4283,8 +4295,9 @@ def get_student_available_lessons():
         student_class = user_data['student_data'].get('education_level', '5')
         
         room_id = "default"
-        if room_id not in room_dialogue:
-            room_dialogue[room_id] = DialogueManager(socketio)
+        # Создаем DialogueManager если нужно
+        if not ensure_dialogue_manager_for_room(room_id):
+            return jsonify({"success": False, "error": "Не удалось создать DialogueManager"})
         
         dialogue = room_dialogue[room_id]
         dialogue.set_student_data(user_data['student_data'])
@@ -4420,10 +4433,14 @@ def force_room_initialization():
         success = _fast_room_initialization(room_id)
         
         if success:
+            # Создаем DialogueManager если нужно
+            dm_created = ensure_dialogue_manager_for_room(room_id)
+            
             return jsonify({
                 "success": True,
                 "message": f"Комната {room_id} инициализирована",
-                "ready": room_id in room_dialogue and room_dialogue[room_id] is not None
+                "ready": room_id in room_dialogue and room_dialogue[room_id] is not None,
+                "dialogue_manager_created": dm_created
             })
         else:
             return jsonify({
@@ -4635,8 +4652,8 @@ def debug_student_lessons_route():
     student_class = user_data['student_data'].get('education_level', '5')
     
     room_id = "default"
-    if room_id not in room_dialogue:
-        room_dialogue[room_id] = DialogueManager(socketio)
+    if not ensure_dialogue_manager_for_room(room_id):
+        return jsonify({"success": False, "error": "Не удалось создать DialogueManager"})
     
     dialogue = room_dialogue[room_id]
     dialogue.set_student_data(user_data['student_data'])
@@ -4837,7 +4854,7 @@ def download_lessons_by_class():
         
         import tempfile
         import zipfile
-        
+    
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
@@ -5266,6 +5283,7 @@ if __name__ == '__main__':
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
     debug_log(f"🔥 Добавлена поддержка билингвального озвучивания")
     debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена быстрая проверка языка")
+    debug_log(f"🔧 Ленивая инициализация DialogueManager активирована")
     
     socketio.run(
         app, 
