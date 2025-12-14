@@ -673,7 +673,7 @@ def setup_llm_manager():
     debug_log("LLM Manager настроен с улучшенным callback")
 
 def _fast_room_initialization(room_id):
-    """Быстрая инициализация комнаты с ограничением"""
+    """🔥 СУПЕР-БЫСТРАЯ инициализация комнаты без создания DialogueManager"""
     with init_semaphore:
         try:
             # Обновляем время активности
@@ -689,16 +689,14 @@ def _fast_room_initialization(room_id):
             if room_id not in room_current_avatar:
                 room_current_avatar[room_id] = 'teacher'
             
-            # DialogueManager будет создан лениво при необходимости
-            # Не создаем его здесь!
+            # DialogueManager НЕ создаем здесь - только при необходимости
             
-            # Если это комната ученика, устанавливаем данные
+            # Если это комната ученика, просто сохраняем данные
             if room_id in room_student_data and room_student_data[room_id]:
                 student_data = room_student_data[room_id]
-                debug_log(f"🔥 Комната {room_id} является комнатой ученика: {student_data.get('name')}")
-                
+                debug_log(f"🔥 Комната {room_id} зарегистрирована как комната ученика: {student_data.get('name')}")
                 # DialogueManager будет создан позже при необходимости
-                # Не создаем его здесь!
+                # НЕ создаем его здесь!
             
             debug_log(f"✅ Быстрая инициализация завершена для комнаты {room_id}")
             return True
@@ -714,7 +712,7 @@ def ensure_dialogue_manager_for_room(room_id):
             with dialogue_init_locks[room_id]:
                 # Двойная проверка после захвата лока
                 if room_id not in room_dialogue or room_dialogue[room_id] is None:
-                    debug_log(f"Создаем DialogueManager для комнаты {room_id}")
+                    debug_log(f"🔥 Создаем DialogueManager для комнаты {room_id} (ленивая инициализация)")
                     
                     # Создаем с базовой инициализацией
                     dm = DialogueManager(socketio)
@@ -1331,7 +1329,7 @@ def handle_join_room(data):
                 room_peer_ids[room_id] = {}
             room_peer_ids[room_id][request.sid] = peer_id
         
-        # Быстрая инициализация - БЕЗ создания DialogueManager
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Только быстрая инициализация - БЕЗ создания DialogueManager
         _fast_room_initialization(room_id)
         
         if peer_id:
@@ -1562,7 +1560,7 @@ def handle_recognized_speech(data):
     if not room_ai_activated.get(room_id, False):
         return
         
-    # Ленивое создание DialogueManager при необходимости
+    # 🔥 Ленивое создание DialogueManager при необходимости
     if not ensure_dialogue_manager_for_room(room_id):
         debug_log(f"Не удалось создать DialogueManager для {room_id}")
         return
@@ -1698,7 +1696,7 @@ def handle_activate_ai_teacher(data):
     try:
         room_ai_activated[room_id] = True
         
-        # Ленивое создание DialogueManager при необходимости
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ленивое создание DialogueManager при необходимости
         if not ensure_dialogue_manager_for_room(room_id):
             emit('activate_ai_error', {
                 'room_id': room_id,
@@ -5284,6 +5282,7 @@ if __name__ == '__main__':
     debug_log(f"🔥 Добавлена поддержка билингвального озвучивания")
     debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена быстрая проверка языка")
     debug_log(f"🔧 Ленивая инициализация DialogueManager активирована")
+    debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
     
     socketio.run(
         app, 
