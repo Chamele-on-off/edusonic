@@ -9,6 +9,19 @@ from local_llm_manager import get_llm_manager
 import queue
 from key_manager import get_key_manager
 
+# 🔥 ИМПОРТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+try:
+    from technical_subjects import (
+        is_technical_subject, 
+        clean_text_for_speech_technical,
+        contains_formulas,
+        get_subject_type
+    )
+    TECHNICAL_SUPPORT_ENABLED = True
+except ImportError:
+    TECHNICAL_SUPPORT_ENABLED = False
+    print("⚠️ technical_subjects.py не найден, техническая поддержка отключена")
+
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
     if not text:
@@ -127,27 +140,49 @@ class LLMIntegration:
         
         return content.strip()
 
-    def _process_llm_response(self, response: str, is_svg: bool = False) -> str:
-        """Обработка ответа LLM в зависимости от типа"""
+    def _process_llm_response(self, response: str, is_svg: bool = False, subject: str = "") -> str:
+        """🔥 ОБНОВЛЕННЫЙ: Обработка ответа LLM в зависимости от типа и предмета"""
         if is_svg:
             # Для SVG - минимальная очистка, сохраняем структуру
             print(f"🔧 [LLM] Обработка SVG ответа (без очистки речи)")
             return response.strip()
         else:
-            # Для речи - полная очистка
-            print(f"🔧 [LLM] Обработка текстового ответа (с очисткой речи)")
-            clean1 = clean_text_for_speech(response)
-            return self._clean_llm_response(clean1)
+            # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Умная очистка в зависимости от предмета
+            if TECHNICAL_SUPPORT_ENABLED and subject:
+                # Используем умную очистку для технических предметов
+                cleaned = clean_text_for_speech_technical(response, subject)
+                print(f"🔧 [LLM] Использована умная очистка для предмета: {subject}")
+                # Дополнительная очистка от форматирования
+                return self._clean_llm_response(cleaned)
+            else:
+                # Стандартная очистка для гуманитарных предметов
+                print(f"🔧 [LLM] Обработка текстового ответа (стандартная очистка)")
+                clean1 = clean_text_for_speech(response)
+                return self._clean_llm_response(clean1)
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000, 
                        room_id: str = "default", callback: Callable = None,
                        is_svg: bool = False) -> Optional[str]:
-        """УМНАЯ ЛОГИКА ПРИОРИТЕТОВ С FALLBACK - БЕЗ БЛОКИРОВАНИЯ"""
+        """🔥 ОБНОВЛЕННЫЙ: УМНАЯ ЛОГИКА ПРИОРИТЕТОВ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ"""
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
         print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
         print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
+        
+        # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРЕДМЕТЕ В ЗАПРОСЫ
+        is_technical = False
+        if TECHNICAL_SUPPORT_ENABLED and subject:
+            is_technical = is_technical_subject(subject)
+            
+            # Адаптируем системный промпт для технических предметов
+            if is_technical and not is_svg:
+                # Для технических предметов добавляем инструкции по формулам
+                if "system" in system_prompt.lower():
+                    system_prompt += "\n\nИСПОЛЬЗУЙ математические и научные обозначения: формулы, символы, единицы измерения."
+                    system_prompt += "\nСОХРАНЯЙ формулы в читаемом формате (например, E=mc², F=ma, H₂O)."
+                    system_prompt += "\nОБЪЯСНЯЙ сложные концепции с помощью примеров и вычислений."
+                print(f"🔧 [LLM] Технический предмет: {subject}")
         
         # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Используем асинхронный режим чтобы не блокировать систему
         if callback:
@@ -160,7 +195,9 @@ class LLMIntegration:
                         max_tokens, room_id, is_svg
                     )
                     if result:
-                        callback(result, room_id)
+                        # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА
+                        processed_result = self._process_llm_response(result, is_svg, subject)
+                        callback(processed_result, room_id)
                     else:
                         # 🔥 ВСЕГДА ВОЗВРАЩАЕМ FALLBACK ДЛЯ АСИНХРОННЫХ ЗАПРОСОВ
                         fallback = self._get_fallback_response(prompt, subject)
@@ -183,7 +220,8 @@ class LLMIntegration:
                     max_tokens, room_id, is_svg
                 )
                 if result:
-                    return result
+                    # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА
+                    return self._process_llm_response(result, is_svg, subject)
                 else:
                     return self._get_fallback_response(prompt, subject)
             except Exception as e:
@@ -203,17 +241,31 @@ class LLMIntegration:
         local_available = self.llm_manager.local_llm.is_available()
         print(f"🔧 [LLM] Локальная модель доступна: {local_available}")
         
+        # 🔥 АДАПТИРУЕМ ПРОМПТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+        adapted_system_prompt = system_prompt
+        if TECHNICAL_SUPPORT_ENABLED and subject and is_technical_subject(subject):
+            if not adapted_system_prompt:
+                adapted_system_prompt = "Ты - профессиональный учитель по техническим предметам."
+            
+            # Добавляем технические инструкции
+            adapted_system_prompt += "\n\n🔥 ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ:"
+            adapted_system_prompt += "\n- Используй математические и научные обозначения"
+            adapted_system_prompt += "\n- Сохраняй формулы в правильном формате"
+            adapted_system_prompt += "\n- Объясняй пошагово сложные концепции"
+            adapted_system_prompt += "\n- Приводи конкретные вычисления и примеры"
+            print(f"🔧 [LLM] Использован адаптированный промпт для технического предмета")
+        
         if self.priority_mode == "local_only":
             print("🔧 [LLM] Режим: только локальная модель")
             if local_available:
-                return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+                return self._handle_local_request_safe(prompt, adapted_system_prompt, max_tokens, is_svg)
             else:
                 print("❌ [LLM] Локальная модель недоступна в режиме local_only")
                 return None
                 
         elif self.priority_mode == "openrouter_only":
             print("🔧 [LLM] Режим: только OpenRouter")
-            response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
+            response = self._handle_openrouter_request_safe(prompt, context, subject, adapted_system_prompt, max_tokens, is_svg)
             if response:
                 return response
             else:
@@ -222,14 +274,14 @@ class LLMIntegration:
                 
         elif self.priority_mode == "openrouter_first":
             print("🔧 [LLM] Режим: сначала OpenRouter")
-            response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
+            response = self._handle_openrouter_request_safe(prompt, context, subject, adapted_system_prompt, max_tokens, is_svg)
             if response:
                 print("✅ [LLM] Использую ответ от OpenRouter")
                 return response
             
             print("⚠️ [LLM] OpenRouter не ответил, пробую локальную модель...")
             if local_available:
-                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+                response = self._handle_local_request_safe(prompt, adapted_system_prompt, max_tokens, is_svg)
                 if response:
                     print("✅ [LLM] Использую ответ от локальной модели")
                     return response
@@ -240,13 +292,13 @@ class LLMIntegration:
         else:  # local_first (по умолчанию)
             print("🔧 [LLM] Режим: сначала локальная модель")
             if local_available:
-                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
+                response = self._handle_local_request_safe(prompt, adapted_system_prompt, max_tokens, is_svg)
                 if response:
                     print("✅ [LLM] Использую ответ от локальной модели")
                     return response
             
             print("⚠️ [LLM] Локальная модель не ответила, пробую OpenRouter...")
-            response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
+            response = self._handle_openrouter_request_safe(prompt, context, subject, adapted_system_prompt, max_tokens, is_svg)
             if response:
                 print("✅ [LLM] Использую ответ от OpenRouter")
                 return response
@@ -275,8 +327,8 @@ class LLMIntegration:
                     max_tokens
                 )
                 if response:
-                    processed = self._process_llm_response(response, is_svg)
-                    result_queue.put(processed)
+                    # 🔥 НЕ ОБРАБАТЫВАЕМ ТУТ - обработка будет в вызывающем коде с учетом предмета
+                    result_queue.put(response)
                 else:
                     result_queue.put(None)
             except Exception as e:
@@ -370,10 +422,9 @@ class LLMIntegration:
                     if 'choices' in result and len(result['choices']) > 0:
                         answer = result['choices'][0]['message']['content']
                         
-                        processed_answer = self._process_llm_response(answer, is_svg)
-                        
+                        # 🔥 НЕ ОБРАБАТЫВАЕМ ТУТ - обработка будет в вызывающем коде
                         print(f"✅ [LLM] Успешный ответ от модели: {self.model}")
-                        return processed_answer
+                        return answer
                     else:
                         print("❌ [LLM] Неверный формат ответа от OpenRouter")
                         return None
@@ -432,7 +483,27 @@ class LLMIntegration:
         """Возвращает fallback ответ когда LLM недоступен - НИКОГДА НЕ ПАДАЕТ"""
         prompt_lower = prompt.lower()
         
-        # УЛУЧШЕННЫЕ FALLBACK ОТВЕТЫ
+        # 🔥 УЛУЧШЕННЫЕ FALLBACK ОТВЕТЫ С УЧЕТОМ ТИПА ПРЕДМЕТА
+        if TECHNICAL_SUPPORT_ENABLED and subject:
+            subject_type = get_subject_type(subject)
+            
+            if subject_type == "technical":
+                # Fallback для технических предметов
+                if any(word in prompt_lower for word in ['формул', 'уравнен', 'вычисл', 'рассчит', 'задач']):
+                    return "Для решения этой задачи нужно применить соответствующую формулу. Давайте вспомним основные формулы по этой теме."
+                elif any(word in prompt_lower for word in ['докаж', 'теорем', 'свойств', 'закон']):
+                    return "Это требует доказательства или объяснения закона. Давайте разберем этот вопрос подробнее."
+                elif any(word in prompt_lower for word in ['график', 'диаграмм', 'схем', 'чертеж']):
+                    return "Для понимания этой темы полезно построить график или схему. Давайте визуализируем."
+            
+            elif subject_type == "natural_science":
+                # Fallback для естественных наук
+                if any(word in prompt_lower for word in ['эксперимент', 'опыт', 'наблюден', 'исследован']):
+                    return "Этот вопрос лучше понять через эксперимент или наблюдение. Давайте рассмотрим практический пример."
+                elif any(word in prompt_lower for word in ['процесс', 'явление', 'систем', 'взаимодейств']):
+                    return "Это природное явление или процесс. Давайте разберем его механизм по шагам."
+        
+        # Базовые fallback ответы
         if any(word in prompt_lower for word in ['привет', 'здравств', 'начать', 'старт']):
             return "Привет! Я ваш AI-учитель. Давайте выберем предмет для изучения - математика, история, обществознание или другой?"
         
@@ -450,7 +521,7 @@ class LLMIntegration:
         return "Спасибо за вопрос! Я обрабатываю ваш запрос."
 
     def query(self, question: str, context: str = "", subject: str = "") -> str:
-        """Запрос к LLM API с ГАРАНТИРОВАННЫМ ответом - НЕ БЛОКИРУЕТ СИСТЕМУ"""
+        """🔥 ОБНОВЛЕННЫЙ: Запрос к LLM API с поддержкой технических предметов"""
         if not question.strip():
             return ""
             
@@ -476,10 +547,12 @@ class LLMIntegration:
             print(f"⏱️ Общее время обработки: {total_time:.2f}с")
             
             if llm_response and llm_response.strip():
-                print(f"✅ Ответ получен: {llm_response[:100]}...")
-                self.cache[cache_key] = llm_response
+                # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА
+                processed_response = self._process_llm_response(llm_response, subject=subject)
+                print(f"✅ Ответ получен: {processed_response[:100]}...")
+                self.cache[cache_key] = processed_response
                 self._save_cache()
-                return llm_response
+                return processed_response
             
             # Fallback на локальные ответы если LLM недоступен
             print("⚠️ LLM недоступен, использую fallback ответ")
@@ -592,7 +665,8 @@ class LLMIntegration:
                 "daily_limit": self.key_manager.daily_limit,
                 "extended_limit": self.key_manager.extended_limit,
                 "reset_time": self.key_manager.reset_time
-            }
+            },
+            "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED
         }
 
     def handle_llm_response(self, request_id: str, response: str, room_id: str):
@@ -600,8 +674,9 @@ class LLMIntegration:
         if request_id in self.pending_requests:
             callback, is_svg = self.pending_requests.pop(request_id)
             try:
-                # Обрабатываем ответ в зависимости от типа
-                processed_response = self._process_llm_response(response, is_svg)
+                # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ В ЗАВИСИМОСТИ ОТ ТИПА (предмет передается через room_id)
+                subject = room_id  # В этом контексте room_id может содержать информацию о предмете
+                processed_response = self._process_llm_response(response, is_svg, subject)
                 callback(processed_response, room_id)
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
@@ -658,66 +733,72 @@ class LLMIntegration:
         
         return has_svg_open and has_svg_close and has_proper_tags
 
-    def generate_infographic(self, topic: str, context: str = "") -> dict:
-        """Генерация стильной инфографики в SVG формате"""
+    def generate_infographic(self, topic: str, context: str = "", subject: str = "") -> dict:
+        """🔥 ОБНОВЛЕННЫЙ: Генерация стильной инфографики с поддержкой технических предметов"""
         
-        # 🔥 УЛУЧШЕННЫЙ ПРОМПТ: Больше разнообразия и креативности
-        prompt = f"""
-Создай УНИКАЛЬНУЮ и КРЕАТИВНУЮ образовательную инфографику в формате SVG на тему: "{topic}"
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ИНФОГРАФИКИ В ЗАВИСИМОСТИ ОТ ПРЕДМЕТА
+        is_technical = False
+        if TECHNICAL_SUPPORT_ENABLED and subject:
+            is_technical = is_technical_subject(subject)
+        
+        if is_technical:
+            # 🔥 СПЕЦИАЛЬНЫЙ ПРОМПТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+            prompt = self._create_technical_infographic_prompt(topic, subject)
+        else:
+            # 🔥 УЛУЧШЕННЫЙ ПРОМПТ ДЛЯ ГУМАНИТАРНЫХ ПРЕДМЕТОВ
+            prompt = f"""
+            Создай УНИКАЛЬНУЮ и КРЕАТИВНУЮ образовательную инфографику в формате SVG на тему: "{topic}"
 
-ТРЕБОВАНИЯ К ИНФОГРАФИКЕ:
-- Только чистый SVG код без пояснений
-- УНИКАЛЬНЫЙ дизайн для каждой темы
-- Информативная и понятная структура  
-- Использование разнообразных фигур, текста, цветов
-- Максимальная ширина: 600px, высота: 400px
-- Четкая визуальная иерархия
-- Баланс между визуальными элементами и текстом
+            ТРЕБОВАНИЯ К ИНФОГРАФИКЕ:
+            - Только чистый SVG код без пояснений
+            - УНИКАЛЬНЫЙ дизайн для каждой темы
+            - Информативная и понятная структура  
+            - Использование разнообразных фигур, текста, цветов
+            - Максимальная ширина: 600px, высота: 400px
+            - Четкая визуальная иерархия
+            - Баланс между визуальными элементами и текстом
 
-ВАРИАНТЫ СТРУКТУРЫ (выбери наиболее подходящую):
-1. Иерархическая схема - для процессов и структур
-2. Сравнительная таблица - для сравнения понятий  
-3. Временная шкала - для исторических событий
-4. Круговая диаграмма - для пропорций и соотношений
-5. Блок-схема - для алгоритмов и процессов
-6. Концептуальная карта - для связей между понятиями
-7. Инфографика с иконками - для визуального представления
+            ВАРИАНТЫ СТРУКТУРЫ (выбери наиболее подходящую):
+            1. Иерархическая схема - для процессов и структур
+            2. Сравнительная таблица - для сравнения понятий  
+            3. Временная шкала - для исторических событий
+            4. Круговая диаграмма - для пропорций и соотношений
+            5. Блок-схема - для алгоритмов и процессов
+            6. Концептуальная карта - для связей между понятиями
+            7. Инфографика с иконками - для визуального представления
 
-ЭЛЕМЕНТЫ ДЛЯ ИСПОЛЬЗОВАНИЯ:
-- Прямоугольники, круги, треугольники, стрелки
-- Линии, кривые, пути
-- Градиенты, тени, фильтры
-- Текстовые блоки с заголовками
-- Иконки и символы (если уместно)
+            ЭЛЕМЕНТЫ ДЛЯ ИСПОЛЬЗОВАНИЯ:
+            - Прямоугольники, круги, треугольники, стрелки
+            - Линии, кривые, пути
+            - Градиенты, тени, фильтры
+            - Текстовые блоки с заголовками
+            - Иконки и символы (если уместно)
 
-ЦВЕТОВАЯ ПАЛИТРА (используй разные комбинации):
-- Основные цвета: #4f46e5, #10b981, #f59e0b, #ef4444, #8b5cf6, #06b6d4, #84cc16, #f97316
-- Фон: светлые оттенки (#f8fafc, #f1f5f9, #fef7ed, #f0fdf4)
-- Текст: темные оттенки (#1f2937, #374151, #4b5563)
+            ЦВЕТОВАЯ ПАЛИТРА (используй разные комбинации):
+            - Основные цвета: #4f46e5, #10b981, #f59e0b, #ef4444, #8b5cf6, #06b6d4, #84cc16, #f97316
+            - Фон: светлые оттенки (#f8fafc, #f1f5f9, #fef7ed, #f0fdf4)
+            - Текст: темные оттенки (#1f2937, #374151, #4b5563)
 
-СТРУКТУРА ИНФОГРАФИКИ:
-1. Привлекательный заголовок
-2. Ключевые элементы/понятия  
-3. Визуальные связи между элементами
-4. Подписи и пояснения (если нужны)
+            СТРУКТУРА ИНФОГРАФИКИ:
+            1. Привлекательный заголовок
+            2. Ключевые элементы/понятия  
+            3. Визуальные связи между элементами
+            4. Подписи и пояснения (если нужны)
 
-ТЕМА: "{topic}"
+            ТЕМА: "{topic}"
 
-Создай УНИКАЛЬНЫЙ дизайн, который лучше всего подходит для этой темы.
-Не используй шаблонные решения - будь креативным!
+            Создай УНИКАЛЬНЫЙ дизайн, который лучше всего подходит для этой темы.
+            Не используй шаблонные решения - будь креативным!
 
-Верни ТОЛЬКО SVG код без каких-либо пояснений, комментариев или markdown разметки.
-Код должен начинаться с <svg и заканчиваться </svg>.
-"""
+            Верни ТОЛЬКО SVG код без каких-либо пояснений, комментариев или markdown разметки.
+            Код должен начинаться с <svg и заканчиваться </svg>.
+            """
 
         try:
-            print(f"🎨 Генерация УНИКАЛЬНОЙ SVG инфографики для: {topic}")
+            print(f"🎨 Генерация {'ТЕХНИЧЕСКОЙ ' if is_technical else ''}SVG инфографики для: {topic}")
             
-            response = self._query_llm_api(
-                prompt=prompt,
-                context="",  # 🔥 УБИРАЕМ КОНТЕКСТ УРОКА - это решит проблему с передачей текста
-                subject="general",
-                system_prompt="""Ты - креативный дизайнер образовательной инфографики. 
+            # 🔥 АДАПТИРУЕМ СИСТЕМНЫЙ ПРОМПТ ДЛЯ ТИПА ИНФОГРАФИКИ
+            system_prompt = """Ты - креативный дизайнер образовательной инфографики. 
 Твоя задача - создавать УНИКАЛЬНЫЕ и РАЗНООБРАЗНЫЕ SVG инфографики для разных тем.
 
 ОЧЕНЬ ВАЖНЫЕ ПРАВИЛА:
@@ -737,8 +818,23 @@ class LLMIntegration:
 - Концептуальные карты для связей
 - Круговые диаграммы для пропорций
 
-Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ.""",
-                max_tokens=2500,  # Увеличили для более сложных дизайнов
+Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ."""
+            
+            if is_technical:
+                system_prompt += """
+
+🔥 ДОПОЛНИТЕЛЬНО ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ:
+- Используй математические и научные символы если уместно
+- Добавляй схемы, диаграммы, графики
+- Включай формулы и обозначения в SVG
+- Делай инфографику информативной и точной"""
+
+            response = self._query_llm_api(
+                prompt=prompt,
+                context=context,
+                subject=subject,
+                system_prompt=system_prompt,
+                max_tokens=2500,
                 is_svg=True
             )
             
@@ -761,7 +857,8 @@ class LLMIntegration:
                         "success": True,
                         "svg_code": svg_code,
                         "topic": topic,
-                        "type": "infographic"
+                        "type": "technical_infographic" if is_technical else "infographic",
+                        "subject": subject
                     }
                 else:
                     print(f"❌ [DEBUG] Не удалось извлечь валидный SVG")
@@ -773,25 +870,247 @@ class LLMIntegration:
             print("❌ [DEBUG] Используем fallback SVG")
             return {
                 "success": False,
-                "svg_code": self._create_fallback_infographic(topic),
+                "svg_code": self._create_fallback_infographic(topic, is_technical, subject),
                 "topic": topic,
-                "type": "fallback"
+                "type": "technical_fallback" if is_technical else "fallback",
+                "subject": subject
             }
             
         except Exception as e:
             print(f"❌ Ошибка генерации инфографики: {e}")
             return {
                 "success": False,
-                "svg_code": self._create_fallback_infographic(topic),
+                "svg_code": self._create_fallback_infographic(topic, is_technical, subject),
                 "topic": topic,
-                "type": "error_fallback"
+                "type": "error_fallback",
+                "subject": subject
             }
 
-    def _create_fallback_infographic(self, topic: str) -> str:
+    def _create_technical_infographic_prompt(self, topic: str, subject: str) -> str:
+        """Создает промпт для технической инфографики"""
+        subject_lower = subject.lower()
+        
+        if 'математика' in subject_lower or 'алгебра' in subject_lower or 'геометрия' in subject_lower:
+            return f"""
+            Создай МАТЕМАТИЧЕСКУЮ инфографику в формате SVG на тему: "{topic}"
+
+            ТРЕБОВАНИЯ:
+            - Только чистый SVG код без пояснений
+            - Включай математические формулы и символы
+            - Используй схемы, графики, диаграммы
+            - Добавь примеры вычислений если уместно
+            - Четкая логическая структура
+
+            ЭЛЕМЕНТЫ:
+            - Математические символы: ∑, ∫, √, π, ∞, ≠, ≈, ≤, ≥
+            - Формулы в SVG тексте
+            - Координатные оси для графиков
+            - Геометрические фигуры
+            - Блок-схемы для алгоритмов
+
+            ЦВЕТОВАЯ ПАЛИТРА (научный стиль):
+            - Основные: #2563eb (синий для формул), #059669 (зеленый для результатов)
+            - Акценты: #dc2626 (красный для важного), #7c3aed (фиолетовый для определений)
+            - Фон: #f8fafc или #f1f5f9
+
+            РАЗМЕР: 600x400 пикселей
+
+            ТЕМА: "{topic}"
+
+            Верни ТОЛЬКО SVG код.
+            Код должен начинаться с <svg и заканчиваться </svg>.
+            """
+        
+        elif 'физика' in subject_lower:
+            return f"""
+            Создай ФИЗИЧЕСКУЮ инфографику в формате SVG на тему: "{topic}"
+
+            ТРЕБОВАНИЯ:
+            - Только чистый SVG код без пояснений
+            - Включай физические формулы и законы
+            - Добавь схемы экспериментов или явлений
+            - Укажи единицы измерения
+            - Покажи взаимосвязи между понятиями
+
+            ЭЛЕМЕНТЫ:
+            - Физические формулы: F=ma, E=mc² и т.д.
+            - Схемы экспериментов
+            - Графики зависимостей
+            - Стрелки для сил и направлений
+            - Обозначения физических величин
+
+            ЦВЕТОВАЯ ПАЛИТРА:
+            - Силы: #ef4444 (красный)
+            - Энергия: #f59e0b (желтый)
+            - Движение: #3b82f6 (синий)
+            - Статика: #10b981 (зеленый)
+            - Фон: #f8fafc
+
+            РАЗМЕР: 600x400 пикселей
+
+            ТЕМА: "{topic}"
+
+            Верни ТОЛЬКО SVG код.
+            """
+        
+        elif 'химия' in subject_lower:
+            return f"""
+            Создай ХИМИЧЕСКУЮ инфографику в формате SVG на тему: "{topic}"
+
+            ТРЕБОВАНИЯ:
+            - Только чистый SVG код без пояснений
+            - Включай химические формулы и уравнения
+            - Покажи структурные формулы веществ
+            - Добавь схемы реакций
+            - Укажи условия реакций
+
+            ЭЛЕМЕНТЫ:
+            - Химические формулы: H₂O, CO₂, NaCl
+            - Структурные формулы молекул
+            - Уравнения реакций с коэффициентами
+            - Схемы химических процессов
+            - Обозначения состояний веществ (г, ж, т, р-р)
+
+            ЦВЕТОВАЯ ПАЛИТРА:
+            - Металлы: #f59e0b (золотой)
+            - Неметаллы: #3b82f6 (синий)
+            - Газы: #a5b4fc (лавандовый)
+            - Жидкости: #06b6d4 (бирюзовый)
+            - Реакции: #ef4444 (красный для экзотермических)
+            - Фон: #f8fafc
+
+            РАЗМЕР: 600x400 пикселей
+
+            ТЕМА: "{topic}"
+
+            Верни ТОЛЬКО SVG код.
+            """
+        
+        elif 'биология' in subject_lower:
+            return f"""
+            Создай БИОЛОГИЧЕСКУЮ инфографику в формате SVG на тему: "{topic}"
+
+            ТРЕБОВАНИЯ:
+            - Только чистый SVG код без пояснений
+            - Включай схемы биологических процессов
+            - Покажи взаимосвязи в экосистемах
+            - Добавь классификации организмов
+            - Используй научные термины
+
+            ЭЛЕМЕНТЫ:
+            - Схемы клеток и органов
+            - Циклы развития организмов
+            - Пищевые цепи и сети
+            - Классификационные диаграммы
+            - Процессы: фотосинтез, дыхание и т.д.
+
+            ЦВЕТОВАЯ ПАЛИТРА:
+            - Растения: #10b981 (зеленый)
+            - Животные: #f59e0b (коричневый/желтый)
+            - Микроорганизмы: #8b5cf6 (фиолетовый)
+            - Процессы: #06b6d4 (бирюзовый)
+            - Фон: #f0fdf4 (светло-зеленый)
+
+            РАЗМЕР: 600x400 пикселей
+
+            ТЕМА: "{topic}"
+
+            Верни ТОЛЬКО SVG код.
+            """
+        
+        else:
+            # Общий промпт для других технических предметов
+            return f"""
+            Создай НАУЧНУЮ инфографику в формате SVG на тему: "{topic}"
+
+            ПРЕДМЕТ: {subject}
+
+            ТРЕБОВАНИЯ:
+            - Только чистый SVG код без пояснений
+            - Научный стиль с точностью
+            - Включай схемы, диаграммы, графики
+            - Используй профессиональную терминологию
+            - Логическая структура информации
+
+            ЭЛЕМЕНТЫ:
+            - Схемы и диаграммы
+            - Графики данных
+            - Классификационные таблицы
+            - Процессные карты
+            - Сравнительные диаграммы
+
+            ЦВЕТОВАЯ ПАЛИТРА (научный стиль):
+            - Основные: #2563eb, #059669, #7c3aed
+            - Акценты: #dc2626, #f59e0b
+            - Фон: #f8fafc
+
+            РАЗМЕР: 600x400 пикселей
+
+            ТЕМА: "{topic}"
+
+            Верни ТОЛЬКО SVG код.
+            """
+
+    def _create_fallback_infographic(self, topic: str, is_technical: bool = False, subject: str = "") -> str:
         """Создает простую SVG инфографику как fallback"""
         topic_short = topic[:50] + "..." if len(topic) > 50 else topic
         
-        return f'''<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+        if is_technical:
+            # Технический fallback
+            subject_display = subject if subject else "технический предмет"
+            icon_text = "Σ" if 'математика' in subject.lower() else "F" if 'физика' in subject.lower() else "H₂O" if 'химия' in subject.lower() else "DNA" if 'биология' in subject.lower() else "?"
+            
+            return f'''<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="techGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <filter id="techShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#1e3a8a" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="100%" height="100%" fill="url(#techGradient)" opacity="0.08"/>
+  
+  <!-- Основной контейнер -->
+  <g filter="url(#techShadow)">
+    <rect x="50" y="50" width="500" height="300" rx="15" fill="white" stroke="#d1d5db" stroke-width="2"/>
+  </g>
+  
+  <!-- Заголовок -->
+  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#1f2937">
+    {topic_short}
+  </text>
+  
+  <!-- Предмет -->
+  <text x="300" y="130" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    {subject_display}
+  </text>
+  
+  <!-- Научная иконка -->
+  <g transform="translate(300, 220)">
+    <rect x="-40" y="-40" width="80" height="80" rx="10" fill="#2563eb" opacity="0.9"/>
+    <text x="0" y="10" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="white">
+      {icon_text}
+    </text>
+  </g>
+  
+  <!-- Подпись -->
+  <text x="300" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#4b5563">
+    Научная инфографика
+  </text>
+  
+  <!-- Декоративные элементы - научные символы -->
+  <text x="100" y="100" font-family="Arial, sans-serif" font-size="16" fill="#2563eb" opacity="0.6">∫</text>
+  <text x="500" y="120" font-family="Arial, sans-serif" font-size="18" fill="#10b981" opacity="0.6">∑</text>
+  <text x="80" y="280" font-family="Arial, sans-serif" font-size="14" fill="#ef4444" opacity="0.6">π</text>
+  <text x="520" y="260" font-family="Arial, sans-serif" font-size="20" fill="#8b5cf6" opacity="0.6">∞</text>
+</svg>'''
+        else:
+            # Стандартный fallback
+            return f'''<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#4f46e5" />
@@ -871,16 +1190,21 @@ class LLMIntegration:
             for model in known_models
         ]
 
-    def debug_infographic_generation(self, topic: str):
+    def debug_infographic_generation(self, topic: str, subject: str = ""):
         """Отладочный метод для тестирования генерации инфографики"""
-        print(f"🔧 DEBUG: Генерация инфографики для: {topic}")
+        print(f"🔧 DEBUG: Генерация инфографики для: {topic}, предмет: {subject}")
         
-        test_prompt = f"Создай простую SVG инфографику на тему: {topic}"
+        # Проверяем тип предмета
+        is_technical = False
+        if TECHNICAL_SUPPORT_ENABLED and subject:
+            is_technical = is_technical_subject(subject)
+        
+        test_prompt = f"Создай {'техническую ' if is_technical else ''}SVG инфографику на тему: {topic}"
         
         response = self._query_llm_api(
             prompt=test_prompt,
             context="",
-            subject="general", 
+            subject=subject,
             system_prompt="Верни только SVG код без пояснений",
             max_tokens=1000,
             is_svg=True
@@ -896,6 +1220,57 @@ class LLMIntegration:
         
         return None
 
+    def generate_formula_explanation(self, formula: str, subject: str = "") -> str:
+        """🔥 НОВЫЙ МЕТОД: Генерация объяснения для формул (для технических предметов)"""
+        if not formula or not subject:
+            return ""
+        
+        prompt = f"""
+        Объясни формулу или математическое выражение:
+        
+        ФОРМУЛА: {formula}
+        ПРЕДМЕТ: {subject}
+        
+        Объясни:
+        1. Что означает эта формула?
+        2. Какие величины в ней используются?
+        3. В каких случаях применяется?
+        4. Как ее использовать для расчетов?
+        5. Приведи простой пример расчета.
+        
+        Объяснение должно быть понятным для ученика.
+        Используй русский язык для объяснений.
+        """
+        
+        try:
+            explanation = self.query(prompt, subject=subject)
+            return explanation
+        except Exception as e:
+            print(f"❌ Ошибка генерации объяснения формулы: {e}")
+            return f"Формула {formula} используется в {subject}. Для расчетов нужно подставить значения переменных."
+
+    def adapt_for_technical_subject(self, text: str, subject: str) -> str:
+        """🔥 НОВЫЙ МЕТОД: Адаптация текста для технического предмета"""
+        if not TECHNICAL_SUPPORT_ENABLED or not is_technical_subject(subject):
+            return text
+        
+        print(f"🔧 [LLM] Адаптация текста для технического предмета: {subject}")
+        
+        # Простая адаптация - добавление инструкций
+        adapted = f"""
+        🔬 ДЛЯ ТЕХНИЧЕСКОГО ПРЕДМЕТА "{subject}":
+        
+        {text}
+        
+        💡 ТЕХНИЧЕСКИЕ АСПЕКТЫ:
+        - Используй точные формулировки
+        - Приводи формулы и расчеты
+        - Объясняй пошагово
+        - Давай практические примеры
+        """
+        
+        return adapted
+
 # Создаем глобальный экземпляр для использования в других модулях
 llm_integration = LLMIntegration()
 
@@ -907,18 +1282,45 @@ if __name__ == "__main__":
     # Тестирование модуля
     llm = LLMIntegration()
     
-    print("🔧 Тестирование улучшенного LLM модуля...")
+    print("🔧 Тестирование улучшенного LLM модуля с поддержкой технических предметов...")
     
-    # Тестирование генерации инфографики
-    test_topic = "Статистика включает описательную статистику и индуктивную статистику"
-    print(f"\n🔄 Генерация инфографики для: {test_topic}")
-    infographic_result = llm.generate_infographic(test_topic)
+    # Тестирование определения технических предметов
+    print(f"\n🔬 Техническая поддержка включена: {TECHNICAL_SUPPORT_ENABLED}")
     
-    if infographic_result["success"]:
-        print("✅ Инфографика успешно сгенерирована!")
-        print(f"📊 SVG код (первые 200 символов): {infographic_result['svg_code'][:200]}...")
-    else:
-        print("❌ Не удалось сгенерировать инфографику")
-        print(f"📊 Использован fallback")
+    # Тестирование генерации инфографики для разных предметов
+    test_cases = [
+        ("Сумма углов треугольника равна 180 градусов", "математика"),
+        ("Закон Ома: I = U/R", "физика"),
+        ("Фотосинтез: CO₂ + H₂O → C₆H₁₂O₆ + O₂", "биология"),
+        ("Квадратное уравнение: ax² + bx + c = 0", "алгебра"),
+    ]
+    
+    for topic, subject in test_cases:
+        print(f"\n🔄 Генерация инфографики для: {topic} ({subject})")
+        infographic_result = llm.generate_infographic(topic, subject=subject)
+        
+        if infographic_result["success"]:
+            print(f"✅ Инфографика успешно сгенерирована! Тип: {infographic_result['type']}")
+            print(f"📊 SVG код (первые 200 символов): {infographic_result['svg_code'][:200]}...")
+        else:
+            print(f"❌ Не удалось сгенерировать инфографику")
+            print(f"📊 Использован fallback")
+    
+    # Тестирование очистки текста
+    print("\n🧪 Тестирование умной очистки текста:")
+    test_texts = [
+        ("Уравнение: E=mc², где E - энергия", "физика"),
+        ("Молекула воды: H₂O состоит из 2 атомов водорода и 1 атома кислорода", "химия"),
+        ("Интеграл ∫f(x)dx показывает площадь под кривой", "математика"),
+        ("Великая французская революция началась в 1789 году", "история"),
+    ]
+    
+    for text, subject in test_texts:
+        print(f"\n📝 Исходный текст: {text}")
+        print(f"📚 Предмет: {subject}")
+        
+        # Тестируем очистку
+        cleaned = llm._process_llm_response(text, subject=subject)
+        print(f"🧹 Очищенный текст: {cleaned[:100]}...")
     
     print("\n🎉 Тестирование завершено!")
