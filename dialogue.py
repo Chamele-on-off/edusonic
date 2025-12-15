@@ -1,3 +1,6 @@
+# dialogue.py
+# Полный код с интеграцией технических предметов
+
 import json
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
@@ -18,6 +21,33 @@ try:
 except ImportError:
     LANGUAGE_SUPPORT_ENABLED = False
     print(f"🔥 [DIALOGUE] ⚠️ language_integration.py не найден, языковая поддержка отключена")
+
+# 🔥 ИМПОРТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+try:
+    from technical_subjects import (
+        is_technical_subject,
+        get_subject_type,
+        generate_technical_practice_prompt,
+        adapt_visualization_for_technical,
+        TECHNICAL_SUBJECTS,
+        NATURAL_SCIENCES
+    )
+    TECHNICAL_SUPPORT_ENABLED = True
+except ImportError:
+    TECHNICAL_SUPPORT_ENABLED = False
+    print(f"🔥 [DIALOGUE] ⚠️ technical_subjects.py не найден, техническая поддержка отключена")
+
+# 🔥 ИМПОРТ ПРОМПТОВ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+try:
+    from prompts.technical_prompts import (
+        get_lesson_prompt,
+        get_practice_prompt,
+        TECHNICAL_LESSON_PROMPTS
+    )
+    TECHNICAL_PROMPTS_ENABLED = True
+except ImportError:
+    TECHNICAL_PROMPTS_ENABLED = False
+    print(f"🔥 [DIALOGUE] ⚠️ technical_prompts.py не найден, промпты отключены")
 
 def debug_log(message):
     """Логирование для отладки"""
@@ -142,6 +172,11 @@ class DialogueManager:
         self.language_level = 'beginner'
         self.bilingual_ratio = 0.3
         self.language_practice_manager = None
+        
+        # 🔥 НОВЫЕ ПОЛЯ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+        self.is_technical_subject = False
+        self.subject_type = "general"  # "technical", "natural_science", "language", "humanitarian"
+        self.technical_symbols_preserved = False
         
         # 🔥 ВАЖНО: НЕ ЗАГРУЖАЕМ УРОКИ И НЕ ИНИЦИАЛИЗИРУЕМ LLM В __init__
         # ВСЁ будет загружено лениво при первом обращении
@@ -589,6 +624,20 @@ class DialogueManager:
         if not content:
             return content
         
+        # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Умная очистка в зависимости от типа предмета
+        if TECHNICAL_SUPPORT_ENABLED and self.current_subject:
+            from technical_subjects import should_preserve_formatting
+            if should_preserve_formatting(content, self.current_subject):
+                debug_log(f"🎯 Технический предмет: сохраняем формулы в уроке")
+                # Для технических предметов - минимальная очистка
+                # Удаляем только маркеры форматирования
+                content = re.sub(r'[#\*\_\~`]', '', content)
+                # Сохраняем формулы и специальные символы
+                content = re.sub(r'\n\s*\n', '\n\n', content)
+                content = content.strip()
+                return content
+        
+        # Для гуманитарных предметов - стандартная очистка
         # Удаляем маркеры форматирования
         content = re.sub(r'[\*\#]{1,}', '', content)
         content = re.sub(r'\-\-\-+', '', content)
@@ -711,10 +760,18 @@ class DialogueManager:
             # Собираем контекст диалога
             context = self._get_conversation_context()
             
-            # УЛУЧШЕННЫЙ ПРОМПТ С ДАННЫМИ УЧЕНИКА
+            # 🔥 УЛУЧШЕННЫЙ ПРОМПТ С ДАННЫМИ УЧЕНИКА И ТИПОМ ПРЕДМЕТА
             age = self.student_data.get('age', '12')
             level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
+            
+            # 🔥 АДАПТИРУЕМ ПРОМПТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+            subject_type_instructions = ""
+            if TECHNICAL_SUPPORT_ENABLED and self.current_subject:
+                if self.is_technical_subject:
+                    subject_type_instructions = f"\nПРЕДМЕТ ТЕХНИЧЕСКИЙ: Используй формулы и научные обозначения! Сохраняй математические символы: =, +, -, ×, ÷, √, π, ∑, ∫ и т.д."
+                elif self.subject_type == "natural_science":
+                    subject_type_instructions = f"\nПРЕДМЕТ ЕСТЕСТВЕННОНАУЧНЫЙ: Используй научные термины, объясняй природные процессы!"
             
             system_prompt = f"""Ты - дружелюбный учитель для ученика {age} лет, {level} класс.
 
@@ -723,6 +780,8 @@ class DialogueManager:
 - Возраст: {age} лет  
 - Уровень: {level} класс
 - Предмет: {self.current_subject or 'не выбран'}
+
+{subject_type_instructions}
 
 СТИЛЬ ОБЩЕНИЯ:
 - ОБРАЩАЙСЯ К УЧЕНИКУ ПО ИМЕНИ "{name}"
@@ -935,7 +994,10 @@ class DialogueManager:
             level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
-            # ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - ИСПОЛЬЗУЕМ СПЕЦИАЛЬНЫЙ ПРОМПТ
+            # 🔥 УМНЫЙ ВЫБОР ПРОМПТА В ЗАВИСИМОСТИ ОТ ТИПА ПРЕДМЕТА
+            system_prompt = ""
+            
+            # 1. ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - ИСПОЛЬЗУЕМ СПЕЦИАЛЬНЫЙ ПРОМПТ
             if is_language and LANGUAGE_SUPPORT_ENABLED:
                 system_prompt = LanguageIntegration.create_bilingual_lesson_prompt(
                     topic=topic,
@@ -944,8 +1006,19 @@ class DialogueManager:
                     bilingual_ratio=self.bilingual_ratio
                 )
                 debug_log(f"🎯 Используем языковой промт для уровня {self.language_level}")
+            
+            # 2. ЕСЛИ ЭТО ТЕХНИЧЕСКИЙ ПРЕДМЕТ - ИСПОЛЬЗУЕМ ТЕХНИЧЕСКИЙ ПРОМПТ
+            elif TECHNICAL_PROMPTS_ENABLED and self.current_subject and self.is_technical_subject:
+                system_prompt = get_lesson_prompt(
+                    subject=self.current_subject,
+                    topic=topic,
+                    level=level,
+                    age=int(age) if age.isdigit() else 12
+                )
+                debug_log(f"🎯 Используем технический промпт для предмета: {self.current_subject}")
+            
+            # 3. ОБЩИЙ ПРОМПТ ДЛЯ ОСТАЛЬНЫХ ПРЕДМЕТОВ
             else:
-                # ОБНОВЛЕННЫЙ: Формируем промпт для генерации урока с ПРОВЕРОЧНЫМИ ВОПРОСАМИ
                 system_prompt = f"""Ты - эксперт по созданию образовательных материалов.
 
 ВАЖНЫЕ ПАРАМЕТРЫ УЧЕНИКА:
@@ -999,6 +1072,14 @@ class DialogueManager:
             
             debug_log(f"✅ Получен контент урока, длина: {len(lesson_content)} символов")
             
+            # 🔥 ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ: проверяем наличие формул
+            if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
+                from technical_subjects import contains_formulas
+                has_formulas = contains_formulas(lesson_content)
+                if has_formulas:
+                    debug_log("🎯 В сгенерированном уроке обнаружены формулы")
+                    self.technical_symbols_preserved = True
+            
             # Убедимся, что есть правильное разделение на абзацы
             if '\n\n' not in lesson_content:
                 debug_log("⚠️ В ответе нет двойных переводов строк, добавляем...")
@@ -1031,7 +1112,9 @@ class DialogueManager:
                 'class_level': self.student_data.get('education_level', 'general') if self.has_student_data else 'general',
                 'lesson_number': 999,
                 'full_path': f"generated/{filename}",
-                'is_language': is_language
+                'is_language': is_language,
+                'is_technical': self.is_technical_subject if TECHNICAL_SUPPORT_ENABLED else False,
+                'subject_type': self.subject_type if TECHNICAL_SUPPORT_ENABLED else "general"
             }
             
             if is_language:
@@ -1124,6 +1207,12 @@ class DialogueManager:
             self.current_state = "lesson_reading"
             self.current_paragraph = 0
             
+            # 🔥 УСТАНАВЛИВАЕМ ФЛАГИ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+            if lesson_data.get('is_technical', False):
+                self.is_technical_subject = True
+                self.subject_type = lesson_data.get('subject_type', 'technical')
+                debug_log(f"🎯 Начинаем технический урок: {self.current_subject}")
+            
             # ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - УСТАНАВЛИВАЕМ НАСТРОЙКИ
             if lesson_data.get('is_language', False):
                 self.is_language_subject = True
@@ -1160,7 +1249,9 @@ class DialogueManager:
                     'subject': self.current_subject,
                     'is_generated': True,
                     'is_language': lesson_data.get('is_language', False),
-                    'target_language': self.target_language if lesson_data.get('is_language') else None
+                    'target_language': self.target_language if lesson_data.get('is_language') else None,
+                    'is_technical': lesson_data.get('is_technical', False),
+                    'subject_type': lesson_data.get('subject_type', 'general')
                 }, room=self.room_id)
                 debug_log(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
             
@@ -1174,18 +1265,43 @@ class DialogueManager:
         """Проверяет наличие триггеров для визуализации - ТОЛЬКО SVG"""
         text_lower = text.lower()
         
+        # 🔥 УСОВЕРШЕНСТВОВАННЫЕ ТРИГГЕРЫ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
         visualization_triggers = [
             'структура', 'схема', 'диаграмма', 'график', 'процесс', 
             'алгоритм', 'иерархия', 'взаимосвязь', 'соотношение',
             'таблица', 'классификация', 'этапы', 'стадии', 'система',
-            'сравнение', 'типы', 'виды', 'формы', 'принципы', 'компоненты'
+            'сравнение', 'типы', 'виды', 'формы', 'принципы', 'компоненты',
+            # Технические триггеры
+            'формула', 'уравнение', 'теорема', 'доказательство', 'вычисление',
+            'эксперимент', 'реакция', 'процесс', 'механизм', 'модель',
+            'диаграмма', 'график', 'координаты', 'ось', 'параметр'
         ]
         
         structure_indicators = [
             'состоит из', 'включает в себя', 'делится на', 'подразделяется',
             'можно разделить', 'выделяют', 'различают', 'существуют',
-            'основные элементы', 'ключевые аспекты'
+            'основные элементы', 'ключевые аспекты',
+            # Технические индикаторы
+            'формула имеет вид', 'уравнение записывается', 'теорема гласит',
+            'согласно закону', 'из этого следует', 'отсюда получаем'
         ]
+        
+        # 🔥 СПЕЦИАЛЬНЫЕ ПРОВЕРКИ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+        if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
+            # Для технических предметов всегда генерируем визуализацию для формул
+            formula_patterns = [
+                r'\b[a-zA-Z]\s*=\s*',  # x = 
+                r'\b[a-zA-Z]\s*\+\s*[a-zA-Z]',  # a + b
+                r'\b[a-zA-Z]\s*/\s*[a-zA-Z]',  # a / b
+                r'\b[a-zA-Z]\s*\^\s*\d',  # x^2
+                r'\bH₂O|CO₂|NaCl|H₂SO₄\b',  # Химические формулы
+                r'∑|∫|∂|∇|∞|√|≠|≈|≡|≤|≥|π|θ|α|β|γ',  # Математические символы
+            ]
+            
+            for pattern in formula_patterns:
+                if re.search(pattern, text):
+                    debug_log(f"🎯 Технический триггер: формула обнаружена")
+                    return True
         
         has_trigger = any(trigger in text_lower for trigger in visualization_triggers)
         has_structure = any(indicator in text_lower for indicator in structure_indicators)
@@ -1218,8 +1334,36 @@ class DialogueManager:
                     # ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ: инициализируем LLM при первом использовании
                     _ = self.llm
                     
+                    # 🔥 АДАПТИРУЕМ ВИЗУАЛИЗАЦИЮ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+                    visualization_type = "infographic"
+                    visualization_prompt = text
+                    
+                    if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
+                        debug_log(f"🎯 Адаптация визуализации для технического предмета: {self.subject_type}")
+                        visualization_type = "technical_diagram"
+                        
+                        # Добавляем инструкции для технической визуализации
+                        visualization_prompt = f"""
+                        ТЕХНИЧЕСКАЯ ТЕМА: {text}
+                        ПРЕДМЕТ: {self.current_subject}
+                        ТИП: {self.subject_type}
+                        
+                        СОЗДАЙ ТЕХНИЧЕСКУЮ ДИАГРАММУ SVG:
+                        - Используй математические/научные символы
+                        - Добавь формулы если они есть в тексте
+                        - Создай логическую схему
+                        - Используй научную нотацию
+                        - Сделай понятную визуализацию
+                        
+                        ТЕКСТ: {text[:500]}
+                        """
+                    
                     # Генерируем SVG инфографику через LLM
-                    infographic_result = self.llm.generate_infographic(text, context)
+                    infographic_result = self.llm.generate_infographic(
+                        visualization_prompt, 
+                        context, 
+                        visualization_type=visualization_type
+                    )
                     
                     if infographic_result and infographic_result.get("success"):
                         self.socketio.emit('visualization_generated', {
@@ -1227,7 +1371,9 @@ class DialogueManager:
                             'topic': text[:100],
                             'svg_code': infographic_result['svg_code'],
                             'timestamp': time.time(),
-                            'type': 'infographic'
+                            'type': visualization_type,
+                            'subject_type': self.subject_type,
+                            'is_technical': self.is_technical_subject
                         }, room=self.room_id)
                         debug_log(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
                     else:
@@ -1238,7 +1384,8 @@ class DialogueManager:
                             'topic': text[:100],
                             'svg_code': fallback_svg,
                             'timestamp': time.time(),
-                            'type': 'fallback'
+                            'type': 'fallback',
+                            'subject_type': self.subject_type
                         }, room=self.room_id)
                         debug_log(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
                     
@@ -1252,12 +1399,21 @@ class DialogueManager:
                         'topic': text[:100],
                         'svg_code': fallback_svg,
                         'timestamp': time.time(),
-                        'type': 'error_fallback'
+                        'type': 'error_fallback',
+                        'subject_type': self.subject_type
                     }, room=self.room_id)
 
     def _create_fallback_infographic(self, text: str) -> str:
         """Создает простую SVG инфографику как fallback"""
         topic_short = text[:50] + "..." if len(text) > 50 else text
+        
+        # 🔥 АДАПТИРУЕМ FALLBACK ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+        icon_text = "?"
+        if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
+            if self.subject_type == "technical":
+                icon_text = "∑"  # Сумма для математики
+            elif self.subject_type == "natural_science":
+                icon_text = "🌿"  # Природа для естественных наук
         
         return f'''
 <svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
@@ -1286,7 +1442,7 @@ class DialogueManager:
   
   <!-- Иконка -->
   <circle cx="300" cy="200" r="40" fill="#4f46e5" opacity="0.8"/>
-  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white">?</text>
+  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white">{icon_text}</text>
   
   <!-- Подпись -->
   <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
@@ -1317,6 +1473,10 @@ class DialogueManager:
         self._ensure_lessons_loaded()
         
         text_lower = text.lower().strip()
+        
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА ЕСЛИ ЕЩЕ НЕ ОПРЕДЕЛЕН
+        if self.current_subject and not self.subject_type:
+            self._determine_subject_type()
         
         # ПЕРВОЕ: Проверяем, не нужен ли языковой урок
         if self.current_subject and not self.lesson_started:
@@ -1470,6 +1630,40 @@ class DialogueManager:
             return personalized_fallback
         
         return None
+
+    def _determine_subject_type(self):
+        """Определяет тип текущего предмета"""
+        if not self.current_subject:
+            return
+            
+        if TECHNICAL_SUPPORT_ENABLED:
+            self.subject_type = get_subject_type(self.current_subject)
+            self.is_technical_subject = (self.subject_type in ["technical", "natural_science"])
+            debug_log(f"🎯 Определен тип предмета: {self.current_subject} -> {self.subject_type}")
+        else:
+            # Без технической поддержки - определяем локально
+            subject_lower = self.current_subject.lower()
+            
+            # Простая логика определения
+            technical_keywords = ['математика', 'алгебра', 'геометрия', 'физика', 'химия', 
+                                  'информатика', 'программирование', 'инженерия', 'технология']
+            science_keywords = ['биология', 'география', 'астрономия', 'экология', 'геология']
+            language_keywords = ['английский', 'французский', 'немецкий', 'испанский', 'китайский', 'язык']
+            
+            if any(keyword in subject_lower for keyword in technical_keywords):
+                self.subject_type = "technical"
+                self.is_technical_subject = True
+            elif any(keyword in subject_lower for keyword in science_keywords):
+                self.subject_type = "natural_science"
+                self.is_technical_subject = True
+            elif any(keyword in subject_lower for keyword in language_keywords):
+                self.subject_type = "language"
+                self.is_language_subject = True
+            else:
+                self.subject_type = "humanitarian"
+                self.is_technical_subject = False
+            
+            debug_log(f"🎯 Локальное определение типа предмета: {self.subject_type}")
 
     def _detect_language_subject_local(self, subject: str) -> bool:
         """Локальная детекция языкового предмета"""
@@ -1682,6 +1876,12 @@ class DialogueManager:
         # Устанавливаем выбранный урок
         self.selected_lesson = selected_lesson
         
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА ДЛЯ ВЫБРАННОГО УРОКА
+        if TECHNICAL_SUPPORT_ENABLED:
+            self.subject_type = get_subject_type(selected_lesson.get('subject', ''))
+            self.is_technical_subject = (self.subject_type in ["technical", "natural_science"])
+            debug_log(f"🎯 Для выбранного урока определен тип: {self.subject_type}")
+        
         # ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
         student_name = self.student_data.get('name', 'ученик')
         return f"Отлично, {student_name}! Выбран урок: '{selected_lesson['title']}'. " \
@@ -1766,7 +1966,9 @@ class DialogueManager:
                     'subject': self.current_subject,
                     'class_level': self.selected_lesson.get('class_level', 'general'),
                     'lesson_number': self.selected_lesson.get('lesson_number'),
-                    'is_student_lesson': True
+                    'is_student_lesson': True,
+                    'is_technical': self.is_technical_subject,
+                    'subject_type': self.subject_type
                 }, room=self.room_id)
                 debug_log(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
             
@@ -1779,6 +1981,9 @@ class DialogueManager:
         self.current_subject = subject
         
         debug_log(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
+        
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА
+        self._determine_subject_type()
         
         # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДЛЯ УЧЕНИКА - СРАЗУ ВЫБИРАЕМ УРОК И УСТАНАВЛИВАЕМ ЕГО
         if self.has_student_data:
@@ -1891,6 +2096,9 @@ class DialogueManager:
         
         debug_log(f"🚀 ПРИНУДИТЕЛЬНЫЙ СТАРТ УРОКА: {self.selected_lesson['title']}")
         
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА ПЕРЕД НАЧАЛОМ
+        self._determine_subject_type()
+        
         # Начинаем урок
         self.lesson_started = True
         self.current_state = "lesson_reading"
@@ -1923,7 +2131,9 @@ class DialogueManager:
                     'subject': self.current_subject,
                     'is_generated': self.selected_lesson.get('type') == 'generated',
                     'is_language': self.selected_lesson.get('is_language', False),
-                    'target_language': self.target_language if self.selected_lesson.get('is_language') else None
+                    'target_language': self.target_language if self.selected_lesson.get('is_language') else None,
+                    'is_technical': self.is_technical_subject,
+                    'subject_type': self.subject_type
                 }, room=self.room_id)
             
             # Персонализированное начало
@@ -2119,8 +2329,19 @@ class DialogueManager:
         if hasattr(self.practice_manager, 'student_data'):
             self.practice_manager.student_data = self.student_data
         
+        # 🔥 ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ: устанавливаем специальные настройки
+        if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
+            debug_log(f"🎯 Запускаем техническую практику для: {self.current_subject}")
+            # Используем технические промпты
+            lesson_context = " ".join(self.lesson_content)
+            self.practice_manager.initialize_technical_practice(
+                lesson_context=lesson_context,
+                subject=self.current_subject,
+                subject_type=self.subject_type,
+                level=self.student_data.get('education_level', '5') if self.has_student_data else '5'
+            )
         # ДЛЯ ЯЗЫКОВЫХ ПРЕДМЕТОВ: устанавливаем специальные настройки
-        if self.is_language_subject and hasattr(self.practice_manager, 'initialize_language_practice'):
+        elif self.is_language_subject and hasattr(self.practice_manager, 'initialize_language_practice'):
             lesson_context = " ".join(self.lesson_content)
             self.practice_manager.initialize_language_practice(
                 lesson_context=lesson_context,
@@ -2136,11 +2357,21 @@ class DialogueManager:
         
         # Уведомляем клиентов о начале практики
         if self.room_id:
-            self.socketio.emit('practice_started', {'room_id': self.room_id})
+            self.socketio.emit('practice_started', {
+                'room_id': self.room_id,
+                'is_technical': self.is_technical_subject,
+                'subject_type': self.subject_type
+            })
         
         # ПОЛУЧАЕМ ПЕРВЫЙ ВОПРОС ИЗ ОЧЕРЕДИ
         debug_log("🔄 Получение первого вопроса практики...")
-        first_question = self.practice_manager.get_next_question()
+        
+        # 🔥 ИСПОЛЬЗУЕМ РАЗНЫЕ МЕТОДЫ ДЛЯ РАЗНЫХ ТИПОВ ПРЕДМЕТОВ
+        first_question = None
+        if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
+            first_question = self.practice_manager.generate_technical_question()
+        else:
+            first_question = self.practice_manager.get_next_question()
         
         if first_question:
             debug_log(f"✅ Первый вопрос получен: {first_question}")
@@ -2217,11 +2448,23 @@ class DialogueManager:
             else:
                 return "Отлично! Вы ответили на все вопросы практики. Урок завершен!"
         
-        # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД: оценка + следующий вопрос
-        if self.is_language_subject and hasattr(self.practice_manager, 'evaluate_language_answer'):
+        # 🔥 ИСПОЛЬЗУЕМ РАЗНЫЕ МЕТОДЫ ДЛЯ РАЗНЫХ ТИПОВ ПРЕДМЕТОВ
+        feedback = None
+        next_question = None
+        
+        if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
+            # Для технических предметов используем специальный метод
+            feedback, next_question = self.practice_manager.evaluate_technical_answer(
+                student_answer, 
+                current_question["question"],
+                subject_type=self.subject_type
+            )
+        elif self.is_language_subject and hasattr(self.practice_manager, 'evaluate_language_answer'):
+            # Для языковых предметов
             feedback = self.practice_manager.evaluate_language_answer(student_answer, current_question["question"])
             next_question = self.practice_manager.get_next_question()
         else:
+            # Стандартный метод
             feedback, next_question = self.practice_manager.evaluate_and_continue(
                 student_answer, 
                 current_question["question"]
@@ -2271,6 +2514,11 @@ class DialogueManager:
         self.lesson_content = []
         self.current_paragraph = 0
         
+        # 🔥 СБРАСЫВАЕМ НАСТРОЙКИ ТИПОВ ПРЕДМЕТОВ
+        self.is_technical_subject = False
+        self.subject_type = "general"
+        self.technical_symbols_preserved = False
+        
         # СБРАСЫВАЕМ ЯЗЫКОВЫЕ НАСТРОЙКИ
         self.is_language_subject = False
         self.target_language = 'english'
@@ -2301,11 +2549,17 @@ class DialogueManager:
             context_start = max(0, self.current_paragraph - 3)
             current_context = " ".join(self.lesson_content[context_start:self.current_paragraph])
         
-        # УНИВЕРСАЛЬНЫЙ ПРОМПТ ДЛЯ ВСЕХ ОТВЕТОВ
+        # 🔥 УНИВЕРСАЛЬНЫЙ ПРОМПТ ДЛЯ ВСЕХ ОТВЕТОВ С УЧЕТОМ ТИПА ПРЕДМЕТА
+        technical_instructions = ""
+        if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
+            technical_instructions = f"\nПРЕДМЕТ ТЕХНИЧЕСКИЙ: Используй формулы и научные обозначения! Сохраняй математические символы и объясняй их."
+        
         universal_prompt = f"""
 КОНТЕКСТ УРОКА (последние абзацы): {current_context}
 
 ОТВЕТ УЧЕНИКА: {question}
+
+{technical_instructions}
 
 ИНСТРУКЦИИ ДЛЯ УЧИТЕЛЯ:
 1. Проанализируй контекст урока и ответ ученика
@@ -2435,6 +2689,11 @@ class DialogueManager:
         # Сброс данных ученика
         self.student_data = {}
         self.has_student_data = False
+        
+        # 🔥 СБРОС НАСТРОЕК ТИПОВ ПРЕДМЕТОВ
+        self.is_technical_subject = False
+        self.subject_type = "general"
+        self.technical_symbols_preserved = False
         
         # СБРОС ЯЗЫКОВЫХ НАСТРОЕК
         self.is_language_subject = False
@@ -2777,7 +3036,9 @@ class DialogueManager:
             "current_question": self.current_practice_question,
             "question_index": self.current_question_index,
             "max_questions": self.max_questions,
-            "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0
+            "questions_asked": len(self.practice_manager.generated_questions) if hasattr(self.practice_manager, 'generated_questions') else 0,
+            "is_technical": self.is_technical_subject,
+            "subject_type": self.subject_type
         }
 
     def force_start_practice(self, lesson_context: str, subject: str) -> str:
@@ -2791,11 +3052,28 @@ class DialogueManager:
             
             debug_log("=== ПРИНУДИТЕЛЬНЫЙ ЗАПУСК ПРАКТИКИ ===")
             
+            # Определяем тип предмета
+            self._determine_subject_type()
+            
             # Инициализируем менеджер практики
-            self.practice_manager.initialize_practice_generation(lesson_context, subject)
+            if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
+                self.practice_manager.initialize_technical_practice(
+                    lesson_context=lesson_context,
+                    subject=subject,
+                    subject_type=self.subject_type,
+                    level=self.student_data.get('education_level', '5') if self.has_student_data else '5'
+                )
+            else:
+                self.practice_manager.initialize_practice_generation(lesson_context, subject)
             
             # Получаем первый вопрос
-            first_question = self.practice_manager.get_next_question()
+            debug_log("🔄 Получение первого вопроса практики...")
+            first_question = None
+            
+            if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
+                first_question = self.practice_manager.generate_technical_question()
+            else:
+                first_question = self.practice_manager.get_next_question()
             
             if first_question:
                 self.waiting_for_answer = True
@@ -2829,7 +3107,9 @@ class DialogueManager:
             "visualization_counter": self.visualization_counter,
             "last_visualization_time": self.last_visualization_time,
             "paragraphs_since_last_viz": self.paragraphs_since_last_viz,
-            "type": "svg_infographic"
+            "type": "svg_infographic",
+            "is_technical": self.is_technical_subject,
+            "subject_type": self.subject_type
         }
 
     def force_visualization(self, text: str) -> bool:
@@ -2863,7 +3143,11 @@ class DialogueManager:
             "conversation_context": self.conversation_context,
             "has_student_data": self.has_student_data,
             "student_name": self.student_data.get('name', 'нет'),
-            "student_class": self.student_data.get('education_level', 'нет')
+            "student_class": self.student_data.get('education_level', 'нет'),
+            "subject_type": self.subject_type,
+            "is_technical": self.is_technical_subject,
+            "is_language": self.is_language_subject,
+            "target_language": self.target_language if self.is_language_subject else None
         }
 
     def debug_info(self) -> Dict:
@@ -2905,7 +3189,13 @@ class DialogueManager:
             "target_language": self.target_language,
             "language_level": self.language_level,
             "bilingual_ratio": self.bilingual_ratio,
-            "language_support_enabled": LANGUAGE_SUPPORT_ENABLED
+            "language_support_enabled": LANGUAGE_SUPPORT_ENABLED,
+            # 🔥 НОВОЕ: Информация о технической поддержке
+            "is_technical_subject": self.is_technical_subject,
+            "subject_type": self.subject_type,
+            "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED,
+            "technical_prompts_enabled": TECHNICAL_PROMPTS_ENABLED,
+            "technical_symbols_preserved": self.technical_symbols_preserved
         }
 
     def export_conversation_history(self) -> List[Dict]:
@@ -2947,6 +3237,15 @@ class DialogueManager:
             }
             base_commands.update(student_commands)
         
+        # 🔥 ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+        if self.is_technical_subject:
+            technical_commands = {
+                "формула": "Показать формулы из урока",
+                "график": "Показать графики/диаграммы",
+                "пример": "Показать примеры решения"
+            }
+            base_commands.update(technical_commands)
+        
         return base_commands
 
     def force_lesson_start_notification(self):
@@ -2960,7 +3259,9 @@ class DialogueManager:
                 'subject': self.current_subject,
                 'class_level': self.selected_lesson.get('class_level', 'general'),
                 'lesson_number': self.selected_lesson.get('lesson_number'),
-                'is_student_lesson': True
+                'is_student_lesson': True,
+                'is_technical': self.is_technical_subject,
+                'subject_type': self.subject_type
             }, room=self.room_id)
             
             # Также отправляем текущий абзац если есть
@@ -2996,6 +3297,11 @@ class DialogueManager:
                 progress = self.get_student_progress(subject)
                 completed_ids = progress.get('completed_lessons', [])
                 
+                # Определяем тип предмета
+                subject_type = "general"
+                if TECHNICAL_SUPPORT_ENABLED:
+                    subject_type = get_subject_type(subject)
+                
                 # Сортируем уроки
                 sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
                 
@@ -3010,11 +3316,13 @@ class DialogueManager:
                         'lesson_number': lesson.get('lesson_number'),
                         'completed': is_completed,
                         'file_path': str(lesson.get('file_path', '')),
-                        'type': lesson.get('type', 'student')
+                        'type': lesson.get('type', 'student'),
+                        'subject_type': subject_type
                     })
                 
                 result["subjects"].append({
                     'subject': subject,
+                    'subject_type': subject_type,
                     'lessons': subject_lessons,
                     'total_lessons': len(subject_lessons),
                     'completed_lessons': len([l for l in subject_lessons if l['completed']]),
@@ -3048,23 +3356,26 @@ class DialogueManager:
         self.lesson_started = True
         self.current_state = "lesson_reading"
         
-        # 3. Загружаем содержание
+        # 3. Определяем тип предмета
+        self._determine_subject_type()
+        
+        # 4. Загружаем содержание
         self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
         self.current_paragraph = 0
         
         if not self.lesson_content:
             return "Ошибка загрузки урока."
         
-        # 4. Инициализируем базу знаний
+        # 5. Инициализируем базу знаний
         if self.current_subject:
             from knowledge.knowledge_base import KnowledgeBase
             self.knowledge_base = KnowledgeBase(self.current_subject)
         
-        # 5. Очищаем историю
+        # 6. Очищаем историю
         self.conversation_history = []
         self.conversation_context = []
         
-        # 6. Обновляем прогресс ученика
+        # 7. Обновляем прогресс ученика
         student_id = self.student_data.get('student_id')
         if student_id:
             self.save_student_progress(
@@ -3073,7 +3384,7 @@ class DialogueManager:
                 completed=False
             )
         
-        # 7. Возвращаем первый абзац
+        # 8. Возвращаем первый абзац
         first_paragraph = self._get_next_paragraph()
         
         student_name = self.student_data.get('name', 'ученик')
@@ -3084,7 +3395,7 @@ if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    debug_log("🧪 Тестирование DialogueManager с полной ленивой инициализацией...")
+    debug_log("🧪 Тестирование DialogueManager с поддержкой технических предметов...")
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
@@ -3097,4 +3408,4 @@ if __name__ == "__main__":
     response = dm.process_input("привет")
     debug_log(f"👋 Ответ на приветствие: {response[:100]}...")
     
-    debug_log("✅ Тестирование завершено! Ленивая инициализация работает правильно.")
+    debug_log("✅ Тестирование завершено! Ленивая инициализация и техническая поддержка работают правильно.")
