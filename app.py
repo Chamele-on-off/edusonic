@@ -1,5 +1,5 @@
-# app.py - AI Teacher System с поддержкой языковых уроков
-# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ЯЗЫКОВОЙ ПОДДЕРЖКОЙ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
+# app.py - AI Teacher System с поддержкой технических и естественнонаучных предметов
+# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -185,6 +185,23 @@ def json_serialize_paths(obj):
     elif isinstance(obj, dict):
         return {key: json_serialize_paths(value) for key, value in obj.items()}
     return obj
+
+# =============================================================================
+# ИМПОРТ МОДУЛЕЙ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+# =============================================================================
+
+try:
+    from technical_subjects import (
+        is_technical_subject,
+        clean_text_for_speech_technical,
+        contains_formulas,
+        get_subject_type
+    )
+    TECHNICAL_SUPPORT_ENABLED = True
+    debug_log("✅ Модуль технических предметов загружен")
+except ImportError as e:
+    TECHNICAL_SUPPORT_ENABLED = False
+    debug_log(f"⚠️ Модуль technical_subjects.py не найден: {e}. Техническая поддержка отключена.")
 
 # =============================================================================
 # СИСТЕМА АУТЕНТИФИКАЦИИ
@@ -770,7 +787,7 @@ def reset_speaking_state(room_id, is_teacher=False):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 # =============================================================================
-# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ОПТИМИЗАЦИЕЙ
+# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
 # =============================================================================
 
 def is_foreign_text(text):
@@ -900,13 +917,34 @@ def text_to_speech_mixed(text):
         return text_to_speech(text, 'ru')
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
-    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с оптимизацией производительности"""
+    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкой технических предметов"""
     if not text.strip():
         return
         
-    cleaned_text = clean_text_for_speech(text)
+    # 🔥 ОПРЕДЕЛЯЕМ ПРЕДМЕТ ДЛЯ УМНОЙ ОЧИСТКИ
+    subject = None
+    if room_id in room_student_data and room_student_data[room_id]:
+        subject = room_student_data[room_id].get('subject')
+    elif room_id in room_dialogue and room_dialogue[room_id]:
+        subject = room_dialogue[room_id].current_subject
+    
+    # 🔥 УМНАЯ ОЧИСТКА В ЗАВИСИМОСТИ ОТ ПРЕДМЕТА
+    cleaned_text = ""
+    try:
+        if TECHNICAL_SUPPORT_ENABLED and subject:
+            # Используем умную очистку для технических предметов
+            cleaned_text = clean_text_for_speech_technical(text, subject)
+            debug_log(f"🎯 Использована умная очистка для предмета: {subject}")
+        else:
+            # Стандартная очистка
+            cleaned_text = clean_text_for_speech(text)
+            debug_log(f"🎯 Использована стандартная очистка")
+    except Exception as e:
+        debug_log(f"⚠️ Ошибка умной очистки: {e}, используется стандартная")
+        cleaned_text = clean_text_for_speech(text)
     
     if not cleaned_text.strip():
+        debug_log("⚠️ Текст пуст после очистки, пропускаем озвучивание")
         return
         
     if is_teacher:
@@ -949,7 +987,9 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             'timestamp': time.time(),
             'voice_type': voice_type,
             'is_teacher': is_teacher,
-            'optimized': True  # 🔥 Флаг что использовалась оптимизация
+            'subject': subject if subject else 'general',
+            'optimized': True,  # 🔥 Флаг что использовалась оптимизация
+            'technical_support': TECHNICAL_SUPPORT_ENABLED
         }, room=room_id)
         
         if not skip_history:
@@ -958,7 +998,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 'timestamp': time.time(),
                 'type': 'generated',
                 'voice_type': voice_type,
-                'is_teacher': is_teacher
+                'is_teacher': is_teacher,
+                'subject': subject if subject else 'general'
             })
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
@@ -4062,112 +4103,104 @@ def get_lessons_for_edit():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЕ API ДЛЯ ЯЗЫКОВОЙ ПОДДЕРЖКИ
+# 🔥 НОВЫЕ API ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
 # =============================================================================
 
-@app.route('/api/language/settings', methods=['POST'])
+@app.route('/api/technical/settings', methods=['POST'])
 @student_required
-def set_language_settings():
-    """Устанавливает настройки языка для ученика"""
+def set_technical_settings():
+    """Устанавливает настройки для технических предметов"""
     try:
         data = request.json
         student_id = data.get('student_id')
-        language_level = data.get('language_level', 'beginner')
-        bilingual_ratio = data.get('bilingual_ratio', 0.3)
+        technical_mode = data.get('technical_mode', 'standard')
         
         if not student_id:
             return jsonify({"success": False, "error": "Не указан student_id"})
         
         student_data = load_student_data(student_id)
         if student_data:
-            student_data['language_level'] = language_level
-            student_data['bilingual_ratio'] = bilingual_ratio
+            student_data['technical_mode'] = technical_mode
+            student_data['technical_support'] = TECHNICAL_SUPPORT_ENABLED
             save_student_data(student_data)
             
             return jsonify({
                 "success": True,
-                "message": f"Установлен уровень языка: {language_level}, соотношение: {bilingual_ratio*100}%",
-                "language_level": language_level,
-                "bilingual_ratio": bilingual_ratio
+                "message": f"Установлен режим технических предметов: {technical_mode}",
+                "technical_mode": technical_mode,
+                "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED
             })
         else:
             return jsonify({"success": False, "error": "Ученик не найден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/language/generate-exercise', methods=['POST'])
-def generate_language_exercise():
-    """Генерация языкового упражнения"""
+@app.route('/api/technical/detect-subject', methods=['POST'])
+def detect_technical_subject():
+    """Определяет, является ли предмет техническим"""
     try:
         data = request.json
-        topic = data.get('topic', 'greetings')
-        exercise_type = data.get('type', 'vocabulary')
-        target_language = data.get('language', 'english')
-        level = data.get('level', 'beginner')
-        room_id = data.get('room_id', 'default')
+        subject = data.get('subject', '')
         
-        # Используем существующую LLM через менеджер
-        prompt = f"""
-        Создай упражнение по языку для ученика.
+        if not subject:
+            return jsonify({"success": False, "error": "Предмет не указан"})
         
-        ТИП УПРАЖНЕНИЯ: {exercise_type}
-        ЯЗЫК: {target_language}
-        ТЕМА: {topic}
-        УРОВЕНЬ: {level}
+        is_technical = False
+        subject_type = "general"
+        formulas_supported = False
         
-        Создай упражнение соответствующего типа:
-        - Для 'vocabulary': словарный запас, сопоставление слов
-        - Для 'translation': перевод с русского на {target_language}
-        - Для 'dialogue': диалог на {target_language}
-        - Для 'grammar': грамматическое упражнение
-        
-        Упражнение должно быть понятным для уровня {level}.
-        Верни только упражнение без дополнительных комментариев.
-        """
-        
-        llm_response = llm_manager.submit_request(
-            prompt=prompt,
-            system_prompt="Ты - учитель языка. Создай полезное упражнение.",
-            max_tokens=500,
-            room_id=room_id
-        )
+        if TECHNICAL_SUPPORT_ENABLED:
+            is_technical = is_technical_subject(subject)
+            subject_type = get_subject_type(subject)
+            formulas_supported = is_technical or (subject_type == "natural_science")
         
         return jsonify({
             "success": True,
-            "exercise": llm_response if llm_response else "Упражнение будет создано в процессе урока.",
-            "type": exercise_type,
-            "language": target_language,
-            "level": level
+            "subject": subject,
+            "is_technical": is_technical,
+            "subject_type": subject_type,
+            "formulas_supported": formulas_supported,
+            "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED,
+            "suggested_settings": {
+                "formula_preservation": formulas_supported,
+                "cleaning_mode": "technical" if formulas_supported else "standard",
+                "visualization_type": "diagram" if is_technical else "infographic"
+            }
         })
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/language/test-speech', methods=['POST'])
-def test_speech_synthesis():
-    """Тестирование смешанного озвучивания"""
+@app.route('/api/technical/test-formula', methods=['POST'])
+def test_formula_cleaning():
+    """Тестирование очистки формул"""
     try:
         data = request.json
-        text = data.get('text', 'Hello, привет! My name is Иван.')
-        room_id = data.get('room_id', 'default')
+        text = data.get('text', 'Уравнение: E=mc², где E - энергия, m - масса')
+        subject = data.get('subject', 'физика')
         
         if not text:
             return jsonify({"success": False, "error": "Текст обязателен"})
         
-        # Тестируем новую функцию смешанного озвучивания
-        audio_data = text_to_speech(text, lang='auto')
-        
-        if audio_data:
-            return jsonify({
-                "success": True,
-                "message": "Синтез речи успешен",
-                "text": text,
-                "audio_length": len(audio_data),
-                "has_cyrillic": bool(re.search(r'[а-яА-ЯёЁ]', text)),
-                "has_latin": bool(re.search(r'[a-zA-Z]', text))
-            })
+        cleaned_text = ""
+        if TECHNICAL_SUPPORT_ENABLED:
+            cleaned_text = clean_text_for_speech_technical(text, subject)
         else:
-            return jsonify({"success": False, "error": "Ошибка синтеза речи"})
+            cleaned_text = clean_text_for_speech(text)
+        
+        contains_formula_check = False
+        if TECHNICAL_SUPPORT_ENABLED:
+            contains_formula_check = contains_formulas(text)
+        
+        return jsonify({
+            "success": True,
+            "original": text,
+            "cleaned": cleaned_text,
+            "contains_formula": contains_formula_check,
+            "technical_support": TECHNICAL_SUPPORT_ENABLED,
+            "subject": subject,
+            "subject_type": get_subject_type(subject) if TECHNICAL_SUPPORT_ENABLED else "unknown"
+        })
             
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -5197,63 +5230,71 @@ def get_student_profile():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЕ API ДЛЯ ЯЗЫКОВОЙ АВТОДЕТЕКЦИИ
+# 🔥 НОВЫЕ API ДЛЯ ТЕХНИЧЕСКОЙ АВТОДЕТЕКЦИИ
 # =============================================================================
 
-@app.route('/api/language/detect-subject', methods=['POST'])
-def detect_language_subject():
-    """Определяет, является ли предмет языковым"""
+@app.route('/api/technical/generate-exercise', methods=['POST'])
+def generate_technical_exercise():
+    """Генерация упражнения для технических предметов"""
     try:
         data = request.json
-        subject = data.get('subject', '')
+        subject = data.get('subject', 'математика')
+        topic = data.get('topic', 'уравнения')
+        level = data.get('level', '5')
+        room_id = data.get('room_id', 'default')
         
-        if not subject:
-            return jsonify({"success": False, "error": "Предмет не указан"})
+        # Определяем тип предмета
+        is_technical = False
+        if TECHNICAL_SUPPORT_ENABLED:
+            is_technical = is_technical_subject(subject)
         
-        # Список языковых предметов
-        language_subjects = [
-            'английский язык', 'english', 'английский',
-            'французский язык', 'french', 'французский',
-            'немецкий язык', 'german', 'немецкий',
-            'испанский язык', 'spanish', 'испанский',
-            'китайский язык', 'chinese', 'китайский',
-            'итальянский язык', 'italian', 'итальянский',
-            'японский язык', 'japanese', 'японский',
-            'корейский язык', 'korean', 'корейский'
-        ]
+        # Используем существующую LLM через менеджер
+        if is_technical:
+            prompt = f"""
+            Создай упражнение по {subject} для ученика {level} класса.
+            
+            ТЕМА: {topic}
+            УРОВЕНЬ: {level} класс
+            
+            ТРЕБОВАНИЯ:
+            1. Включай конкретные формулы и вычисления
+            2. Добавляй пошаговые решения
+            3. Учитывай возраст ученика
+            4. Используй математическую/научную нотацию
+            5. Для физики/химии включай единицы измерения
+            
+            Верни 3-5 практических заданий.
+            """
+        else:
+            prompt = f"""
+            Создай практические задания по {subject} на тему: {topic}
+            
+            Уровень ученика: {level} класс
+            
+            Создай 5 заданий разного типа:
+            1. Вопросы на понимание
+            2. Практические задачи
+            3. Творческие задания
+            4. Аналитические вопросы
+            5. Применение знаний
+            
+            Верни задания в структурированном виде.
+            """
         
-        subject_lower = subject.lower()
-        is_language = False
-        detected_language = None
-        
-        for lang_subj in language_subjects:
-            if lang_subj in subject_lower:
-                is_language = True
-                # Определяем конкретный язык
-                if 'английский' in lang_subj or 'english' in lang_subj:
-                    detected_language = 'english'
-                elif 'французский' in lang_subj or 'french' in lang_subj:
-                    detected_language = 'french'
-                elif 'немецкий' in lang_subj or 'german' in lang_subj:
-                    detected_language = 'german'
-                elif 'испанский' in lang_subj or 'spanish' in lang_subj:
-                    detected_language = 'spanish'
-                elif 'китайский' in lang_subj or 'chinese' in lang_subj:
-                    detected_language = 'chinese'
-                else:
-                    detected_language = 'english'  # По умолчанию
-                break
+        llm_response = llm_manager.submit_request(
+            prompt=prompt,
+            system_prompt="Ты - учитель. Создай полезное упражнение соответствующего типа.",
+            max_tokens=800,
+            room_id=room_id
+        )
         
         return jsonify({
             "success": True,
+            "exercise": llm_response if llm_response else "Упражнение будет создано в процессе урока.",
+            "type": "technical" if is_technical else "general",
             "subject": subject,
-            "is_language_subject": is_language,
-            "detected_language": detected_language,
-            "suggested_settings": {
-                "bilingual_ratio": 0.3,
-                "level": "beginner",
-                "exercise_types": ["vocabulary", "translation", "dialogue"]
-            }
+            "level": level,
+            "technical_support": TECHNICAL_SUPPORT_ENABLED
         })
         
     except Exception as e:
@@ -5264,7 +5305,8 @@ def detect_language_subject():
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("🚀 Запуск AI Teacher системы с поддержкой языковых уроков...")
+    debug_log("🚀 Запуск AI Teacher системы с поддержкой технических предметов...")
+    debug_log(f"🔥 Поддержка технических предметов: {'ВКЛЮЧЕНА' if TECHNICAL_SUPPORT_ENABLED else 'ВЫКЛЮЧЕНА'}")
     
     setup_llm_manager()
     
@@ -5279,8 +5321,8 @@ if __name__ == '__main__':
     debug_log(f"✅ Система готова. Async mode: {socketio.async_mode}")
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
-    debug_log(f"🔥 Добавлена поддержка билингвального озвучивания")
-    debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена быстрая проверка языка")
+    debug_log(f"🔥 Добавлена поддержка технических предметов")
+    debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена умная очистка текста")
     debug_log(f"🔧 Ленивая инициализация DialogueManager активирована")
     debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
     
