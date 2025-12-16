@@ -1,4 +1,3 @@
-# llm.py
 import requests
 import json
 from typing import Optional, Dict, Callable, List
@@ -9,20 +8,6 @@ import re
 from local_llm_manager import get_llm_manager
 import queue
 from key_manager import get_key_manager
-
-# 🔥 ДОБАВЛЕН ИМПОРТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-try:
-    from technical_subjects import (
-        is_technical_subject, 
-        clean_text_for_speech_technical,
-        contains_formulas,
-        get_subject_type
-    )
-    TECHNICAL_SUPPORT_ENABLED = True
-    print("✅ Модуль технических предметов загружен")
-except ImportError:
-    TECHNICAL_SUPPORT_ENABLED = False
-    print("⚠️ technical_subjects.py не найден, техническая поддержка отключена")
 
 def clean_text_for_speech(text: str) -> str:
     """Тщательная очистка текста для озвучивания"""
@@ -142,35 +127,17 @@ class LLMIntegration:
         
         return content.strip()
 
-    def _process_llm_response(self, response: str, is_svg: bool = False, subject: str = "") -> str:
-        """🔥 ОБНОВЛЕННАЯ ФУНКЦИЯ: Обработка ответа LLM в зависимости от типа и предмета"""
+    def _process_llm_response(self, response: str, is_svg: bool = False) -> str:
+        """Обработка ответа LLM в зависимости от типа"""
         if is_svg:
-            # 🔥 ДЛЯ SVG - СТРОГО МИНИМАЛЬНАЯ ОЧИСТКА, КАК И БЫЛО
-            print(f"🔧 [LLM] Обработка SVG ответа (БЕЗ ОЧИСТКИ, сохранение исходного кода)")
-            # Возвращаем как есть, только убираем лишние пробелы по краям
+            # Для SVG - минимальная очистка, сохраняем структуру
+            print(f"🔧 [LLM] Обработка SVG ответа (без очистки речи)")
             return response.strip()
         else:
-            # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Умная очистка в зависимости от предмета
-            if TECHNICAL_SUPPORT_ENABLED and subject:
-                # Определяем тип предмета для умной очистки
-                subject_type = get_subject_type(subject) if hasattr(get_subject_type, '__call__') else "general"
-                is_technical = subject_type in ["technical", "natural_science"]
-                
-                if is_technical:
-                    # Используем умную очистку для технических предметов
-                    cleaned = clean_text_for_speech_technical(response, subject)
-                    print(f"🔧 [LLM] Использована умная очистка для технического предмета: {subject}")
-                    return cleaned
-                else:
-                    # Стандартная очистка для гуманитарных предметов
-                    print(f"🔧 [LLM] Обработка текстового ответа (стандартная очистка)")
-                    clean1 = clean_text_for_speech(response)
-                    return self._clean_llm_response(clean1)
-            else:
-                # Стандартная обработка если технический модуль не загружен
-                print(f"🔧 [LLM] Обработка текстового ответа (стандартная очистка)")
-                clean1 = clean_text_for_speech(response)
-                return self._clean_llm_response(clean1)
+            # Для речи - полная очистка
+            print(f"🔧 [LLM] Обработка текстового ответа (с очисткой речи)")
+            clean1 = clean_text_for_speech(response)
+            return self._clean_llm_response(clean1)
 
     def _query_llm_api(self, prompt: str, context: str = "", subject: str = "", 
                        system_prompt: str = "", max_tokens: int = 1000, 
@@ -180,30 +147,7 @@ class LLMIntegration:
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
         print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
-        print(f"🔧 [LLM] Предмет: {subject}")
         print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
-        
-        # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРЕДМЕТЕ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-        enhanced_system_prompt = system_prompt
-        
-        if TECHNICAL_SUPPORT_ENABLED and subject and not is_svg:
-            is_technical = is_technical_subject(subject) if hasattr(is_technical_subject, '__call__') else False
-            
-            if is_technical:
-                # 🔥 АДАПТИРУЕМ СИСТЕМНЫЙ ПРОМПТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-                print(f"🔧 [LLM] Технический предмет обнаружен: {subject}")
-                
-                if not enhanced_system_prompt:
-                    enhanced_system_prompt = "Ты - профессиональный учитель, специализирующийся на технических и естественнонаучных предметах."
-                
-                # Добавляем инструкции для технических предметов
-                enhanced_system_prompt += "\n\n🔧 ВАЖНЫЕ ИНСТРУКЦИИ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ:"
-                enhanced_system_prompt += "\n1. Используй математические и научные обозначения (формулы, символы, единицы измерения)"
-                enhanced_system_prompt += "\n2. Сохраняй формулы в читаемом формате (например, E=mc², F=ma, H₂O)"
-                enhanced_system_prompt += "\n3. Объясняй сложные концепции с помощью примеров и вычислений"
-                enhanced_system_prompt += "\n4. Используй научную терминологию с пояснениями"
-                enhanced_system_prompt += "\n5. Включай практические примеры применения знаний"
-                enhanced_system_prompt += "\n6. Учитывай уровень понимания ученика при объяснении сложных тем"
         
         # 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Используем асинхронный режим чтобы не блокировать систему
         if callback:
@@ -212,7 +156,7 @@ class LLMIntegration:
             def async_query():
                 try:
                     result = self._execute_llm_query(
-                        prompt, context, subject, enhanced_system_prompt, 
+                        prompt, context, subject, system_prompt, 
                         max_tokens, room_id, is_svg
                     )
                     if result:
@@ -235,7 +179,7 @@ class LLMIntegration:
             # Синхронный режим - с таймаутом и fallback
             try:
                 result = self._execute_llm_query(
-                    prompt, context, subject, enhanced_system_prompt,
+                    prompt, context, subject, system_prompt,
                     max_tokens, room_id, is_svg
                 )
                 if result:
@@ -253,7 +197,6 @@ class LLMIntegration:
         
         print(f"🔧 [LLM] Запрос: {prompt[:100]}...")
         print(f"🔧 [LLM] Приоритет: {self.priority_mode}")
-        print(f"🔧 [LLM] Предмет: {subject}")
         print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
         
         # Проверяем доступность локальной модели
@@ -263,7 +206,7 @@ class LLMIntegration:
         if self.priority_mode == "local_only":
             print("🔧 [LLM] Режим: только локальная модель")
             if local_available:
-                return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg, subject)
+                return self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
             else:
                 print("❌ [LLM] Локальная модель недоступна в режиме local_only")
                 return None
@@ -286,7 +229,7 @@ class LLMIntegration:
             
             print("⚠️ [LLM] OpenRouter не ответил, пробую локальную модель...")
             if local_available:
-                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg, subject)
+                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
                 if response:
                     print("✅ [LLM] Использую ответ от локальной модели")
                     return response
@@ -297,12 +240,12 @@ class LLMIntegration:
         else:  # local_first (по умолчанию)
             print("🔧 [LLM] Режим: сначала локальная модель")
             if local_available:
-                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg, subject)
+                response = self._handle_local_request_safe(prompt, system_prompt, max_tokens, is_svg)
                 if response:
                     print("✅ [LLM] Использую ответ от локальной модели")
                     return response
             
-            print("⚠️ [ЛЛМ] Локальная модель не ответила, пробую OpenRouter...")
+            print("⚠️ [LLM] Локальная модель не ответила, пробую OpenRouter...")
             response = self._handle_openrouter_request_safe(prompt, context, subject, system_prompt, max_tokens, is_svg)
             if response:
                 print("✅ [LLM] Использую ответ от OpenRouter")
@@ -312,7 +255,7 @@ class LLMIntegration:
             return None
     
     def _handle_local_request_safe(self, prompt: str, system_prompt: str, max_tokens: int,
-                                 is_svg: bool = False, subject: str = "") -> Optional[str]:
+                                 is_svg: bool = False) -> Optional[str]:
         """Безопасная обработка локальной модели с таймаутом"""
         if not self.llm_manager.local_llm.is_available():
             print("❌ [LLM] Локальная модель недоступна")
@@ -332,8 +275,7 @@ class LLMIntegration:
                     max_tokens
                 )
                 if response:
-                    # 🔥 ПЕРЕДАЕМ ПРЕДМЕТ ДЛЯ ПРАВИЛЬНОЙ ОЧИСТКИ
-                    processed = self._process_llm_response(response, is_svg, subject)
+                    processed = self._process_llm_response(response, is_svg)
                     result_queue.put(processed)
                 else:
                     result_queue.put(None)
@@ -428,8 +370,7 @@ class LLMIntegration:
                     if 'choices' in result and len(result['choices']) > 0:
                         answer = result['choices'][0]['message']['content']
                         
-                        # 🔥 ПЕРЕДАЕМ ПРЕДМЕТ ДЛЯ ПРАВИЛЬНОЙ ОЧИСТКИ
-                        processed_answer = self._process_llm_response(answer, is_svg, subject)
+                        processed_answer = self._process_llm_response(answer, is_svg)
                         
                         print(f"✅ [LLM] Успешный ответ от модели: {self.model}")
                         return processed_answer
@@ -504,22 +445,6 @@ class LLMIntegration:
         # Для образовательных вопросов даем более полезный ответ
         if any(word in prompt_lower for word in ['что такое', 'объясни', 'расскажи', 'как работает']):
             return "Хороший вопрос! Давайте разберем эту тему подробнее. Мне нужно немного времени подумать..."
-        
-        # 🔥 СПЕЦИАЛЬНЫЕ ОТВЕТЫ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-        if TECHNICAL_SUPPORT_ENABLED and subject:
-            is_technical = is_technical_subject(subject) if hasattr(is_technical_subject, '__call__') else False
-            if is_technical:
-                subject_type = get_subject_type(subject) if hasattr(get_subject_type, '__call__') else "technical"
-                
-                if subject_type == "technical":
-                    if any(word in prompt_lower for word in ['формула', 'уравнение', 'вычисли', 'рассчитай']):
-                        return "Давайте рассмотрим формулы и вычисления по этой теме. Нужно сделать точные расчеты..."
-                    elif any(word in prompt_lower for word in ['задача', 'пример', 'упражнение']):
-                        return "Хорошая практическая задача! Давайте решим ее пошагово с объяснениями."
-                
-                elif subject_type == "natural_science":
-                    if any(word in prompt_lower for word in ['эксперимент', 'опыт', 'наблюдение']):
-                        return "Интересный научный вопрос! Давайте разберем экспериментальную сторону этой темы."
         
         # Общий fallback ответ
         return "Спасибо за вопрос! Я обрабатываю ваш запрос."
@@ -667,8 +592,7 @@ class LLMIntegration:
                 "daily_limit": self.key_manager.daily_limit,
                 "extended_limit": self.key_manager.extended_limit,
                 "reset_time": self.key_manager.reset_time
-            },
-            "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED
+            }
         }
 
     def handle_llm_response(self, request_id: str, response: str, room_id: str):
@@ -676,28 +600,18 @@ class LLMIntegration:
         if request_id in self.pending_requests:
             callback, is_svg = self.pending_requests.pop(request_id)
             try:
-                # 🔥 ПЕРЕДАЕМ ПРЕДМЕТ ДЛЯ ПРАВИЛЬНОЙ ОЧИСТКИ
-                # Извлекаем предмет из room_id или контекста
-                subject = ""
-                if room_id and "_" in room_id:
-                    # Пытаемся извлечь предмет из room_id (формат: subject_username)
-                    parts = room_id.split("_")
-                    if len(parts) > 1:
-                        subject = parts[0]
-                
-                processed_response = self._process_llm_response(response, is_svg, subject)
+                # Обрабатываем ответ в зависимости от типа
+                processed_response = self._process_llm_response(response, is_svg)
                 callback(processed_response, room_id)
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
 
     def _extract_svg_code(self, response: str) -> str:
-        """🔥 ВАЖНО: Извлекает чистый SVG код из ответа LLM - БЕЗ ИЗМЕНЕНИЙ"""
+        """Извлекает чистый SVG код из ответа LLM - устойчиво к обёрткам"""
         if not response:
             return ""
         
         print(f"🔧 [DEBUG] Извлечение SVG из ответа длиной: {len(response)}")
-        
-        # 🔥 КРИТИЧЕСКИ ВАЖНО: Оставляем исходную логику БЕЗ ИЗМЕНЕНИЙ
         
         # 1. Удаляем всё до первого <svg (включая пояснения)
         svg_start = response.find('<svg')
@@ -834,7 +748,7 @@ class LLMIntegration:
             print(f"🔧 [DEBUG] Response length: {len(response) if response else 0}")
             
             if response:
-                # 🔥 КРИТИЧЕСКИ ВАЖНО: Для SVG используем специальную очистку БЕЗ ИЗМЕНЕНИЙ
+                # Очистка ответа (для SVG минимальная очистка)
                 svg_code = self._extract_svg_code(response)
                 
                 # 🔧 ДОБАВЛЕНО ЛОГИ ДЛЯ ОТЛАДКИ
@@ -995,9 +909,6 @@ if __name__ == "__main__":
     
     print("🔧 Тестирование улучшенного LLM модуля...")
     
-    # Тестирование технической поддержки
-    print(f"\n🔬 Техническая поддержка включена: {TECHNICAL_SUPPORT_ENABLED}")
-    
     # Тестирование генерации инфографики
     test_topic = "Статистика включает описательную статистику и индуктивную статистику"
     print(f"\n🔄 Генерация инфографики для: {test_topic}")
@@ -1009,20 +920,5 @@ if __name__ == "__main__":
     else:
         print("❌ Не удалось сгенерировать инфографику")
         print(f"📊 Использован fallback")
-    
-    # Тестирование запросов для разных предметов
-    print("\n🧪 Тестирование запросов для разных предметов:")
-    
-    test_cases = [
-        ("математика", "Что такое производная функции?"),
-        ("литература", "Кто написал 'Войну и мир'?"),
-        ("физика", "Объясни закон Ома"),
-    ]
-    
-    for subject, question in test_cases:
-        print(f"\n📚 Предмет: {subject}")
-        print(f"❓ Вопрос: {question}")
-        response = llm.query(question, subject=subject)
-        print(f"✅ Ответ (первые 100 символов): {response[:100]}...")
     
     print("\n🎉 Тестирование завершено!")
