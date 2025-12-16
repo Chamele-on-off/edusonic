@@ -1150,167 +1150,6 @@
             color: var(--gray);
             font-size: 12px;
         }
-        
-        /* Дополнительные стили для технических предметов */
-        .technical-formula {
-            font-family: 'Courier New', Courier, monospace;
-            background: linear-gradient(135deg, #f0f7ff, #e6f2ff);
-            border: 2px solid #7E76F9;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-            color: #2c3e50;
-            font-size: 16px;
-            box-shadow: 0 4px 12px rgba(126, 118, 249, 0.1);
-        }
-
-        .technical-equation {
-            text-align: center;
-            padding: 20px;
-            background: white;
-            border-radius: 10px;
-            margin: 15px 0;
-            border-left: 5px solid var(--primary);
-            font-family: 'Cambria Math', 'Latin Modern Math', STIXGeneral, serif;
-        }
-
-        .formula-symbol {
-            font-family: 'Cambria Math', 'Latin Modern Math', STIXGeneral, serif;
-            color: var(--primary);
-            font-weight: bold;
-            font-size: 18px;
-        }
-
-        .chemical-formula {
-            font-family: 'Cambria', serif;
-            color: #e74c3c;
-            background: #fff5f5;
-            padding: 5px 10px;
-            border-radius: 5px;
-            margin: 0 2px;
-            border: 1px solid #ffcccc;
-        }
-
-        .math-symbol {
-            font-family: 'Cambria Math', 'Latin Modern Math', serif;
-            color: #3498db;
-            font-size: 20px;
-            vertical-align: middle;
-        }
-
-        .technical-text {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            line-height: 1.8;
-            color: #2c3e50;
-        }
-
-        .technical-highlight {
-            background: linear-gradient(120deg, rgba(126, 118, 249, 0.1) 0%, rgba(126, 118, 249, 0.3) 100%);
-            padding: 3px 8px;
-            border-radius: 4px;
-            border-left: 3px solid var(--primary);
-        }
-
-        .visualization-placeholder.technical {
-            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-            border: 2px dashed var(--primary);
-        }
-
-        .visualization-placeholder.technical i {
-            color: var(--primary);
-            font-size: 48px;
-            margin-bottom: 15px;
-        }
-
-        .visualization-placeholder.technical p {
-            color: #495057;
-            font-weight: 500;
-        }
-
-        /* Стили для отображения формул */
-        .equation-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            margin: 15px 0;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-        }
-
-        .equation-text {
-            font-family: 'Cambria Math', 'Latin Modern Math', STIXGeneral, serif;
-            font-size: 20px;
-            color: #2c3e50;
-            text-align: center;
-        }
-
-        /* Стили для химических формул */
-        .chemical-container {
-            display: inline-block;
-            padding: 10px 15px;
-            background: white;
-            border-radius: 8px;
-            margin: 5px;
-            box-shadow: 0 2px 8px rgba(231, 76, 60, 0.1);
-            border: 1px solid rgba(231, 76, 60, 0.2);
-        }
-
-        .subscript {
-            vertical-align: sub;
-            font-size: 0.8em;
-        }
-
-        .superscript {
-            vertical-align: super;
-            font-size: 0.8em;
-        }
-
-        /* Стили для физических величин */
-        .physical-quantity {
-            font-style: italic;
-            color: #2980b9;
-            font-weight: 500;
-        }
-
-        .unit {
-            font-family: 'Courier New', monospace;
-            color: #27ae60;
-            font-size: 0.9em;
-        }
-
-        /* Дополнительные стили для SVG визуализаций */
-        .svg-diagram-container.technical {
-            background: white;
-            border: 2px solid var(--primary);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        .diagram-title.technical {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-            padding: 12px 20px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .diagram-title.technical i {
-            font-size: 18px;
-        }
-
-        /* Стили для математических символов в тексте */
-        .math-inline {
-            font-family: 'Cambria Math', 'Latin Modern Math', serif;
-            background: #f8f9fa;
-            padding: 2px 6px;
-            border-radius: 4px;
-            border: 1px solid #dee2e6;
-            color: #495057;
-        }
 
         @media (max-width: 768px) {
             #header {
@@ -1424,21 +1263,6 @@
             .thinking-indicator {
                 width: 150px;
                 height: 150px;
-            }
-            
-            /* Адаптивность для формул */
-            .technical-equation {
-                padding: 15px;
-                font-size: 14px;
-            }
-            
-            .equation-text {
-                font-size: 16px;
-            }
-            
-            .chemical-formula {
-                font-size: 14px;
-                padding: 3px 6px;
             }
 
             /* Адаптивность для слайдов */
@@ -1569,21 +1393,6 @@
             .thinking-text {
                 font-size: 14px;
                 padding: 8px 16px;
-            }
-            
-            /* Адаптивность для формул */
-            .technical-formula {
-                padding: 10px;
-                font-size: 14px;
-            }
-            
-            .technical-equation {
-                padding: 10px;
-                margin: 10px 0;
-            }
-            
-            .equation-text {
-                font-size: 14px;
             }
 
             .slide-container {
@@ -2228,268 +2037,6 @@
         window.svgFix = new SVGFix();
     </script>
 
-    <!-- Technical Content Processor -->
-    <script>
-        // Technical Content Processor
-        class TechnicalContentProcessor {
-            constructor() {
-                this.subjectType = 'general';
-                this.technicalSubjects = [
-                    'математика', 'алгебра', 'геометрия', 'физика', 'химия', 
-                    'биология', 'информатика', 'программирование', 'инженерия'
-                ];
-                this.naturalSciences = [
-                    'биология', 'география', 'астрономия', 'экология', 'геология'
-                ];
-            }
-
-            setSubject(subject) {
-                if (!subject) {
-                    this.subjectType = 'general';
-                    return;
-                }
-
-                const subjectLower = subject.toLowerCase();
-                
-                // Проверяем технические предметы
-                for (const techSubject of this.technicalSubjects) {
-                    if (subjectLower.includes(techSubject)) {
-                        this.subjectType = 'technical';
-                        return;
-                    }
-                }
-                
-                // Проверяем естественные науки
-                for (const scienceSubject of this.naturalSciences) {
-                    if (subjectLower.includes(scienceSubject)) {
-                        this.subjectType = 'natural_science';
-                        return;
-                    }
-                }
-                
-                this.subjectType = 'general';
-            }
-
-            processTextForDisplay(text) {
-                if (!text) return '';
-
-                // Для технических и естественных наук обрабатываем формулы
-                if (this.subjectType === 'technical' || this.subjectType === 'natural_science') {
-                    return this.enhanceTechnicalText(text);
-                }
-
-                // Для остальных - стандартная обработка
-                return this.cleanText(text);
-            }
-
-            enhanceTechnicalText(text) {
-                let enhanced = text;
-                
-                // Обработка математических формул
-                enhanced = this.processMathematicalFormulas(enhanced);
-                
-                // Обработка химических формул
-                enhanced = this.processChemicalFormulas(enhanced);
-                
-                // Обработка физических величин
-                enhanced = this.processPhysicalQuantities(enhanced);
-                
-                // Обработка специальных символов
-                enhanced = this.processSpecialSymbols(enhanced);
-                
-                // Добавление подсветки для технических терминов
-                enhanced = this.highlightTechnicalTerms(enhanced);
-                
-                return enhanced;
-            }
-
-            processMathematicalFormulas(text) {
-                let processed = text;
-                
-                // Обработка уравнений вида E=mc²
-                processed = processed.replace(/(\b[A-Za-zα-ωΑ-Ω])\s*=\s*([^=\s]+)/g, 
-                    '<span class="technical-highlight"><span class="physical-quantity">$1</span> = <span class="math-symbol">$2</span></span>');
-                
-                // Обработка греческих букв
-                const greekSymbols = {
-                    'α': 'α', 'β': 'β', 'γ': 'γ', 'δ': 'δ', 'ε': 'ε',
-                    'θ': 'θ', 'π': 'π', 'σ': 'σ', 'ω': 'ω', 'λ': 'λ'
-                };
-                
-                for (const [symbol, html] of Object.entries(greekSymbols)) {
-                    processed = processed.replace(new RegExp(symbol, 'g'), 
-                        `<span class="formula-symbol">${html}</span>`);
-                }
-                
-                // Обработка математических операторов
-                const mathOperators = {
-                    '∑': '∑', '∫': '∫', '∂': '∂', '∇': '∇', '∞': '∞',
-                    '√': '√', '≠': '≠', '≈': '≈', '≡': '≡', '≤': '≤',
-                    '≥': '≥', '→': '→'
-                };
-                
-                for (const [symbol, html] of Object.entries(mathOperators)) {
-                    processed = processed.replace(new RegExp(symbol, 'g'), 
-                        `<span class="math-symbol">${html}</span>`);
-                }
-                
-                // Обработка дробей и индексов
-                processed = processed.replace(/(\w)_(\d+)/g, '$1<sub class="subscript">$2</sub>');
-                processed = processed.replace(/(\w)\^(\d+)/g, '$1<sup class="superscript">$2</sup>');
-                
-                // Обработка целых уравнений
-                const equationPatterns = [
-                    /E\s*=\s*mc\^?2/gi,
-                    /F\s*=\s*ma/gi,
-                    /a\^2\s*\+\s*b\^2\s*=\s*c\^2/gi,
-                    /PV\s*=\s*nRT/gi,
-                ];
-                
-                equationPatterns.forEach(pattern => {
-                    processed = processed.replace(pattern, match => 
-                        `<div class="technical-equation">${match}</div>`);
-                });
-                
-                return processed;
-            }
-
-            processChemicalFormulas(text) {
-                let processed = text;
-                
-                // Обработка химических формул с индексами
-                processed = processed.replace(/(H|C|O|N|Na|Cl|S)(\d+)/g, 
-                    '<span class="chemical-formula">$1<sub class="subscript">$2</sub></span>');
-                
-                // Обработка распространенных формул
-                const chemicalFormulas = {
-                    'H₂O': 'H<sub>2</sub>O',
-                    'CO₂': 'CO<sub>2</sub>',
-                    'NaCl': 'NaCl',
-                    'H₂SO₄': 'H<sub>2</sub>SO<sub>4</sub>',
-                    'C₆H₁₂O₆': 'C<sub>6</sub>H<sub>12</sub>O<sub>6</sub>'
-                };
-                
-                for (const [formula, html] of Object.entries(chemicalFormulas)) {
-                    processed = processed.replace(new RegExp(formula.replace(/[₀-₉]/g, '\\d'), 'g'), 
-                        `<span class="chemical-formula">${html}</span>`);
-                }
-                
-                // Обработка химических символов
-                processed = processed.replace(/(→|⇌|↑|↓|Δ|°C)/g, 
-                    '<span class="chemical-formula">$1</span>');
-                
-                return processed;
-            }
-
-            processPhysicalQuantities(text) {
-                let processed = text;
-                
-                // Обработка физических величин с единицами измерения
-                const physicalQuantities = [
-                    /(\d+\.?\d*)\s*(m|cm|mm|km|g|kg|mg|s|min|h|N|J|W|V|A|Hz)/g,
-                    /(\d+\.?\d*)\s*°(C|F)/g
-                ];
-                
-                physicalQuantities.forEach(pattern => {
-                    processed = processed.replace(pattern, 
-                        '<span class="physical-quantity">$1</span> <span class="unit">$2</span>');
-                });
-                
-                // Выделение физических терминов
-                const physicsTerms = [
-                    'скорость', 'ускорение', 'масса', 'сила', 'энергия',
-                    'мощность', 'напряжение', 'ток', 'сопротивление'
-                ];
-                
-                physicsTerms.forEach(term => {
-                    const regex = new RegExp(`\\b${term}\\b`, 'gi');
-                    processed = processed.replace(regex, 
-                        '<span class="technical-highlight">$&</span>');
-                });
-                
-                return processed;
-            }
-
-            processSpecialSymbols(text) {
-                let processed = text;
-                
-                // Замена текстовых обозначений на символы
-                const symbolReplacements = {
-                    'стремится к': '→',
-                    'равно': '=',
-                    'не равно': '≠',
-                    'приблизительно равно': '≈',
-                    'меньше или равно': '≤',
-                    'больше или равно': '≥',
-                    'сумма': '∑',
-                    'интеграл': '∫',
-                    'бесконечность': '∞',
-                    'корень квадратный': '√',
-                    'пи': 'π'
-                };
-                
-                for (const [text, symbol] of Object.entries(symbolReplacements)) {
-                    const regex = new RegExp(`\\b${text}\\b`, 'gi');
-                    processed = processed.replace(regex, 
-                        `<span class="math-symbol">${symbol}</span>`);
-                }
-                
-                return processed;
-            }
-
-            highlightTechnicalTerms(text) {
-                let processed = text;
-                
-                const technicalTerms = [
-                    'формула', 'уравнение', 'теорема', 'доказательство',
-                    'гипотеза', 'эксперимент', 'наблюдение', 'анализ',
-                    'синтез', 'молекула', 'атом', 'электрон', 'протон'
-                ];
-                
-                technicalTerms.forEach(term => {
-                    const regex = new RegExp(`\\b${term}\\b`, 'gi');
-                    processed = processed.replace(regex, 
-                        '<span class="technical-highlight">$&</span>');
-                });
-                
-                return processed;
-            }
-
-            cleanText(text) {
-                // Базовая очистка текста для гуманитарных предметов
-                return text
-                    .replace(/[#\*\_\~`]/g, '')
-                    .replace(/\n+/g, ' ')
-                    .replace(/\s+/g, ' ');
-            }
-
-            updateVisualizationForSubject(subject) {
-                const svgDiagram = document.getElementById('svg-diagram');
-                const placeholder = svgDiagram.querySelector('.visualization-placeholder');
-                
-                if (!placeholder) return;
-                
-                if (this.subjectType === 'technical' || this.subjectType === 'natural_science') {
-                    placeholder.classList.add('technical');
-                    placeholder.innerHTML = `
-                        <i class="fas fa-atom"></i>
-                        <p>Техническая визуализация<br>будет сгенерирована автоматически</p>
-                        <small>Формулы, диаграммы, схемы</small>
-                    `;
-                } else {
-                    placeholder.classList.remove('technical');
-                    placeholder.innerHTML = `
-                        <i class="fas fa-shapes"></i>
-                        <p>SVG инфографика будет сгенерирована автоматически</p>
-                    `;
-                }
-            }
-        }
-
-        // Инициализация процессора технического контента
-        window.technicalProcessor = new TechnicalContentProcessor();
-    </script>
-
     <script>
         // Сообщаем родительскому окну о загрузке
         window.addEventListener('load', function() {
@@ -3130,16 +2677,6 @@
             
             console.log('🖼️ Отображение SVG инфографики:', title);
             
-            // Определяем тип визуализации
-            let diagramType = 'general';
-            if (window.technicalProcessor) {
-                if (window.technicalProcessor.subjectType === 'technical') {
-                    diagramType = 'technical';
-                } else if (window.technicalProcessor.subjectType === 'natural_science') {
-                    diagramType = 'science';
-                }
-            }
-            
             // Показываем вкладку SVG
             switchVisualizationTab('svg');
             
@@ -3148,47 +2685,17 @@
                 if (window.svgFix) {
                     window.svgFix.showFallback('svg-diagram', title || 'Инфографика');
                 } else {
-                    let placeholderHTML = '';
-                    
-                    if (diagramType === 'technical') {
-                        placeholderHTML = `
-                            <div class="visualization-placeholder technical">
-                                <i class="fas fa-atom"></i>
-                                <p>Техническая диаграмма<br>будет сгенерирована автоматически</p>
-                                <small>Формулы, схемы, графики</small>
-                            </div>
-                        `;
-                    } else if (diagramType === 'science') {
-                        placeholderHTML = `
-                            <div class="visualization-placeholder technical">
-                                <i class="fas fa-microscope"></i>
-                                <p>Научная визуализация<br>будет сгенерирована автоматически</p>
-                                <small>Диаграммы, схемы, классификации</small>
-                            </div>
-                        `;
-                    } else {
-                        placeholderHTML = `
-                            <div class="visualization-placeholder">
-                                <i class="fas fa-shapes"></i>
-                                <p>SVG инфографика будет сгенерирована автоматически</p>
-                            </div>
-                        `;
-                    }
-                    
-                    svgDiagram.innerHTML = placeholderHTML;
+                    svgDiagram.innerHTML = `
+                        <div class="visualization-placeholder">
+                            <i class="fas fa-shapes"></i>
+                            <p>SVG инфографика будет сгенерирована автоматически</p>
+                        </div>
+                    `;
                 }
                 return;
             }
             
             console.log('✅ Отображение SVG, длина кода:', svgCode.length);
-            
-            // Добавляем класс для технических предметов
-            if (diagramType !== 'general') {
-                const container = svgDiagram.closest('.svg-diagram-container');
-                if (container) {
-                    container.classList.add('technical');
-                }
-            }
             
             if (window.svgFix) {
                 window.svgFix.renderSVG('svg-diagram', svgCode, title);
@@ -4229,15 +3736,22 @@
         function setTool(tool) {
             console.log('🛠️ Активация инструмента:', tool);
             
+            // НЕ скрываем другие окна - они должны оставаться видимыми
+            // lessonContent.style.display = 'none'; // УБИРАЕМ ЭТУ СТРОКУ
+            // drawingWindow.style.display = 'none'; // УБИРАЕМ ЭТУ СТРОКУ  
+            // visualizationWindow.style.display = 'none'; // УБИРАЕМ ЭТУ СТРОКУ
+            
             // Сбрасываем активность всех кнопок
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
             answerToolBtn.classList.remove('active');
             visualizationToolBtn.classList.remove('active');
             
+            // answerInputContainer.style.display = 'none'; // УБИРАЕМ ЭТУ СРОКУ
+            
             if (tool === 'text') {
                 textToolBtn.classList.add('active');
-                lessonContent.style.display = 'block';
+                // lessonContent.style.display = 'block'; // УБИРАЕМ - окно уже видимо
                 bringWindowToFront(lessonContent);
                 console.log('📝 Активирована текстовая доска');
             } 
@@ -4256,7 +3770,7 @@
             } 
             else if (tool === 'answer') {
                 answerToolBtn.classList.add('active');
-                lessonContent.style.display = 'block';
+                // lessonContent.style.display = 'block'; // УБИРАЕМ - окно уже видимо
                 answerInputContainer.style.display = 'block';
                 answerInput.focus();
                 bringWindowToFront(lessonContent);
@@ -4359,7 +3873,7 @@
         // Демонстрация экрана
         async function shareScreen() {
             try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                const screenStream = await navig.mediaDevices.getDisplayMedia({
                     video: true,
                     audio: true
                 });
@@ -4558,6 +4072,8 @@
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
+                // УПРОЩЕНИЕ: Не используем сложную логику состояний
+                
                 // Инициализируем PeerJS после успешного получения медиапотока
                 initPeerJS();
                 
@@ -4591,6 +4107,8 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
+                // УПРОЩЕНИЕ: Не используем сложную логику состояний
+                
                 // Ждем инициализации PeerJS перед отправкой room_id
                 if (peerId) {
                     socket.emit('join_room', { 
@@ -4602,14 +4120,13 @@
                 setTimeout(() => {
                     if (socket) {
                         socket.emit('get_current_avatar', { room_id: roomId });
-                        socket.emit('get_current_subject', { room_id: roomId });
                     }
                 }, 500);
 
                 initLlmSystem();
             });
             
-            // Обработка присоединения к комнате
+            // УПРОЩЕНИЕ: Простая обработка присоединения к комнате
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 participantsCount.textContent = data.count;
@@ -4663,44 +4180,6 @@
                 }
             });
             
-            // Обработчик получения текущего предмета
-            socket.on('current_subject', (data) => {
-                console.log('Текущий предмет:', data.subject);
-                
-                if (window.technicalProcessor && data.subject) {
-                    window.technicalProcessor.setSubject(data.subject);
-                    updateSubjectStatus(data.subject);
-                }
-            });
-            
-            // Обработчик выбора предмета
-            socket.on('subject_selected', (data) => {
-                console.log('Предмет выбран:', data.subject);
-                
-                // Обновляем процессор технического контента
-                if (window.technicalProcessor) {
-                    window.technicalProcessor.setSubject(data.subject);
-                    window.technicalProcessor.updateVisualizationForSubject(data.subject);
-                }
-                
-                // Обновляем статус предмета
-                updateSubjectStatus(data.subject);
-            });
-            
-            // Обработчик технического контента
-            socket.on('technical_content', (data) => {
-                console.log('Получен технический контент:', data.type);
-                
-                if (window.technicalProcessor && window.technicalProcessor.subjectType !== 'general') {
-                    // Для технических предметов используем специальную обработку
-                    if (data.type === 'formula') {
-                        displayTechnicalFormula(data.content);
-                    } else if (data.type === 'diagram') {
-                        displayTechnicalDiagram(data.content);
-                    }
-                }
-            });
-            
             // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
@@ -4734,6 +4213,8 @@
                     
                     // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
                     autoContinuePaused = true;
+                    // НЕ вызываем setAutoContinueEnabled(false) здесь!
+                    // Состояние включения таймера мы восстановим позже
                     
                     startSpeechAnimation(data.text);
                     playAudio(data.audio);
@@ -4760,6 +4241,8 @@
                     
                     // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
                     autoContinuePaused = true;
+                    // НЕ вызываем setAutoContinueEnabled(false) здесь!
+                    // Состояние включения таймера мы восстановим позже
                     
                     const teacherText = data.text.replace('Учитель: ', '');
                     startSpeechAnimation(teacherText);
@@ -4896,79 +4379,6 @@
             return names[priority] || priority;
         }
 
-        // Новая функция для отображения формул
-        function displayTechnicalFormula(formulaData) {
-            if (!lessonText) return;
-            
-            const formulaDiv = document.createElement('div');
-            formulaDiv.className = 'technical-formula';
-            
-            if (formulaData.latex) {
-                // Если есть LaTeX формула
-                formulaDiv.innerHTML = `
-                    <div class="equation-container">
-                        <div class="equation-text">
-                            ${formulaData.latex}
-                        </div>
-                    </div>
-                    <div class="formula-description">
-                        <strong>${formulaData.title || 'Формула'}</strong><br>
-                        <em>${formulaData.description || ''}</em>
-                    </div>
-                `;
-            } else {
-                // Простая формула
-                formulaDiv.innerHTML = formulaData.content;
-            }
-            
-            lessonText.appendChild(formulaDiv);
-            lessonCanvas.scrollTop = lessonCanvas.scrollHeight;
-        }
-
-        // Функция для отображения технических диаграмм
-        function displayTechnicalDiagram(diagramData) {
-            if (!isVisualizationWindowOpen) {
-                setTool('visualization');
-            }
-            
-            // Показываем диаграмму в окне визуализации
-            if (diagramData.type === 'svg') {
-                displaySvgDiagram(diagramData.content, diagramData.title || 'Техническая диаграмма');
-            }
-        }
-
-        // Функция обновления статуса предмета
-        function updateSubjectStatus(subject) {
-            const statusContainer = document.getElementById('status-container');
-            if (!statusContainer) return;
-            
-            let subjectStatus = document.getElementById('subject-status');
-            if (!subjectStatus) {
-                subjectStatus = document.createElement('div');
-                subjectStatus.id = 'subject-status';
-                subjectStatus.style.fontSize = '12px';
-                subjectStatus.style.marginTop = '5px';
-                subjectStatus.style.color = 'var(--gray)';
-                statusContainer.appendChild(subjectStatus);
-            }
-            
-            let icon = '📚';
-            let color = 'var(--gray)';
-            
-            if (window.technicalProcessor) {
-                const type = window.technicalProcessor.subjectType;
-                if (type === 'technical') {
-                    icon = '⚙️';
-                    color = 'var(--primary)';
-                } else if (type === 'natural_science') {
-                    icon = '🔬';
-                    color = 'var(--success)';
-                }
-            }
-            
-            subjectStatus.innerHTML = `${icon} Предмет: <span style="color: ${color}; font-weight: 500;">${subject}</span>`;
-        }
-
         function loadLessonContent(lessonId) {
             currentLessonContent = [
                 "Добро пожаловать на урок!",
@@ -5003,90 +4413,42 @@
         }
 
         function updateLessonText(text) {
-            if (!lessonText) return;
-            
-            // Получаем текущий предмет
-            let currentSubject = '';
-            if (window.technicalProcessor && window.technicalProcessor.subjectType) {
-                currentSubject = window.technicalProcessor.subjectType === 'technical' ? 'математика' : 'литература';
-            }
-            
-            // Обрабатываем текст в зависимости от предмета
-            let processedText = text;
-            if (window.technicalProcessor) {
-                processedText = window.technicalProcessor.processTextForDisplay(text);
-            }
-            
             if (currentLesson) {
                 const paragraphIndex = currentLessonContent.indexOf(text);
                 if (paragraphIndex !== -1 && paragraphIndex >= currentParagraph) {
                     displayLessonParagraph(paragraphIndex);
                 } else if (paragraphIndex === -1) {
-                    animateTextTyping(processedText);
+                    animateTextTyping(text);
                 }
-            } else {
-                animateTextTyping(processedText);
             }
         }
 
         function animateTextTyping(text) {
-            if (!lessonText) return;
-            
             lessonContent.style.display = 'block';
             
             if (currentTypingAnimation) {
                 clearInterval(currentTypingAnimation);
             }
             
-            lessonText.innerHTML = '';
+            lessonText.textContent = '';
             let currentIndex = 0;
-            let htmlBuffer = '';
             const typingSpeed = 30;
-            let isInHtmlTag = false;
-            let tagBuffer = '';
             
             currentTypingAnimation = setInterval(() => {
-                if (currentIndex >= text.length) {
-                    clearInterval(currentTypingAnimation);
-                    const cursor = lessonText.querySelector('.typing-cursor');
-                    if (cursor) cursor.remove();
-                    return;
-                }
-                
-                const char = text.charAt(currentIndex);
-                
-                // Обработка HTML тегов
-                if (char === '<') {
-                    isInHtmlTag = true;
-                    tagBuffer = char;
-                } else if (char === '>' && isInHtmlTag) {
-                    tagBuffer += char;
-                    isInHtmlTag = false;
-                    htmlBuffer += tagBuffer;
-                    tagBuffer = '';
-                } else if (isInHtmlTag) {
-                    tagBuffer += char;
-                } else {
-                    htmlBuffer += char;
-                }
-                
-                // Обновляем содержимое только если не в теге
-                if (!isInHtmlTag) {
-                    lessonText.innerHTML = htmlBuffer + (tagBuffer || '');
-                    
-                    // Добавляем курсор
-                    const cursor = lessonText.querySelector('.typing-cursor');
-                    if (!cursor) {
-                        const cursorSpan = document.createElement('span');
-                        cursorSpan.className = 'typing-cursor';
-                        lessonText.appendChild(cursorSpan);
-                    }
-                    
+                if (currentIndex < text.length) {
+                    lessonText.textContent += text.charAt(currentIndex);
+                    currentIndex++;
                     lessonCanvas.scrollTop = lessonCanvas.scrollHeight;
+                } else {
+                    clearInterval(currentTypingAnimation);
+                    const cursor = document.querySelector('.typing-cursor');
+                    if (cursor) cursor.remove();
                 }
-                
-                currentIndex++;
             }, typingSpeed);
+            
+            const cursor = document.createElement('span');
+            cursor.className = 'typing-cursor';
+            lessonText.appendChild(cursor);
         }
 
         function showTeacherSpeech(text) {
@@ -5182,6 +4544,8 @@
 
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
+            // УПРОЩЕНИЕ: Не используем сложную систему состояний
+            
             // Инициализация частиц фона
             initParticlesBackground();
             
@@ -5198,17 +4562,6 @@
             setTimeout(() => {
                 initActivateButton();
                 updateActivationButton();
-                
-                // Инициализация системы технических предметов
-                if (window.technicalProcessor) {
-                    // Запрашиваем текущий предмет у сервера
-                    if (socket) {
-                        socket.emit('get_current_subject', { room_id: roomId });
-                    }
-                    
-                    // Инициализируем обработку контента
-                    window.technicalProcessor.updateVisualizationForSubject();
-                }
             }, 1000);
             
             // ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ КНОПОК - ИСПОЛЬЗУЕМ БЕЗОПАСНУЮ АКТИВАЦИЮ
@@ -5334,6 +4687,8 @@
                 peerId = id;
                 statusDiv.textContent = 'Подключение к конференции...';
                 
+                // УПРОЩЕНИЕ: Не используем сложную логику состояний
+                
                 // Сообщаем серверу о нашем peerId
                 if (socket && socket.connected) {
                     socket.emit('join_room', { 
@@ -5438,7 +4793,7 @@
             participantsCount.textContent = totalParticipants;
         }
 
-        // Подключение к других участникам
+        // Подключение к другим участникам
         function connectToPeer(remotePeerId) {
             if (!localStream || peerId === remotePeerId) {
                 return;
