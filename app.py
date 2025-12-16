@@ -1766,6 +1766,18 @@ def handle_activate_ai_teacher(data):
             'error': f'Ошибка активации: {str(e)}'
         }, to=sid)
 
+@socketio.on('visualization_generated')
+def handle_visualization_generated(data):
+    room_id = data['room_id']
+    debug_log(f"Получена SVG инфографика для комнаты {room_id}: {data['topic'][:100]}...")
+    emit('visualization_generated', {
+        'room_id': room_id,
+        'topic': data['topic'],
+        'svg_code': data.get('svg_code', ''),
+        'timestamp': data.get('timestamp', time.time()),
+        'type': data.get('type', 'infographic')
+    }, room=room_id)
+
 @socketio.on('set_llm_mode')
 def handle_set_llm_mode(data):
     room_id = data['room_id']
