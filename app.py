@@ -47,7 +47,7 @@ socketio = SocketIO(
 )
 
 # Ограничитель параллельной инициализации комнат
-init_semaphore = Semaphore(50)  # Не более 50 одновременных инициализаций
+init_semaphore = Semaphore(100)  # УВЕЛИЧИЛИ до 100 одновременных инициализаций
 dialogue_init_locks = defaultdict(Lock)  # Лок для инициализации DialogueManager в каждой комнате
 
 # Ручная настройка CORS
@@ -722,7 +722,7 @@ def _fast_room_initialization(room_id):
             return False
 
 def ensure_dialogue_manager_for_room(room_id):
-    """Гарантирует наличие DialogueManager для комнаты (создает при необходимости)"""
+    """🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Гарантирует наличие DialogueManager для комнаты (создает при необходимости)"""
     try:
         # Проверяем, нужен ли нам DialogueManager
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
@@ -731,7 +731,8 @@ def ensure_dialogue_manager_for_room(room_id):
                 if room_id not in room_dialogue or room_dialogue[room_id] is None:
                     debug_log(f"🔥 Создаем DialogueManager для комнаты {room_id} (ленивая инициализация)")
                     
-                    # Создаем с базовой инициализацией
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: УБИРАЕМ init_semaphore отсюда!
+                    # Создаем DialogueManager БЕЗ семафора - это быстрая операция
                     dm = DialogueManager(socketio)
                     dm.room_id = room_id
                     dm.set_llm_mode(room_llm_mode[room_id])
@@ -1834,20 +1835,6 @@ def handle_practice_ended(data):
     room_current_question_index[room_id] = 0
     emit('practice_ended', {}, room=room_id)
     debug_log(f"Практика завершена в комнате {room_id}")
-
-@socketio.on('visualization_generated')
-def handle_visualization_generated(data):
-    room_id = data['room_id']
-    
-    debug_log(f"Получена SVG инфографика для комнаты {room_id}: {data['topic'][:100]}...")
-    
-    emit('visualization_generated', {
-        'room_id': room_id,
-        'topic': data['topic'],
-        'svg_code': data.get('svg_code', ''),
-        'timestamp': data.get('timestamp', time.time()),
-        'type': data.get('type', 'infographic')
-    }, room=room_id)
 
 @socketio.on('get_llm_status')
 def handle_get_llm_status(data):
