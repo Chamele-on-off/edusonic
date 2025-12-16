@@ -141,13 +141,13 @@ class LLMIntegration:
         return content.strip()
 
     def _process_llm_response(self, response: str, is_svg: bool = False, subject: str = "") -> str:
-        """🔥 ОБНОВЛЕННЫЙ: Обработка ответа LLM в зависимости от типа и предмета"""
+        """🔥 ИСПРАВЛЕННЫЙ: Обработка ответа LLM - SVG НЕ ОЧИЩАЕТСЯ НИКОГДА"""
         if is_svg:
-            # Для SVG - минимальная очистка, сохраняем структуру
-            print(f"🔧 [LLM] Обработка SVG ответа (без очистки речи)")
-            return response.strip()
+            # 🔥 КРИТИЧЕСКО ВАЖНО: Для SVG НЕ применяем никакую очистку
+            print(f"🔧 [LLM] SVG ответ - возвращаем как есть (без очистки)")
+            return response  # 🔥 ВАЖНО: возвращаем без .strip(), чтобы не удалить пробелы в начале SVG
         else:
-            # 🔥 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Умная очистка в зависимости от предмета
+            # 🔥 Только для текстовых ответов применяем очистку
             if TECHNICAL_SUPPORT_ENABLED and subject:
                 # Используем умную очистку для технических предметов
                 cleaned = clean_text_for_speech_technical(response, subject)
@@ -164,20 +164,18 @@ class LLMIntegration:
                        system_prompt: str = "", max_tokens: int = 1000, 
                        room_id: str = "default", callback: Callable = None,
                        is_svg: bool = False) -> Optional[str]:
-        """🔥 ОБНОВЛЕННЫЙ: УМНАЯ ЛОГИКА ПРИОРИТЕТОВ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ"""
+        """🔥 ИСПРАВЛЕННЫЙ: УМНАЯ ЛОГИКА ПРИОРИТЕТОВ"""
         
         print(f"🔧 [LLM] Запрос с приоритетом '{self.priority_mode}': {prompt[:100]}...")
-        print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}")
-        print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
+        print(f"🔧 [LLM] Тип запроса: {'SVG' if is_svg else 'Текст'}, Предмет: {subject if subject else 'нет'}")
         
-        # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРЕДМЕТЕ В ЗАПРОСЫ
+        # 🔥 ВАЖНО: Для SVG запросов НЕ адаптируем промпт для технических предметов
         is_technical = False
-        if TECHNICAL_SUPPORT_ENABLED and subject:
+        if TECHNICAL_SUPPORT_ENABLED and subject and not is_svg:
             is_technical = is_technical_subject(subject)
             
-            # Адаптируем системный промпт для технических предметов
-            if is_technical and not is_svg:
-                # Для технических предметов добавляем инструкции по формулам
+            # Адаптируем системный промпт только для НЕ-SVG запросов
+            if is_technical:
                 if "system" in system_prompt.lower():
                     system_prompt += "\n\nИСПОЛЬЗУЙ математические и научные обозначения: формулы, символы, единицы измерения."
                     system_prompt += "\nСОХРАНЯЙ формулы в читаемом формате (например, E=mc², F=ma, H₂O)."
@@ -195,7 +193,7 @@ class LLMIntegration:
                         max_tokens, room_id, is_svg
                     )
                     if result:
-                        # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА
+                        # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ТИПА ЗАПРОСА (SVG или текст)
                         processed_result = self._process_llm_response(result, is_svg, subject)
                         callback(processed_result, room_id)
                     else:
@@ -220,7 +218,7 @@ class LLMIntegration:
                     max_tokens, room_id, is_svg
                 )
                 if result:
-                    # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА
+                    # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ТИПА ЗАПРОСА
                     return self._process_llm_response(result, is_svg, subject)
                 else:
                     return self._get_fallback_response(prompt, subject)
@@ -234,20 +232,19 @@ class LLMIntegration:
         """Выполнение LLM запроса с безопасным fallback"""
         
         print(f"🔧 [LLM] Запрос: {prompt[:100]}...")
-        print(f"🔧 [LLM] Приоритет: {self.priority_mode}")
-        print(f"🔧 [LLM] Используемая модель OpenRouter: {self.model}")
+        print(f"🔧 [LLM] Приоритет: {self.priority_mode}, SVG: {is_svg}")
         
         # Проверяем доступность локальной модели
         local_available = self.llm_manager.local_llm.is_available()
         print(f"🔧 [LLM] Локальная модель доступна: {local_available}")
         
-        # 🔥 АДАПТИРУЕМ ПРОМПТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+        # 🔥 ВАЖНО: Для SVG НЕ адаптируем системный промпт
         adapted_system_prompt = system_prompt
-        if TECHNICAL_SUPPORT_ENABLED and subject and is_technical_subject(subject):
+        if TECHNICAL_SUPPORT_ENABLED and subject and is_technical_subject(subject) and not is_svg:
             if not adapted_system_prompt:
                 adapted_system_prompt = "Ты - профессиональный учитель по техническим предметам."
             
-            # Добавляем технические инструкции
+            # Добавляем технические инструкции ТОЛЬКО для текстовых ответов
             adapted_system_prompt += "\n\n🔥 ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ:"
             adapted_system_prompt += "\n- Используй математические и научные обозначения"
             adapted_system_prompt += "\n- Сохраняй формулы в правильном формате"
@@ -313,7 +310,7 @@ class LLMIntegration:
             print("❌ [LLM] Локальная модель недоступна")
             return None
             
-        print(f"⚡ [LLM] Использую локальную модель")
+        print(f"⚡ [LLM] Использую локальную модель, SVG: {is_svg}")
         
         # Создаем отдельный поток для таймаута
         import threading
@@ -327,7 +324,7 @@ class LLMIntegration:
                     max_tokens
                 )
                 if response:
-                    # 🔥 НЕ ОБРАБАТЫВАЕМ ТУТ - обработка будет в вызывающем коде с учетом предмета
+                    # 🔥 НЕ ОБРАБАТЫВАЕМ ТУТ - обработка будет в вызывающем коде
                     result_queue.put(response)
                 else:
                     result_queue.put(None)
@@ -357,7 +354,7 @@ class LLMIntegration:
             # 🔥 БЕЗОПАСНОЕ ПОЛУЧЕНИЕ КЛЮЧА
             try:
                 api_key = self.key_manager.get_next_key()
-                print(f"🔧 [LLM] Пробую OpenRouter: ключ {api_key[:8]}..., модель: {self.model}")
+                print(f"🔧 [LLM] Пробую OpenRouter: ключ {api_key[:8]}..., SVG: {is_svg}")
             except Exception as e:
                 print(f"❌ [LLM] Нет доступных ключей OpenRouter: {e}")
                 return None  # Fallback на локальную модель
@@ -540,15 +537,15 @@ class LLMIntegration:
         start_time = time.time()
         
         try:
-            # Запрос к реальному LLM
+            # Запрос к реальному LLM (НЕ SVG запрос)
             llm_response = self._query_llm_api(question, context, subject)
             
             total_time = time.time() - start_time
             print(f"⏱️ Общее время обработки: {total_time:.2f}с")
             
             if llm_response and llm_response.strip():
-                # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА
-                processed_response = self._process_llm_response(llm_response, subject=subject)
+                # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ С УЧЕТОМ ПРЕДМЕТА (НЕ SVG)
+                processed_response = self._process_llm_response(llm_response, is_svg=False, subject=subject)
                 print(f"✅ Ответ получен: {processed_response[:100]}...")
                 self.cache[cache_key] = processed_response
                 self._save_cache()
@@ -674,9 +671,15 @@ class LLMIntegration:
         if request_id in self.pending_requests:
             callback, is_svg = self.pending_requests.pop(request_id)
             try:
-                # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ В ЗАВИСИМОСТИ ОТ ТИПА (предмет передается через room_id)
-                subject = room_id  # В этом контексте room_id может содержать информацию о предмете
-                processed_response = self._process_llm_response(response, is_svg, subject)
+                # 🔥 ОБРАБАТЫВАЕМ ОТВЕТ В ЗАВИСИМОСТИ ОТ ТИПА
+                # Для SVG не передаем subject, чтобы не применять очистку
+                if is_svg:
+                    processed_response = self._process_llm_response(response, is_svg=True)
+                else:
+                    # Для текста можно передать subject через room_id или другой способ
+                    subject = room_id  # Или извлечь из room_id
+                    processed_response = self._process_llm_response(response, is_svg=False, subject=subject)
+                
                 callback(processed_response, room_id)
             except Exception as e:
                 print(f"❌ Ошибка в callback для запроса {request_id}: {e}")
@@ -734,9 +737,9 @@ class LLMIntegration:
         return has_svg_open and has_svg_close and has_proper_tags
 
     def generate_infographic(self, topic: str, context: str = "", subject: str = "") -> dict:
-        """🔥 ОБНОВЛЕННЫЙ: Генерация стильной инфографики с поддержкой технических предметов"""
+        """🔥 ИСПРАВЛЕННЫЙ: Генерация SVG инфографики - SVG НЕ ОЧИЩАЕТСЯ"""
         
-        # 🔥 ОПРЕДЕЛЯЕМ ТИП ИНФОГРАФИКИ В ЗАВИСИМОСТИ ОТ ПРЕДМЕТА
+        # 🔥 ОПРЕДЕЛЯЕМ ТИП ИНФОГРАФИКИ
         is_technical = False
         if TECHNICAL_SUPPORT_ENABLED and subject:
             is_technical = is_technical_subject(subject)
@@ -797,8 +800,12 @@ class LLMIntegration:
         try:
             print(f"🎨 Генерация {'ТЕХНИЧЕСКОЙ ' if is_technical else ''}SVG инфографики для: {topic}")
             
-            # 🔥 АДАПТИРУЕМ СИСТЕМНЫЙ ПРОМПТ ДЛЯ ТИПА ИНФОГРАФИКИ
-            system_prompt = """Ты - креативный дизайнер образовательной инфографики. 
+            # 🔥 ВАЖНО: Для SVG всегда используем is_svg=True
+            response = self._query_llm_api(
+                prompt=prompt,
+                context=context,
+                subject=subject,
+                system_prompt="""Ты - креативный дизайнер образовательной инфографики. 
 Твоя задача - создавать УНИКАЛЬНЫЕ и РАЗНООБРАЗНЫЕ SVG инфографики для разных тем.
 
 ОЧЕНЬ ВАЖНЫЕ ПРАВИЛА:
@@ -818,38 +825,19 @@ class LLMIntegration:
 - Концептуальные карты для связей
 - Круговые диаграммы для пропорций
 
-Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ."""
-            
-            if is_technical:
-                system_prompt += """
-
-🔥 ДОПОЛНИТЕЛЬНО ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ:
-- Используй математические и научные символы если уместно
-- Добавляй схемы, диаграммы, графики
-- Включай формулы и обозначения в SVG
-- Делай инфографику информативной и точной"""
-
-            response = self._query_llm_api(
-                prompt=prompt,
-                context=context,
-                subject=subject,
-                system_prompt=system_prompt,
+Верни ТОЛЬКО SVG код. НИЧЕГО БОЛЬШЕ.""",
                 max_tokens=2500,
-                is_svg=True
+                is_svg=True  # 🔥 КРИТИЧЕСКИ ВАЖНО: это SVG запрос
             )
             
-            # 🔧 ДОБАВЛЕНО ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ
-            print(f"🔧 [DEBUG] RAW LLM RESPONSE:")
-            print(f"'{response}'")
-            print(f"🔧 [DEBUG] Response length: {len(response) if response else 0}")
+            print(f"🔧 [DEBUG] Получен ответ для SVG инфографики, длина: {len(response) if response else 0}")
             
             if response:
-                # Очистка ответа (для SVG минимальная очистка)
+                # 🔥 ВАЖНО: Для SVG используем extract_svg_code, НЕ применяем _process_llm_response
                 svg_code = self._extract_svg_code(response)
                 
-                # 🔧 ДОБАВЛЕНО ЛОГИ ДЛЯ ОТЛАДКИ
-                print(f"🔧 [DEBUG] Extracted SVG code length: {len(svg_code)}")
-                print(f"🔧 [DEBUG] SVG validation: {self._validate_svg(svg_code)}")
+                print(f"🔧 [DEBUG] Извлеченный SVG код, длина: {len(svg_code)}")
+                print(f"🔧 [DEBUG] Валидация SVG: {self._validate_svg(svg_code)}")
                 
                 if svg_code and self._validate_svg(svg_code):
                     print(f"✅ [DEBUG] SVG успешно извлечен и валидирован!")
@@ -862,10 +850,6 @@ class LLMIntegration:
                     }
                 else:
                     print(f"❌ [DEBUG] Не удалось извлечь валидный SVG")
-                    if svg_code:
-                        print(f"🔧 [DEBUG] Extracted code (первые 500 символов): '{svg_code[:500]}...'")
-                    else:
-                        print(f"🔧 [DEBUG] SVG код пустой")
             
             print("❌ [DEBUG] Используем fallback SVG")
             return {
@@ -1271,6 +1255,35 @@ class LLMIntegration:
         
         return adapted
 
+    def generate_svg_safely(self, prompt: str, system_prompt: str = None) -> Optional[str]:
+        """🔥 НОВЫЙ МЕТОД: Безопасная генерация SVG без очистки"""
+        try:
+            if not system_prompt:
+                system_prompt = """Ты - креативный дизайнер SVG инфографики.
+Верни ТОЛЬКО SVG код без каких-либо пояснений.
+Код должен начинаться с <svg и заканчиваться </svg>."""
+            
+            # 🔥 ВАЖНО: Используем is_svg=True и subject=""
+            response = self._query_llm_api(
+                prompt=prompt,
+                context="",
+                subject="",  # Пустой subject для SVG
+                system_prompt=system_prompt,
+                max_tokens=2500,
+                is_svg=True  # 🔥 КРИТИЧЕСКИ ВАЖНО
+            )
+            
+            if response:
+                # 🔥 Извлекаем SVG без дополнительной обработки
+                svg_code = self._extract_svg_code(response)
+                return svg_code
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Ошибка безопасной генерации SVG: {e}")
+            return None
+
 # Создаем глобальный экземпляр для использования в других модулях
 llm_integration = LLMIntegration()
 
@@ -1282,45 +1295,30 @@ if __name__ == "__main__":
     # Тестирование модуля
     llm = LLMIntegration()
     
-    print("🔧 Тестирование улучшенного LLM модуля с поддержкой технических предметов...")
+    print("🔧 Тестирование исправленного LLM модуля...")
+    
+    # Тестирование SVG генерации
+    print(f"\n🎨 Тест SVG генерации:")
+    svg_result = llm.generate_infographic("Тестовая инфографика", subject="математика")
+    
+    if svg_result["success"]:
+        print(f"✅ SVG успешно сгенерирован! Тип: {svg_result['type']}")
+        print(f"📊 Длина SVG кода: {len(svg_result['svg_code'])}")
+        print(f"📊 Содержит <svg: {'<svg' in svg_result['svg_code']}")
+        print(f"📊 Содержит </svg>: {'</svg>' in svg_result['svg_code']}")
+    else:
+        print(f"❌ Не удалось сгенерировать SVG")
+    
+    # Тестирование текстового запроса
+    print(f"\n📝 Тест текстового запроса:")
+    text_response = llm.query("Что такое интеграл?", subject="математика")
+    print(f"📝 Ответ: {text_response[:100]}...")
     
     # Тестирование определения технических предметов
     print(f"\n🔬 Техническая поддержка включена: {TECHNICAL_SUPPORT_ENABLED}")
     
-    # Тестирование генерации инфографики для разных предметов
-    test_cases = [
-        ("Сумма углов треугольника равна 180 градусов", "математика"),
-        ("Закон Ома: I = U/R", "физика"),
-        ("Фотосинтез: CO₂ + H₂O → C₆H₁₂O₆ + O₂", "биология"),
-        ("Квадратное уравнение: ax² + bx + c = 0", "алгебра"),
-    ]
-    
-    for topic, subject in test_cases:
-        print(f"\n🔄 Генерация инфографики для: {topic} ({subject})")
-        infographic_result = llm.generate_infographic(topic, subject=subject)
-        
-        if infographic_result["success"]:
-            print(f"✅ Инфографика успешно сгенерирована! Тип: {infographic_result['type']}")
-            print(f"📊 SVG код (первые 200 символов): {infographic_result['svg_code'][:200]}...")
-        else:
-            print(f"❌ Не удалось сгенерировать инфографику")
-            print(f"📊 Использован fallback")
-    
-    # Тестирование очистки текста
-    print("\n🧪 Тестирование умной очистки текста:")
-    test_texts = [
-        ("Уравнение: E=mc², где E - энергия", "физика"),
-        ("Молекула воды: H₂O состоит из 2 атомов водорода и 1 атома кислорода", "химия"),
-        ("Интеграл ∫f(x)dx показывает площадь под кривой", "математика"),
-        ("Великая французская революция началась в 1789 году", "история"),
-    ]
-    
-    for text, subject in test_texts:
-        print(f"\n📝 Исходный текст: {text}")
-        print(f"📚 Предмет: {subject}")
-        
-        # Тестируем очистку
-        cleaned = llm._process_llm_response(text, subject=subject)
-        print(f"🧹 Очищенный текст: {cleaned[:100]}...")
+    if TECHNICAL_SUPPORT_ENABLED:
+        print(f"🔬 Математика - технический предмет: {is_technical_subject('математика')}")
+        print(f"🔬 История - технический предмет: {is_technical_subject('история')}")
     
     print("\n🎉 Тестирование завершено!")
