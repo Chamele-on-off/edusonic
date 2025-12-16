@@ -748,7 +748,7 @@ class DialogueManager:
             
             # Не персонализируем если уже есть обращение
             if student_name.lower() not in first_sentence.lower():
-                # Добавляем имя в начале первого предложения
+                # Добавляем имя в начале первого предложции
                 personalized_first = f"{student_name}, {first_sentence[0].lower() + first_sentence[1:]}"
                 sentences[0] = personalized_first
                 
@@ -1362,37 +1362,63 @@ class DialogueManager:
                         
                         ТЕКСТ: {text[:500]}
                         """
+                    else:
+                        # Стандартный промпт для нетехнических предметов
+                        visualization_prompt = f"Создай стильную образовательную инфографику в формате SVG на тему: {text}"
                     
                     # Генерируем SVG инфографику через LLM
-                    infographic_result = self.llm.generate_infographic(
-                        visualization_prompt, 
-                        context, 
-                        visualization_type=visualization_type
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем is_svg=True
+                    svg_response = self.llm.query_llm(
+                        visualization_prompt,
+                        context="",
+                        subject=self.current_subject or "общий",
+                        max_tokens=600,
+                        room_id=self.room_id,
+                        is_svg=True  # ← ОБЯЗАТЕЛЬНО ДОБАВЬТЕ ЭТУ СТРОКУ
                     )
                     
-                    if infographic_result and infographic_result.get("success"):
-                        self.socketio.emit('visualization_generated', {
-                            'room_id': self.room_id,
-                            'topic': text[:100],
-                            'svg_code': infographic_result['svg_code'],
-                            'timestamp': time.time(),
-                            'type': visualization_type,
-                            'subject_type': self.subject_type,
-                            'is_technical': self.is_technical_subject
-                        }, room=self.room_id)
-                        debug_log(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
+                    if svg_response:
+                        # Извлекаем SVG код из ответа
+                        svg_code_match = re.search(r'<svg[^>]*>.*?</svg>', svg_response, re.DOTALL)
+                        svg_code = svg_code_match.group(0) if svg_code_match else ""
+                        
+                        if svg_code:
+                            debug_log(f"✅ SVG код извлечен, длина: {len(svg_code)} символов")
+                            self.socketio.emit('visualization_generated', {
+                                'room_id': self.room_id,
+                                'topic': text[:100],
+                                'svg_code': svg_code,
+                                'timestamp': time.time(),
+                                'type': visualization_type,
+                                'subject_type': self.subject_type,
+                                'is_technical': self.is_technical_subject
+                            }, room=self.room_id)
+                            debug_log(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
+                        else:
+                            # Fallback - простая SVG схема
+                            debug_log("⚠️ Не удалось извлечь SVG код, используем fallback")
+                            fallback_svg = self._create_fallback_infographic(text)
+                            self.socketio.emit('visualization_generated', {
+                                'room_id': self.room_id,
+                                'topic': text[:100],
+                                'svg_code': fallback_svg,
+                                'timestamp': time.time(),
+                                'type': 'fallback',
+                                'subject_type': self.subject_type
+                            }, room=self.room_id)
+                            debug_log(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
                     else:
-                        # Fallback - простая SVG схема
+                        # Fallback при ошибке запроса
+                        debug_log("❌ Не получен ответ от LLM для визуализации")
                         fallback_svg = self._create_fallback_infographic(text)
                         self.socketio.emit('visualization_generated', {
                             'room_id': self.room_id,
                             'topic': text[:100],
                             'svg_code': fallback_svg,
                             'timestamp': time.time(),
-                            'type': 'fallback',
+                            'type': 'error_fallback',
                             'subject_type': self.subject_type
                         }, room=self.room_id)
-                        debug_log(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
                     
             except Exception as e:
                 debug_log(f"❌ Ошибка генерации SVG инфографики: {e}")
@@ -2700,7 +2726,7 @@ class DialogueManager:
         self.subject_type = "general"
         self.technical_symbols_preserved = False
         
-        # СБРОС ЯЗЫКОВЫХ НАСТРОЕК
+        # СБРОС ЯЗЫКОВЫХ НАСТРОЙКИ
         self.is_language_subject = False
         self.target_language = 'english'
         self.language_level = 'beginner'
