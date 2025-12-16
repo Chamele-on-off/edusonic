@@ -1,5 +1,5 @@
 # dialogue.py
-# Полный код с интеграцией технических предметов
+# Полный код с интеграцией технических предметов и исправленной SVG визуализацией
 
 import json
 from pathlib import Path
@@ -52,6 +52,52 @@ except ImportError:
 def debug_log(message):
     """Логирование для отладки"""
     print(f"🔥 [DIALOGUE] {message}")
+
+def generate_svg_code(topic: str, context: str = "") -> str:
+    """Генерирует простую SVG инфографику как fallback"""
+    topic_short = topic[:50] + "..." if len(topic) > 50 else topic
+    
+    return f'''
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#7c3aed" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Фон -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)" opacity="0.1"/>
+  
+  <!-- Основной контейнер -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="50" width="500" height="300" rx="20" fill="white" stroke="#e5e7eb" stroke-width="2"/>
+  </g>
+  
+  <!-- Заголовок -->
+  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">
+    {topic_short}
+  </text>
+  
+  <!-- Иконка -->
+  <circle cx="300" cy="200" r="40" fill="#4f46e5" opacity="0.8"/>
+  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="white">📊</text>
+  
+  <!-- Подпись -->
+  <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
+    Инфографика по теме
+  </text>
+  
+  <!-- Декоративные элементы -->
+  <circle cx="100" cy="100" r="15" fill="#10b981" opacity="0.6"/>
+  <circle cx="500" cy="120" r="12" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="80" cy="280" r="10" fill="#ef4444" opacity="0.6"/>
+  <circle cx="520" cy="260" r="8" fill="#8b5cf6" opacity="0.6"/>
+</svg>
+'''
 
 class DialogueManager:
     def __init__(self, socketio):
@@ -536,7 +582,7 @@ class DialogueManager:
         """Определяет предмет по названию файла"""
         filename_lower = filename.lower()
         
-        # Используем маппинг из константы
+        # Используем маппинг из константа
         for eng, rus in self.subject_mapping.items():
             if eng in filename_lower:
                 return rus
@@ -748,7 +794,7 @@ class DialogueManager:
             
             # Не персонализируем если уже есть обращение
             if student_name.lower() not in first_sentence.lower():
-                # Добавляем имя в начале первого предложции
+                # Добавляем имя в начале первого предложения
                 personalized_first = f"{student_name}, {first_sentence[0].lower() + first_sentence[1:]}"
                 sentences[0] = personalized_first
                 
@@ -1314,179 +1360,59 @@ class DialogueManager:
         return has_trigger or has_structure
 
     def _generate_visualization(self, text: str, context: str = ""):
-        """Генерация SVG инфографики для текста - ТОЛЬКО SVG"""
-        if not self.visualization_enabled or not text.strip():
+        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Генерация SVG инфографики для текста"""
+        if not self.visualization_enabled or not text.strip() or not self.room_id:
             return
     
+        # Ограничиваем частоту визуализаций
         current_time = time.time()
         if current_time - self.last_visualization_time < self.visualization_cooldown:
             return
         
-        self.paragraphs_since_last_viz += 1
+        self.last_visualization_time = current_time
+        self.visualization_counter += 1
         
-        should_generate = (self.paragraphs_since_last_viz >= self.viz_paragraph_interval or 
-                          self._has_visualization_triggers(text))
+        debug_log(f"🎨 Генерация визуализации №{self.visualization_counter} для: {text[:50]}...")
         
-        if should_generate:
-            try:
-                self.last_visualization_time = current_time
-                self.paragraphs_since_last_viz = 0
-                self.visualization_counter += 1
-                
-                debug_log(f"🎨 Генерация SVG инфографики для: {text[:100]}...")
-                
-                if self.room_id and self.socketio:
-                    # ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ: инициализируем LLM при первом использовании
-                    _ = self.llm
-                    
-                    # 🔥 АДАПТИРУЕМ ВИЗУАЛИЗАЦИЮ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-                    visualization_type = "infographic"
-                    visualization_prompt = text
-                    
-                    if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
-                        debug_log(f"🎯 Адаптация визуализации для технического предмета: {self.subject_type}")
-                        visualization_type = "technical_diagram"
-                        
-                        # Добавляем инструкции для технической визуализации
-                        visualization_prompt = f"""
-                        ТЕХНИЧЕСКАЯ ТЕМА: {text}
-                        ПРЕДМЕТ: {self.current_subject}
-                        ТИП: {self.subject_type}
-                        
-                        СОЗДАЙ ТЕХНИЧЕСКУЮ ДИАГРАММУ SVG:
-                        - Используй математические/научные символы
-                        - Добавь формулы если они есть в тексте
-                        - Создай логическую схему
-                        - Используй научную нотацию
-                        - Сделай понятную визуализацию
-                        
-                        ТЕКСТ: {text[:500]}
-                        """
-                    else:
-                        # Стандартный промпт для нетехнических предметов
-                        visualization_prompt = f"Создай стильную образовательную инфографику в формате SVG на тему: {text}"
-                    
-                    # Генерируем SVG инфографику через LLM
-                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Добавляем is_svg=True
-                    svg_response = self.llm.query_llm(
-                        visualization_prompt,
-                        context="",
-                        subject=self.current_subject or "общий",
-                        max_tokens=600,
-                        room_id=self.room_id,
-                        is_svg=True  # ← ОБЯЗАТЕЛЬНО ДОБАВЬТЕ ЭТУ СТРОКУ
-                    )
-                    
-                    if svg_response:
-                        # Извлекаем SVG код из ответа
-                        svg_code_match = re.search(r'<svg[^>]*>.*?</svg>', svg_response, re.DOTALL)
-                        svg_code = svg_code_match.group(0) if svg_code_match else ""
-                        
-                        if svg_code:
-                            debug_log(f"✅ SVG код извлечен, длина: {len(svg_code)} символов")
-                            self.socketio.emit('visualization_generated', {
-                                'room_id': self.room_id,
-                                'topic': text[:100],
-                                'svg_code': svg_code,
-                                'timestamp': time.time(),
-                                'type': visualization_type,
-                                'subject_type': self.subject_type,
-                                'is_technical': self.is_technical_subject
-                            }, room=self.room_id)
-                            debug_log(f"✅ SVG инфографика отправлена в комнату {self.room_id}")
-                        else:
-                            # Fallback - простая SVG схема
-                            debug_log("⚠️ Не удалось извлечь SVG код, используем fallback")
-                            fallback_svg = self._create_fallback_infographic(text)
-                            self.socketio.emit('visualization_generated', {
-                                'room_id': self.room_id,
-                                'topic': text[:100],
-                                'svg_code': fallback_svg,
-                                'timestamp': time.time(),
-                                'type': 'fallback',
-                                'subject_type': self.subject_type
-                            }, room=self.room_id)
-                            debug_log(f"✅ Fallback SVG отправлена в комнату {self.room_id}")
-                    else:
-                        # Fallback при ошибке запроса
-                        debug_log("❌ Не получен ответ от LLM для визуализации")
-                        fallback_svg = self._create_fallback_infographic(text)
-                        self.socketio.emit('visualization_generated', {
-                            'room_id': self.room_id,
-                            'topic': text[:100],
-                            'svg_code': fallback_svg,
-                            'timestamp': time.time(),
-                            'type': 'error_fallback',
-                            'subject_type': self.subject_type
-                        }, room=self.room_id)
-                    
-            except Exception as e:
-                debug_log(f"❌ Ошибка генерации SVG инфографики: {e}")
-                # Fallback при ошибке
-                if self.room_id and self.socketio:
-                    fallback_svg = self._create_fallback_infographic(text)
-                    self.socketio.emit('visualization_generated', {
-                        'room_id': self.room_id,
-                        'topic': text[:100],
-                        'svg_code': fallback_svg,
-                        'timestamp': time.time(),
-                        'type': 'error_fallback',
-                        'subject_type': self.subject_type
-                    }, room=self.room_id)
-
-    def _create_fallback_infographic(self, text: str) -> str:
-        """Создает простую SVG инфографику как fallback"""
-        topic_short = text[:50] + "..." if len(text) > 50 else text
-        
-        # 🔥 АДАПТИРУЕМ FALLBACK ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
-        icon_text = "?"
-        if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
-            if self.subject_type == "technical":
-                icon_text = "∑"  # Сумма для математики
-            elif self.subject_type == "natural_science":
-                icon_text = "🌿"  # Природа для естественных наук
-        
-        return f'''
-<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4f46e5" />
-      <stop offset="100%" stop-color="#7c3aed" />
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="4" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
-    </filter>
-  </defs>
-  
-  <!-- Фон -->
-  <rect width="100%" height="100%" fill="url(#bgGradient)" opacity="0.1"/>
-  
-  <!-- Основной контейнер -->
-  <g filter="url(#shadow)">
-    <rect x="50" y="50" width="500" height="300" rx="20" fill="white" stroke="#e5e7eb" stroke-width="2"/>
-  </g>
-  
-  <!-- Заголовок -->
-  <text x="300" y="100" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">
-    {topic_short}
-  </text>
-  
-  <!-- Иконка -->
-  <circle cx="300" cy="200" r="40" fill="#4f46e5" opacity="0.8"/>
-  <text x="300" y="205" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="white">{icon_text}</text>
-  
-  <!-- Подпись -->
-  <text x="300" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#6b7280">
-    Инфографика по теме
-  </text>
-  
-  <!-- Декоративные элементы -->
-  <circle cx="100" cy="100" r="15" fill="#10b981" opacity="0.6"/>
-  <circle cx="500" cy="120" r="12" fill="#f59e0b" opacity="0.6"/>
-  <circle cx="80" cy="280" r="10" fill="#ef4444" opacity="0.6"/>
-  <circle cx="520" cy="260" r="8" fill="#8b5cf6" opacity="0.6"/>
-</svg>
-'''
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем generate_infographic вместо query_llm
+        try:
+            result = self.llm.generate_infographic(text, context)
+            
+            svg_code = ""
+            if result and result.get("success"):
+                svg_code = result.get("svg_code", "")
+                debug_log(f"✅ SVG код получен через generate_infographic, длина: {len(svg_code)} символов")
+            else:
+                # Fallback на базовую визуализацию
+                svg_code = generate_svg_code(text, context)
+                debug_log(f"⚠️ Используем fallback SVG, длина: {len(svg_code)} символов")
+            
+            # 🔥 Отправляем клиенту ОДИН РАЗ, через событие
+            self.socketio.emit('visualization_generated', {
+                'room_id': self.room_id,
+                'topic': text[:100],
+                'svg_code': svg_code,
+                'timestamp': time.time(),
+                'type': 'technical' if self.is_technical_subject else 'infographic',
+                'subject_type': self.subject_type,
+                'is_technical': self.is_technical_subject
+            }, room=self.room_id)
+            
+            debug_log(f"✅ SVG визуализация отправлена в комнату {self.room_id}")
+            
+        except Exception as e:
+            debug_log(f"❌ Ошибка генерации SVG визуализации: {e}")
+            
+            # Fallback при ошибке
+            fallback_svg = generate_svg_code(text, "Ошибка генерации")
+            self.socketio.emit('visualization_generated', {
+                'room_id': self.room_id,
+                'topic': text[:100],
+                'svg_code': fallback_svg,
+                'timestamp': time.time(),
+                'type': 'error_fallback',
+                'is_technical': self.is_technical_subject
+            }, room=self.room_id)
 
     def enable_visualization(self):
         """Включение автоматической визуализации - ТОЛЬКО SVG"""
