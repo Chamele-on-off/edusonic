@@ -90,8 +90,8 @@ class DialogueManager:
         self._llm_lock = threading.Lock()
         self._lessons_loaded = False
         self._lessons_lock = threading.Lock()
-        self._dialogue_knowledge = None
-        self._dialogue_knowledge_lock = threading.Lock()
+        self._dialogue_knowledge = None  # ← ИЗМЕНЕНИЕ: не загружаем сразу!
+        self._dialogue_knowledge_lock = threading.Lock()  # ← ДОБАВЛЕНО
         self.knowledge_base = None
         
         # Простые поля
@@ -229,7 +229,7 @@ class DialogueManager:
 
     @property
     def dialogue_knowledge(self):
-        """Ленивое свойство: Загружает диалоговые шаблоны только при первом обращении"""
+        """🔥 ЛЕНИВОЕ СВОЙСТВО: Загружает диалоговые шаблоны только при первом обращении"""
         if self._dialogue_knowledge is None:
             with self._dialogue_knowledge_lock:
                 if self._dialogue_knowledge is None:
@@ -267,10 +267,15 @@ class DialogueManager:
         try:
             dialogue_path = Path("knowledge/dialogue_knowledge.json")
             if dialogue_path.exists():
+                debug_log(f"📂 Загрузка dialogue_knowledge из: {dialogue_path}")
                 with open(dialogue_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    debug_log(f"✅ dialogue_knowledge загружен, размер: {len(str(data))} байт")
+                    return data
+            else:
+                debug_log(f"⚠️ Файл {dialogue_path} не найден, использую шаблоны по умолчанию")
         except Exception as e:
-            debug_log(f"Ошибка загрузки диалоговых шаблонов: {e}")
+            debug_log(f"❌ Ошибка загрузки диалоговых шаблонов: {e}")
         
         return self._get_default_dialogue_patterns()
 
