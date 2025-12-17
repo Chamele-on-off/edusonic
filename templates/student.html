@@ -639,6 +639,24 @@
         .lessons-container::-webkit-scrollbar-thumb:hover {
             background: var(--secondary);
         }
+        
+        /* Стиль для ссылок на уроки */
+        .lesson-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .lesson-link:hover {
+            background: rgba(126, 118, 249, 0.1);
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -935,7 +953,8 @@
             try {
                 showLoading('progress');
                 
-                const response = await fetch('/api/student/progress');
+                // Используем новый исправленный API
+                const response = await fetch('/api/student/progress/dashboard');
                 const data = await response.json();
                 
                 if (data.success && data.progress && data.progress.subjects) {
@@ -976,6 +995,7 @@
                 const totalLessons = subjectData.total_lessons || 0;
                 const completedLessons = subjectData.completed_lessons || 0;
                 const nextLesson = subjectData.next_lesson;
+                const hasLessons = subjectData.has_lessons || totalLessons > 0;
                 
                 html += `
                     <div class="subject-card">
@@ -1006,15 +1026,21 @@
                         </div>
                         
                         <div class="subject-actions">
-                            ${nextLesson ? `
-                                <button class="btn btn-small" onclick="continueNextLesson('${subjectName}')">
+                            ${nextLesson && hasLessons ? `
+                                <a class="btn btn-small" href="#" onclick="continueNextLesson('${subjectName}', event)">
                                     <i class="fas fa-play"></i> Продолжить
-                                </button>
+                                </a>
+                            ` : hasLessons ? `
+                                <a class="btn btn-small" href="#" onclick="startFirstLesson('${subjectName}', event)">
+                                    <i class="fas fa-play"></i> Начать первый урок
+                                </a>
                             ` : ''}
                             
-                            <button class="btn btn-small btn-secondary" onclick="selectSubjectLessons('${subjectName}')">
-                                <i class="fas fa-list"></i> Все уроки
-                            </button>
+                            ${hasLessons ? `
+                                <a class="btn btn-small btn-secondary" href="#" onclick="selectSubjectLessons('${subjectName}', event)">
+                                    <i class="fas fa-list"></i> Все уроки
+                                </a>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -1025,7 +1051,10 @@
         }
         
         // Продолжить следующий урок
-        async function continueNextLesson(subjectName) {
+        async function continueNextLesson(subjectName, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
             try {
                 // Получаем следующую комнату для этого предмета
                 const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
@@ -1043,8 +1072,36 @@
             }
         }
         
+        // Начать первый урок
+        async function startFirstLesson(subjectName, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            try {
+                // Получаем уроки по предмету
+                if (!subjectsData || !subjectsData[subjectName] || !subjectsData[subjectName].lessons) {
+                    await loadLessonsData();
+                }
+                
+                const lessons = subjectsData[subjectName].lessons;
+                if (lessons && lessons.length > 0) {
+                    // Берем первый урок
+                    const firstLesson = lessons[0];
+                    await startSpecificLesson(firstLesson.id, subjectName);
+                } else {
+                    createAndOpenConference(subjectName);
+                }
+            } catch (error) {
+                console.error('Error starting first lesson:', error);
+                createAndOpenConference(subjectName);
+            }
+        }
+        
         // Выбрать предмет для просмотра уроков
-        function selectSubjectLessons(subjectName) {
+        function selectSubjectLessons(subjectName, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
             // Переключаемся на вкладку уроков
             switchTab('lessons');
             
@@ -1097,10 +1154,13 @@
             let html = `
                 <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
                     <select id="subjectSelect" class="avatar-select" onchange="loadLessonsForSubject(this.value)" style="flex: 1; min-width: 250px;">
+                        <option value="">Выберите предмет...</option>
             `;
             
             for (const [subjectName, subjectData] of Object.entries(subjects)) {
-                html += `<option value="${subjectName}">${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</option>`;
+                const lessonCount = subjectData.lessons ? subjectData.lessons.length : 0;
+                const displayName = `${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)} (${lessonCount} уроков)`;
+                html += `<option value="${subjectName}">${displayName}</option>`;
             }
             
             html += `
@@ -1118,6 +1178,17 @@
         async function loadLessonsForSubject(subjectName) {
             try {
                 showLoading('lessons');
+                
+                if (!subjectName) {
+                    document.getElementById('lessonsList').innerHTML = `
+                        <div class="info-message">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Пожалуйста, выберите предмет из списка</span>
+                        </div>
+                    `;
+                    hideLoading('lessons');
+                    return;
+                }
                 
                 if (!subjectsData || !subjectsData[subjectName]) {
                     // Загружаем заново если нет данных
@@ -1162,8 +1233,12 @@
             
             let html = `
                 <div class="lessons-container">
-                    <div style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600; color: var(--primary);">
-                        <i class="fas fa-book"></i> Уроки по предмету: ${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
+                    <div style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-book"></i> 
+                        <span>Уроки по предмету: ${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</span>
+                        <span style="font-size: 0.9rem; color: var(--text-light); margin-left: auto;">
+                            ${lessons.length} уроков
+                        </span>
                     </div>
             `;
             
@@ -1191,32 +1266,194 @@
                             </p>
                         </div>
                         <div>
-                            <button class="btn btn-small" onclick="startSpecificLesson('${lesson.id}', '${subjectName}')" 
-                                    ${isCompleted ? 'style="opacity: 0.7;"' : ''}>
+                            <a class="btn btn-small lesson-link" href="#" onclick="startSpecificLesson('${lesson.id}', '${subjectName}', event)">
                                 <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
                                 ${isCompleted ? 'Повторить' : 'Начать'}
-                            </button>
+                            </a>
                         </div>
                     </div>
                 `;
             });
             
-            html += '</div>';
+            html += `
+                </div>
+                <div style="margin-top: 1rem; text-align: center;">
+                    <a href="#" class="btn" onclick="createAndOpenConference('${subjectName}', event)" style="width: 100%;">
+                        <i class="fas fa-plus-circle"></i> Создать новую комнату для ${subjectName}
+                    </a>
+                </div>
+            `;
             container.innerHTML = html;
         }
         
-        // Начать конкретный урок
-        async function startSpecificLesson(lessonId, subjectName) {
+        // Начать конкретный урок - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        async function startSpecificLesson(lessonId, subjectName, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
             try {
-                // Создаем комнату для этого урока
-                const roomName = await createRoomForLesson(lessonId, subjectName);
-                if (roomName) {
-                    openConference(roomName, subjectName, lessonId);
+                console.log(`🚀 Начинаем урок ${lessonId} по предмету ${subjectName}`);
+                
+                // 1. Создаем или получаем комнату для предмета
+                const roomResponse = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
+                const roomData = await roomResponse.json();
+                
+                if (!roomData.success) {
+                    throw new Error('Ошибка получения комнаты: ' + (roomData.error || 'неизвестная ошибка'));
+                }
+                
+                const roomName = roomData.room.room_name;
+                console.log(`✅ Получена комната: ${roomName}`);
+                
+                // 2. Регистрируем комнату с уроком
+                const registerResponse = await fetch('/api/room/register-student', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomName,
+                        student_data: currentStudentData,
+                        lesson_id: lessonId,
+                        subject: subjectName
+                    })
+                });
+                
+                const registerResult = await registerResponse.json();
+                
+                if (!registerResult.success) {
+                    console.warn('⚠️ Предупреждение при регистрации комнаты:', registerResult.error);
+                    // Продолжаем - комната все равно создана
+                }
+                
+                // 3. Инициализируем комнату
+                const initResponse = await fetch('/api/room/initialize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomName
+                    })
+                });
+                
+                const initResult = await initResponse.json();
+                
+                if (!initResult.success) {
+                    console.warn('⚠️ Предупреждение при инициализации комнаты:', initResult.error);
+                }
+                
+                // 4. Запускаем конкретный урок
+                const startResponse = await fetch('/api/lesson/start-specific', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomName,
+                        lesson_id: lessonId
+                    })
+                });
+                
+                const startResult = await startResponse.json();
+                
+                if (!startResult.success) {
+                    console.warn('⚠️ Предупреждение при запуске урока:', startResult.error);
+                    // Продолжаем - урок может быть запущен автоматически при входе в комнату
+                }
+                
+                console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
+                
+                // 5. Открываем конференцию по ссылке
+                openConference(roomName, subjectName, lessonId);
+                
+            } catch (error) {
+                console.error('❌ Ошибка запуска урока:', error);
+                
+                // Fallback: просто создаем комнату без привязки к уроку
+                alert(`Ошибка: ${error.message}\nСоздаю комнату без привязки к конкретному уроку.`);
+                createAndOpenConference(subjectName);
+            }
+        }
+        
+        // Создание и открытие конференции
+        async function createAndOpenConference(subjectName, event = null) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            try {
+                console.log(`🚀 Создаем комнату для предмета: ${subjectName}`);
+                
+                // Создаем новую комнату через API
+                const response = await fetch('/api/student/create-conference', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        subject: subjectName
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.conference) {
+                    const roomName = data.conference.room_id;
+                    console.log(`✅ Комната создана: ${roomName}`);
+                    
+                    // Открываем конференцию
+                    openConference(roomName, subjectName);
+                } else {
+                    throw new Error(data.error || 'Ошибка создания комнаты');
                 }
             } catch (error) {
-                console.error('Error starting specific lesson:', error);
-                alert('Ошибка запуска урока. Попробуйте снова.');
+                console.error('❌ Ошибка создания конференции:', error);
+                
+                // Fallback: генерируем имя комнаты вручную
+                const timestamp = Date.now();
+                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                const roomName = `student_${subjectName}_${studentName}_${timestamp}`;
+                
+                console.log(`⚠️ Используем fallback комнату: ${roomName}`);
+                
+                // Регистрируем комнату
+                try {
+                    await fetch('/api/room/register-student', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            room_id: roomName,
+                            student_data: currentStudentData,
+                            subject: subjectName
+                        })
+                    });
+                } catch (regError) {
+                    console.warn('Не удалось зарегистрировать комнату:', regError);
+                }
+                
+                openConference(roomName, subjectName);
             }
+        }
+        
+        // Открытие конференции - ТОЛЬКО ПО ССЫЛКЕ
+        function openConference(roomName, subjectName, lessonId = null) {
+            console.log(`🌐 Открываем конференцию: ${roomName}, предмет: ${subjectName}, урок: ${lessonId || 'нет'}`);
+            
+            // Формируем URL с параметрами
+            let url = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
+            
+            if (lessonId && lessonId !== 'next') {
+                url += `&lesson_id=${encodeURIComponent(lessonId)}`;
+            }
+            
+            console.log(`🔗 Переход по ссылке: ${url}`);
+            
+            // Открываем в ТЕКУЩЕЙ вкладке
+            window.location.href = url;
         }
         
         // ==============================
@@ -1405,89 +1642,22 @@
             }
         }
         
-        // Создание комнаты для урока
-        async function createRoomForLesson(lessonId, subjectName) {
-            if (!currentStudentData) return null;
-            
-            try {
-                // Создаем уникальный идентификатор комнаты
-                const conferenceId = currentStudentData.conference_id || Date.now().toString();
-                const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
-                const studentClass = currentStudentData.education_level || '5';
-                const roomName = `${studentClass}_class_${subjectName}_${studentName}_${conferenceId}_${lessonId}`;
-                
-                // Сохраняем данные ученика для комнаты
-                const response = await fetch('/api/room/register-student', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        room_id: roomName,
-                        student_data: currentStudentData,
-                        lesson_id: lessonId,
-                        subject: subjectName
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    return roomName;
-                } else {
-                    throw new Error(result.error || 'Ошибка создания комнаты');
-                }
-                
-            } catch (error) {
-                console.error('Error creating room:', error);
-                // Fallback: создаем простую комнату
-                const conferenceId = currentStudentData.conference_id || Date.now().toString();
-                const studentName = currentStudentData.name.replace(/\s+/g, '_').toLowerCase();
-                return `${subjectName}_${studentName}_${conferenceId}`;
-            }
-        }
-        
-        // Создание и открытие конференции
-        async function createAndOpenConference(subjectName) {
-            try {
-                const roomName = await createRoomForLesson('next', subjectName);
-                if (roomName) {
-                    openConference(roomName, subjectName);
-                }
-            } catch (error) {
-                console.error('Error creating conference:', error);
-                alert('Ошибка создания комнаты. Попробуйте снова.');
-            }
-        }
-        
-        // Открытие конференции
-        function openConference(roomName, subjectName, lessonId = null) {
-            let url = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
-            
-            if (lessonId) {
-                url += `&lesson_id=${encodeURIComponent(lessonId)}`;
-            }
-            
-            // Открываем в новом окне
-            const newWindow = window.open(url, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
-            
-            if (!newWindow) {
-                alert('Пожалуйста, разрешите всплывающие окна для открытия конференции');
-                // Fallback: открываем в этой же вкладке
-                window.location.href = url;
-            }
-        }
-        
         // Показать индикатор загрузки
         function showLoading(tab) {
-            document.getElementById(tab + 'Loading').style.display = 'block';
-            document.getElementById(tab + 'Container') && (document.getElementById(tab + 'Container').style.display = 'none');
+            const loadingElement = document.getElementById(tab + 'Loading');
+            const containerElement = document.getElementById(tab + 'Container');
+            
+            if (loadingElement) loadingElement.style.display = 'block';
+            if (containerElement) containerElement.style.display = 'none';
         }
         
         // Скрыть индикатор загрузки
         function hideLoading(tab) {
-            document.getElementById(tab + 'Loading').style.display = 'none';
-            document.getElementById(tab + 'Container') && (document.getElementById(tab + 'Container').style.display = 'block');
+            const loadingElement = document.getElementById(tab + 'Loading');
+            const containerElement = document.getElementById(tab + 'Container');
+            
+            if (loadingElement) loadingElement.style.display = 'none';
+            if (containerElement) containerElement.style.display = 'block';
         }
         
         // Инициализация Socket.io
