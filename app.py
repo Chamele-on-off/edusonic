@@ -3706,6 +3706,83 @@ def get_student_progress_api():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+# 🔥 ИСПРАВЛЕННЫЙ ЭНДПОИНТ ДЛЯ ЛИЧНОГО КАБИНЕТА
+@app.route('/api/student/progress/dashboard')
+@student_required
+def get_student_progress_dashboard():
+    """🔥 ИСПРАВЛЕННЫЙ: Получает прогресс ученика для личного кабинета"""
+    try:
+        user_data = load_user_data(session['user_id'])
+        if not user_data or not user_data.get('student_data'):
+            return jsonify({"success": False, "error": "Данные ученика не найдены"})
+        
+        student_id = user_data['student_data'].get('student_id')
+        student_class = user_data['student_data'].get('education_level', '5')
+        
+        if not student_id:
+            return jsonify({"success": False, "error": "Student ID not found"})
+        
+        progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
+        if not progress_file.exists():
+            # Создаем начальный прогресс
+            initialize_student_progress(student_id, student_class)
+        
+        with open(progress_file, 'r', encoding='utf-8') as f:
+            progress_data = json.load(f)
+        
+        lessons_by_subject = get_student_lessons_by_class(student_class)
+        
+        result = {
+            'student_id': student_id,
+            'student_class': student_class,
+            'student_name': user_data['student_data'].get('name', ''),
+            'subjects': {}
+        }
+        
+        for subject_name, lessons in lessons_by_subject.items():
+            subject_progress = progress_data.get("subjects", {}).get(subject_name, {
+                "completed_lessons": [],
+                "current_lesson": None,
+                "total_lessons": len(lessons),
+                "last_accessed": None,
+                "progress_percent": 0
+            })
+            
+            completed_count = len(subject_progress.get("completed_lessons", []))
+            total_lessons = len(lessons)
+            
+            # Ищем следующий урок
+            next_lesson = None
+            for lesson in lessons:
+                if lesson['id'] not in subject_progress.get("completed_lessons", []):
+                    next_lesson = lesson
+                    break
+            
+            result['subjects'][subject_name] = {
+                'total_lessons': total_lessons,
+                'completed_lessons': completed_count,
+                'progress_percent': int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0,
+                'last_updated': subject_progress.get("last_accessed"),
+                'current_lesson': subject_progress.get("current_lesson"),
+                'next_lesson': next_lesson,
+                'has_lessons': total_lessons > 0
+            }
+        
+        total_completed = sum(subj['completed_lessons'] for subj in result['subjects'].values())
+        total_lessons = sum(subj['total_lessons'] for subj in result['subjects'].values())
+        
+        result['overall'] = {
+            'total_lessons': total_lessons,
+            'completed_lessons': total_completed,
+            'progress_percent': int((total_completed / total_lessons) * 100) if total_lessons > 0 else 0,
+            'subjects_count': len(result['subjects'])
+        }
+        
+        return jsonify({"success": True, "progress": result})
+    except Exception as e:
+        debug_log(f"❌ Ошибка получения прогресса для дашборда: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route('/api/lessons/structure', methods=['GET'])
 @teacher_required
 def get_lessons_structure():
@@ -4566,7 +4643,7 @@ def test_student_flow():
         <script>
             function testOpenConference() {
                 const url = '/conference?room=test_room&student=true&subject=math&subject_name=Математика';
-                const newWindow = window.open(url, 'TestConference', 'width=1200,height=800');
+                const newWindow = window.open(url, 'TestConference', 'width=1200,height=800,scrollbars=yes,resizable=yes,toolbar=no,location=no,status=no');
                 if (!newWindow) {
                     alert('Окно заблокировано! Разрешите всплывающие окна.');
                 }
@@ -5324,6 +5401,7 @@ if __name__ == '__main__':
     debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена умная очистка текста")
     debug_log(f"🔧 Ленивая инициализация DialogueManager активирована")
     debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
+    debug_log(f"✅ ДОБАВЛЕН новый API /api/student/progress/dashboard для личного кабинета")
     
     socketio.run(
         app, 
