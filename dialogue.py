@@ -1,5 +1,5 @@
 # dialogue.py
-# Полный код с интеграцией технических предметов и исправленной SVG визуализацией
+# Полный код с исправленной логикой перехода к практике
 
 import json
 from pathlib import Path
@@ -688,7 +688,7 @@ class DialogueManager:
                 content = content.strip()
                 return content
         
-        # Для гуманитарных предметов - стандартная очистка
+        # Для гуманитарных предметы - стандартная очистка
         # Удаляем маркеры форматирования
         content = re.sub(r'[\*\#]{1,}', '', content)
         content = re.sub(r'\-\-\-+', '', content)
@@ -943,8 +943,8 @@ class DialogueManager:
     def _add_subject_suggestion(self, original_response: str) -> str:
         """Добавляет предложение выбора предмета к любому ответу ДО начала урока"""
         
-        # НИКОГДА не добавляем предложение выбора во время урока
-        if self.lesson_started:
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НИКОГДА не добавляем предложение выбора во время урока ИЛИ практики
+        if self.lesson_started or self.practice_active:
             return original_response
         
         # Если есть данные ученика и выбран предмет, не предлагаем выбор
@@ -1542,10 +1542,12 @@ class DialogueManager:
                 return next_paragraph
             else:
                 debug_log("🏁 Урок завершен по команде продолжения")
-                # ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ
+                # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НО НЕ СБРАСЫВАЕМ КОНТЕКСТ
                 if self.selected_lesson and self.has_student_data:
                     self.mark_lesson_completed(self.selected_lesson)
-                return "Урок завершен. Переходим к практике."
+                # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
+                practice_message = self._start_practice_session()
+                return practice_message
         
         self._add_to_conversation_history(text, is_user=True)
         
@@ -2205,6 +2207,10 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
+            # 🔥 ОБНОВЛЕНИЕ: Сбрасываем контекст практики тоже
+            if self.practice_active:
+                self._end_practice_session()
+            
             # ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
@@ -2217,15 +2223,7 @@ class DialogueManager:
 
     def _handle_practice_session(self, text: str) -> Optional[str]:
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
-            self.practice_active = False
-            self.waiting_for_answer = False
-            self.current_state = "greeting"
-            self.conversation_counter = 0
-            self.conversation_history = []
-            self.conversation_context = []
-            
-            if self.room_id:
-                self.socketio.emit('practice_ended', {'room_id': self.room_id})
+            self._end_practice_session()
             
             # ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
@@ -2264,23 +2262,31 @@ class DialogueManager:
             return paragraph
         else:
             debug_log("🏁 Урок завершен, запускаем практику")
-            # ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ
+            # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НО НЕ СБРАСЫВАЕМ КОНТЕКСТ
             if self.selected_lesson and self.has_student_data:
                 self.mark_lesson_completed(self.selected_lesson)
             
+            # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """Запускает фазу практики с асинхронной генерацией вопросов"""
-        self.lesson_started = False
+        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Запускает фазу практики НЕ сбрасывая контекст урока"""
+        self.lesson_started = False  # Урок прочитан
         self.current_state = "practice_session"
         self.practice_active = True
         self.waiting_for_answer = False
         self.current_question_index = 0  # СБРАСЫВАЕМ СЧЕТЧИК ВОПРОСОВ
         
         debug_log("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
+        debug_log(f"📊 КОНТЕКСТ СОХРАНЕН: subject={self.current_subject}, lesson={self.selected_lesson['title'] if self.selected_lesson else 'None'}")
         debug_log(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
+        
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НЕ СБРАСЫВАЕМ КОНТЕКСТ УРОКА!
+        # self.selected_lesson = None        # ← НЕ СБРАСЫВАЕМ!
+        # self.current_subject = None        # ← НЕ СБРАСЫВАЕМ!
+        # self.lesson_content = []           # ← НЕ СБРАСЫВАЕМ!
+        # self.current_paragraph = 0         # ← НЕ СБРАСЫВАЕМ!
         
         # ОБНОВЛЕНИЕ: Передаем данные ученика в менеджер практики
         if hasattr(self.practice_manager, 'student_data'):
@@ -2458,13 +2464,14 @@ class DialogueManager:
             return f"{feedback}. Практика завершена!"
 
     def _end_practice_session(self):
-        """Завершает сессию практики"""
+        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Завершает сессию практики и ТОЛЬКО ТОГДА сбрасывает контекст"""
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
         self.current_question_index = 0  # СБРАСЫВАЕМ СЧЕТЧИК
         self.practice_manager.stop_async_generation()
         
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сбрасываем контекст урока ТОЛЬКО ПОСЛЕ завершения практики
         self.lesson_started = False
         self.selected_lesson = None
         self.current_subject = None
@@ -2940,6 +2947,7 @@ class DialogueManager:
         for subject, lessons in self.lessons_by_class[student_class].items():
             # Сортируем уроки по номеру
             sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+            
             result[subject] = sorted_lessons
         
         return result
@@ -3352,7 +3360,7 @@ if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    debug_log("🧪 Тестирование DialogueManager с поддержкой технических предметов...")
+    debug_log("🧪 Тестирование DialogueManager с исправленной логикой перехода к практике...")
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
@@ -3365,4 +3373,4 @@ if __name__ == "__main__":
     response = dm.process_input("привет")
     debug_log(f"👋 Ответ на приветствие: {response[:100]}...")
     
-    debug_log("✅ Тестирование завершено! Ленивая инициализация и техническая поддержка работают правильно.")
+    debug_log("✅ Тестирование завершено! Логика перехода к практике исправлена.")
