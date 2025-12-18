@@ -1719,9 +1719,9 @@ class DialogueManager:
             return 'french'
         elif 'немецкий' in subject_lower or 'german' in subject_lower:
             return 'german'
-        elif 'испанский' в subject_lower or 'spanish' in subject_lower:
+        elif 'испанский' in subject_lower or 'spanish' in subject_lower:
             return 'spanish'
-        elif 'китайский' в subject_lower or 'chinese' in subject_lower:
+        elif 'китайский' in subject_lower or 'chinese' in subject_lower:
             return 'chinese'
         elif 'итальянский' in subject_lower or 'italian' in subject_lower:
             return 'italian'
