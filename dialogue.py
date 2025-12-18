@@ -1,5 +1,5 @@
 # dialogue.py
-# Полный код с исправленной логикой перехода к практике
+# НОВАЯ ВЕРСИЯ со СТАРОЙ ЛОГИКОЙ ПРАКТИКИ
 
 import json
 from pathlib import Path
@@ -136,8 +136,8 @@ class DialogueManager:
         self._llm_lock = threading.Lock()
         self._lessons_loaded = False
         self._lessons_lock = threading.Lock()
-        self._dialogue_knowledge = None  # ← ИЗМЕНЕНИЕ: не загружаем сразу!
-        self._dialogue_knowledge_lock = threading.Lock()  # ← ДОБАВЛЕНО
+        self._dialogue_knowledge = None
+        self._dialogue_knowledge_lock = threading.Lock()
         self.knowledge_base = None
         
         # Простые поля
@@ -1601,7 +1601,7 @@ class DialogueManager:
         # РАСШИРЕННЫЙ СПИСОК КОМАНД ПРОДОЛЖЕНИЯ
         continue_commands = [
             "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
-            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
+            "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", " ладно", "ясно",
             "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
         ]
 
@@ -2240,7 +2240,7 @@ class DialogueManager:
 
 Это демонстрационный урок. В реальной системе здесь был бы полноценный учебный материал.
 
-Для доступа ко всех функциям системы зарегистрируйтесь как ученик!"""
+Для доступа ко всех функции системы зарегистрируйтесь как ученик!"""
         
         with open(lesson_path, 'w', encoding='utf-8') as f:
             f.write(demo_content)
@@ -2568,34 +2568,27 @@ class DialogueManager:
             return f"{feedback}. Практика завершена!"
 
     def _end_practice_session(self):
-        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Завершает сессию практики и ТОЛЬКО ТОГДА сбрасывает контекст"""
+        """🔥 СТАРАЯ ЛОГИКА ПРАКТИКИ: Завершает сессию практики и НЕ сбрасывает контекст"""
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
         self.current_question_index = 0  # СБРАСЫВАЕМ СЧЕТЧИК
-        self.practice_manager.stop_async_generation()
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сбрасываем контекст урока ТОЛЬКО ПОСЛЕ завершения практики
-        self.lesson_started = False
-        self.selected_lesson = None
-        self.current_subject = None
-        self.lesson_content = []
-        self.current_paragraph = 0
+        # 🔥 ВАЖНО: В старой версии мы НЕ сбрасываем данные урока и предмета
+        # Они остаются доступными для продолжения
+        # self.lesson_started = False    # ← НЕ сбрасываем!
+        # self.selected_lesson = None    # ← НЕ сбрасываем!
+        # self.current_subject = None    # ← НЕ сбрасываем!
+        # self.lesson_content = []       # ← НЕ сбрасываем!
+        # self.current_paragraph = 0     # ← НЕ сбрасываем!
         
-        # 🔥 СБРАСЫВАЕМ НАСТРОЙКИ ТИПОВ ПРЕДМЕТОВ
-        self.is_technical_subject = False
-        self.subject_type = "general"
-        self.technical_symbols_preserved = False
-        
-        # СБРАСЫВАЕМ ЯЗЫКОВЫЕ НАСТРОЙКИ
-        self.is_language_subject = False
-        self.target_language = 'english'
-        self.language_level = 'beginner'
-        self.bilingual_ratio = 0.3
+        # Останавливаем генерацию вопросов
+        if hasattr(self.practice_manager, 'stop_async_generation'):
+            self.practice_manager.stop_async_generation()
         
         if self.room_id:
             self.socketio.emit('practice_ended', {'room_id': self.room_id})
-        debug_log("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА ===")
+        debug_log("=== 🏁 ПРАКТИКА ЗАВЕРШЕНА (СТАРАЯ ЛОГИКА) ===")
 
     def handle_question_during_lesson(self, question: str) -> str:
         """ОБНОВЛЕННЫЙ: Обработка вопросов ученика во время урока с КОНТЕКСТУАЛЬНЫМ АНАЛИЗОМ"""
@@ -2697,7 +2690,7 @@ class DialogueManager:
             if not final_response and self.knowledge_base:
                 llm_answer = self.knowledge_base.find_llm_answer(question, threshold=0.8)
                 if llm_answer:
-                    debug_log(f"💾 Использован сохраненный ответ LLM для вопроса: {question}")
+                    debug_log(f"💾 Использован сохраненный ответ LLМ для вопроса: {question}")
                     final_response = llm_answer
             
             if not final_response:
