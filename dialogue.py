@@ -1131,7 +1131,7 @@ class DialogueManager:
                     debug_log("🎯 В сгенерированном уроке обнаружены формулы")
                     self.technical_symbols_preserved = True
             
-            # Убедимся, что есть правильное разделение на абзацы
+            # Убедимся, что есть правильное разделение на абзацев
             if '\n\n' not in lesson_content:
                 debug_log("⚠️ В ответе нет двойных переводов строк, добавляем...")
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
@@ -1935,6 +1935,65 @@ class DialogueManager:
         
         return response
 
+    def start_lesson_for_student_with_ready(self):
+        """НОВЫЙ МЕТОД: Явно начинает урок для ученика когда все готово"""
+        if not self.has_student_data or not self.current_subject:
+            debug_log("❌ Нет данных ученика или предмета")
+            return None
+        
+        debug_log(f"🚀 Явный старт урока для ученика: {self.current_subject}")
+        
+        # 1. Получаем следующий урок
+        next_lesson = self.get_next_lesson_for_student(self.current_subject)
+        
+        if not next_lesson:
+            # Если нет следующего урока, берем первый
+            available_lessons = self.get_lessons_for_student_subject(self.current_subject)
+            if not available_lessons:
+                return f"У меня нет уроков по {self.current_subject} для твоего класса."
+            next_lesson = available_lessons[0]
+        
+        debug_log(f"🎯 Найден урок: {next_lesson['title']}")
+        
+        # 2. Устанавливаем урок
+        self.selected_lesson = next_lesson
+        self.lesson_started = True
+        self.current_state = "lesson_reading"
+        
+        # 3. Определяем тип предмета
+        self._determine_subject_type()
+        
+        # 4. Загружаем содержание
+        self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
+        self.current_paragraph = 0
+        
+        if not self.lesson_content:
+            return "Ошибка загрузки урока."
+        
+        # 5. Инициализируем базу знаний
+        if self.current_subject:
+            from knowledge.knowledge_base import KnowledgeBase
+            self.knowledge_base = KnowledgeBase(self.current_subject)
+        
+        # 6. Очищаем историю
+        self.conversation_history = []
+        self.conversation_context = []
+        
+        # 7. Обновляем прогресс ученика
+        student_id = self.student_data.get('student_id')
+        if student_id:
+            self.save_student_progress(
+                next_lesson['id'],
+                next_lesson['subject'],
+                completed=False
+            )
+        
+        # 8. Возвращаем первый абзац
+        first_paragraph = self._get_next_paragraph()
+        
+        student_name = self.student_data.get('name', 'ученик')
+        return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
+
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
         self.current_subject = subject
@@ -2394,11 +2453,11 @@ class DialogueManager:
             self._end_practice_session()
             return "Практика завершена."
         
-        # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ
+        # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ ПЕРЕД ПРОВЕРКОЙ ЛИМИТА
         self.current_question_index += 1
         debug_log(f"📊 Текущий номер вопроса: {self.current_question_index}/{self.max_questions}")
         
-        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ ДО ГЕНЕРАЦИИ СЛЕДУЮЩЕГО
         if self.current_question_index >= self.max_questions:
             debug_log(f"🏁 Достигнут лимит вопросов: {self.current_question_index}/{self.max_questions}")
             self._end_practice_session()
@@ -2407,9 +2466,9 @@ class DialogueManager:
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
-                return f"{name_prefix}Отлично! Ты ответил на все вопросы практики. Урок завершен!"
+                return f"{name_prefix}Отлично! Ты ответил на все {self.max_questions} вопросов практики. Урок завершен!"
             else:
-                return "Отлично! Вы ответили на все вопросы практики. Урок завершен!"
+                return f"Отлично! Вы ответили на все {self.max_questions} вопросов практики. Урок завершен!"
         
         # 🔥 ИСПОЛЬЗУЕМ РАЗНЫЕ МЕТОДЫ ДЛЯ РАЗНЫХ ТИПОВ ПРЕДМЕТОВ
         feedback = None
@@ -3295,65 +3354,6 @@ class DialogueManager:
                 })
         
         return result
-
-    def start_lesson_for_student_with_ready(self):
-        """НОВЫЙ МЕТОД: Явно начинает урок для ученика когда все готово"""
-        if not self.has_student_data or not self.current_subject:
-            debug_log("❌ Нет данных ученика или предмета")
-            return None
-        
-        debug_log(f"🚀 Явный старт урока для ученика: {self.current_subject}")
-        
-        # 1. Получаем следующий урок
-        next_lesson = self.get_next_lesson_for_student(self.current_subject)
-        
-        if not next_lesson:
-            # Если нет следующего урока, берем первый
-            available_lessons = self.get_lessons_for_student_subject(self.current_subject)
-            if not available_lessons:
-                return f"У меня нет уроков по {self.current_subject} для твоего класса."
-            next_lesson = available_lessons[0]
-        
-        debug_log(f"🎯 Найден урок: {next_lesson['title']}")
-        
-        # 2. Устанавливаем урок
-        self.selected_lesson = next_lesson
-        self.lesson_started = True
-        self.current_state = "lesson_reading"
-        
-        # 3. Определяем тип предмета
-        self._determine_subject_type()
-        
-        # 4. Загружаем содержание
-        self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
-        self.current_paragraph = 0
-        
-        if not self.lesson_content:
-            return "Ошибка загрузки урока."
-        
-        # 5. Инициализируем базу знаний
-        if self.current_subject:
-            from knowledge.knowledge_base import KnowledgeBase
-            self.knowledge_base = KnowledgeBase(self.current_subject)
-        
-        # 6. Очищаем историю
-        self.conversation_history = []
-        self.conversation_context = []
-        
-        # 7. Обновляем прогресс ученика
-        student_id = self.student_data.get('student_id')
-        if student_id:
-            self.save_student_progress(
-                next_lesson['id'],
-                next_lesson['subject'],
-                completed=False
-            )
-        
-        # 8. Возвращаем первый абзац
-        first_paragraph = self._get_next_paragraph()
-        
-        student_name = self.student_data.get('name', 'ученик')
-        return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
 
 # Тестирование
 if __name__ == "__main__":
