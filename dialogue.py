@@ -1,5 +1,5 @@
 # dialogue.py
-# НОВАЯ ВЕРСИЯ со СТАРОЙ ЛОГИКОЙ ПРАКТИКИ
+# ИСПРАВЛЕННАЯ ВЕРСИЯ с полной ленивой инициализацией
 
 import json
 from pathlib import Path
@@ -103,8 +103,8 @@ class DialogueManager:
     def __init__(self, socketio):
         self.socketio = socketio
         
-        # 🔥 ОЧЕНЬ ВАЖНО: ИНИЦИАЛИЗАЦИЯ ТОЛЬКО ПРОСТЫХ ПОЛЕЙ
-        # Без диска, без LLM, без парсинга файлов
+        # 🔥 КРИТИЧЕСКО ВАЖНО: ПОЛНОСТЬЮ ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ
+        # НИКАКИХ операций с диском, парсинга файлов, инициализации LLM
         
         # Базовые поля состояния
         self.dialogue_states = {
@@ -224,9 +224,6 @@ class DialogueManager:
         self.subject_type = "general"  # "technical", "natural_science", "language", "humanitarian"
         self.technical_symbols_preserved = False
         
-        # 🔥 ВАЖНО: НЕ ЗАГРУЖАЕМ УРОКИ И НЕ ИНИЦИАЛИЗИРУЕМ LLM В __init__
-        # ВСЁ будет загружено лениво при первом обращении
-        
         # Локальные шаблоны (маленькие, можно оставить в памяти)
         self.local_patterns = {
             "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
@@ -248,7 +245,7 @@ class DialogueManager:
                                "Моя задача - помочь вам учиться с удовольствием и пониманием."]
         }
         
-        debug_log(f"✅ DialogueManager создан за <1 мс (ленивая инициализация)")
+        debug_log(f"✅ DialogueManager создан за <1 мс (полностью ленивая инициализация)")
 
     # 🔥 ЛЕНИВЫЕ СВОЙСТВА
     @property
@@ -1479,8 +1476,8 @@ class DialogueManager:
 
     def process_input(self, text: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
-        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ УРОКИ ПРИ ПЕРВОМ ИСПОЛЬЗОВАНИИ
-        self._ensure_lessons_loaded()
+        # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ УРОКИ ТОЛЬКО ПРИ НЕОБХОДИМОСТИ
+        # self._ensure_lessons_loaded() - НЕ ЗАГРУЖАЕМ ЗДЕСЬ!
         
         text_lower = text.lower().strip()
         
@@ -1722,9 +1719,9 @@ class DialogueManager:
             return 'french'
         elif 'немецкий' in subject_lower or 'german' in subject_lower:
             return 'german'
-        elif 'испанский' in subject_lower or 'spanish' in subject_lower:
+        elif 'испанский' в subject_lower or 'spanish' in subject_lower:
             return 'spanish'
-        elif 'китайский' in subject_lower or 'chinese' in subject_lower:
+        elif 'китайский' в subject_lower or 'chinese' in subject_lower:
             return 'chinese'
         elif 'итальянский' in subject_lower or 'italian' in subject_lower:
             return 'italian'
@@ -2214,6 +2211,10 @@ class DialogueManager:
 
     def _get_available_lessons(self, subject: str) -> List[dict]:
         """ВОЗВРАЩАЕТ УРОКИ В ЗАВИСИМОСТИ ОТ НАЛИЧИЯ ДАННЫХ УЧЕНИКА"""
+        # 🔥 ЛЕНИВАЯ ЗАГРУЗКА: загружаем уроки только при первом обращении
+        if self._lessons is None:
+            self._ensure_lessons_loaded()
+            
         all_lessons = self.lessons.get(subject, [])
         
         if self.has_student_data:
@@ -2274,7 +2275,7 @@ class DialogueManager:
                 level = self.student_data.get('education_level', '5')
                 
                 personalized_greetings = [
-                    f"Привет, {student_name}! Я твой виртуальный учитель. Очень рад тебя видеть! Ты в {level} классе, тебе {age} лет - это прекрасный возраст для учебы!",
+                    f"Привет, {student_name}! Я твой виртуальный учитель. Очень рад тебя видеть! Ты в {level} классе, это прекрасный возраст для учебы!",
                     f"Здравствуй, {student_name}! Я твой AI-репетитор. Вижу, ты учишься в {level} классе. Готов помочь тебе с учебой!",
                     f"Привет, {student_name}! Я твой цифровой преподаватель. {age} лет - отличный возраст для новых открытий! Давай сделаем обучение интересным!",
                     f"Здравствуй, {student_name}! Я твой персональный учитель. Рад познакомиться с учеником {level} класса! Готов к увлекательному уроку?"
@@ -2296,7 +2297,7 @@ class DialogueManager:
             self.current_state = "greeting"
             return "Хорошо, начнем сначала. Скажите привет чтобы продолжить."
             
-        if any(word in text for word in ["да", "ага", 'угу', "ладно", "хорошо"]):
+        if any(word in text for word in ["да", "ага", 'угу', " ладно", "хорошо"]):
             prompt = self._get_subject_selection_prompt()
             return prompt if prompt else "Отлично! Какой предмет вас заинтересовал? Назовите его пожалуйста."
             
@@ -2366,7 +2367,7 @@ class DialogueManager:
             return paragraph
         else:
             debug_log("🏁 Урок завершен, запускаем практику")
-            # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НО НЕ СБРАСЫВАЕМ КОНТЕКСТ
+            # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НЕ СБРАСЫВАЕМ КОНТЕКСТ
             if self.selected_lesson and self.has_student_data:
                 self.mark_lesson_completed(self.selected_lesson)
             
@@ -2396,31 +2397,21 @@ class DialogueManager:
         if hasattr(self.practice_manager, 'student_data'):
             self.practice_manager.student_data = self.student_data
         
-        # 🔥 ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ: устанавливаем специальные настройки
-        if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
-            debug_log(f"🎯 Запускаем техническую практику для: {self.current_subject}")
-            # Используем технические промпты
-            lesson_context = " ".join(self.lesson_content)
-            self.practice_manager.initialize_technical_practice(
-                lesson_context=lesson_context,
-                subject=self.current_subject,
-                subject_type=self.subject_type,
-                level=self.student_data.get('education_level', '5') if self.has_student_data else '5'
-            )
-        # ДЛЯ ЯЗЫКОВЫХ ПРЕДМЕТОВ: устанавливаем специальные настройки
-        elif self.is_language_subject and hasattr(self.practice_manager, 'initialize_language_practice'):
-            lesson_context = " ".join(self.lesson_content)
-            self.practice_manager.initialize_language_practice(
-                lesson_context=lesson_context,
-                subject=self.current_subject,
-                target_language=self.target_language,
-                level=self.language_level
-            )
-            debug_log(f"🎯 Запущена языковая практика: {self.target_language}, уровень {self.language_level}")
-        else:
-            # Стандартная инициализация практики
-            lesson_context = " ".join(self.lesson_content)
-            self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
+        # 🔥 ИСПРАВЛЕНИЕ: УНИФИЦИРОВАННАЯ ЛОГИКА ПРАКТИКИ ДЛЯ ВСЕХ ПРЕДМЕТОВ
+        lesson_context = " ".join(self.lesson_content)
+        debug_log(f"🎯 Запускаем унифицированную практику для: {self.current_subject}")
+        
+        # 🔥 ИСПРАВЛЕНИЕ: Всегда используем стандартную инициализацию практики
+        # Без разделения на технические/гуманитарные
+        self.practice_manager.initialize_practice_generation(lesson_context, self.current_subject)
+        
+        # 🔥 Установка флагов для менеджера практики (для адаптации промптов)
+        if hasattr(self.practice_manager, 'is_technical_subject'):
+            self.practice_manager.is_technical_subject = self.is_technical_subject
+        if hasattr(self.practice_manager, 'subject_type'):
+            self.practice_manager.subject_type = self.subject_type
+        if hasattr(self.practice_manager, 'student_data'):
+            self.practice_manager.student_data = self.student_data
         
         # Уведомляем клиентов о начале практики
         if self.room_id:
@@ -2430,15 +2421,9 @@ class DialogueManager:
                 'subject_type': self.subject_type
             })
         
-        # ПОЛУЧАЕМ ПЕРВЫЙ ВОПРОС ИЗ ОЧЕРЕДИ
-        debug_log("🔄 Получение первого вопроса практики...")
-        
-        # 🔥 ИСПОЛЬЗУЕМ РАЗНЫЕ МЕТОДЫ ДЛЯ РАЗНЫХ ТИПОВ ПРЕДМЕТОВ
-        first_question = None
-        if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
-            first_question = self.practice_manager.generate_technical_question()
-        else:
-            first_question = self.practice_manager.get_next_question()
+        # 🔥 ИСПРАВЛЕНИЕ: ВСЕГДА используем get_next_question() для всех предметов
+        debug_log("🔄 Получение первого вопроса практики через get_next_question()...")
+        first_question = self.practice_manager.get_next_question()
         
         if first_question:
             debug_log(f"✅ Первый вопрос получен: {first_question}")
@@ -2515,27 +2500,11 @@ class DialogueManager:
             else:
                 return f"Отлично! Вы ответили на все {self.max_questions} вопросов практики. Урок завершен!"
         
-        # 🔥 ИСПОЛЬЗУЕМ РАЗНЫЕ МЕТОДЫ ДЛЯ РАЗНЫХ ТИПОВ ПРЕДМЕТОВ
-        feedback = None
-        next_question = None
-        
-        if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
-            # Для технических предметов используем специальный метод
-            feedback, next_question = self.practice_manager.evaluate_technical_answer(
-                student_answer, 
-                current_question["question"],
-                subject_type=self.subject_type
-            )
-        elif self.is_language_subject and hasattr(self.practice_manager, 'evaluate_language_answer'):
-            # Для языковых предметов
-            feedback = self.practice_manager.evaluate_language_answer(student_answer, current_question["question"])
-            next_question = self.practice_manager.get_next_question()
-        else:
-            # Стандартный метод
-            feedback, next_question = self.practice_manager.evaluate_and_continue(
-                student_answer, 
-                current_question["question"]
-            )
+        # 🔥 ИСПРАВЛЕНИЕ: ВСЕГДА используем evaluate_and_continue для всех предметов
+        feedback, next_question = self.practice_manager.evaluate_and_continue(
+            student_answer, 
+            current_question["question"]
+        )
         
         # АДАПТИРУЕМ ОБРАТНУЮ СВЯЗЬ ДЛЯ УЧЕНИКА
         if self.has_student_data:
@@ -2756,7 +2725,7 @@ class DialogueManager:
         self.subject_type = "general"
         self.technical_symbols_preserved = False
         
-        # СБРОС ЯЗЫКОВЫХ НАСТРОЙКИ
+        # СБРОС ЯЗЫКОВЫХ НАСТРОЕК
         self.is_language_subject = False
         self.target_language = 'english'
         self.language_level = 'beginner'
@@ -2764,8 +2733,10 @@ class DialogueManager:
 
     def get_available_subjects(self) -> List[str]:
         """ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
-        # 🔥 ВАЖНО: Загружаем уроки при первом обращении
-        self._ensure_lessons_loaded()
+        # 🔥 ВАЖНО: Загружаем уроки ТОЛЬКО при первом обращении
+        # НЕ загружаем в set_student_data или __init__
+        if self._lessons is None:
+            self._ensure_lessons_loaded()
         
         # ДЛЯ УЧЕНИКА: предметы его класса
         if self.has_student_data and self.student_data.get('education_level'):
@@ -2794,6 +2765,10 @@ class DialogueManager:
         student_class = self.student_data.get('education_level', '5')
         
         debug_log(f"🔥 Поиск уроков: класс {student_class}, предмет '{subject}'")
+        
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЛЕНИВАЯ ЗАГРУЗКА УРОКОВ
+        if self._lessons is None:
+            self._ensure_lessons_loaded()
         
         # Способ 1: Через lessons_by_class
         if student_class in self.lessons_by_class:
@@ -3019,7 +2994,7 @@ class DialogueManager:
                 json.dump(progress_data, f, ensure_ascii=False, indent=2)
             debug_log(f"✅ Прогресс сохранен: {lesson_id} по предмету {subject}")
         except Exception as e:
-            debug_log(f"❌ Ошибка сохранения прогресса: {e}")
+            debug_log(f"❌ Ошибка сохранения прогресс: {e}")
 
     def mark_lesson_completed(self, lesson_data: Dict):
         """НОВЫЙ МЕТОД: Помечает урок как завершенный"""
@@ -3037,6 +3012,11 @@ class DialogueManager:
             return {}
         
         student_class = self.student_data.get('education_level', '5')
+        
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЛЕНИВАЯ ЗАГРУЗКА
+        if self._lessons is None:
+            self._ensure_lessons_loaded()
+            
         if student_class not in self.lessons_by_class:
             return {}
         
@@ -3070,7 +3050,7 @@ class DialogueManager:
         debug_log(f"🔧 Установлен room_id для DialogueManager: {room_id}")
 
     def set_student_data(self, student_data: dict):
-        """ПРОСТО УСТАНАВЛИВАЕМ ДАННЫЕ УЧЕНИКА"""
+        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Устанавливаем данные ученика БЕЗ загрузки уроков"""
         self.student_data = student_data
         self.has_student_data = bool(student_data)
         
@@ -3079,16 +3059,9 @@ class DialogueManager:
             student_class = student_data.get('education_level', 'неизвестно')
             debug_log(f"🎓 Установлены данные ученика: {student_name} ({student_class} класс)")
             
-            # НОВОЕ: Загружаем прогресс ученика при установке данных
-            self._load_student_progress()
-
-    def _load_student_progress(self):
-        """Загружает прогресс ученика"""
-        if not self.has_student_data:
-            return
-        
-        # Прогресс загружается лениво при вызове get_student_progress
-        debug_log(f"📊 Прогресс ученика будет загружен при необходимости")
+            # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: НЕ загружаем уроки здесь!
+            # Прогресс загружается лениво при вызове get_student_progress
+            debug_log(f"📊 Прогресс ученика будет загружен при необходимости (лениво)")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
@@ -3118,24 +3091,11 @@ class DialogueManager:
             self._determine_subject_type()
             
             # Инициализируем менеджер практики
-            if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
-                self.practice_manager.initialize_technical_practice(
-                    lesson_context=lesson_context,
-                    subject=subject,
-                    subject_type=self.subject_type,
-                    level=self.student_data.get('education_level', '5') if self.has_student_data else '5'
-                )
-            else:
-                self.practice_manager.initialize_practice_generation(lesson_context, subject)
+            self.practice_manager.initialize_practice_generation(lesson_context, subject)
             
             # Получаем первый вопрос
             debug_log("🔄 Получение первого вопроса практики...")
-            first_question = None
-            
-            if TECHNICAL_PROMPTS_ENABLED and self.is_technical_subject:
-                first_question = self.practice_manager.generate_technical_question()
-            else:
-                first_question = self.practice_manager.get_next_question()
+            first_question = self.practice_manager.get_next_question()
             
             if first_question:
                 self.waiting_for_answer = True
@@ -3242,7 +3202,7 @@ class DialogueManager:
             "has_student_data": self.has_student_data,
             "student_data": self.student_data,
             # НОВОЕ: Информация о структуре уроков
-            "available_classes": list(self.lessons_by_class.keys()),
+            "available_classes": list(self.lessons_by_class.keys()) if self._lessons_by_class else [],
             "student_class_lessons": self.get_available_subjects_for_student(),
             "student_progress": student_progress,
             "next_lesson": self.get_next_lesson_for_student(self.current_subject) if self.current_subject else None,
