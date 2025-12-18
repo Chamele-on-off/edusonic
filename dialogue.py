@@ -1,5 +1,5 @@
 # dialogue.py
-# Полный код с исправленной логикой перехода к практике
+# Полный код с интеграцией технических предметов и исправленной SVG визуализацией
 
 import json
 from pathlib import Path
@@ -688,7 +688,7 @@ class DialogueManager:
                 content = content.strip()
                 return content
         
-        # Для гуманитарных предметы - стандартная очистка
+        # Для гуманитарных предметов - стандартная очистка
         # Удаляем маркеры форматирования
         content = re.sub(r'[\*\#]{1,}', '', content)
         content = re.sub(r'\-\-\-+', '', content)
@@ -943,8 +943,8 @@ class DialogueManager:
     def _add_subject_suggestion(self, original_response: str) -> str:
         """Добавляет предложение выбора предмета к любому ответу ДО начала урока"""
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НИКОГДА не добавляем предложение выбора во время урока ИЛИ практики
-        if self.lesson_started or self.practice_active:
+        # НИКОГДА не добавляем предложение выбора во время урока
+        if self.lesson_started:
             return original_response
         
         # Если есть данные ученика и выбран предмет, не предлагаем выбор
@@ -1131,7 +1131,7 @@ class DialogueManager:
                     debug_log("🎯 В сгенерированном уроке обнаружены формулы")
                     self.technical_symbols_preserved = True
             
-            # Убедимся, что есть правильное разделение на абзацев
+            # Убедимся, что есть правильное разделение на абзацы
             if '\n\n' not in lesson_content:
                 debug_log("⚠️ В ответе нет двойных переводов строк, добавляем...")
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
@@ -1542,12 +1542,10 @@ class DialogueManager:
                 return next_paragraph
             else:
                 debug_log("🏁 Урок завершен по команде продолжения")
-                # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НО НЕ СБРАСЫВАЕМ КОНТЕКСТ
+                # ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ
                 if self.selected_lesson and self.has_student_data:
                     self.mark_lesson_completed(self.selected_lesson)
-                # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
-                practice_message = self._start_practice_session()
-                return practice_message
+                return "Урок завершен. Переходим к практике."
         
         self._add_to_conversation_history(text, is_user=True)
         
@@ -1935,65 +1933,6 @@ class DialogueManager:
         
         return response
 
-    def start_lesson_for_student_with_ready(self):
-        """НОВЫЙ МЕТОД: Явно начинает урок для ученика когда все готово"""
-        if not self.has_student_data or not self.current_subject:
-            debug_log("❌ Нет данных ученика или предмета")
-            return None
-        
-        debug_log(f"🚀 Явный старт урока для ученика: {self.current_subject}")
-        
-        # 1. Получаем следующий урок
-        next_lesson = self.get_next_lesson_for_student(self.current_subject)
-        
-        if not next_lesson:
-            # Если нет следующего урока, берем первый
-            available_lessons = self.get_lessons_for_student_subject(self.current_subject)
-            if not available_lessons:
-                return f"У меня нет уроков по {self.current_subject} для твоего класса."
-            next_lesson = available_lessons[0]
-        
-        debug_log(f"🎯 Найден урок: {next_lesson['title']}")
-        
-        # 2. Устанавливаем урок
-        self.selected_lesson = next_lesson
-        self.lesson_started = True
-        self.current_state = "lesson_reading"
-        
-        # 3. Определяем тип предмета
-        self._determine_subject_type()
-        
-        # 4. Загружаем содержание
-        self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
-        self.current_paragraph = 0
-        
-        if not self.lesson_content:
-            return "Ошибка загрузки урока."
-        
-        # 5. Инициализируем базу знаний
-        if self.current_subject:
-            from knowledge.knowledge_base import KnowledgeBase
-            self.knowledge_base = KnowledgeBase(self.current_subject)
-        
-        # 6. Очищаем историю
-        self.conversation_history = []
-        self.conversation_context = []
-        
-        # 7. Обновляем прогресс ученика
-        student_id = self.student_data.get('student_id')
-        if student_id:
-            self.save_student_progress(
-                next_lesson['id'],
-                next_lesson['subject'],
-                completed=False
-            )
-        
-        # 8. Возвращаем первый абзац
-        first_paragraph = self._get_next_paragraph()
-        
-        student_name = self.student_data.get('name', 'ученик')
-        return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
-
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
         self.current_subject = subject
@@ -2266,10 +2205,6 @@ class DialogueManager:
             self.conversation_history = []
             self.conversation_context = []
             
-            # 🔥 ОБНОВЛЕНИЕ: Сбрасываем контекст практики тоже
-            if self.practice_active:
-                self._end_practice_session()
-            
             # ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
@@ -2282,7 +2217,15 @@ class DialogueManager:
 
     def _handle_practice_session(self, text: str) -> Optional[str]:
         if any(word in text for word in ["стоп", "останови", "хватит", "закончи"]):
-            self._end_practice_session()
+            self.practice_active = False
+            self.waiting_for_answer = False
+            self.current_state = "greeting"
+            self.conversation_counter = 0
+            self.conversation_history = []
+            self.conversation_context = []
+            
+            if self.room_id:
+                self.socketio.emit('practice_ended', {'room_id': self.room_id})
             
             # ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
@@ -2321,31 +2264,23 @@ class DialogueManager:
             return paragraph
         else:
             debug_log("🏁 Урок завершен, запускаем практику")
-            # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НО НЕ СБРАСЫВАЕМ КОНТЕКСТ
+            # ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ
             if self.selected_lesson and self.has_student_data:
                 self.mark_lesson_completed(self.selected_lesson)
             
-            # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
             return practice_message
 
     def _start_practice_session(self) -> str:
-        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Запускает фазу практики НЕ сбрасывая контекст урока"""
-        self.lesson_started = False  # Урок прочитан
+        """Запускает фазу практики с асинхронной генерацией вопросов"""
+        self.lesson_started = False
         self.current_state = "practice_session"
         self.practice_active = True
         self.waiting_for_answer = False
         self.current_question_index = 0  # СБРАСЫВАЕМ СЧЕТЧИК ВОПРОСОВ
         
         debug_log("=== ЗАПУСК ФАЗЫ ПРАКТИКИ ===")
-        debug_log(f"📊 КОНТЕКСТ СОХРАНЕН: subject={self.current_subject}, lesson={self.selected_lesson['title'] if self.selected_lesson else 'None'}")
         debug_log(f"practice_active: {self.practice_active}, waiting_for_answer: {self.waiting_for_answer}")
-        
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: НЕ СБРАСЫВАЕМ КОНТЕКСТ УРОКА!
-        # self.selected_lesson = None        # ← НЕ СБРАСЫВАЕМ!
-        # self.current_subject = None        # ← НЕ СБРАСЫВАЕМ!
-        # self.lesson_content = []           # ← НЕ СБРАСЫВАЕМ!
-        # self.current_paragraph = 0         # ← НЕ СБРАСЫВАЕМ!
         
         # ОБНОВЛЕНИЕ: Передаем данные ученика в менеджер практики
         if hasattr(self.practice_manager, 'student_data'):
@@ -2453,11 +2388,11 @@ class DialogueManager:
             self._end_practice_session()
             return "Практика завершена."
         
-        # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ ПЕРЕД ПРОВЕРКОЙ ЛИМИТА
+        # УВЕЛИЧИВАЕМ СЧЕТЧИК ОТВЕТОВ
         self.current_question_index += 1
         debug_log(f"📊 Текущий номер вопроса: {self.current_question_index}/{self.max_questions}")
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ ДО ГЕНЕРАЦИИ СЛЕДУЮЩЕГО
+        # ПРОВЕРЯЕМ ЛИМИТ ВОПРОСОВ
         if self.current_question_index >= self.max_questions:
             debug_log(f"🏁 Достигнут лимит вопросов: {self.current_question_index}/{self.max_questions}")
             self._end_practice_session()
@@ -2466,9 +2401,9 @@ class DialogueManager:
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
-                return f"{name_prefix}Отлично! Ты ответил на все {self.max_questions} вопросов практики. Урок завершен!"
+                return f"{name_prefix}Отлично! Ты ответил на все вопросы практики. Урок завершен!"
             else:
-                return f"Отлично! Вы ответили на все {self.max_questions} вопросов практики. Урок завершен!"
+                return "Отлично! Вы ответили на все вопросы практики. Урок завершен!"
         
         # 🔥 ИСПОЛЬЗУЕМ РАЗНЫЕ МЕТОДЫ ДЛЯ РАЗНЫХ ТИПОВ ПРЕДМЕТОВ
         feedback = None
@@ -2523,14 +2458,13 @@ class DialogueManager:
             return f"{feedback}. Практика завершена!"
 
     def _end_practice_session(self):
-        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Завершает сессию практики и ТОЛЬКО ТОГДА сбрасывает контекст"""
+        """Завершает сессию практики"""
         self.practice_active = False
         self.waiting_for_answer = False
         self.current_state = "greeting"
         self.current_question_index = 0  # СБРАСЫВАЕМ СЧЕТЧИК
         self.practice_manager.stop_async_generation()
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сбрасываем контекст урока ТОЛЬКО ПОСЛЕ завершения практики
         self.lesson_started = False
         self.selected_lesson = None
         self.current_subject = None
@@ -3006,7 +2940,6 @@ class DialogueManager:
         for subject, lessons in self.lessons_by_class[student_class].items():
             # Сортируем уроки по номеру
             sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
-            
             result[subject] = sorted_lessons
         
         return result
@@ -3355,12 +3288,71 @@ class DialogueManager:
         
         return result
 
+    def start_lesson_for_student_with_ready(self):
+        """НОВЫЙ МЕТОД: Явно начинает урок для ученика когда все готово"""
+        if not self.has_student_data or not self.current_subject:
+            debug_log("❌ Нет данных ученика или предмета")
+            return None
+        
+        debug_log(f"🚀 Явный старт урока для ученика: {self.current_subject}")
+        
+        # 1. Получаем следующий урок
+        next_lesson = self.get_next_lesson_for_student(self.current_subject)
+        
+        if not next_lesson:
+            # Если нет следующего урока, берем первый
+            available_lessons = self.get_lessons_for_student_subject(self.current_subject)
+            if not available_lessons:
+                return f"У меня нет уроков по {self.current_subject} для твоего класса."
+            next_lesson = available_lessons[0]
+        
+        debug_log(f"🎯 Найден урок: {next_lesson['title']}")
+        
+        # 2. Устанавливаем урок
+        self.selected_lesson = next_lesson
+        self.lesson_started = True
+        self.current_state = "lesson_reading"
+        
+        # 3. Определяем тип предмета
+        self._determine_subject_type()
+        
+        # 4. Загружаем содержание
+        self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
+        self.current_paragraph = 0
+        
+        if not self.lesson_content:
+            return "Ошибка загрузки урока."
+        
+        # 5. Инициализируем базу знаний
+        if self.current_subject:
+            from knowledge.knowledge_base import KnowledgeBase
+            self.knowledge_base = KnowledgeBase(self.current_subject)
+        
+        # 6. Очищаем историю
+        self.conversation_history = []
+        self.conversation_context = []
+        
+        # 7. Обновляем прогресс ученика
+        student_id = self.student_data.get('student_id')
+        if student_id:
+            self.save_student_progress(
+                next_lesson['id'],
+                next_lesson['subject'],
+                completed=False
+            )
+        
+        # 8. Возвращаем первый абзац
+        first_paragraph = self._get_next_paragraph()
+        
+        student_name = self.student_data.get('name', 'ученик')
+        return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
+
 # Тестирование
 if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    debug_log("🧪 Тестирование DialogueManager с исправленной логикой перехода к практике...")
+    debug_log("🧪 Тестирование DialogueManager с поддержкой технических предметов...")
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
@@ -3373,4 +3365,4 @@ if __name__ == "__main__":
     response = dm.process_input("привет")
     debug_log(f"👋 Ответ на приветствие: {response[:100]}...")
     
-    debug_log("✅ Тестирование завершено! Логика перехода к практике исправлена.")
+    debug_log("✅ Тестирование завершено! Ленивая инициализация и техническая поддержка работают правильно.")
