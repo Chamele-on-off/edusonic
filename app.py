@@ -2332,10 +2332,10 @@ def serve_lesson_slide():
             return jsonify({"error": "Slide path not specified"}), 400
         
         # Преобразуем относительный путь в абсолютный
-        full_path = BASE_DIR / slide_path
+        full_path = full_path.resolve()
         
         # Проверяем безопасность: разрешаем только файлы из папки lessons
-        if not str(full_path).startswith(str(LESSONS_DIR)):
+        if not str(full_path).startswith(str(LESSONS_DIR.resolve())):
             return jsonify({"error": "Access denied"}), 403
         
         if not full_path.exists():
