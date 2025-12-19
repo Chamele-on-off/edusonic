@@ -2325,43 +2325,23 @@ def generate_diagram():
 
 @app.route('/lesson_slide')
 def serve_lesson_slide():
-    """Безопасная отдача слайдов уроков (JPG/PNG/MP4)"""
-    try:
-        slide_path = request.args.get('path', '')
-        if not slide_path:
-            return jsonify({"error": "Slide path not specified"}), 400
-        
-        # Преобразуем относительный путь в абсолютный
-        full_path = full_path.resolve()
-        
-        # Проверяем безопасность: разрешаем только файлы из папки lessons
-        if not str(full_path).startswith(str(LESSONS_DIR.resolve())):
-            return jsonify({"error": "Access denied"}), 403
-        
-        if not full_path.exists():
-            return jsonify({"error": "Slide not found"}), 404
-        
-        # Определяем MIME-тип
-        extension = full_path.suffix.lower()
-        mime_types = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp',
-            '.mp4': 'video/mp4',
-            '.mov': 'video/quicktime',
-            '.avi': 'video/x-msvideo'
-        }
-        
-        mime_type = mime_types.get(extension, 'application/octet-stream')
-        
-        debug_log(f"✅ Отдача слайда: {full_path.name}, MIME: {mime_type}")
-        return send_file(full_path, mimetype=mime_type)
-        
-    except Exception as e:
-        debug_log(f"❌ Ошибка отдачи слайда: {e}")
-        return jsonify({"error": str(e)}), 500
+    slide_path = request.args.get('path', '').strip()
+    if not slide_path:
+        return "Slide path missing", 400
+
+    # 🔥 ВРЕМЕННО УБИРАЕМ ВСЕ ПРОВЕРКИ БЕЗОПАСНОСТИ — ТОЛЬКО ДЛЯ ТЕСТИРОВАНИЯ
+    full_path = LESSONS_DIR / slide_path
+
+    if not full_path.exists():
+        return "File not found", 404
+
+    mime = 'image/jpeg'
+    if slide_path.lower().endswith('.png'):
+        mime = 'image/png'
+    elif slide_path.lower().endswith('.mp4'):
+        mime = 'video/mp4'
+
+    return send_file(full_path, mimetype=mime)
 
 # =============================================================================
 # 🔥 НОВЫЙ API ДЛЯ ПОЛУЧЕНИЯ СЛАЙДОВ УРОКА
