@@ -333,13 +333,13 @@ class DialogueManager:
                 f"{base_name}_{idx:02d}.jpeg", 
                 f"{base_name}_{idx:02d}.png",
                 f"{base_name}_{idx:02d}.gif",
-                f"{base_name}_{idx:02d}.webp",
+                f"{base_name}_{idx:02d}.mp4",
                 # Если нет нумерации в имени файла
                 f"{base_name}_{idx}.jpg",
                 f"{base_name}_{idx}.jpeg",
                 f"{base_name}_{idx}.png",
                 f"{base_name}_{idx}.gif",
-                f"{base_name}_{idx}.webp",
+                f"{base_name}_{idx}.mp4",
                 # Для некоторых уроков может быть другой формат
                 f"{base_name}_slide_{idx:02d}.jpg",
                 f"{base_name}_slide_{idx}.jpg",
@@ -357,7 +357,7 @@ class DialogueManager:
             
             if not found_slide:
                 # Попробуем найти без форматирования нумерации
-                for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                for ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4']:
                     slide_path = lesson_dir / f"{base_name}_{idx}{ext}"
                     if slide_path.exists():
                         found_slide = slide_path
@@ -373,7 +373,7 @@ class DialogueManager:
                 # Преобразуем абсолютный путь в относительный от lessons/
                 if str(found_slide).startswith(str(self.lessons_dir)):
                     rel_path = str(found_slide.relative_to(self.lessons_dir))
-                    slide_url = f"/lesson_slide/{rel_path}"
+                    slides.append(rel_path)
                 else:
                     # Если файл не в папке lessons, используем абсолютный путь
                     slide_url = f"/lesson_slide/{found_slide}"
