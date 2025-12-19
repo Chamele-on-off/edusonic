@@ -4652,6 +4652,40 @@
                 }, 500);
             });
             
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
+            socket.on('lesson_paragraph', (data) => {
+                console.log('📄 Получен абзац урока:', data);
+                
+                // Обновляем текст урока
+                if (data.text) {
+                    updateLessonText(data.text);
+                }
+                
+                // Обрабатываем слайд, если есть
+                if (data.has_slide && data.slide_url) {
+                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index);
+                    
+                    if (!isVisualizationWindowOpen) {
+                        setTool('visualization');
+                    }
+                    
+                    // Отображаем слайд
+                    const svgDiagram = document.getElementById('svg-diagram');
+                    svgDiagram.innerHTML = `
+                        <div class="slide-container">
+                            <div class="slide-content">
+                                <img src="${data.slide_url}" alt="Слайд урока" 
+                                     style="max-width:100%; max-height:100%; object-fit:contain;"
+                                     onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iMjAwIiB5PSIxNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzY2NiI+U2xhZGUgbm90IGZvdW5kPC90ZXh0Pjwvc3ZnPg=='">
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Показываем вкладку SVG
+                    switchVisualizationTab('svg');
+                }
+            });
+            
             // Обработчики для новых типов визуализации
             socket.on('lesson_visualization', (data) => {
                 console.log('📊 Получена визуализация урока:', data.type, data);
