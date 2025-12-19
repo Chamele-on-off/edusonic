@@ -2464,7 +2464,7 @@ class DialogueManager:
                 # Слайд для текущего абзаца: 2-й абзац → слайд[0], 3-й → слайд[1] и т.д.
                 slide_index = self.current_paragraph - 2  # т.к. слайды начинаются со 2-го абзаца
                 if 0 <= slide_index < len(self.lesson_slides):
-                    slide_url = self.lesson_slides[slide_index]
+                    slide_url = f"/lesson_slide?path={self.lesson_slides[slide_index]}"
                     debug_log(f"🖼️ Отправка слайда {slide_index+1} для абзаца {self.current_paragraph}: {slide_url}")
                     
                     # Отправляем событие со слайдом
