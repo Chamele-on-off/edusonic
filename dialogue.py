@@ -312,80 +312,58 @@ class DialogueManager:
 
     # 🔥 НОВЫЙ МЕТОД: Поиск слайдов для урока
     def _find_lesson_slides(self, lesson_path: Path) -> List[str]:
-        """Ищет слайды (JPG/PNG) рядом с уроком: lesson_01.jpg, lesson_02.jpg и т.д."""
+        """Ищет слайды (JPG/PNG/MP4/GIF) рядом с уроком: lesson_01.jpg, lesson_02.jpg и т.д."""
         if not lesson_path or not lesson_path.exists():
             debug_log(f"❌ Путь урока не существует или не указан: {lesson_path}")
             return []
-        
-        base_name = lesson_path.stem  # например: "lesson_01_генетика" или "demo_physics"
+    
+        base_name = lesson_path.stem
         lesson_dir = lesson_path.parent
-        
         debug_log(f"🔍 Поиск слайдов для урока: {base_name} в папке {lesson_dir}")
-        
+    
         slides = []
         idx = 1
-        max_slides = 20  # Максимальное количество слайдов для поиска
-        
+        max_slides = 20
+    
         while idx <= max_slides:
-            # Ищем файлы с разными расширениями
-            slide_patterns = [
-                f"{base_name}_{idx:02d}.jpg",
-                f"{base_name}_{idx:02d}.jpeg", 
-                f"{base_name}_{idx:02d}.png",
-                f"{base_name}_{idx:02d}.gif",
-                f"{base_name}_{idx:02d}.mp4",
-                # Если нет нумерации в имени файла
-                f"{base_name}_{idx}.jpg",
-                f"{base_name}_{idx}.jpeg",
-                f"{base_name}_{idx}.png",
-                f"{base_name}_{idx}.gif",
-                f"{base_name}_{idx}.mp4",
-                # Для некоторых уроков может быть другой формат
-                f"{base_name}_slide_{idx:02d}.jpg",
-                f"{base_name}_slide_{idx}.jpg",
-                # Для демо-уроков
-                f"slide_{idx:02d}.jpg",
-                f"slide_{idx}.jpg",
-            ]
-            
             found_slide = None
-            for pattern in slide_patterns:
-                slide_path = lesson_dir / pattern
-                if slide_path.exists():
-                    found_slide = slide_path
+            # Основные шаблоны поиска
+            patterns = [
+                f"{base_name}_{idx:02d}",
+                f"{base_name}_{idx}",
+                f"{base_name}_slide_{idx:02d}",
+                f"{base_name}_slide_{idx}",
+                f"slide_{idx:02d}",
+                f"slide_{idx}",
+            ]
+            extensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4']
+        
+            for pattern in patterns:
+                if found_slide:
                     break
-            
-            if not found_slide:
-                # Попробуем найти без форматирования нумерации
-                for ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4']:
-                    slide_path = lesson_dir / f"{base_name}_{idx}{ext}"
-                    if slide_path.exists():
-                        found_slide = slide_path
+                for ext in extensions:
+                    candidate = lesson_dir / (pattern + ext)
+                    if candidate.exists():
+                        found_slide = candidate
                         break
-            
+        
             if not found_slide:
-                # Больше слайдов нет
-                break
-            
-            # Преобразуем путь в формат для отправки на клиент
-            # Используем относительный путь от корня проекта
+                break  # больше слайдов нет
+        
             try:
-                # Преобразуем абсолютный путь в относительный от lessons/
-                if str(found_slide).startswith(str(self.lessons_dir)):
+                # ✅ Сохраняем ТОЛЬКО относительный путь от lessons/
+                if str(found_slide.resolve()).startswith(str(self.lessons_dir.resolve())):
                     rel_path = str(found_slide.relative_to(self.lessons_dir))
                     slides.append(rel_path)
+                    debug_log(f"✅ Найден слайд {idx}: {found_slide.name} -> {rel_path}")
                 else:
-                    # Если файл не в папке lessons, используем абсолютный путь
-                    rel_path = f"/lesson_slide/{found_slide}"
-                
-                slides.append(slide_url)
-                debug_log(f"✅ Найден слайд {idx}: {found_slide.name} -> {slide_url}")
-                idx += 1
-                
+                    debug_log(f"⚠️ Слайд вне папки lessons, пропущен: {found_slide}")
+                    # НЕ добавляем — это нарушает безопасность
             except Exception as e:
-                debug_log(f"❌ Ошибка обработки слайда {found_slide}: {e}")
-                break
+                debug_log(f"❌ Ошибка при вычислении относительного пути для {found_slide}: {e}")
         
+            idx += 1  # ← всегда увеличиваем, чтобы избежать зацикливания
+    
         debug_log(f"📊 Найдено слайдов для урока {base_name}: {len(slides)}")
         return slides
 
