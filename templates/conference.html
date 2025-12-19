@@ -318,6 +318,16 @@
             border-color: var(--primary);
         }
         
+        .tab-content {
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: flex;
+        }
+        
         .visualization-container {
             width: 100%;
             height: 100%;
@@ -375,6 +385,82 @@
             font-size: 48px;
             margin-bottom: 15px;
             opacity: 0.5;
+        }
+        
+        /* Контейнер для слайдов */
+        #slides-tab {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #slides-viewer {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .slide-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            padding: 20px;
+        }
+        
+        .slide-content {
+            max-width: 100%;
+            max-height: 100%;
+            text-align: center;
+            position: relative;
+        }
+        
+        .slide-content img {
+            max-width: 100%;
+            max-height: calc(100% - 30px);
+            object-fit: contain;
+            border: 2px solid var(--board-border);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px var(--board-shadow);
+            background: white;
+        }
+        
+        .slide-navigation {
+            margin-top: 15px;
+            color: var(--gray);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .slide-error {
+            text-align: center;
+            color: var(--danger);
+            padding: 20px;
+        }
+        
+        .slide-error i {
+            font-size: 48px;
+            margin-bottom: 10px;
+            opacity: 0.7;
+        }
+        
+        .slide-error p {
+            margin: 10px 0;
+            font-weight: 500;
+        }
+        
+        .slide-error small {
+            color: var(--gray);
+            font-size: 12px;
         }
         
         .text-widget {
@@ -926,23 +1012,6 @@
             flex-direction: column;
         }
 
-        #svg-diagram {
-            flex: 1;
-            min-height: 300px;
-            background: white;
-            border-radius: 8px;
-            overflow: auto;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .visualization-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-
         /* Дисплей распознанной речи */
         #speech-display {
             position: fixed;
@@ -1092,66 +1161,8 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        /* Стили для слайдов */
-        .slide-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: #f8f9fa;
-            padding: 20px;
-        }
-
-        .slide-content {
-            max-width: 100%;
-            max-height: 100%;
-            text-align: center;
-            position: relative;
-        }
-
-        .slide-content img {
-            max-width: 100%;
-            max-height: calc(100% - 30px);
-            object-fit: contain;
-            border: 2px solid var(--board-border);
-            border-radius: 8px;
-            box-shadow: 0 4px 12px var(--board-shadow);
-            background: white;
-        }
-
-        .slide-navigation {
-            margin-top: 10px;
-            color: var(--gray);
-            font-size: 14px;
-            font-weight: 500;
-        }
-
-        .slide-error {
-            text-align: center;
-            color: var(--danger);
-            padding: 20px;
-        }
-
-        .slide-error i {
-            font-size: 48px;
-            margin-bottom: 10px;
-            opacity: 0.7;
-        }
-
-        .slide-error p {
-            margin: 10px 0;
-            font-weight: 500;
-        }
-
-        .slide-error small {
-            color: var(--gray);
-            font-size: 12px;
-        }
         
-        /* Дополнительные стили для технических предметов */
+        /* Стили для технических предметов */
         .technical-formula {
             font-family: 'Courier New', Courier, monospace;
             background: linear-gradient(135deg, #f0f7ff, #e6f2ff);
@@ -1878,19 +1889,39 @@
                 </div>
                 <div class="board-toolbar">
                     <div class="visualization-tabs">
-                        <!-- Только SVG вкладка -->
                         <div class="visualization-tab active" data-tab="svg">
                             <i class="fas fa-shapes"></i>
                             SVG Инфографика
                         </div>
+                        <div class="visualization-tab" data-tab="slides">
+                            <i class="fas fa-images"></i>
+                            Слайды
+                        </div>
                     </div>
                 </div>
                 <div id="visualization-content">
-                    <div class="visualization-container" id="svg-tab">
-                        <div id="svg-diagram">
-                            <div class="visualization-placeholder">
-                                <i class="fas fa-shapes"></i>
-                                <p>SVG инфографика будет сгенерирована автоматически во время урока</p>
+                    <!-- SVG-инфографика -->
+                    <div class="tab-content active" id="svg-tab">
+                        <div class="visualization-container">
+                            <div id="svg-diagram">
+                                <div class="visualization-placeholder">
+                                    <i class="fas fa-shapes"></i>
+                                    <p>SVG инфографика будет сгенерирована автоматически во время урока</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Слайды -->
+                    <div class="tab-content" id="slides-tab">
+                        <div class="visualization-container">
+                            <div id="slides-viewer" class="slide-container">
+                                <div class="slide-content">
+                                    <div class="visualization-placeholder">
+                                        <i class="fas fa-images"></i>
+                                        <p>Слайды урока появятся здесь</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2577,6 +2608,7 @@
         const speechStatus = document.getElementById('speech-status');
         const autoContinueStatus = document.getElementById('auto-continue-status');
         const svgDiagram = document.getElementById('svg-diagram');
+        const slidesViewer = document.getElementById('slides-viewer');
         const visualizationTabs = document.querySelectorAll('.visualization-tab');
         const llmStatus = document.getElementById('llm-status');
         const llmStatusText = document.getElementById('llm-status-text');
@@ -2664,9 +2696,9 @@
         let autoContinueEnabled = false;
         let isPracticeActive = false;
         let lastTeacherSpeechTime = 0;
-        let autoContinuePaused = false; // НОВАЯ ПЕРЕМЕННАЯ: флаг приостановки автопродолжения
+        let autoContinuePaused = false;
 
-        // НОВАЯ ПЕРЕМЕННАЯ: флаг ожидания ответа на команду продолжения
+        // Флаг ожидания ответа на команду продолжения
         let awaitingContinueResponse = false;
 
         // Упрощенная система активации AI-учителя
@@ -2837,12 +2869,6 @@
             console.log('✅ Кнопка активации готова для комнаты:', roomId);
         }
 
-        // УПРОЩЕННАЯ ФУНКЦИЯ - НЕ ИСПОЛЬЗУЕТСЯ
-        function setActivationState(key, value) {
-            console.log(`🔧 Состояние активации: ${key} = ${value}`);
-            // УПРОЩЕНИЕ: Не используем сложную логику состояний
-        }
-
         // Функции для отображения распознанной речи
         function showSpeechDisplay(text) {
             speechText.textContent = text;
@@ -2865,12 +2891,11 @@
                 autoContinueTimer = null;
             }
             
-            // ИСПРАВЛЕНИЕ: Убираем проверку autoContinueEnabled из условия
             if (isLessonActive && !isPracticeActive && !autoContinuePaused) {
                 autoContinueTimer = setTimeout(() => {
                     console.log('Автоматическое продолжение: таймер сработал');
                     simulateContinueCommand();
-                }, 60000); // УВЕЛИЧЕННО ДО 1 МИНУТЫ (60000 мс)
+                }, 60000);
                 
                 updateAutoContinueStatus('активен (60с)');
             }
@@ -2901,7 +2926,6 @@
                 return;
             }
             
-            // ИСПРАВЛЕНИЕ: Сначала устанавливаем значение, потом вызываем resetAutoContinueTimer
             autoContinueEnabled = enabled;
             
             if (enabled && isLessonActive && !isPracticeActive) {
@@ -3140,7 +3164,7 @@
                 }
             }
             
-            // Показываем вкладку SVG
+            // Переключаемся на вкладку SVG
             switchVisualizationTab('svg');
             
             if (!svgCode || svgCode.trim() === '') {
@@ -3199,63 +3223,28 @@
 
         // Функция для отображения слайдов
         function displaySlide(slidePath, slideNumber, totalSlides) {
-            const svgDiagram = document.getElementById('svg-diagram');
-            if (!svgDiagram) return;
+            if (!slidesViewer) return;
+            
+            console.log('🖼️ Отображение слайда:', slideNumber, '/', totalSlides, 'Путь:', slidePath);
+            
+            // Переключаемся на вкладку "Слайды"
+            switchVisualizationTab('slides');
             
             // Создаем контейнер для слайда
-            svgDiagram.innerHTML = `
-                <div class="slide-container">
-                    <div class="slide-content">
-                        <img src="${slidePath}" alt="Слайд ${slideNumber}" 
-                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iMjAwIiB5PSIxNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzY2NiI+U2xhZGUgbm90IGZvdW5kPC90ZXh0Pjwvc3ZnPg=='">
-                        <div class="slide-navigation">
-                            Слайд ${slideNumber} из ${totalSlides}
-                        </div>
+            slidesViewer.innerHTML = `
+                <div class="slide-content">
+                    <img src="${slidePath}" alt="Слайд ${slideNumber}" 
+                         onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iMjAwIiB5PSIxNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzY2NiI+U2xhZGUgbm90IGZvdW5kPC90ZXh0Pjwvc3ZnPg=='">
+                    <div class="slide-navigation">
+                        Слайд ${slideNumber} из ${totalSlides}
                     </div>
                 </div>
             `;
             
-            // Добавляем стили для слайда
-            const style = document.createElement('style');
-            style.textContent = `
-                .slide-container {
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    background: #f8f9fa;
-                    padding: 20px;
-                }
-                .slide-content {
-                    max-width: 100%;
-                    max-height: 100%;
-                    text-align: center;
-                    position: relative;
-                }
-                .slide-content img {
-                    max-width: 100%;
-                    max-height: calc(100% - 30px);
-                    object-fit: contain;
-                    border: 2px solid #e9ecef;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                }
-                .slide-navigation {
-                    margin-top: 10px;
-                    color: #666;
-                    font-size: 14px;
-                    font-weight: 500;
-                }
-            `;
-            
-            // Удаляем старые стили если есть
-            const oldStyle = document.getElementById('slide-styles');
-            if (oldStyle) oldStyle.remove();
-            
-            style.id = 'slide-styles';
-            document.head.appendChild(style);
+            // Если окно визуализации не открыто, открываем его
+            if (!isVisualizationWindowOpen) {
+                setTool('visualization');
+            }
         }
 
         function fallbackSvgRender(svgCode, title) {
@@ -3314,6 +3303,7 @@
         function switchVisualizationTab(tabName) {
             currentVisualizationTab = tabName;
             
+            // Обновляем активные вкладки
             visualizationTabs.forEach(tab => {
                 if (tab.dataset.tab === tabName) {
                     tab.classList.add('active');
@@ -3322,11 +3312,19 @@
                 }
             });
             
-            // ТЕПЕРЬ ТОЛЬКО SVG ВКЛАДКА
-            if (tabName === 'svg') {
-                // Всегда показываем SVG вкладку
-                console.log('Активирована вкладка SVG инфографики');
-            }
+            // Показываем/скрываем соответствующие контейнеры
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                if (content.id === `${tabName}-tab`) {
+                    content.classList.add('active');
+                    content.style.display = 'flex';
+                } else {
+                    content.classList.remove('active');
+                    content.style.display = 'none';
+                }
+            });
+            
+            console.log('Переключена вкладка визуализации:', tabName);
         }
 
         function showVisualizationWindow() {
@@ -3343,12 +3341,21 @@
         }
 
         function showVisualizationLoading() {
-            svgDiagram.innerHTML = `
-                <div class="visualization-loading">
-                    <div class="spinner"></div>
-                    <p>Генерация SVG инфографики...</p>
-                </div>
-            `;
+            if (currentVisualizationTab === 'svg') {
+                svgDiagram.innerHTML = `
+                    <div class="visualization-loading">
+                        <div class="spinner"></div>
+                        <p>Генерация SVG инфографики...</p>
+                    </div>
+                `;
+            } else {
+                slidesViewer.innerHTML = `
+                    <div class="visualization-loading">
+                        <div class="spinner"></div>
+                        <p>Загрузка слайдов...</p>
+                    </div>
+                `;
+            }
         }
 
         function startVisualizationPolling() {
@@ -3386,8 +3393,8 @@
                 console.log('🖼️ Отображение слайда:', slideData.slide_number, '/', slideData.total_slides);
                 displaySlide(slideData.slide_path, slideData.slide_number, slideData.total_slides);
                 
-                // Показываем вкладку SVG для слайдов
-                switchVisualizationTab('svg');
+                // Переключаемся на вкладку "Слайды"
+                switchVisualizationTab('slides');
             } else {
                 console.error('❌ Некорректные данные слайда:', slideData);
             }
@@ -3437,7 +3444,7 @@
                             return;
                         }
                         
-                        // РЕШЕНИЕ ПРОБЛЕМЫ №1: Добавляем список исключений для повторяющихся команд
+                        // Добавляем список исключений для повторяющихся команд
                         const repeatableCommands = ['продолжай', 'записал', 'готов', 'ещё раз', 'повтори', 'понял', 'да', 'нет'];
                         const isRepeatable = repeatableCommands.some(cmd => 
                             cleanText.toLowerCase().includes(cmd.toLowerCase())
@@ -3468,7 +3475,7 @@
                         // Показываем финальный результат
                         showSpeechDisplay(cleanText);
                         
-                        // РЕШЕНИЕ ПРОБЛЕМЫ №3: Умная обработка активности ученика
+                        // Умная обработка активности ученика
                         handleRecognizedSpeech(cleanText);
                     }
                     
@@ -3567,7 +3574,6 @@
                         });
                     } else {
                         console.error('Не удалось переподключиться');
-                        // СКРЫВАЕМ ИНДИКАТОР ПРИ ОШИБКЕ
                         hideThinkingIndicator();
                     }
                 }, 1000);
@@ -3583,19 +3589,19 @@
             
             console.log('Отправка речи на сервер:', text);
             
-            // РЕШЕНИЕ ПРОБЛЕМЫ №3: Умная логика управления автопродолжением
+            // Умная логика управления автопродолжением
             const isContinueCommand = /продолж(ай|и|ение|ать)/i.test(text.trim());
             
             if (isContinueCommand) {
                 // Команда "продолжай" — разрешаем автопродолжение
                 autoContinuePaused = false;
-                setAutoContinueEnabled(true); // ← это запустит таймер
-                awaitingContinueResponse = true; // ← ЗАПОМНИЛИ: ждём ответа-продолжения
+                setAutoContinueEnabled(true);
+                awaitingContinueResponse = true;
             } else {
                 // Любая другая фраза — приостанавливаем урок
                 autoContinuePaused = true;
-                setAutoContinueEnabled(false); // ← останавливаем таймер
-                awaitingContinueResponse = false; // ← это был вопрос — не ждём продолжения
+                setAutoContinueEnabled(false);
+                awaitingContinueResponse = false;
             }
             
             // Отправляем на сервер в любом случае
@@ -3611,7 +3617,7 @@
                 handleStudentActivity();
             }
             
-            // Индикатор скроется когда учитель начнет отвечать (в speakText)
+            // Индикатор скроется когда учитель начнет отвечать
         }
 
         // iOS Audio Fix
@@ -3850,14 +3856,12 @@
                 
                 startNeutralAnimation();
                 
-                // ИСПРАВЛЕНИЕ: Включаем автопродолжение только если это был ответ на команду "продолжай"
+                // Включаем автопродолжение только если это был ответ на команду "продолжай"
                 if (isLessonActive && !isPracticeActive && awaitingContinueResponse) {
-                    // Это был ответ на "продолжай" — можно включать автопродолжение
                     awaitingContinueResponse = false;
                     autoContinuePaused = false;
-                    setAutoContinueEnabled(true); // ← ТАЙМЕР ЗАПУСТИТСЯ!
+                    setAutoContinueEnabled(true);
                 }
-                // Если это был ответ на вопрос — таймер остаётся выключенным
             }, duration);
         }
 
@@ -4225,7 +4229,7 @@
             initDragForWindow(visualizationWindow);
         }
 
-        // ИСПРАВЛЕННАЯ ФУНКЦИЯ setTool - ОКНА НЕ ИСЧЕЗАЮТ
+        // Исправленная функция setTool
         function setTool(tool) {
             console.log('🛠️ Активация инструмента:', tool);
             
@@ -4288,7 +4292,7 @@
         function submitAnswer() {
             const answer = answerInput.value.trim();
             if (answer) {
-                // РЕШЕНИЕ ПРОБЛЕМЫ №3: При отправке ответа приостанавливаем автопродолжение
+                // При отправке ответа приостанавливаем автопродолжение
                 autoContinuePaused = true;
                 setAutoContinueEnabled(false);
                 
@@ -4375,7 +4379,6 @@
                 // Обновляем поток для всех подключенных участников
                 remoteStreams.forEach((remote, peerId) => {
                     // Здесь нужно обновить соединение с новым потоком
-                    // В реальном приложении это требует более сложной логики
                 });
                 
                 screenBtn.classList.add('active');
@@ -4632,27 +4635,13 @@
             socket.on('visualization_generated', (data) => {
                 console.log('🎨 Получена SVG инфографика:', data.topic);
                 
-                if (!isVisualizationWindowOpen) {
-                    setTool('visualization');
-                }
+                // Всегда показываем SVG в своём контейнере
+                displaySvgDiagram(data.svg_code, data.topic);
                 
-                // Показываем индикатор загрузки
-                showVisualizationLoading();
-                
-                setTimeout(() => {
-                    // ОТКЛЮЧАЕМ Mermaid - используем только SVG
-                    if (data.svg_code) {
-                        displaySvgDiagram(data.svg_code, data.topic);
-                        console.log('✅ SVG инфографика отображена');
-                    } else {
-                        // Fallback если SVG код не пришел
-                        displaySvgDiagram('', data.topic);
-                        console.warn('⚠️ SVG код отсутствует, используется fallback');
-                    }
-                }, 500);
+                console.log('✅ SVG инфографика отображена');
             });
             
-            // НОВЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
+            // ОБНОВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
             socket.on('lesson_paragraph', (data) => {
                 console.log('📄 Получен абзац урока:', data);
                 
@@ -4665,24 +4654,8 @@
                 if (data.has_slide && data.slide_url) {
                     console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index);
                     
-                    if (!isVisualizationWindowOpen) {
-                        setTool('visualization');
-                    }
-                    
-                    // Отображаем слайд
-                    const svgDiagram = document.getElementById('svg-diagram');
-                    svgDiagram.innerHTML = `
-                        <div class="slide-container">
-                            <div class="slide-content">
-                                <img src="${data.slide_url}" alt="Слайд урока" 
-                                     style="max-width:100%; max-height:100%; object-fit:contain;"
-                                     onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iMjAwIiB5PSIxNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzY2NiI+U2xhZGUgbm90IGZvdW5kPC90ZXh0Pjwvc3ZnPg=='">
-                            </div>
-                        </div>
-                    `;
-                    
-                    // Показываем вкладку SVG
-                    switchVisualizationTab('svg');
+                    // Отображаем слайд в отдельном контейнере
+                    displaySlide(data.slide_url, data.paragraph_index + 1, data.total_slides || 1);
                 }
             });
             
@@ -4766,7 +4739,7 @@
                     // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
                     hideThinkingIndicator();
                     
-                    // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
+                    // Останавливаем автопродолжение на время ответа ИИ
                     autoContinuePaused = true;
                     
                     startSpeechAnimation(data.text);
@@ -4792,7 +4765,7 @@
                     // СКРЫВАЕМ ИНДИКАТОР РАЗМЫШЛЕНИЯ КОГДА УЧИТЕЛЬ НАЧИНАЕТ ГОВОРИТЬ
                     hideThinkingIndicator();
                     
-                    // РЕШЕНИЕ ПРОБЛЕМЫ №3: Останавливаем автопродолжение на время ответа ИИ
+                    // Останавливаем автопродолжение на время ответа ИИ
                     autoContinuePaused = true;
                     
                     const teacherText = data.text.replace('Учитель: ', '');
@@ -4820,7 +4793,7 @@
             
             socket.on('ai_teacher_activated', () => {
                 aiTeacherActivated = true;
-                aiTeacherWasActivated = true; // ЗАПОМИНАЕМ ЧТО БЫЛ АКТИВИРОВАН
+                aiTeacherWasActivated = true;
                 activateAiBtn.style.display = 'none';
                 statusDiv.textContent = 'AI-Teacher активирован';
                 console.log('✅ AI-учитель активирован для комнаты:', roomId);
@@ -4859,7 +4832,7 @@
                 currentLesson = data;
                 currentParagraph = 0;
                 
-                // РЕШЕНИЕ ПРОБЛЕМЫ №3: При старте урока не включаем автопродолжение автоматически
+                // При старте урока не включаем автопродолжение автоматически
                 autoContinuePaused = true;
                 setAutoContinueEnabled(false);
                 
@@ -4884,7 +4857,7 @@
                 console.log('Практика завершена');
                 isPracticeActive = false;
                 if (isLessonActive) {
-                    // РЕШЕНИЕ ПРОБЛЕМЫ №3: После практики не включаем автопродолжение автоматически
+                    // После практики не включаем автопродолжение автоматически
                     autoContinuePaused = true;
                     setAutoContinueEnabled(false);
                 }
@@ -5245,7 +5218,7 @@
                 }
             }, 1000);
             
-            // ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ КНОПОК - ИСПОЛЬЗУЕМ БЕЗОПАСНУЮ АКТИВАЦИЮ
+            // ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ КНОПОК
             textToolBtn.addEventListener('click', () => safeToolActivation('text'));
             drawToolBtn.addEventListener('click', () => safeToolActivation('draw'));
             answerToolBtn.addEventListener('click', () => safeToolActivation('answer'));
@@ -5500,9 +5473,8 @@
 
         // Глобальный обработчик ошибок загрузки изображений
         document.addEventListener('error', function(e) {
-            if (e.target.tagName === 'IMG' && e.target.closest('#svg-diagram')) {
+            if (e.target.tagName === 'IMG' && e.target.closest('#slides-viewer')) {
                 console.error('Ошибка загрузки слайда:', e.target.src);
-                e.target.style.display = 'none';
                 
                 const container = e.target.closest('.slide-content');
                 if (container) {
