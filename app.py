@@ -1,5 +1,6 @@
 # app.py - AI Teacher System с поддержкой технических и естественнонаучных предметов
 # ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
+# ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG)
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -1335,6 +1336,125 @@ def get_student_next_lesson(student_id, subject):
         return None
 
 # =============================================================================
+# 🔥 НОВЫЕ ФУНКЦИИ ДЛЯ СЛАЙДОВ УРОКОВ
+# =============================================================================
+
+def find_lesson_slides(lesson_path):
+    """Ищет слайды (JPG/PNG/MP4) рядом с уроком: lesson_01.jpg, lesson_02.png и т.д."""
+    try:
+        if not lesson_path:
+            return []
+        
+        # Преобразуем путь к уроку в объект Path
+        if isinstance(lesson_path, str):
+            lesson_path = Path(lesson_path)
+            if not lesson_path.is_absolute():
+                lesson_path = LESSONS_DIR / lesson_path
+        
+        if not lesson_path.exists():
+            debug_log(f"❌ Файл урока не найден: {lesson_path}")
+            return []
+        
+        base_name = lesson_path.stem  # например: "lesson_01_генетика" или "demo_physics"
+        lesson_dir = lesson_path.parent
+        
+        slides = []
+        idx = 1
+        
+        # Проверяем файлы с расширениями в порядке приоритета
+        supported_extensions = ['.jpg', '.jpeg', '.png', '.mp4', '.webp']
+        
+        while True:
+            found = False
+            for ext in supported_extensions:
+                # Варианты имен: base_01.jpg, lesson_01_01.jpg, demo_physics_01.jpg
+                candidate_patterns = [
+                    lesson_dir / f"{base_name}_{idx:02d}{ext}",
+                    lesson_dir / f"{base_name}_{idx:02d}.{ext.lstrip('.')}",
+                ]
+                
+                for candidate in candidate_patterns:
+                    if candidate.exists():
+                        slides.append({
+                            'path': str(candidate.relative_to(BASE_DIR)),
+                            'filename': candidate.name,
+                            'index': idx,
+                            'type': 'image' if ext in ['.jpg', '.jpeg', '.png', '.webp'] else 'video',
+                            'extension': ext
+                        })
+                        found = True
+                        debug_log(f"✅ Найден слайд {idx}: {candidate.name}")
+                        break
+                
+                if found:
+                    break
+            
+            if not found:
+                break
+                
+            idx += 1
+        
+        debug_log(f"✅ Всего найдено слайдов для урока {base_name}: {len(slides)}")
+        return slides
+    
+    except Exception as e:
+        debug_log(f"❌ Ошибка поиска слайдов: {e}")
+        return []
+
+def get_lesson_slides_api(lesson_id):
+    """API-функция для получения слайдов урока"""
+    try:
+        # Ищем урок во всех папках
+        possible_paths = []
+        
+        # Поиск в демо-уроках
+        for lesson_file in LESSONS_DEMO_DIR.glob(f"{lesson_id}.txt"):
+            possible_paths.append(lesson_file)
+        
+        # Поиск в студенческих уроках
+        for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
+            for subject_dir in class_dir.iterdir():
+                if subject_dir.is_dir():
+                    lesson_file = subject_dir / f"{lesson_id}.txt"
+                    if lesson_file.exists():
+                        possible_paths.append(lesson_file)
+        
+        # Поиск в сгенерированных уроках
+        for lesson_file in LESSONS_GENERATED_DIR.glob(f"{lesson_id}.txt"):
+            possible_paths.append(lesson_file)
+        
+        # Поиск в корневой папке уроков
+        for lesson_file in LESSONS_DIR.glob(f"{lesson_id}.txt"):
+            possible_paths.append(lesson_file)
+        
+        if not possible_paths:
+            return {"success": False, "error": "Урок не найден"}
+        
+        # Берем первый найденный урок
+        lesson_path = possible_paths[0]
+        
+        # Ищем слайды
+        slides = find_lesson_slides(lesson_path)
+        
+        if slides:
+            # Преобразуем пути в URL для фронтенда
+            for slide in slides:
+                slide['url'] = f"/lesson_slide?path={slide['path']}"
+        
+        return {
+            "success": True,
+            "lesson_id": lesson_id,
+            "lesson_path": str(lesson_path.relative_to(LESSONS_DIR)),
+            "slides": slides,
+            "slides_count": len(slides),
+            "has_slides": len(slides) > 0
+        }
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка получения слайдов: {e}")
+        return {"success": False, "error": str(e)}
+
+# =============================================================================
 # SOCKET.IO HANDLERS
 # =============================================================================
 
@@ -1990,6 +2110,46 @@ def handle_generate_visualization(data):
         }, room=room_id)
 
 # =============================================================================
+# 🔥 НОВЫЕ СОБЫТИЯ ДЛЯ СЛАЙДОВ УРОКОВ
+# =============================================================================
+
+@socketio.on('get_lesson_slides')
+def handle_get_lesson_slides(data):
+    """WebSocket запрос для получения слайдов урока"""
+    try:
+        room_id = data['room_id']
+        lesson_id = data['lesson_id']
+        
+        debug_log(f"Запрос слайдов для урока {lesson_id} в комнате {room_id}")
+        
+        slides_data = get_lesson_slides_api(lesson_id)
+        
+        if slides_data['success']:
+            emit('lesson_slides_loaded', {
+                'room_id': room_id,
+                'lesson_id': lesson_id,
+                'slides': slides_data['slides'],
+                'slides_count': slides_data['slides_count'],
+                'has_slides': slides_data['has_slides']
+            }, room=room_id)
+            
+            debug_log(f"✅ Слайды отправлены в комнату {room_id}: {len(slides_data['slides'])} слайдов")
+        else:
+            emit('lesson_slides_error', {
+                'room_id': room_id,
+                'lesson_id': lesson_id,
+                'error': slides_data.get('error', 'Неизвестная ошибка')
+            }, room=room_id)
+            
+    except Exception as e:
+        debug_log(f"❌ Ошибка обработки запроса слайдов: {e}")
+        emit('lesson_slides_error', {
+            'room_id': data.get('room_id', 'unknown'),
+            'lesson_id': data.get('lesson_id', 'unknown'),
+            'error': str(e)
+        })
+
+# =============================================================================
 # API ЭНДПОИНТЫ
 # =============================================================================
 
@@ -2156,6 +2316,63 @@ def generate_diagram():
             "queue_position": len(room_visualization_queue.get(room_id, [])),
             "topic": topic
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# 🔥 НОВЫЙ ЭНДПОИНТ ДЛЯ ОТДАЧИ СЛАЙДОВ УРОКОВ
+# =============================================================================
+
+@app.route('/lesson_slide')
+def serve_lesson_slide():
+    """Безопасная отдача слайдов уроков (JPG/PNG/MP4)"""
+    try:
+        slide_path = request.args.get('path', '')
+        if not slide_path:
+            return jsonify({"error": "Slide path not specified"}), 400
+        
+        # Преобразуем относительный путь в абсолютный
+        full_path = BASE_DIR / slide_path
+        
+        # Проверяем безопасность: разрешаем только файлы из папки lessons
+        if not str(full_path).startswith(str(LESSONS_DIR)):
+            return jsonify({"error": "Access denied"}), 403
+        
+        if not full_path.exists():
+            return jsonify({"error": "Slide not found"}), 404
+        
+        # Определяем MIME-тип
+        extension = full_path.suffix.lower()
+        mime_types = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.mp4': 'video/mp4',
+            '.mov': 'video/quicktime',
+            '.avi': 'video/x-msvideo'
+        }
+        
+        mime_type = mime_types.get(extension, 'application/octet-stream')
+        
+        debug_log(f"✅ Отдача слайда: {full_path.name}, MIME: {mime_type}")
+        return send_file(full_path, mimetype=mime_type)
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка отдачи слайда: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# =============================================================================
+# 🔥 НОВЫЙ API ДЛЯ ПОЛУЧЕНИЯ СЛАЙДОВ УРОКА
+# =============================================================================
+
+@app.route('/api/lesson/slides/<lesson_id>')
+def get_lesson_slides(lesson_id):
+    """API для получения списка слайдов урока"""
+    try:
+        slides_data = get_lesson_slides_api(lesson_id)
+        return jsonify(slides_data)
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -5381,8 +5598,10 @@ def generate_technical_exercise():
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("🚀 Запуск AI Teacher системы с поддержкой технических предметов...")
+    debug_log("🚀 Запуск AI Teacher системы с поддержкой технических предметов и слайдов...")
     debug_log(f"🔥 Поддержка технических предметов: {'ВКЛЮЧЕНА' if TECHNICAL_SUPPORT_ENABLED else 'ВЫКЛЮЧЕНА'}")
+    debug_log(f"🔥 Поддержка слайдов уроков: ВКЛЮЧЕНА")
+    debug_log(f"🔥 Форматы слайдов: JPG, PNG, MP4, WebP")
     
     setup_llm_manager()
     
@@ -5398,10 +5617,14 @@ if __name__ == '__main__':
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
     debug_log(f"🔥 Добавлена поддержка технических предметов")
+    debug_log(f"🔥 Добавлена поддержка слайдов уроков")
     debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена умная очистка текста")
     debug_log(f"🔧 Ленивая инициализация DialogueManager активирована")
     debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
     debug_log(f"✅ ДОБАВЛЕН новый API /api/student/progress/dashboard для личного кабинета")
+    debug_log(f"✅ ДОБАВЛЕН роут /lesson_slide для отдачи слайдов")
+    debug_log(f"✅ ДОБАВЛЕН WebSocket событие get_lesson_slides")
+    debug_log(f"✅ ДОБАВЛЕН API /api/lesson/slides/<lesson_id> для получения слайдов")
     
     socketio.run(
         app, 
