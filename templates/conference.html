@@ -1916,11 +1916,9 @@
                     <div class="tab-content" id="slides-tab">
                         <div class="visualization-container">
                             <div id="slides-viewer" class="slide-container">
-                                <div class="slide-content">
-                                    <div class="visualization-placeholder">
-                                        <i class="fas fa-images"></i>
-                                        <p>Слайды урока появятся здесь</p>
-                                    </div>
+                                <div class="visualization-placeholder">
+                                    <i class="fas fa-images"></i>
+                                    <p>Слайды урока появятся здесь</p>
                                 </div>
                             </div>
                         </div>
@@ -3221,25 +3219,66 @@
             }
         }
 
-        // Функция для отображения слайдов
-        function displaySlide(slidePath, slideNumber, totalSlides) {
-            if (!slidesViewer) return;
+        // Функция для отображения слайдов (ИСПРАВЛЕННАЯ)
+        function displaySlide(slideUrl, slideNumber, totalSlides) {
+            console.log('🖼️ Отображение слайда:', slideNumber, '/', totalSlides, 'URL:', slideUrl);
             
-            console.log('🖼️ Отображение слайда:', slideNumber, '/', totalSlides, 'Путь:', slidePath);
+            const slidesViewer = document.getElementById('slides-viewer');
+            if (!slidesViewer) {
+                console.error('❌ Контейнер для слайдов не найден');
+                return;
+            }
             
             // Переключаемся на вкладку "Слайды"
             switchVisualizationTab('slides');
             
             // Создаем контейнер для слайда
-            slidesViewer.innerHTML = `
-                <div class="slide-content">
-                    <img src="${slidePath}" alt="Слайд ${slideNumber}" 
-                         onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iMjAwIiB5PSIxNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNiIgZmlsbD0iIzY2NiI+U2xhZGUgbm90IGZvdW5kPC90ZXh0Pjwvc3ZnPg=='">
-                    <div class="slide-navigation">
-                        Слайд ${slideNumber} из ${totalSlides}
-                    </div>
-                </div>
-            `;
+            const slideContent = document.createElement('div');
+            slideContent.className = 'slide-content';
+            
+            // Создаем изображение
+            const img = document.createElement('img');
+            img.src = slideUrl;
+            img.alt = `Слайд ${slideNumber}`;
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = 'calc(100% - 30px)';
+            img.style.objectFit = 'contain';
+            img.style.border = '2px solid var(--board-border)';
+            img.style.borderRadius = '8px';
+            img.style.boxShadow = '0 4px 12px var(--board-shadow)';
+            img.style.background = 'white';
+            img.style.display = 'block';
+            img.style.margin = '0 auto';
+            
+            // Обработчик ошибки загрузки изображения
+            img.onerror = function() {
+                console.error('❌ Ошибка загрузки слайда:', slideUrl);
+                this.style.display = 'none';
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'slide-error';
+                errorDiv.innerHTML = `
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Не удалось загрузить слайд</p>
+                    <small>${slideUrl.split('/').pop() || 'Неизвестный файл'}</small>
+                `;
+                
+                slideContent.appendChild(errorDiv);
+            };
+            
+            // Создаем навигацию
+            const navigationDiv = document.createElement('div');
+            navigationDiv.className = 'slide-navigation';
+            navigationDiv.textContent = `Слайд ${slideNumber} из ${totalSlides || '?'}`;
+            
+            // Добавляем элементы в контейнер
+            slideContent.innerHTML = '';
+            slideContent.appendChild(img);
+            slideContent.appendChild(navigationDiv);
+            
+            // Очищаем и обновляем контейнер слайдов
+            slidesViewer.innerHTML = '';
+            slidesViewer.appendChild(slideContent);
             
             // Если окно визуализации не открыто, открываем его
             if (!isVisualizationWindowOpen) {
@@ -4641,7 +4680,7 @@
                 console.log('✅ SVG инфографика отображена');
             });
             
-            // ОБНОВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
+            // ИСПРАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
             socket.on('lesson_paragraph', (data) => {
                 console.log('📄 Получен абзац урока:', data);
                 
@@ -4652,10 +4691,11 @@
                 
                 // Обрабатываем слайд, если есть
                 if (data.has_slide && data.slide_url) {
-                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index);
+                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index, 
+                              'Номер слайда:', data.slide_number, 'Всего слайдов:', data.total_slides);
                     
-                    // Отображаем слайд в отдельном контейнере
-                    displaySlide(data.slide_url, data.paragraph_index + 1, data.total_slides || 1);
+                    // Используем slide_number вместо paragraph_index
+                    displaySlide(data.slide_url, data.slide_number, data.total_slides || 0);
                 }
             });
             
@@ -5445,7 +5485,7 @@
             participantsCount.textContent = totalParticipants;
         }
 
-        // Подключение к других участникам
+        // Подключение к других участников
         function connectToPeer(remotePeerId) {
             if (!localStream || peerId === remotePeerId) {
                 return;
