@@ -376,7 +376,7 @@ class DialogueManager:
                     slides.append(rel_path)
                 else:
                     # Если файл не в папке lessons, используем абсолютный путь
-                    slide_url = f"/lesson_slide/{found_slide}"
+                    rel_path = f"/lesson_slide/{found_slide}"
                 
                 slides.append(slide_url)
                 debug_log(f"✅ Найден слайд {idx}: {found_slide.name} -> {slide_url}")
