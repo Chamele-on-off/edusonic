@@ -1,5 +1,6 @@
 # dialogue.py
 # ИСПРАВЛЕННАЯ ВЕРСИЯ с полной ленивой инициализацией
+# + ДОБАВЛЕНА ПОДДЕРЖКА СЛАЙДОВ ИЗОБРАЖЕНИЙ ДЛЯ УРОКОВ
 
 import json
 from pathlib import Path
@@ -119,6 +120,10 @@ class DialogueManager:
         self.lesson_started = False
         self.lesson_content = []
         self.current_paragraph = 0
+        
+        # 🔥 НОВОЕ: Список слайдов для текущего урока
+        self.lesson_slides = []  # список URL или путей к файлам слайдов
+        self.slides_enabled = True  # флаг включения слайдов
         
         # Пути к папкам (только создание объектов Path, без проверки существования)
         self.lessons_dir = Path("lessons")
@@ -304,6 +309,85 @@ class DialogueManager:
                     self._load_lessons()
                     self._lessons_loaded = True
                     debug_log("✅ Уроки загружены")
+
+    # 🔥 НОВЫЙ МЕТОД: Поиск слайдов для урока
+    def _find_lesson_slides(self, lesson_path: Path) -> List[str]:
+        """Ищет слайды (JPG/PNG) рядом с уроком: lesson_01.jpg, lesson_02.jpg и т.д."""
+        if not lesson_path or not lesson_path.exists():
+            debug_log(f"❌ Путь урока не существует или не указан: {lesson_path}")
+            return []
+        
+        base_name = lesson_path.stem  # например: "lesson_01_генетика" или "demo_physics"
+        lesson_dir = lesson_path.parent
+        
+        debug_log(f"🔍 Поиск слайдов для урока: {base_name} в папке {lesson_dir}")
+        
+        slides = []
+        idx = 1
+        max_slides = 20  # Максимальное количество слайдов для поиска
+        
+        while idx <= max_slides:
+            # Ищем файлы с разными расширениями
+            slide_patterns = [
+                f"{base_name}_{idx:02d}.jpg",
+                f"{base_name}_{idx:02d}.jpeg", 
+                f"{base_name}_{idx:02d}.png",
+                f"{base_name}_{idx:02d}.gif",
+                f"{base_name}_{idx:02d}.webp",
+                # Если нет нумерации в имени файла
+                f"{base_name}_{idx}.jpg",
+                f"{base_name}_{idx}.jpeg",
+                f"{base_name}_{idx}.png",
+                f"{base_name}_{idx}.gif",
+                f"{base_name}_{idx}.webp",
+                # Для некоторых уроков может быть другой формат
+                f"{base_name}_slide_{idx:02d}.jpg",
+                f"{base_name}_slide_{idx}.jpg",
+                # Для демо-уроков
+                f"slide_{idx:02d}.jpg",
+                f"slide_{idx}.jpg",
+            ]
+            
+            found_slide = None
+            for pattern in slide_patterns:
+                slide_path = lesson_dir / pattern
+                if slide_path.exists():
+                    found_slide = slide_path
+                    break
+            
+            if not found_slide:
+                # Попробуем найти без форматирования нумерации
+                for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                    slide_path = lesson_dir / f"{base_name}_{idx}{ext}"
+                    if slide_path.exists():
+                        found_slide = slide_path
+                        break
+            
+            if not found_slide:
+                # Больше слайдов нет
+                break
+            
+            # Преобразуем путь в формат для отправки на клиент
+            # Используем относительный путь от корня проекта
+            try:
+                # Преобразуем абсолютный путь в относительный от lessons/
+                if str(found_slide).startswith(str(self.lessons_dir)):
+                    rel_path = str(found_slide.relative_to(self.lessons_dir))
+                    slide_url = f"/lesson_slide/{rel_path}"
+                else:
+                    # Если файл не в папке lessons, используем абсолютный путь
+                    slide_url = f"/lesson_slide/{found_slide}"
+                
+                slides.append(slide_url)
+                debug_log(f"✅ Найден слайд {idx}: {found_slide.name} -> {slide_url}")
+                idx += 1
+                
+            except Exception as e:
+                debug_log(f"❌ Ошибка обработки слайда {found_slide}: {e}")
+                break
+        
+        debug_log(f"📊 Найдено слайдов для урока {base_name}: {len(slides)}")
+        return slides
 
     def _load_dialogue_knowledge(self) -> Dict:
         """Загрузка расширенной базы диалоговых шаблонов"""
@@ -1282,6 +1366,10 @@ class DialogueManager:
             
             debug_log(f"✅ Урок загружен, количество абзацев: {len(self.lesson_content)}")
             
+            # 🔥 НОВОЕ: Поиск слайдов для урока
+            self.lesson_slides = self._find_lesson_slides(lesson_data['file_path'])
+            debug_log(f"✅ Найдено слайдов для урока: {len(self.lesson_slides)}")
+            
             # Инициализируем базу знаний
             self.knowledge_base = KnowledgeBase(self.current_subject)
             
@@ -1299,7 +1387,8 @@ class DialogueManager:
                     'is_language': lesson_data.get('is_language', False),
                     'target_language': self.target_language if lesson_data.get('is_language') else None,
                     'is_technical': lesson_data.get('is_technical', False),
-                    'subject_type': lesson_data.get('subject_type', 'general')
+                    'subject_type': lesson_data.get('subject_type', 'general'),
+                    'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
                 }, room=self.room_id)
                 debug_log(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
             
@@ -1446,6 +1535,10 @@ class DialogueManager:
             self.lesson_started = False
             return "Ошибка загрузки урока"
         
+        # 🔥 НОВОЕ: Поиск слайдов для урока
+        self.lesson_slides = self._find_lesson_slides(self.selected_lesson['file_path'])
+        debug_log(f"✅ Найдено слайдов для урока: {len(self.lesson_slides)}")
+        
         # Инициализируем базу знаний
         if self.current_subject:
             from knowledge.knowledge_base import KnowledgeBase
@@ -1468,7 +1561,8 @@ class DialogueManager:
                 'lesson_number': self.selected_lesson.get('lesson_number'),
                 'is_student_lesson': True,
                 'is_technical': self.is_technical_subject,
-                'subject_type': self.subject_type
+                'subject_type': self.subject_type,
+                'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
             }, room=self.room_id)
         
         student_name = self.student_data.get('name', 'ученик')
@@ -1969,7 +2063,8 @@ class DialogueManager:
                     'lesson_number': self.selected_lesson.get('lesson_number'),
                     'is_student_lesson': True,
                     'is_technical': self.is_technical_subject,
-                    'subject_type': self.subject_type
+                    'subject_type': self.subject_type,
+                    'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
                 }, room=self.room_id)
                 debug_log(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
             
@@ -2008,6 +2103,10 @@ class DialogueManager:
         # 4. Загружаем содержание
         self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
         self.current_paragraph = 0
+        
+        # 🔥 НОВОЕ: Поиск слайдов для урока
+        self.lesson_slides = self._find_lesson_slides(next_lesson['file_path'])
+        debug_log(f"✅ Найдено слайдов для урока: {len(self.lesson_slides)}")
         
         if not self.lesson_content:
             return "Ошибка загрузки урока."
@@ -2171,6 +2270,10 @@ class DialogueManager:
                 self.lesson_started = False
                 return "Ошибка загрузки урока. Попробуйте другой."
             
+            # 🔥 НОВОЕ: Поиск слайдов для урока
+            self.lesson_slides = self._find_lesson_slides(self.selected_lesson['file_path'])
+            debug_log(f"✅ Найдено слайдов для урока: {len(self.lesson_slides)}")
+            
             # Инициализируем базу знаний
             if self.current_subject:
                 from knowledge.knowledge_base import KnowledgeBase
@@ -2193,7 +2296,8 @@ class DialogueManager:
                     'is_language': self.selected_lesson.get('is_language', False),
                     'target_language': self.target_language if self.selected_lesson.get('is_language') else None,
                     'is_technical': self.is_technical_subject,
-                    'subject_type': self.subject_type
+                    'subject_type': self.subject_type,
+                    'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
                 }, room=self.room_id)
             
             # Персонализированное начало
@@ -2316,6 +2420,9 @@ class DialogueManager:
             if self.practice_active:
                 self._end_practice_session()
             
+            # 🔥 НОВОЕ: Сбрасываем слайды
+            self.lesson_slides = []
+            
             # ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
@@ -2344,15 +2451,45 @@ class DialogueManager:
         return None
 
     def _get_next_paragraph(self) -> Optional[str]:
-        """ОБНОВЛЕННЫЙ: Получает следующий абзац урока (БЕЗ РАСПОЗНАВАНИЯ ВОПРОСОВ)"""
+        """🔥 ОБНОВЛЕННЫЙ МЕТОД: Получает следующий абзац урока с ОТПРАВКОЙ СЛАЙДА"""
         debug_log(f"📄 Получение следующего абзаца: текущий {self.current_paragraph}, всего {len(self.lesson_content)}")
         
         if self.current_paragraph < len(self.lesson_content):
             paragraph = self.lesson_content[self.current_paragraph]
             self.current_paragraph += 1
             
-            # УДАЛЕНА логика распознавания вопросов - теперь вся логика в LLM
+            # 🔥 НОВОЕ: Отправка слайда если есть
+            slide_url = None
+            if self.slides_enabled and self.lesson_slides:
+                # Слайд для текущего абзаца: 2-й абзац → слайд[0], 3-й → слайд[1] и т.д.
+                slide_index = self.current_paragraph - 2  # т.к. слайды начинаются со 2-го абзаца
+                if 0 <= slide_index < len(self.lesson_slides):
+                    slide_url = self.lesson_slides[slide_index]
+                    debug_log(f"🖼️ Отправка слайда {slide_index+1} для абзаца {self.current_paragraph}: {slide_url}")
+                    
+                    # Отправляем событие со слайдом
+                    if self.room_id and self.socketio:
+                        self.socketio.emit('lesson_slide', {
+                            'room_id': self.room_id,
+                            'slide_url': slide_url,
+                            'slide_index': slide_index,
+                            'slide_number': slide_index + 1,
+                            'total_slides': len(self.lesson_slides),
+                            'paragraph_index': self.current_paragraph - 1,
+                            'has_slide': True
+                        }, room=self.room_id)
             
+            # 🔥 НОВОЕ: Отправляем абзац с информацией о слайде
+            if self.room_id and self.socketio:
+                self.socketio.emit('lesson_paragraph', {
+                    'text': paragraph,
+                    'paragraph_index': self.current_paragraph - 1,
+                    'total_paragraphs': len(self.lesson_content),
+                    'slide_url': slide_url,
+                    'has_slide': slide_url is not None
+                }, room=self.room_id)
+            
+            # Генерация визуализации (оставляем как есть)
             if (self.visualization_enabled and paragraph and 
                 len(paragraph.strip()) > 10 and self.room_id):
                 
@@ -2370,6 +2507,16 @@ class DialogueManager:
             # 🔥 ИСПРАВЛЕНИЕ: ОТМЕЧАЕМ УРОК КАК ЗАВЕРШЕННЫЙ, НЕ СБРАСЫВАЕМ КОНТЕКСТ
             if self.selected_lesson and self.has_student_data:
                 self.mark_lesson_completed(self.selected_lesson)
+            
+            # 🔥 НОВОЕ: Отправляем событие о завершении урока
+            if self.room_id and self.socketio:
+                self.socketio.emit('lesson_completed', {
+                    'room_id': self.room_id,
+                    'lesson_id': self.selected_lesson['id'] if self.selected_lesson else None,
+                    'title': self.selected_lesson['title'] if self.selected_lesson else None,
+                    'total_paragraphs': len(self.lesson_content),
+                    'total_slides': len(self.lesson_slides)
+                }, room=self.room_id)
             
             # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
@@ -2392,6 +2539,7 @@ class DialogueManager:
         # self.current_subject = None        # ← НЕ СБРАСЫВАЕМ!
         # self.lesson_content = []           # ← НЕ СБРАСЫВАЕМ!
         # self.current_paragraph = 0         # ← НЕ СБРАСЫВАЕМ!
+        # self.lesson_slides = []            # ← НЕ СБРАСЫВАЕМ!
         
         # ОБНОВЛЕНИЕ: Передаем данные ученика в менеджер практики
         if hasattr(self.practice_manager, 'student_data'):
@@ -2418,7 +2566,8 @@ class DialogueManager:
             self.socketio.emit('practice_started', {
                 'room_id': self.room_id,
                 'is_technical': self.is_technical_subject,
-                'subject_type': self.subject_type
+                'subject_type': self.subject_type,
+                'lesson_title': self.selected_lesson['title'] if self.selected_lesson else None
             })
         
         # 🔥 ИСПРАВЛЕНИЕ: ВСЕГДА используем get_next_question() для всех предметов
@@ -2550,6 +2699,7 @@ class DialogueManager:
         # self.current_subject = None    # ← НЕ сбрасываем!
         # self.lesson_content = []       # ← НЕ сбрасываем!
         # self.current_paragraph = 0     # ← НЕ сбрасываем!
+        # self.lesson_slides = []        # ← НЕ сбрасываем!
         
         # Останавливаем генерацию вопросов
         if hasattr(self.practice_manager, 'stop_async_generation'):
@@ -2730,6 +2880,10 @@ class DialogueManager:
         self.target_language = 'english'
         self.language_level = 'beginner'
         self.bilingual_ratio = 0.3
+        
+        # 🔥 НОВОЕ: Сброс слайдов
+        self.lesson_slides = []
+        self.slides_enabled = True
 
     def get_available_subjects(self) -> List[str]:
         """ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
@@ -2932,7 +3086,7 @@ class DialogueManager:
                     else:
                         return all_progress
         except Exception as e:
-            debug_log(f"Ошибка загрузки прогресса: {e}")
+            debug_log(f"Ошибка загрузки прогресс: {e}")
         
         # Возвращаем пустой прогресс если файла нет
         if subject:
@@ -3217,7 +3371,11 @@ class DialogueManager:
             "subject_type": self.subject_type,
             "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED,
             "technical_prompts_enabled": TECHNICAL_PROMPTS_ENABLED,
-            "technical_symbols_preserved": self.technical_symbols_preserved
+            "technical_symbols_preserved": self.technical_symbols_preserved,
+            # 🔥 НОВОЕ: Информация о слайдах
+            "slides_enabled": self.slides_enabled,
+            "lesson_slides_count": len(self.lesson_slides),
+            "current_slide_index": self.current_paragraph - 2 if self.current_paragraph >= 2 else None
         }
 
     def export_conversation_history(self) -> List[Dict]:
@@ -3283,7 +3441,8 @@ class DialogueManager:
                 'lesson_number': self.selected_lesson.get('lesson_number'),
                 'is_student_lesson': True,
                 'is_technical': self.is_technical_subject,
-                'subject_type': self.subject_type
+                'subject_type': self.subject_type,
+                'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
             }, room=self.room_id)
             
             # Также отправляем текущий абзац если есть
@@ -3294,6 +3453,20 @@ class DialogueManager:
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=self.room_id)
+            
+            # 🔥 НОВОЕ: Отправляем текущий слайд если есть
+            if self.lesson_slides and self.current_paragraph >= 2:
+                slide_index = self.current_paragraph - 2
+                if 0 <= slide_index < len(self.lesson_slides):
+                    self.socketio.emit('lesson_slide', {
+                        'room_id': self.room_id,
+                        'slide_url': self.lesson_slides[slide_index],
+                        'slide_index': slide_index,
+                        'slide_number': slide_index + 1,
+                        'total_slides': len(self.lesson_slides),
+                        'paragraph_index': self.current_paragraph - 1,
+                        'has_slide': True
+                    }, room=self.room_id)
             
             return True
         return False
@@ -3353,15 +3526,66 @@ class DialogueManager:
         
         return result
 
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ СЛАЙДАМИ
+    def enable_slides(self):
+        """Включение отображения слайдов"""
+        self.slides_enabled = True
+        debug_log("✅ Отображение слайдов включено")
+
+    def disable_slides(self):
+        """Выключение отображения слайдов"""
+        self.slides_enabled = False
+        debug_log("❌ Отображение слайдов выключено")
+
+    def get_slides_status(self) -> Dict:
+        """Возвращает статус слайдов для текущего урока"""
+        return {
+            "slides_enabled": self.slides_enabled,
+            "slides_count": len(self.lesson_slides),
+            "current_slide_index": self.current_paragraph - 2 if self.current_paragraph >= 2 else None,
+            "lesson_has_slides": len(self.lesson_slides) > 0,
+            "current_lesson": self.selected_lesson['title'] if self.selected_lesson else None
+        }
+
+    def force_show_slide(self, slide_index: int) -> bool:
+        """Принудительно показывает слайд по индексу"""
+        if not self.room_id or not self.socketio or slide_index < 0:
+            return False
+        
+        if slide_index < len(self.lesson_slides):
+            slide_url = self.lesson_slides[slide_index]
+            self.socketio.emit('lesson_slide', {
+                'room_id': self.room_id,
+                'slide_url': slide_url,
+                'slide_index': slide_index,
+                'slide_number': slide_index + 1,
+                'total_slides': len(self.lesson_slides),
+                'paragraph_index': self.current_paragraph,
+                'has_slide': True,
+                'force_show': True
+            }, room=self.room_id)
+            debug_log(f"🔧 Принудительно показан слайд {slide_index + 1}: {slide_url}")
+            return True
+        
+        return False
+
 # Тестирование
 if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    debug_log("🧪 Тестирование DialogueManager с исправленной логикой перехода к практике...")
+    debug_log("🧪 Тестирование DialogueManager с поддержкой слайдов...")
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
+    
+    # Тест метода поиска слайдов
+    test_lesson_path = Path("lessons/demo/demo_physics.txt")
+    if test_lesson_path.exists():
+        slides = dm._find_lesson_slides(test_lesson_path)
+        debug_log(f"📸 Тест поиска слайдов: найдено {len(slides)} слайдов")
+    else:
+        debug_log("⚠️ Тестовый файл урока не найден для проверки слайдов")
     
     # Тест доступных предметов (загрузит уроки лениво)
     subjects = dm.get_available_subjects()
@@ -3371,4 +3595,4 @@ if __name__ == "__main__":
     response = dm.process_input("привет")
     debug_log(f"👋 Ответ на приветствие: {response[:100]}...")
     
-    debug_log("✅ Тестирование завершено! Логика перехода к практике исправлена.")
+    debug_log("✅ Тестирование завершено! Поддержка слайдов добавлена.")
