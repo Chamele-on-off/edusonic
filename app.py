@@ -1,6 +1,7 @@
-# app.py - AI Teacher System с поддержкой технических и естественнонаучных предметов
-# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
-# ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG) И РЕЗЕРВНОГО КОПИРОВАНИЯ
+# app.py - AI Teacher System с поддержкои технических и естественнонаучных предметов
+# ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОИ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОИ ПРОИЗВОДИТЕЛЬНОСТЬЮ
+# ВЕРСИЯ С ПОДДЕРЖКОИ СЛАИДОВ ДЛЯ УРОКОВ (JPG/PNG) И РЕЗЕРВНОГО КОПИРОВАНИЯ
+# ВЕРСИЯ С ПОДДЕРЖКОИ ДОБАВЛЕНИЯ НОВЫХ АВАТАРОВ ЧЕРЕЗ TEACHER.HTML
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -30,8 +31,10 @@ import sys
 import atexit
 from threading import Timer, Semaphore, Lock
 import psutil
+import shutil
+import zipfile
 
-# Настройка Flask и SocketIO
+# Настроика Flask и SocketIO
 app = Flask(__name__, static_folder='static')
 app.secret_key = 'ai-teacher-secret-key-2024'
 
@@ -47,11 +50,11 @@ socketio = SocketIO(
     async_handlers=True
 )
 
-# Ограничитель параллельной инициализации комнат
-init_semaphore = Semaphore(100)  # УВЕЛИЧИЛИ до 100 одновременных инициализаций
-dialogue_init_locks = defaultdict(Lock)  # Лок для инициализации DialogueManager в каждой комнате
+# Ограничитель параллельнои инициализации комнат
+init_semaphore = Semaphore(100)  # УВЕЛИЧИЛИ до 100 одновременных инициализации
+dialogue_init_locks = defaultdict(Lock)  # Лок для инициализации DialogueManager в каждои комнате
 
-# Ручная настройка CORS
+# Ручная настроика CORS
 @app.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
@@ -69,7 +72,7 @@ USERS_DIR = BASE_DIR / "users_data"
 STUDENT_PROGRESS_DIR = BASE_DIR / "students_progress"
 
 # Создаем необходимые папки
-for folder in [LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR, USERS_DIR, STUDENT_PROGRESS_DIR]:
+for folder in [FRAMES_DIR, LESSONS_DIR, MATERIALS_DIR, PRACTICE_DIR, STUDENTS_DIR, USERS_DIR, STUDENT_PROGRESS_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # Создаем новую структуру папок для уроков
@@ -84,17 +87,17 @@ for folder in [LESSONS_DEMO_DIR, LESSONS_STUDENTS_DIR, LESSONS_GENERATED_DIR, LE
 def create_lessons_structure():
     """Создает структуру папок для уроков по классам (1-11 классы)"""
     subjects_by_class = {
-        "1": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский язык", "французский язык", "информатика"],
-        "2": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский язык", "французский язык", "информатика"],
-        "3": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский язык", "французский язык", "информатика"],
-        "4": ["русский язык", "литературное чтение", "математика", "окружающий мир", "английский язык", "французский язык", "информатика"],
-        "5": ["математика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "информатика"],
-        "6": ["математика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "обществознание", "информатика"],
-        "7": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "обществознание", "информатика"],
-        "8": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "обществознание", "информатика", "химия"],
-        "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "обществознание", "информатика", "химия"],
-        "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "обществознание", "информатика", "химия"],
-        "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык", "литература", "английский язык", "французский язык", "история", "обществознание", "информатика", "химия"]
+        "1": ["русскии язык", "литературное чтение", "математика", "окружающии мир", "англиискии язык", "французскии язык", "информатика"],
+        "2": ["русскии язык", "литературное чтение", "математика", "окружающии мир", "англиискии язык", "французскии язык", "информатика"],
+        "3": ["русскии язык", "литературное чтение", "математика", "окружающии мир", "англиискии язык", "французскии язык", "информатика"],
+        "4": ["русскии язык", "литературное чтение", "математика", "окружающии мир", "англиискии язык", "французскии язык", "информатика"],
+        "5": ["математика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "информатика"],
+        "6": ["математика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика"],
+        "7": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика"],
+        "8": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика", "химия"],
+        "9": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика", "химия"],
+        "10": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика", "химия"],
+        "11": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика", "химия"]
     }
     
     for class_level, subjects in subjects_by_class.items():
@@ -146,7 +149,7 @@ room_last_activity = defaultdict(lambda: time.time())
 # PeerJS tracking
 room_peer_ids = defaultdict(dict)
 
-# Кэш для визуализаций
+# Кэш для визуализации
 diagram_cache = {}
 room_visualization_queue = defaultdict(list)
 room_visualization_active = defaultdict(bool)
@@ -160,13 +163,13 @@ room_last_llm_update = defaultdict(lambda: 0)
 # Данные учеников
 room_student_data = defaultdict(dict)
 
-# Менеджер локальной LLM
+# Менеджер локальнои LLM
 llm_manager = get_llm_manager()
 
-# Менеджер ключей API
+# Менеджер ключеи API
 key_manager = get_key_manager()
 
-# Настройки очистки
+# Настроики очистки
 ROOM_TIMEOUT = 3600  # 1 час неактивности
 MAX_ROOMS = 200  # Максимальное количество комнат в памяти
 DEBUG_LLM = True
@@ -188,7 +191,7 @@ def json_serialize_paths(obj):
     return obj
 
 # =============================================================================
-# ИМПОРТ МОДУЛЕЙ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+# ИМПОРТ МОДУЛЕИ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
 # =============================================================================
 
 try:
@@ -202,7 +205,20 @@ try:
     debug_log("✅ Модуль технических предметов загружен")
 except ImportError as e:
     TECHNICAL_SUPPORT_ENABLED = False
-    debug_log(f"⚠️ Модуль technical_subjects.py не найден: {e}. Техническая поддержка отключена.")
+    debug_log(f"⚠️ Модуль technical_subjects.py не наиден: {e}. Техническая поддержка отключена.")
+
+# =============================================================================
+# 🔥 ИМПОРТ AVATAR MANAGER
+# =============================================================================
+
+try:
+    from avatar_manager import AvatarManager
+    avatar_manager = AvatarManager(FRAMES_DIR)
+    AVATAR_MANAGER_ENABLED = True
+    debug_log("✅ AvatarManager загружен")
+except ImportError as e:
+    AVATAR_MANAGER_ENABLED = False
+    debug_log(f"⚠️ AvatarManager не загружен: {e}. Функционал управления аватарами отключен.")
 
 # =============================================================================
 # СИСТЕМА АУТЕНТИФИКАЦИИ
@@ -379,12 +395,12 @@ def auth_login():
             
             return jsonify({
                 "success": True, 
-                "message": "Успешный вход",
+                "message": "Успешныи вход",
                 "role": user_data['role'],
                 "profile_complete": user_data.get('profile_complete', False)
             })
         else:
-            return jsonify({"success": False, "error": "Неверный логин или пароль"})
+            return jsonify({"success": False, "error": "Неверныи логин или пароль"})
     except Exception as e:
         return jsonify({"success": False, "error": f"Ошибка входа: {str(e)}"})
 
@@ -396,7 +412,7 @@ def logout():
 @app.route('/logout', methods=['POST'])
 def logout_post():
     session.clear()
-    return jsonify({"success": True, "message": "Успешный выход"})
+    return jsonify({"success": True, "message": "Успешныи выход"})
 
 @app.route('/api/auth/check')
 def check_auth():
@@ -534,10 +550,10 @@ def delete_user(user_id):
         user_file = USERS_DIR / f"{user_id}.json"
         
         if not user_file.exists():
-            return jsonify({"success": False, "error": "Пользователь не найден"})
+            return jsonify({"success": False, "error": "Пользователь не наиден"})
         
         if session.get('user_id') == user_id:
-            return jsonify({"success": False, "error": "Нельзя удалить свой собственный аккаунт"})
+            return jsonify({"success": False, "error": "Нельзя удалить свои собственныи аккаунт"})
         
         user_file.unlink()
         return jsonify({"success": True, "message": "Пользователь удален"})
@@ -619,20 +635,20 @@ def periodic_cleanup():
                             del room_participants[room_id]
                         debug_log(f"🧹 Удалена старая комната для оптимизации: {room_id}")
                     except Exception as e:
-                        debug_log(f"⚠️ Ошибка удаления старой комнаты: {e}")
+                        debug_log(f"⚠️ Ошибка удаления старои комнаты: {e}")
     except Exception as e:
-        debug_log(f"❌ Ошибка периодической очистки: {e}")
+        debug_log(f"❌ Ошибка периодическои очистки: {e}")
     
     # Повторяем каждые 10 минут
     Timer(600, periodic_cleanup).start()
 
 def handle_disconnected_session(sid):
-    """Безопасная обработка отключенных сессий"""
+    """Безопасная обработка отключенных сессии"""
     try:
         for room_id, participants in room_participants.items():
             if sid in participants:
                 participants.remove(sid)
-                debug_log(f"🔧 Удален отключенный участник {sid} из комнаты {room_id}")
+                debug_log(f"🔧 Удален отключенныи участник {sid} из комнаты {room_id}")
                 emit('participants_update', {'count': len(participants)}, room=room_id)
                 
         for room_id, peers in room_peer_ids.items():
@@ -640,14 +656,14 @@ def handle_disconnected_session(sid):
                 del peers[sid]
                 debug_log(f"🔧 Удален peer_id для отключенного участника {sid}")
     except Exception as e:
-        debug_log(f"⚠️ Ошибка очистки отключенной сессии {sid}: {e}")
+        debug_log(f"⚠️ Ошибка очистки отключеннои сессии {sid}: {e}")
 
 def setup_llm_manager():
-    """Настройка менеджера LLM"""
+    """Настроика менеджера LLM"""
     llm_manager.start()
     
     def global_llm_callback(request_id, response, room_id, original_request_id=None):
-        """Глобальный обработчик ответов от LLM"""
+        """Глобальныи обработчик ответов от LLM"""
         debug_log(f"Получен ответ для комнаты {room_id}: {response[:100]}...")
         
         target_request_id = original_request_id
@@ -728,7 +744,7 @@ def ensure_dialogue_manager_for_room(room_id):
         # Проверяем, нужен ли нам DialogueManager
         if room_id not in room_dialogue or room_dialogue[room_id] is None:
             with dialogue_init_locks[room_id]:
-                # Двойная проверка после захвата лока
+                # Двоиная проверка после захвата лока
                 if room_id not in room_dialogue or room_dialogue[room_id] is None:
                     debug_log(f"🔥 Создаем DialogueManager для комнаты {room_id} (ленивая инициализация)")
                     
@@ -782,18 +798,18 @@ def clean_text_for_speech(text: str) -> str:
     return text
 
 def reset_speaking_state(room_id, is_teacher=False):
-    """Сбрасывает состояние речи для указанной комнаты"""
+    """Сбрасывает состояние речи для указаннои комнаты"""
     room_speaking[room_id] = False
     if is_teacher:
         room_teacher_speaking[room_id] = False
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 # =============================================================================
-# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОИ ЯЗЫКОВ И ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
 # =============================================================================
 
 def is_foreign_text(text):
-    """🔥 СУПЕР-БЫСТРАЯ проверка на иностранный текст"""
+    """🔥 СУПЕР-БЫСТРАЯ проверка на иностранныи текст"""
     if not text:
         return False
     
@@ -802,9 +818,9 @@ def is_foreign_text(text):
     
     # 1. Ищем латинские буквы
     if not re.search(r'[a-zA-Z]', sample):
-        return False  # Нет латинских букв - точно не иностранный
+        return False  # Нет латинских букв - точно не иностранныи
     
-    # 2. Игнорируем общепринятые английские слова в русском контексте
+    # 2. Игнорируем общепринятые англииские слова в русском контексте
     common_english_in_russian = ['ok', 'hello', 'hi', 'yes', 'no', 'bye', 'sorry', 'please', 'thank you', 'okay']
     words = re.findall(r'\b[a-zA-Z]{2,}\b', sample.lower())
     
@@ -815,7 +831,7 @@ def is_foreign_text(text):
     foreign_words = [w for w in words if w not in common_english_in_russian]
     unique_foreign_words = set(foreign_words)
     
-    # Если есть хотя бы 2 уникальных НЕ общепринятых английских слова
+    # Если есть хотя бы 2 уникальных НЕ общепринятых англииских слова
     if len(unique_foreign_words) >= 2:
         return True
     
@@ -836,15 +852,15 @@ def text_to_speech(text, lang='ru'):
         if lang == 'auto':
             # Быстрая проверка - есть ли латинские буквы?
             has_latin = bool(re.search(r'[a-zA-Z]', text))
-            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', text))
+            has_cyrillic = bool(re.search(r'[а-яА-ЯеЕ]', text))
             
-            # Если ЕСТЬ латиница И кириллица - смешанный режим
+            # Если ЕСТЬ латиница И кириллица - смешанныи режим
             if has_latin and has_cyrillic:
                 return text_to_speech_mixed(text)
-            # Если ТОЛЬКО латиница - английский
+            # Если ТОЛЬКО латиница - англиискии
             elif has_latin and not has_cyrillic:
                 lang = 'en'
-            # По умолчанию - русский (для ТОЛЬКО кириллицы или цифр/знаков)
+            # По умолчанию - русскии (для ТОЛЬКО кириллицы или цифр/знаков)
             else:
                 lang = 'ru'
         
@@ -857,7 +873,7 @@ def text_to_speech(text, lang='ru'):
         
     except Exception as e:
         debug_log(f"Error in text_to_speech: {e}")
-        # Fallback - используем русский язык
+        # Fallback - используем русскии язык
         try:
             tts = gTTS(text=text, lang='ru', slow=False, lang_check=False)
             mp3_fp = io.BytesIO()
@@ -871,9 +887,9 @@ def text_to_speech(text, lang='ru'):
 def text_to_speech_mixed(text):
     """🔥 ОПТИМИЗИРОВАННАЯ ФУНКЦИЯ: Озвучивание смешанного текста"""
     try:
-        # 🔥 ОПТИМИЗИРОВАННЫЙ ШАБЛОН: ищем последовательности букв одного языка
+        # 🔥 ОПТИМИЗИРОВАННЫИ ШАБЛОН: ищем последовательности букв одного языка
         # Разбиваем по границам языка (кириллица/латиница)
-        pattern = r'([а-яА-ЯёЁ][а-яА-ЯёЁ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
+        pattern = r'([а-яА-ЯеЕ][а-яА-ЯеЕ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
         fragments = re.findall(pattern, text)
         
         if not fragments:
@@ -887,7 +903,7 @@ def text_to_speech_mixed(text):
                 continue
                 
             # Определяем язык фрагмента - быстрая проверка
-            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', fragment))
+            has_cyrillic = bool(re.search(r'[а-яА-ЯеЕ]', fragment))
             lang = 'ru' if has_cyrillic else 'en'
             
             try:
@@ -919,11 +935,11 @@ def text_to_speech_mixed(text):
         return text_to_speech(text, 'ru')
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
-    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкой технических предметов"""
+    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкои технических предметов"""
     if not text.strip():
         return
         
-    # 🔥 ОПРЕДЕЛЯЕМ ПРЕДМЕТ ДЛЯ УМНОЙ ОЧИСТКИ
+    # 🔥 ОПРЕДЕЛЯЕМ ПРЕДМЕТ ДЛЯ УМНОИ ОЧИСТКИ
     subject = None
     if room_id in room_student_data and room_student_data[room_id]:
         subject = room_student_data[room_id].get('subject')
@@ -942,7 +958,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             cleaned_text = clean_text_for_speech(text)
             debug_log(f"🎯 Использована стандартная очистка")
     except Exception as e:
-        debug_log(f"⚠️ Ошибка умной очистки: {e}, используется стандартная")
+        debug_log(f"⚠️ Ошибка умнои очистки: {e}, используется стандартная")
         cleaned_text = clean_text_for_speech(text)
     
     if not cleaned_text.strip():
@@ -956,14 +972,14 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
     # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
-    # 1. Если force_lang указан - используем его (самый быстрый путь)
+    # 1. Если force_lang указан - используем его (самыи быстрыи путь)
     # 2. Иначе определяем только если есть латинские буквы
-    # 3. По умолчанию - русский (самый частый случай)
+    # 3. По умолчанию - русскии (самыи частыи случаи)
     
     audio_data = None
     
     if force_lang:
-        # 🔥 ЯВНО УКАЗАН ЯЗЫК - САМЫЙ БЫСТРЫЙ ПУТЬ
+        # 🔥 ЯВНО УКАЗАН ЯЗЫК - САМЫИ БЫСТРЫИ ПУТЬ
         audio_data = text_to_speech(cleaned_text, lang=force_lang)
     else:
         # 🔥 БЫСТРАЯ ЭВРИСТИКА: проверяем только на латинские буквы
@@ -971,15 +987,15 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
         has_latin = bool(re.search(r'[a-zA-Z]', cleaned_text))
         
         if not has_latin:
-            # 🔥 ТОЛЬКО РУССКИЙ ТЕКСТ - БЫСТРЫЙ ПУТЬ
+            # 🔥 ТОЛЬКО РУССКИИ ТЕКСТ - БЫСТРЫИ ПУТЬ
             audio_data = text_to_speech(cleaned_text, lang='ru')
         else:
             # Есть латинские буквы - нужна более точная проверка
             if is_foreign_text(cleaned_text):
-                # 🔥 ЕСТЬ ИНОСТРАННЫЙ ТЕКСТ - автоопределение
+                # 🔥 ЕСТЬ ИНОСТРАННЫИ ТЕКСТ - автоопределение
                 audio_data = text_to_speech(cleaned_text, lang='auto')
             else:
-                # 🔥 ТОЛЬКО ОБЩЕПРИНЯТЫЕ СЛОВА - РУССКИЙ
+                # 🔥 ТОЛЬКО ОБЩЕПРИНЯТЫЕ СЛОВА - РУССКИИ
                 audio_data = text_to_speech(cleaned_text, lang='ru')
     
     if audio_data:
@@ -1011,7 +1027,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
 def save_student_data(student_data):
-    """Сохраняет данные ученика в JSON файл"""
+    """Сохраняет данные ученика в JSON фаил"""
     try:
         student_id = student_data.get('student_id')
         if not student_id:
@@ -1036,7 +1052,7 @@ def save_student_data(student_data):
         return None
 
 def load_student_data(student_id):
-    """Загружает данные ученика из JSON файл"""
+    """Загружает данные ученика из JSON фаил"""
     try:
         filename = f"{student_id}.json"
         filepath = STUDENTS_DIR / filename
@@ -1109,7 +1125,7 @@ def create_student_conference(student_data, subject=None):
             'student_data': room_student_data[room_id]
         }
     except Exception as e:
-        debug_log(f"❌ Ошибка создания студенческой конференции: {e}")
+        debug_log(f"❌ Ошибка создания студенческои конференции: {e}")
         return None
 
 def create_student_rooms(student_data):
@@ -1128,8 +1144,8 @@ def create_student_rooms(student_data):
         
         subjects = [
             'математика', 'физика', 'химия', 'биология', 
-            'история', 'обществознание', 'литература', 'русский язык', 
-            'английский язык', 'география', 'информатика'
+            'история', 'обществознание', 'литература', 'русскии язык', 
+            'англиискии язык', 'география', 'информатика'
         ]
         
         created_rooms = []
@@ -1306,7 +1322,7 @@ def get_student_lessons_by_class(student_class):
         return {}
 
 def get_student_next_lesson(student_id, subject):
-    """Получает следующий урок для ученика по предмету"""
+    """Получает следующии урок для ученика по предмету"""
     try:
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         
@@ -1336,11 +1352,11 @@ def get_student_next_lesson(student_id, subject):
         return None
 
 # =============================================================================
-# 🔥 НОВЫЕ ФУНКЦИИ ДЛЯ СЛАЙДОВ УРОКОВ
+# 🔥 НОВЫЕ ФУНКЦИИ ДЛЯ СЛАИДОВ УРОКОВ
 # =============================================================================
 
 def find_lesson_slides(lesson_path):
-    """Ищет слайды (JPG/PNG/MP4) рядом с уроком: lesson_01.jpg, lesson_02.png и т.д."""
+    """Ищет слаиды (JPG/PNG/MP4) рядом с уроком: lesson_01.jpg, lesson_02.png и т.д."""
     try:
         if not lesson_path:
             return []
@@ -1352,7 +1368,7 @@ def find_lesson_slides(lesson_path):
                 lesson_path = LESSONS_DIR / lesson_path
         
         if not lesson_path.exists():
-            debug_log(f"❌ Файл урока не найден: {lesson_path}")
+            debug_log(f"❌ Фаил урока не наиден: {lesson_path}")
             return []
         
         base_name = lesson_path.stem  # например: "lesson_01_генетика" или "demo_physics"
@@ -1361,7 +1377,7 @@ def find_lesson_slides(lesson_path):
         slides = []
         idx = 1
         
-        # Проверяем файлы с расширениями в порядке приоритета
+        # Проверяем фаилы с расширениями в порядке приоритета
         supported_extensions = ['.jpg', '.jpeg', '.png', '.mp4', '.webp']
         
         while True:
@@ -1383,7 +1399,7 @@ def find_lesson_slides(lesson_path):
                             'extension': ext
                         })
                         found = True
-                        debug_log(f"✅ Найден слайд {idx}: {candidate.name}")
+                        debug_log(f"✅ Наиден слаид {idx}: {candidate.name}")
                         break
                 
                 if found:
@@ -1394,15 +1410,15 @@ def find_lesson_slides(lesson_path):
                 
             idx += 1
         
-        debug_log(f"✅ Всего найдено слайдов для урока {base_name}: {len(slides)}")
+        debug_log(f"✅ Всего наидено слаидов для урока {base_name}: {len(slides)}")
         return slides
     
     except Exception as e:
-        debug_log(f"❌ Ошибка поиска слайдов: {e}")
+        debug_log(f"❌ Ошибка поиска слаидов: {e}")
         return []
 
 def get_lesson_slides_api(lesson_id):
-    """API-функция для получения слайдов урока"""
+    """API-функция для получения слаидов урока"""
     try:
         # Ищем урок во всех папках
         possible_paths = []
@@ -1423,17 +1439,17 @@ def get_lesson_slides_api(lesson_id):
         for lesson_file in LESSONS_GENERATED_DIR.glob(f"{lesson_id}.txt"):
             possible_paths.append(lesson_file)
         
-        # Поиск в корневой папке уроков
+        # Поиск в корневои папке уроков
         for lesson_file in LESSONS_DIR.glob(f"{lesson_id}.txt"):
             possible_paths.append(lesson_file)
         
         if not possible_paths:
-            return {"success": False, "error": "Урок не найден"}
+            return {"success": False, "error": "Урок не наиден"}
         
-        # Берем первый найденный урок
+        # Берем первыи наиденныи урок
         lesson_path = possible_paths[0]
         
-        # Ищем слайды
+        # Ищем слаиды
         slides = find_lesson_slides(lesson_path)
         
         if slides:
@@ -1451,7 +1467,7 @@ def get_lesson_slides_api(lesson_id):
         }
         
     except Exception as e:
-        debug_log(f"❌ Ошибка получения слайдов: {e}")
+        debug_log(f"❌ Ошибка получения слаидов: {e}")
         return {"success": False, "error": str(e)}
 
 # =============================================================================
@@ -1523,8 +1539,8 @@ def handle_join_room(data):
             student_name = student_data.get('name', 'ученик')
             subject = student_data.get('subject', 'предмету')
             
-            welcome_message = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-            welcome_message += "Давай начнем наш сегодняшний урок. Если ты готов начать, скажи 'готов начать'."
+            welcome_message = f"{student_name}, привет! Я твои виртуальныи учитель по {subject}. "
+            welcome_message += "Даваи начнем наш сегодняшнии урок. Если ты готов начать, скажи 'готов начать'."
             
             socketio.emit('student_welcome_message', {
                 'room_id': room_id,
@@ -1537,7 +1553,7 @@ def handle_join_room(data):
             socketio.start_background_task(lambda: delayed_welcome(room_id, welcome_message))
         
         elif len(room_participants[room_id]) == 1 and not room_ai_activated[room_id]:
-            greeting = "Привет! Я ваш виртуальный учитель. Давайте познакомимся и выберем интересный урок вместе!"
+            greeting = "Привет! Я ваш виртуальныи учитель. Даваите познакомимся и выберем интересныи урок вместе!"
             socketio.start_background_task(lambda: delayed_welcome(room_id, greeting))
         
         debug_log(f"Успешное присоединение к комнате {room_id}, участников: {len(room_participants[room_id])}")
@@ -1553,9 +1569,9 @@ def handle_join_room(data):
             debug_log("⚠️ Не удалось отправить ошибку - клиент уже отключен")
 
 def delayed_welcome(room_id, message, delay=2):
-    """Отправляет приветствие с задержкой"""
+    """Отправляет приветствие с задержкои"""
     time.sleep(delay)
-    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ: приветствие всегда на русском
+    # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ: приветствие всегда на русском
     speak_text(room_id, message, voice_type='female', is_teacher=True, force_lang='ru')
 
 @socketio.on('get_current_avatar')
@@ -1587,7 +1603,7 @@ def handle_generate_speech(data):
     room_id = data['room_id']
     text = data['text']
     voice_type = data.get('voice', 'male')
-    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+    # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
     speak_text(room_id, text, voice_type)
 
 @socketio.on('student_answer')
@@ -1618,13 +1634,13 @@ def handle_student_answer(data):
             room_practice_active[room_id] = False
             room_current_question_index[room_id] = 0
             
-            response = "Практика завершена по вашей команде. Урок окончен!"
+            response = "Практика завершена по вашеи команде. Урок окончен!"
             emit('speech_text', {
                 'text': f"Учитель: {response}",
                 'sid': 'teacher',
                 'is_teacher': True
             }, room=room_id)
-            # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+            # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
             speak_text(room_id, response, voice_type='female', is_teacher=True, force_lang='ru')
             emit('practice_ended', {}, room=room_id)
         return
@@ -1639,7 +1655,7 @@ def handle_student_answer(data):
         debug_log(f"Система не ожидает ответа, игнорирую: {answer}")
         return
 
-    if any(cmd in answer.lower() for cmd in ['продолжай', 'дальше', 'следующий']):
+    if any(cmd in answer.lower() for cmd in ['продолжаи', 'дальше', 'следующии']):
         debug_log(f"Игнорирую команду вместо ответа: {answer}")
         response = dialogue._evaluate_and_generate_next("")
         if response:
@@ -1648,7 +1664,7 @@ def handle_student_answer(data):
                 'sid': 'teacher',
                 'is_teacher': True
             }, room=room_id)
-            # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+            # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
             speak_text(room_id, response, voice_type='female', is_teacher=True)
         return
 
@@ -1672,7 +1688,7 @@ def handle_student_answer(data):
             'is_teacher': True
         }, room=room_id)
         
-        # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+        # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
         speak_text(room_id, response, voice_type='female', is_teacher=True)
         
         if not dialogue.practice_active:
@@ -1732,7 +1748,7 @@ def handle_recognized_speech(data):
         return
 
     if (text.startswith("Учитель:") or "учитель" in text.lower() or 
-        len(text.strip()) < 3 or text in ["привет", "здравствуйте"]):
+        len(text.strip()) < 3 or text in ["привет", "здравствуите"]):
         return
     
     room_speech_data[room_id].append({
@@ -1751,9 +1767,9 @@ def handle_recognized_speech(data):
         
         if dialogue.is_lesson_started():
             all_continue_commands = [
-                "продолжай", "продолжить", "дальше", "следующий", "вперед", "давай дальше",
+                "продолжаи", "продолжить", "дальше", "следующии", "вперед", "даваи дальше",
                 "записал", "понял", "ясно", "ага", "угу", "хорошо", "ок", "ладно", "ясно",
-                "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующий вопрос"
+                "готов", "можно дальше", "слушаю", "понятно", "ясно", "следующии вопрос"
             ]
             
             if any(cmd in text.lower() for cmd in all_continue_commands):
@@ -1764,7 +1780,7 @@ def handle_recognized_speech(data):
                         'sid': 'teacher',
                         'is_teacher': True
                     }, room=room_id)
-                    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+                    # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
                     speak_text(room_id, next_paragraph, voice_type='female', is_teacher=True)
                 else:
                     practice_msg = "Урок завершен. Переходим к практике."
@@ -1795,7 +1811,7 @@ def handle_recognized_speech(data):
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=room_id)
-                # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+                # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
         else:
             response = dialogue.process_input(text)
@@ -1824,7 +1840,7 @@ def handle_recognized_speech(data):
                     'is_teacher': True
                 }, room=room_id)
                 
-                # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+                # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
                 speak_text(room_id, response, voice_type='female', is_teacher=True)
                 
             if dialogue.is_lesson_started():
@@ -1869,8 +1885,8 @@ def handle_activate_ai_teacher(data):
         dialogue = room_dialogue[room_id]
         dialogue.set_llm_mode(room_llm_mode[room_id])
         
-        greeting = "Привет! Я ваш AI-учитель. Давайте пообщаемся и выберем интересный урок вместе!"
-        # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+        greeting = "Привет! Я ваш AI-учитель. Даваите пообщаемся и выберем интересныи урок вместе!"
+        # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
         speak_text(room_id, greeting, voice_type='female', is_teacher=True, force_lang='ru')
         
         emit('ai_teacher_activated', {
@@ -1937,7 +1953,7 @@ def handle_llm_response_ready(data):
         'is_teacher': True
     }, room=room_id)
     
-    # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+    # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
     speak_text(room_id, answer, voice_type='female', is_teacher=True)
 
 @socketio.on('practice_started')
@@ -2068,7 +2084,7 @@ def handle_llm_async_response(data):
             'is_teacher': True
         }, room=room_id)
         
-        # 🔥 ОПТИМИЗИРОВАННЫЙ ВЫЗОВ
+        # 🔥 ОПТИМИЗИРОВАННЫИ ВЫЗОВ
         speak_text(room_id, response, voice_type='female', is_teacher=True)
 
 @socketio.on('generate_visualization')
@@ -2100,7 +2116,7 @@ def handle_generate_visualization(data):
         debug_log(f"✅ SVG инфографика немедленно отправлена в комнату {room_id}")
         
     except Exception as e:
-        debug_log(f"❌ Ошибка немедленной генерации SVG инфографики: {e}")
+        debug_log(f"❌ Ошибка немедленнои генерации SVG инфографики: {e}")
         emit('visualization_generated', {
             'room_id': room_id,
             'topic': topic,
@@ -2110,17 +2126,17 @@ def handle_generate_visualization(data):
         }, room=room_id)
 
 # =============================================================================
-# 🔥 НОВЫЕ СОБЫТИЯ ДЛЯ СЛАЙДОВ УРОКОВ
+# 🔥 НОВЫЕ СОБЫТИЯ ДЛЯ СЛАИДОВ УРОКОВ
 # =============================================================================
 
 @socketio.on('get_lesson_slides')
 def handle_get_lesson_slides(data):
-    """WebSocket запрос для получения слайдов урока"""
+    """WebSocket запрос для получения слаидов урока"""
     try:
         room_id = data['room_id']
         lesson_id = data['lesson_id']
         
-        debug_log(f"Запрос слайдов для урока {lesson_id} в комнате {room_id}")
+        debug_log(f"Запрос слаидов для урока {lesson_id} в комнате {room_id}")
         
         slides_data = get_lesson_slides_api(lesson_id)
         
@@ -2133,7 +2149,7 @@ def handle_get_lesson_slides(data):
                 'has_slides': slides_data['has_slides']
             }, room=room_id)
             
-            debug_log(f"✅ Слайды отправлены в комнату {room_id}: {len(slides_data['slides'])} слайдов")
+            debug_log(f"✅ Слаиды отправлены в комнату {room_id}: {len(slides_data['slides'])} слаидов")
         else:
             emit('lesson_slides_error', {
                 'room_id': room_id,
@@ -2142,7 +2158,7 @@ def handle_get_lesson_slides(data):
             }, room=room_id)
             
     except Exception as e:
-        debug_log(f"❌ Ошибка обработки запроса слайдов: {e}")
+        debug_log(f"❌ Ошибка обработки запроса слаидов: {e}")
         emit('lesson_slides_error', {
             'room_id': data.get('room_id', 'unknown'),
             'lesson_id': data.get('lesson_id', 'unknown'),
@@ -2320,7 +2336,7 @@ def generate_diagram():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЙ ЭНДПОИНТ ДЛЯ ОТДАЧИ СЛАЙДОВ УРОКОВ
+# 🔥 НОВЫИ ЭНДПОИНТ ДЛЯ ОТДАЧИ СЛАИДОВ УРОКОВ
 # =============================================================================
 
 @app.route('/lesson_slide')
@@ -2344,12 +2360,12 @@ def serve_lesson_slide():
     return send_file(full_path, mimetype=mime)
 
 # =============================================================================
-# 🔥 НОВЫЙ API ДЛЯ ПОЛУЧЕНИЯ СЛАЙДОВ УРОКА
+# 🔥 НОВЫИ API ДЛЯ ПОЛУЧЕНИЯ СЛАИДОВ УРОКА
 # =============================================================================
 
 @app.route('/api/lesson/slides/<lesson_id>')
 def get_lesson_slides(lesson_id):
-    """API для получения списка слайдов урока"""
+    """API для получения списка слаидов урока"""
     try:
         slides_data = get_lesson_slides_api(lesson_id)
         return jsonify(slides_data)
@@ -2357,16 +2373,16 @@ def get_lesson_slides(lesson_id):
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЕ API ДЛЯ ЗАГРУЗКИ СЛАЙДОВ УРОКОВ
+# 🔥 НОВЫЕ API ДЛЯ ЗАГРУЗКИ СЛАИДОВ УРОКОВ
 # =============================================================================
 
 @app.route('/api/lesson/slides/upload', methods=['POST'])
 @teacher_required
 def upload_lesson_slides():
-    """Загрузка слайдов для урока"""
+    """Загрузка слаидов для урока"""
     try:
         if 'files' not in request.files:
-            return jsonify({"success": False, "error": "Файлы не найдены"})
+            return jsonify({"success": False, "error": "Фаилы не наидены"})
         
         files = request.files.getlist('files')
         lesson_id = request.form.get('lesson_id')
@@ -2375,7 +2391,7 @@ def upload_lesson_slides():
             return jsonify({"success": False, "error": "Не указан ID урока"})
         
         if not files or files[0].filename == '':
-            return jsonify({"success": False, "error": "Нет выбранных файлов"})
+            return jsonify({"success": False, "error": "Нет выбранных фаилов"})
         
         # Ищем урок
         lesson_path = None
@@ -2396,7 +2412,7 @@ def upload_lesson_slides():
                 break
         
         if not lesson_path:
-            return jsonify({"success": False, "error": "Урок не найден"})
+            return jsonify({"success": False, "error": "Урок не наиден"})
         
         lesson_dir = lesson_path.parent
         results = {
@@ -2406,14 +2422,14 @@ def upload_lesson_slides():
             "details": []
         }
         
-        # Получаем существующие слайды
+        # Получаем существующие слаиды
         existing_slides = find_lesson_slides(lesson_path)
         existing_slide_numbers = [slide['index'] for slide in existing_slides]
         next_slide_number = max(existing_slide_numbers) + 1 if existing_slide_numbers else 1
         
         for file in files:
             try:
-                # Проверяем тип файла
+                # Проверяем тип фаила
                 filename = secure_filename(file.filename)
                 file_ext = Path(filename).suffix.lower()
                 
@@ -2422,16 +2438,16 @@ def upload_lesson_slides():
                     results["details"].append({
                         "filename": filename,
                         "status": "failed",
-                        "error": f"Неподдерживаемый формат: {file_ext}"
+                        "error": f"Неподдерживаемыи формат: {file_ext}"
                     })
                     continue
                 
-                # Генерируем имя файла для слайда
+                # Генерируем имя фаила для слаида
                 base_name = lesson_path.stem
                 slide_filename = f"{base_name}_{next_slide_number:02d}{file_ext}"
                 slide_path = lesson_dir / slide_filename
                 
-                # Сохраняем файл
+                # Сохраняем фаил
                 file.save(slide_path)
                 
                 results["uploaded"] += 1
@@ -2455,28 +2471,28 @@ def upload_lesson_slides():
         return jsonify(results)
         
     except Exception as e:
-        debug_log(f"❌ Ошибка загрузки слайдов: {e}")
+        debug_log(f"❌ Ошибка загрузки слаидов: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/lesson/slides/delete', methods=['POST'])
 @teacher_required
 def delete_lesson_slide():
-    """Удаление слайда урока"""
+    """Удаление слаида урока"""
     try:
         data = request.json
         slide_path = data.get('slide_path')
         
         if not slide_path:
-            return jsonify({"success": False, "error": "Не указан путь к слайду"})
+            return jsonify({"success": False, "error": "Не указан путь к слаиду"})
         
         full_path = BASE_DIR / slide_path
         
         if not full_path.exists():
-            return jsonify({"success": False, "error": "Слайд не найден"})
+            return jsonify({"success": False, "error": "Слаид не наиден"})
         
-        # Проверяем, что файл находится в папке уроков
+        # Проверяем, что фаил находится в папке уроков
         if not str(full_path).startswith(str(LESSONS_DIR)):
-            return jsonify({"success": False, "error": "Неверный путь к слайду"})
+            return jsonify({"success": False, "error": "Неверныи путь к слаиду"})
         
         # Создаем резервную копию в корзине
         trash_dir = LESSONS_TRASH_DIR / "slides"
@@ -2488,18 +2504,18 @@ def delete_lesson_slide():
         
         return jsonify({
             "success": True,
-            "message": "Слайд перемещен в корзину",
+            "message": "Слаид перемещен в корзину",
             "backup_path": str(backup_path.relative_to(BASE_DIR))
         })
         
     except Exception as e:
-        debug_log(f"❌ Ошибка удаления слайда: {e}")
+        debug_log(f"❌ Ошибка удаления слаида: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/lesson/slides/bulk_delete', methods=['POST'])
 @teacher_required
 def bulk_delete_lesson_slides():
-    """Массовое удаление слайдов урока"""
+    """Массовое удаление слаидов урока"""
     try:
         data = request.json
         lesson_id = data.get('lesson_id')
@@ -2507,18 +2523,18 @@ def bulk_delete_lesson_slides():
         if not lesson_id:
             return jsonify({"success": False, "error": "Не указан ID урока"})
         
-        # Ищем слайды урока
+        # Ищем слаиды урока
         slides_data = get_lesson_slides_api(lesson_id)
         
         if not slides_data['success']:
-            return jsonify({"success": False, "error": slides_data.get('error', 'Ошибка поиска слайдов')})
+            return jsonify({"success": False, "error": slides_data.get('error', 'Ошибка поиска слаидов')})
         
         slides = slides_data.get('slides', [])
         
         if not slides:
-            return jsonify({"success": False, "error": "Слайды не найдены"})
+            return jsonify({"success": False, "error": "Слаиды не наидены"})
         
-        # Создаем папку для резервных копий
+        # Создаем папку для резервных копии
         trash_dir = LESSONS_TRASH_DIR / "slides_bulk" / lesson_id
         trash_dir.mkdir(parents=True, exist_ok=True)
         
@@ -2534,19 +2550,19 @@ def bulk_delete_lesson_slides():
                     shutil.move(slide_path, backup_path)
                     deleted_count += 1
             except Exception as e:
-                debug_log(f"❌ Ошибка удаления слайда {slide['filename']}: {e}")
+                debug_log(f"❌ Ошибка удаления слаида {slide['filename']}: {e}")
                 failed_count += 1
         
         return jsonify({
             "success": True,
-            "message": f"Удалено {deleted_count} слайдов, ошибок: {failed_count}",
+            "message": f"Удалено {deleted_count} слаидов, ошибок: {failed_count}",
             "deleted": deleted_count,
             "failed": failed_count,
             "backup_dir": str(trash_dir.relative_to(BASE_DIR))
         })
         
     except Exception as e:
-        debug_log(f"❌ Ошибка массового удаления слайдов: {e}")
+        debug_log(f"❌ Ошибка массового удаления слаидов: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
@@ -2556,7 +2572,7 @@ def bulk_delete_lesson_slides():
 @app.route('/api/students/export_full', methods=['GET'])
 @teacher_required
 def export_students_full():
-    """Полный экспорт данных учеников (включая прогресс)"""
+    """Полныи экспорт данных учеников (включая прогресс)"""
     try:
         import zipfile
         import tempfile
@@ -2565,7 +2581,7 @@ def export_students_full():
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-            # 1. Экспорт пользователей
+            # 1. Экспорт пользователеи
             for user_file in USERS_DIR.glob("*.json"):
                 with open(user_file, 'r', encoding='utf-8') as f:
                     user_data = json.load(f)
@@ -2580,7 +2596,7 @@ def export_students_full():
             for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
                 zipf.write(progress_file, f"progress/{progress_file.name}")
             
-            # 4. Создаем файл метаданных
+            # 4. Создаем фаил метаданных
             metadata = {
                 "export_date": datetime.now().isoformat(),
                 "total_users": len(list(USERS_DIR.glob("*.json"))),
@@ -2614,17 +2630,17 @@ def export_students_full():
 @app.route('/api/students/import', methods=['POST'])
 @teacher_required
 def import_students_data():
-    """Импорт данных учеников из ZIP-файла"""
+    """Импорт данных учеников из ZIP-фаила"""
     try:
         if 'file' not in request.files:
-            return jsonify({"success": False, "error": "Файл не найден"})
+            return jsonify({"success": False, "error": "Фаил не наиден"})
         
         file = request.files['file']
         if file.filename == '':
-            return jsonify({"success": False, "error": "Файл не выбран"})
+            return jsonify({"success": False, "error": "Фаил не выбран"})
         
         if not file.filename.endswith('.zip'):
-            return jsonify({"success": False, "error": "Только ZIP файлы"})
+            return jsonify({"success": False, "error": "Только ZIP фаилы"})
         
         import zipfile
         import tempfile
@@ -2649,7 +2665,7 @@ def import_students_data():
         with zipfile.ZipFile(zip_path, 'r') as zipf:
             zipf.extractall(temp_dir)
         
-        # Импортируем пользователей
+        # Импортируем пользователеи
         users_dir = os.path.join(temp_dir, "users")
         if os.path.exists(users_dir):
             for user_file in os.listdir(users_dir):
@@ -2658,7 +2674,7 @@ def import_students_data():
                         src_path = os.path.join(users_dir, user_file)
                         dst_path = USERS_DIR / user_file
                         
-                        # Проверяем, существует ли уже такой пользователь
+                        # Проверяем, существует ли уже такои пользователь
                         if dst_path.exists():
                             # Создаем резервную копию
                             backup_path = USERS_DIR / f"{user_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -2705,7 +2721,7 @@ def import_students_data():
                     except Exception as e:
                         results["errors"].append(f"Ошибка импорта прогресса {progress_file}: {str(e)}")
         
-        # Очищаем временные файлы
+        # Очищаем временные фаилы
         shutil.rmtree(temp_dir, ignore_errors=True)
         
         return jsonify(results)
@@ -2740,6 +2756,267 @@ def export_students_progress():
     except Exception as e:
         debug_log(f"❌ Ошибка экспорта прогресса: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# 🔥 НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ АВАТАРАМИ (ДОБАВЛЕННЫЕ)
+# =============================================================================
+
+@app.route('/api/avatars/upload', methods=['POST'])
+@teacher_required
+def upload_avatar():
+    """Загрузка нового аватара (ZIP архив с кадрами)"""
+    try:
+        if not AVATAR_MANAGER_ENABLED:
+            return jsonify({"success": False, "error": "AvatarManager не загружен"})
+        
+        if 'avatar_file' not in request.files:
+            return jsonify({"success": False, "error": "Файл не найден"})
+        
+        file = request.files['avatar_file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Файл не выбран"})
+        
+        if not file.filename.endswith('.zip'):
+            return jsonify({"success": False, "error": "Только ZIP архивы разрешены"})
+        
+        # Получаем параметры
+        avatar_name = request.form.get('avatar_name', '').strip()
+        force_overwrite = request.form.get('force_overwrite', 'false') == 'true'
+        
+        # Генерируем имя аватара если не указано
+        if not avatar_name:
+            avatar_name = Path(file.filename).stem
+            avatar_name = re.sub(r'[^\w\s-]', '', avatar_name).replace(' ', '_').lower()
+            avatar_name = avatar_name[:50]
+        
+        # Проверяем имя аватара
+        if not avatar_name or len(avatar_name) < 2:
+            return jsonify({"success": False, "error": "Неверное имя аватара"})
+        
+        # Создаем временный файл
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        temp_zip = Path(temp_dir) / file.filename
+        file.save(temp_zip)
+        
+        # Извлекаем аватар
+        success, message, avatar_path = avatar_manager.extract_avatar(temp_zip, avatar_name, force_overwrite)
+        
+        # Очищаем временные файлы
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        if success:
+            # Обновляем кэш аватаров
+            avatars = avatar_manager.list_avatars()
+            
+            # Уведомляем всех клиентов об обновлении списка аватаров
+            socketio.emit('avatars_updated', {
+                'avatars': avatars,
+                'new_avatar': avatar_name,
+                'timestamp': time.time()
+            })
+            
+            return jsonify({
+                "success": True,
+                "message": message,
+                "avatar_name": avatar_name,
+                "avatar_path": avatar_path,
+                "frames_count": len(list((FRAMES_DIR / avatar_name).iterdir()))
+            })
+        else:
+            return jsonify({"success": False, "error": message})
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка загрузки аватара: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/avatars/delete', methods=['POST'])
+@teacher_required
+def delete_avatar():
+    """Удаление аватара"""
+    try:
+        if not AVATAR_MANAGER_ENABLED:
+            return jsonify({"success": False, "error": "AvatarManager не загружен"})
+        
+        data = request.json
+        avatar_name = data.get('avatar_name')
+        
+        if not avatar_name:
+            return jsonify({"success": False, "error": "Не указано имя аватара"})
+        
+        # Проверяем, что это не системный аватар
+        system_avatars = ['woman', 'man', 'teacher', 'default']
+        if avatar_name in system_avatars:
+            return jsonify({"success": False, "error": "Нельзя удалить системный аватар"})
+        
+        success, message = avatar_manager.delete_avatar(avatar_name)
+        
+        if success:
+            # Уведомляем об удалении
+            socketio.emit('avatar_deleted', {
+                'avatar_name': avatar_name,
+                'timestamp': time.time()
+            })
+            
+            return jsonify({
+                "success": True,
+                "message": message,
+                "avatar_name": avatar_name
+            })
+        else:
+            return jsonify({"success": False, "error": message})
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка удаления аватара: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/avatars/rename', methods=['POST'])
+@teacher_required
+def rename_avatar():
+    """Переименование аватара"""
+    try:
+        if not AVATAR_MANAGER_ENABLED:
+            return jsonify({"success": False, "error": "AvatarManager не загружен"})
+        
+        data = request.json
+        old_name = data.get('old_name')
+        new_name = data.get('new_name')
+        
+        if not old_name or not new_name:
+            return jsonify({"success": False, "error": "Не указаны имена"})
+        
+        # Проверяем новое имя
+        new_name = re.sub(r'[^\w\s-]', '', new_name).replace(' ', '_').lower()
+        if len(new_name) < 2:
+            return jsonify({"success": False, "error": "Неверное новое имя"})
+        
+        success, message = avatar_manager.rename_avatar(old_name, new_name)
+        
+        if success:
+            # Уведомляем клиентов
+            socketio.emit('avatar_renamed', {
+                'old_name': old_name,
+                'new_name': new_name,
+                'timestamp': time.time()
+            })
+            
+            return jsonify({
+                "success": True,
+                "message": message,
+                "old_name": old_name,
+                "new_name": new_name
+            })
+        else:
+            return jsonify({"success": False, "error": message})
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка переименования аватара: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/avatars/stats', methods=['GET'])
+@teacher_required
+def get_avatars_stats():
+    """Получение статистики по всем аватарам"""
+    try:
+        if not AVATAR_MANAGER_ENABLED:
+            return jsonify({"success": False, "error": "AvatarManager не загружен"})
+        
+        avatars = avatar_manager.list_avatars()
+        
+        total_avatars = len(avatars)
+        total_frames = sum(avatar['frames_count'] for avatar in avatars)
+        total_size = sum(avatar['total_size'] for avatar in avatars)
+        
+        # Группируем по форматам
+        format_stats = {}
+        for avatar in avatars:
+            for fmt in avatar['formats']:
+                format_stats[fmt] = format_stats.get(fmt, 0) + 1
+        
+        return jsonify({
+            "success": True,
+            "stats": {
+                "total_avatars": total_avatars,
+                "total_frames": total_frames,
+                "total_size": total_size,
+                "total_size_mb": total_size / (1024 * 1024),
+                "format_stats": format_stats,
+                "avatars": avatars
+            }
+        })
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка получения статистики аватаров: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/avatars/<avatar_name>/preview', methods=['GET'])
+def get_avatar_preview(avatar_name):
+    """Получение превью аватара (первый кадр)"""
+    try:
+        if not AVATAR_MANAGER_ENABLED:
+            return jsonify({"success": False, "error": "AvatarManager не загружен"})
+        
+        stats = avatar_manager.get_avatar_stats(avatar_name)
+        if not stats:
+            return jsonify({"success": False, "error": "Аватар не найден"})
+        
+        return jsonify({
+            "success": True,
+            "avatar": stats
+        })
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка получения превью аватара: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/avatars/validate', methods=['POST'])
+@teacher_required
+def validate_avatar_archive():
+    """Валидация ZIP архива перед загрузкой"""
+    try:
+        if not AVATAR_MANAGER_ENABLED:
+            return jsonify({"success": False, "error": "AvatarManager не загружен"})
+        
+        if 'avatar_file' not in request.files:
+            return jsonify({"success": False, "error": "Файл не найден"})
+        
+        file = request.files['avatar_file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Файл не выбран"})
+        
+        if not file.filename.endswith('.zip'):
+            return jsonify({"success": False, "error": "Только ZIP архивы"})
+        
+        # Создаем временный файл
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        temp_zip = Path(temp_dir) / file.filename
+        file.save(temp_zip)
+        
+        # Валидируем архив
+        is_valid, message, frame_files = avatar_manager.validate_avatar_archive(temp_zip)
+        
+        # Очищаем временные файлы
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        if is_valid:
+            return jsonify({
+                "success": True,
+                "message": message,
+                "frames_count": len(frame_files),
+                "frame_files": frame_files[:20],  # Первые 20 файлов
+                "total_frames": len(frame_files)
+            })
+        else:
+            return jsonify({"success": False, "error": message})
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка валидации архива аватара: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# ОСТАВШИЕСЯ API (НЕ ИЗМЕНЯЕМ)
+# =============================================================================
 
 @app.route('/api/llm/priority', methods=['POST'])
 def set_llm_priority_route():
@@ -3176,8 +3453,8 @@ def _detect_subject(filename: str) -> str:
         return "биология"
     elif any(word in filename_lower for word in ['literature', 'литература', 'лит']):
         return "литература"
-    elif any(word in filename_lower for word in ['russian', 'русский', 'язык']):
-        return "русский язык"
+    elif any(word in filename_lower for word in ['russian', 'русскии', 'язык']):
+        return "русскии язык"
     else:
         return "общее"
 
@@ -3186,7 +3463,7 @@ def get_practice_content(lesson_id):
     try:
         practice_file = PRACTICE_DIR / f"{lesson_id}.json"
         if not practice_file.exists():
-            return jsonify({"error": "Практические задания не найдены", "success": False}), 404
+            return jsonify({"error": "Практические задания не наидены", "success": False}), 404
         
         with open(practice_file, 'r', encoding='utf-8') as f:
             content = json.load(f)
@@ -3380,7 +3657,7 @@ def download_knowledge():
     llm_answers_file = MATERIALS_DIR / f"{subject}_llm_answers.json"
     
     if not knowledge_file.exists() and not llm_answers_file.exists():
-        return jsonify({"success": False, "error": f"База знаний для предмета '{subject}' не найдена"})
+        return jsonify({"success": False, "error": f"База знании для предмета '{subject}' не наидена"})
     
     import tempfile
     import zipfile
@@ -3418,7 +3695,7 @@ def download_lessons():
                     lesson_files.append(lesson_file)
     
     if not lesson_files:
-        return jsonify({"success": False, "error": "Уроки не найдены"})
+        return jsonify({"success": False, "error": "Уроки не наидены"})
     
     import tempfile
     import zipfile
@@ -3450,7 +3727,7 @@ def download_lessons():
 @app.route('/api/download_practice')
 def download_practice():
     if not any(PRACTICE_DIR.iterdir()):
-        return jsonify({"success": False, "error": "Практические задания не найдены"})
+        return jsonify({"success": False, "error": "Практические задания не наидены"})
     
     import tempfile
     import zipfile
@@ -3476,7 +3753,7 @@ def download_practice_txt():
         practice_txt_files = list(PRACTICE_DIR.glob("*.txt"))
         
         if not practice_txt_files:
-            return jsonify({"success": False, "error": "TXT файлы практики не найдены"})
+            return jsonify({"success": False, "error": "TXT фаилы практики не наидены"})
         
         import tempfile
         import zipfile
@@ -3577,7 +3854,7 @@ def test_api_key():
         elif response.status_code == 401:
             return jsonify({
                 "success": True,
-                "message": f"Ключ {provider} неверный или неактивный",
+                "message": f"Ключ {provider} неверныи или неактивныи",
                 "valid": False
             })
         else:
@@ -3599,7 +3876,7 @@ def force_visualization():
         data = request.json
         room_id = data.get('room_id', 'default')
         topic = data.get('topic', 'Тестовая инфографика')
-        context = data.get('context', 'Тестовый контекст')
+        context = data.get('context', 'Тестовыи контекст')
         
         debug_log(f"Принудительная генерация SVG инфографики для комнаты {room_id}")
         
@@ -3731,7 +4008,7 @@ def set_reset_time():
                 "message": f"Время сброса установлено на {reset_time}"
             })
         else:
-            return jsonify({"success": False, "error": "Неверный формат времени"})
+            return jsonify({"success": False, "error": "Неверныи формат времени"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3744,7 +4021,7 @@ def force_reset_keys():
         
         return jsonify({
             "success": True,
-            "message": "Все счетчики ключей сброшены"
+            "message": "Все счетчики ключеи сброшены"
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
@@ -3770,7 +4047,7 @@ def upload_keys_file():
         
         return jsonify({
             "success": True,
-            "message": f"Импортировано {imported_count} ключей",
+            "message": f"Импортировано {imported_count} ключеи",
             "imported_count": imported_count
         })
     except Exception as e:
@@ -3820,7 +4097,7 @@ def toggle_key_active():
                 "message": f"Ключ {key_name} {status}"
             })
         else:
-            return jsonify({"success": False, "error": "Ключ не найден"})
+            return jsonify({"success": False, "error": "Ключ не наиден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3845,7 +4122,7 @@ def set_key_limit():
                 "message": f"Лимит ключа {key_name} установлен на {limit} запросов"
             })
         else:
-            return jsonify({"success": False, "error": "Ключ не найден"})
+            return jsonify({"success": False, "error": "Ключ не наиден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3868,7 +4145,7 @@ def delete_key():
                 "message": f"Ключ {key_name} удален"
             })
         else:
-            return jsonify({"success": False, "error": "Ключ не найден"})
+            return jsonify({"success": False, "error": "Ключ не наиден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3945,7 +4222,7 @@ def get_student(student_id):
         if student_data:
             return jsonify({"success": True, "student": student_data})
         else:
-            return jsonify({"success": False, "error": "Ученик не найден"})
+            return jsonify({"success": False, "error": "Ученик не наиден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -3965,7 +4242,7 @@ def get_student_rooms(student_id):
     try:
         student_data = load_student_data(student_id)
         if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
+            return jsonify({"success": False, "error": "Ученик не наиден"})
         
         rooms = student_data.get('rooms', [])
         return jsonify({
@@ -3984,7 +4261,7 @@ def get_student_room(student_id, subject):
     try:
         student_data = load_student_data(student_id)
         if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
+            return jsonify({"success": False, "error": "Ученик не наиден"})
         
         rooms = student_data.get('rooms', [])
         target_room = None
@@ -4001,7 +4278,7 @@ def get_student_room(student_id, subject):
                 "conference_url": f"/conference?room={target_room['room_name']}&student=true&subject={subject}"
             })
         else:
-            return jsonify({"success": False, "error": f"Комната для предмета {subject} не найдена"})
+            return jsonify({"success": False, "error": f"Комната для предмета {subject} не наидена"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -4010,7 +4287,7 @@ def get_student_lessons(student_id):
     try:
         student_data = load_student_data(student_id)
         if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
+            return jsonify({"success": False, "error": "Ученик не наиден"})
         
         lessons = student_data.get('lessons', [])
         return jsonify({
@@ -4028,7 +4305,7 @@ def add_student_lesson(student_id):
         data = request.json
         student_data = load_student_data(student_id)
         if not student_data:
-            return jsonify({"success": False, "error": "Ученик не найден"})
+            return jsonify({"success": False, "error": "Ученик не наиден"})
         
         lesson_data = {
             'lesson_id': data.get('lesson_id'),
@@ -4089,7 +4366,7 @@ def get_lessons_by_class():
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
+            return jsonify({"success": False, "error": "Данные ученика не наидены"})
         
         student_class = user_data['student_data'].get('education_level', '5')
         
@@ -4179,7 +4456,7 @@ def start_specific_lesson():
                 break
         
         if not selected_lesson:
-            return jsonify({"success": False, "error": "Урок не найден"})
+            return jsonify({"success": False, "error": "Урок не наиден"})
         
         dialogue.selected_lesson = selected_lesson
         dialogue.current_subject = selected_lesson.get('subject')
@@ -4226,7 +4503,7 @@ def get_student_progress_api():
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
+            return jsonify({"success": False, "error": "Данные ученика не наидены"})
         
         student_id = user_data['student_data'].get('student_id')
         student_class = user_data['student_data'].get('education_level', '5')
@@ -4288,15 +4565,15 @@ def get_student_progress_api():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 ИСПРАВЛЕННЫЙ ЭНДПОИНТ ДЛЯ ЛИЧНОГО КАБИНЕТА
+# 🔥 ИСПРАВЛЕННЫИ ЭНДПОИНТ ДЛЯ ЛИЧНОГО КАБИНЕТА
 @app.route('/api/student/progress/dashboard')
 @student_required
 def get_student_progress_dashboard():
-    """🔥 ИСПРАВЛЕННЫЙ: Получает прогресс ученика для личного кабинета"""
+    """🔥 ИСПРАВЛЕННЫИ: Получает прогресс ученика для личного кабинета"""
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
+            return jsonify({"success": False, "error": "Данные ученика не наидены"})
         
         student_id = user_data['student_data'].get('student_id')
         student_class = user_data['student_data'].get('education_level', '5')
@@ -4306,7 +4583,7 @@ def get_student_progress_dashboard():
         
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         if not progress_file.exists():
-            # Создаем начальный прогресс
+            # Создаем начальныи прогресс
             initialize_student_progress(student_id, student_class)
         
         with open(progress_file, 'r', encoding='utf-8') as f:
@@ -4333,7 +4610,7 @@ def get_student_progress_dashboard():
             completed_count = len(subject_progress.get("completed_lessons", []))
             total_lessons = len(lessons)
             
-            # Ищем следующий урок
+            # Ищем следующии урок
             next_lesson = None
             for lesson in lessons:
                 if lesson['id'] not in subject_progress.get("completed_lessons", []):
@@ -4436,12 +4713,12 @@ def create_sample_lessons():
                 with open(lesson_file, 'w', encoding='utf-8') as f:
                     f.write(f"""# Демо урок: Введение в {subject}
 
-Это демонстрационный урок по предмету {subject}.
+Это демонстрационныи урок по предмету {subject}.
 
 На этом уроке вы познакомитесь с:
 1. Основными понятиями предмета
-2. Историей развития
-3. Практическим применением знаний
+2. Историеи развития
+3. Практическим применением знании
 
 Урок содержит примеры, упражнения и тестовые задания.
 
@@ -4464,7 +4741,7 @@ def create_sample_lessons():
                                     with open(lesson_file, 'w', encoding='utf-8') as f:
                                         f.write(f"""# Урок {i}: Введение в {subject_dir.name}
                                         
-Это примерный урок {i} по предмету {subject_dir.name} для {class_level} класса.
+Это примерныи урок {i} по предмету {subject_dir.name} для {class_level} класса.
 
 Содержание урока:
 1. Основные понятия
@@ -4507,7 +4784,7 @@ def add_demo_lesson():
         
         next_number = max(demo_numbers) + 1 if demo_numbers else 1
         
-        title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
+        title_slug = re.sub(r'[^\wа-яе\s-]+', '', title.lower()).strip()
         title_slug = re.sub(r'\s+', '_', title_slug)
         title_slug = title_slug[:50]
         
@@ -4598,7 +4875,7 @@ def get_lesson_for_edit(lesson_path):
         full_path = LESSONS_DIR / lesson_path
         
         if not full_path.exists():
-            return jsonify({"success": False, "error": "Урок не найден"})
+            return jsonify({"success": False, "error": "Урок не наиден"})
         
         with open(full_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -4627,7 +4904,7 @@ def save_edited_lesson():
         full_path = LESSONS_DIR / lesson_path
         
         if not full_path.exists():
-            return jsonify({"success": False, "error": "Урок не найден"})
+            return jsonify({"success": False, "error": "Урок не наиден"})
         
         import shutil
         backup_path = full_path.with_suffix('.txt.backup')
@@ -4657,7 +4934,7 @@ def delete_lesson():
         full_path = LESSONS_DIR / lesson_path
         
         if not full_path.exists():
-            return jsonify({"success": False, "error": "Урок не найден"})
+            return jsonify({"success": False, "error": "Урок не наиден"})
         
         if full_path.name.startswith('demo_') or 'generated' in str(full_path):
             trash_dir = LESSONS_DIR / 'trash'
@@ -4767,7 +5044,7 @@ def get_lessons_for_edit():
 @app.route('/api/technical/settings', methods=['POST'])
 @student_required
 def set_technical_settings():
-    """Устанавливает настройки для технических предметов"""
+    """Устанавливает настроики для технических предметов"""
     try:
         data = request.json
         student_id = data.get('student_id')
@@ -4789,7 +5066,7 @@ def set_technical_settings():
                 "technical_support_enabled": TECHNICAL_SUPPORT_ENABLED
             })
         else:
-            return jsonify({"success": False, "error": "Ученик не найден"})
+            return jsonify({"success": False, "error": "Ученик не наиден"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
@@ -5069,7 +5346,7 @@ def create_all_student_rooms():
                         error_count += 1
                         debug_log(f"Ошибка создания комнат для {student_data.get('name')}")
             except Exception as e:
-                debug_log(f"Ошибка обработки файла {student_file}: {e}")
+                debug_log(f"Ошибка обработки фаила {student_file}: {e}")
                 error_count += 1
         
         return jsonify({
@@ -5100,7 +5377,7 @@ def update_student_conference_ids():
                     updated_count += 1
                     debug_log(f"Обновлен ученик {student_data.get('name')}")
             except Exception as e:
-                debug_log(f"Ошибка обработки файла {student_file}: {e}")
+                debug_log(f"Ошибка обработки фаила {student_file}: {e}")
         
         return jsonify({
             "success": True,
@@ -5219,8 +5496,8 @@ def test_student_flow():
     <body>
         <h1>Тест открытия конференции</h1>
         <button onclick="testOpenConference()">Тест открытия конференции</button>
-        <button onclick="testOpenInNewTab()">Тест открытия в новой вкладке</button>
-        <button onclick="testOpenInSameTab()">Тест открытия в этой же вкладке</button>
+        <button onclick="testOpenInNewTab()">Тест открытия в новои вкладке</button>
+        <button onclick="testOpenInSameTab()">Тест открытия в этои же вкладке</button>
         
         <script>
             function testOpenConference() {
@@ -5369,7 +5646,7 @@ def debug_student_lessons_route():
 @app.route('/test-student-room')
 def test_student_room():
     student_data = {
-        'name': 'Тестовый Ученик',
+        'name': 'Тестовыи Ученик',
         'education_level': '5',
         'age': '11',
         'student_id': 'test123'
@@ -5416,7 +5693,7 @@ def add_lesson_with_class():
             lesson_dir = LESSONS_GENERATED_DIR
         else:
             if class_level not in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']:
-                return jsonify({"success": False, "error": "Неверный класс"})
+                return jsonify({"success": False, "error": "Неверныи класс"})
             
             class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
             class_dir.mkdir(parents=True, exist_ok=True)
@@ -5434,7 +5711,7 @@ def add_lesson_with_class():
         
         next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
         
-        title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
+        title_slug = re.sub(r'[^\wа-яе\s-]+', '', title.lower()).strip()
         title_slug = re.sub(r'\s+', '_', title_slug)
         title_slug = title_slug[:50]
         
@@ -5474,7 +5751,7 @@ def get_next_lesson_number():
         else:
             class_dir = LESSONS_STUDENTS_DIR / f"{class_level}_class"
             if not class_dir.exists():
-                return jsonify({"success": False, "error": f"Класс {class_level} не найден"})
+                return jsonify({"success": False, "error": f"Класс {class_level} не наиден"})
             
             lesson_dir = class_dir / subject
             if not lesson_dir.exists():
@@ -5539,7 +5816,7 @@ def download_lessons_by_class():
                         lesson_files.extend(subject_dir.glob("*.txt"))
         
         if not lesson_files:
-            return jsonify({"success": False, "error": f"Уроки для класса {class_level} не найдены"})
+            return jsonify({"success": False, "error": f"Уроки для класса {class_level} не наидены"})
         
         import tempfile
         import zipfile
@@ -5580,7 +5857,7 @@ def download_lessons_by_class():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# НОВЫЕ API ДЛЯ МАССОВОЙ ЗАГРУЗКИ УРОКОВ
+# НОВЫЕ API ДЛЯ МАССОВОИ ЗАГРУЗКИ УРОКОВ
 # =============================================================================
 
 @app.route('/api/bulk_upload_lessons', methods=['POST'])
@@ -5588,12 +5865,12 @@ def download_lessons_by_class():
 def bulk_upload_lessons():
     try:
         if 'files' not in request.files:
-            return jsonify({"success": False, "error": "Файлы не найдены"})
+            return jsonify({"success": False, "error": "Фаилы не наидены"})
         
         files = request.files.getlist('files')
         
         if not files or files[0].filename == '':
-            return jsonify({"success": False, "error": "Нет выбранных файлов"})
+            return jsonify({"success": False, "error": "Нет выбранных фаилов"})
         
         results = {
             "success": True,
@@ -5610,7 +5887,7 @@ def bulk_upload_lessons():
                     results["details"].append({
                         "filename": file.filename,
                         "status": "failed",
-                        "error": "Только TXT файлы"
+                        "error": "Только TXT фаилы"
                     })
                     continue
                 
@@ -5652,7 +5929,7 @@ def bulk_upload_lessons():
                 
                 next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
                 
-                title_slug = re.sub(r'[^\wа-яё\s-]+', '', title.lower()).strip()
+                title_slug = re.sub(r'[^\wа-яе\s-]+', '', title.lower()).strip()
                 title_slug = re.sub(r'\s+', '_', title_slug)
                 title_slug = title_slug[:50]
                 
@@ -5805,7 +6082,7 @@ def get_student_profile():
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data:
-            return jsonify({"success": False, "error": "Пользователь не найден"})
+            return jsonify({"success": False, "error": "Пользователь не наиден"})
         
         progress_data = {}
         student_id = user_data.get('student_data', {}).get('student_id', '')
@@ -5826,7 +6103,7 @@ def get_student_profile():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЕ API ДЛЯ ТЕХНИЧЕСКОЙ АВТОДЕТЕКЦИИ
+# 🔥 НОВЫЕ API ДЛЯ ТЕХНИЧЕСКОИ АВТОДЕТЕКЦИИ
 # =============================================================================
 
 @app.route('/api/technical/generate-exercise', methods=['POST'])
@@ -5847,39 +6124,39 @@ def generate_technical_exercise():
         # Используем существующую LLM через менеджер
         if is_technical:
             prompt = f"""
-            Создай упражнение по {subject} для ученика {level} класса.
+            Создаи упражнение по {subject} для ученика {level} класса.
             
             ТЕМА: {topic}
             УРОВЕНЬ: {level} класс
             
             ТРЕБОВАНИЯ:
-            1. Включай конкретные формулы и вычисления
-            2. Добавляй пошаговые решения
-            3. Учитывай возраст ученика
-            4. Используй математическую/научную нотацию
-            5. Для физики/химии включай единицы измерения
+            1. Включаи конкретные формулы и вычисления
+            2. Добавляи пошаговые решения
+            3. Учитываи возраст ученика
+            4. Используи математическую/научную нотацию
+            5. Для физики/химии включаи единицы измерения
             
-            Верни 3-5 практических заданий.
+            Верни 3-5 практических задании.
             """
         else:
             prompt = f"""
-            Создай практические задания по {subject} на тему: {topic}
+            Создаи практические задания по {subject} на тему: {topic}
             
             Уровень ученика: {level} класс
             
-            Создай 5 заданий разного типа:
+            Создаи 5 задании разного типа:
             1. Вопросы на понимание
             2. Практические задачи
             3. Творческие задания
             4. Аналитические вопросы
-            5. Применение знаний
+            5. Применение знании
             
             Верни задания в структурированном виде.
             """
         
         llm_response = llm_manager.submit_request(
             prompt=prompt,
-            system_prompt="Ты - учитель. Создай полезное упражнение соответствующего типа.",
+            system_prompt="Ты - учитель. Создаи полезное упражнение соответствующего типа.",
             max_tokens=800,
             room_id=room_id
         )
@@ -5901,14 +6178,15 @@ def generate_technical_exercise():
 # =============================================================================
 
 if __name__ == '__main__':
-    debug_log("🚀 Запуск AI Teacher системы с поддержкой технических предметов и слайдов...")
+    debug_log("🚀 Запуск AI Teacher системы с поддержкои технических предметов и слаидов...")
     debug_log(f"🔥 Поддержка технических предметов: {'ВКЛЮЧЕНА' if TECHNICAL_SUPPORT_ENABLED else 'ВЫКЛЮЧЕНА'}")
-    debug_log(f"🔥 Поддержка слайдов уроков: ВКЛЮЧЕНА")
-    debug_log(f"🔥 Форматы слайдов: JPG, PNG, MP4, WebP")
-    debug_log(f"🔥 Добавлены API для загрузки слайдов уроков")
+    debug_log(f"🔥 Поддержка слаидов уроков: ВКЛЮЧЕНА")
+    debug_log(f"🔥 Форматы слаидов: JPG, PNG, MP4, WebP")
+    debug_log(f"🔥 Добавлены API для загрузки слаидов уроков")
     debug_log(f"🔥 Добавлены API для резервного копирования данных учеников")
     debug_log(f"🔥 Ленивая инициализация DialogueManager активирована")
     debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
+    debug_log(f"🔥 Поддержка управления аватарами: {'ВКЛЮЧЕНА' if AVATAR_MANAGER_ENABLED else 'ВЫКЛЮЧЕНА'}")
     
     setup_llm_manager()
     
@@ -5922,11 +6200,14 @@ if __name__ == '__main__':
     
     debug_log(f"✅ Система готова. Async mode: {socketio.async_mode}")
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
-    debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/lesson/slides/upload для загрузки слайдов")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/students/export_full для экспорта данных")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/students/import для восстановления данных")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/lesson/slides/bulk_delete для массового удаления слайдов")
+    debug_log(f"✅ Таимаут неактивных комнат: {ROOM_TIMEOUT} секунд")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/lesson/slides/upload для загрузки слаидов")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/students/export_full для экспорта данных")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/students/import для восстановления данных")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/lesson/slides/bulk_delete для массового удаления слаидов")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/avatars/upload для загрузки аватаров")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/avatars/delete для удаления аватаров")
+    debug_log(f"✅ ДОБАВЛЕН новыи API /api/avatars/stats для статистики аватаров")
     debug_log(f"✅ ВСЕ НОВЫЕ API защищены декоратором @teacher_required")
     debug_log(f"✅ СИСТЕМА ГОТОВА К РАБОТЕ! 🚀")
     
