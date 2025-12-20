@@ -1,6 +1,6 @@
 # app.py - AI Teacher System с поддержкой технических и естественнонаучных предметов
 # ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
-# ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG)
+# ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG) И РЕЗЕРВНОГО КОПИРОВАНИЯ
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -2354,6 +2354,391 @@ def get_lesson_slides(lesson_id):
         slides_data = get_lesson_slides_api(lesson_id)
         return jsonify(slides_data)
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# 🔥 НОВЫЕ API ДЛЯ ЗАГРУЗКИ СЛАЙДОВ УРОКОВ
+# =============================================================================
+
+@app.route('/api/lesson/slides/upload', methods=['POST'])
+@teacher_required
+def upload_lesson_slides():
+    """Загрузка слайдов для урока"""
+    try:
+        if 'files' not in request.files:
+            return jsonify({"success": False, "error": "Файлы не найдены"})
+        
+        files = request.files.getlist('files')
+        lesson_id = request.form.get('lesson_id')
+        
+        if not lesson_id:
+            return jsonify({"success": False, "error": "Не указан ID урока"})
+        
+        if not files or files[0].filename == '':
+            return jsonify({"success": False, "error": "Нет выбранных файлов"})
+        
+        # Ищем урок
+        lesson_path = None
+        possible_paths = [
+            LESSONS_DEMO_DIR / f"{lesson_id}.txt",
+            LESSONS_GENERATED_DIR / f"{lesson_id}.txt",
+        ]
+        
+        # Поиск в студенческих уроках
+        for class_dir in LESSONS_STUDENTS_DIR.glob("*_class"):
+            for subject_dir in class_dir.iterdir():
+                if subject_dir.is_dir():
+                    possible_paths.append(subject_dir / f"{lesson_id}.txt")
+        
+        for path in possible_paths:
+            if path.exists():
+                lesson_path = path
+                break
+        
+        if not lesson_path:
+            return jsonify({"success": False, "error": "Урок не найден"})
+        
+        lesson_dir = lesson_path.parent
+        results = {
+            "success": True,
+            "uploaded": 0,
+            "failed": 0,
+            "details": []
+        }
+        
+        # Получаем существующие слайды
+        existing_slides = find_lesson_slides(lesson_path)
+        existing_slide_numbers = [slide['index'] for slide in existing_slides]
+        next_slide_number = max(existing_slide_numbers) + 1 if existing_slide_numbers else 1
+        
+        for file in files:
+            try:
+                # Проверяем тип файла
+                filename = secure_filename(file.filename)
+                file_ext = Path(filename).suffix.lower()
+                
+                if file_ext not in ['.jpg', '.jpeg', '.png', '.mp4', '.webp']:
+                    results["failed"] += 1
+                    results["details"].append({
+                        "filename": filename,
+                        "status": "failed",
+                        "error": f"Неподдерживаемый формат: {file_ext}"
+                    })
+                    continue
+                
+                # Генерируем имя файла для слайда
+                base_name = lesson_path.stem
+                slide_filename = f"{base_name}_{next_slide_number:02d}{file_ext}"
+                slide_path = lesson_dir / slide_filename
+                
+                # Сохраняем файл
+                file.save(slide_path)
+                
+                results["uploaded"] += 1
+                results["details"].append({
+                    "filename": filename,
+                    "slide_filename": slide_filename,
+                    "slide_number": next_slide_number,
+                    "status": "success"
+                })
+                
+                next_slide_number += 1
+                
+            except Exception as e:
+                results["failed"] += 1
+                results["details"].append({
+                    "filename": file.filename,
+                    "status": "failed",
+                    "error": str(e)
+                })
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка загрузки слайдов: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/lesson/slides/delete', methods=['POST'])
+@teacher_required
+def delete_lesson_slide():
+    """Удаление слайда урока"""
+    try:
+        data = request.json
+        slide_path = data.get('slide_path')
+        
+        if not slide_path:
+            return jsonify({"success": False, "error": "Не указан путь к слайду"})
+        
+        full_path = BASE_DIR / slide_path
+        
+        if not full_path.exists():
+            return jsonify({"success": False, "error": "Слайд не найден"})
+        
+        # Проверяем, что файл находится в папке уроков
+        if not str(full_path).startswith(str(LESSONS_DIR)):
+            return jsonify({"success": False, "error": "Неверный путь к слайду"})
+        
+        # Создаем резервную копию в корзине
+        trash_dir = LESSONS_TRASH_DIR / "slides"
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = trash_dir / full_path.name
+        
+        import shutil
+        shutil.move(full_path, backup_path)
+        
+        return jsonify({
+            "success": True,
+            "message": "Слайд перемещен в корзину",
+            "backup_path": str(backup_path.relative_to(BASE_DIR))
+        })
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка удаления слайда: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/lesson/slides/bulk_delete', methods=['POST'])
+@teacher_required
+def bulk_delete_lesson_slides():
+    """Массовое удаление слайдов урока"""
+    try:
+        data = request.json
+        lesson_id = data.get('lesson_id')
+        
+        if not lesson_id:
+            return jsonify({"success": False, "error": "Не указан ID урока"})
+        
+        # Ищем слайды урока
+        slides_data = get_lesson_slides_api(lesson_id)
+        
+        if not slides_data['success']:
+            return jsonify({"success": False, "error": slides_data.get('error', 'Ошибка поиска слайдов')})
+        
+        slides = slides_data.get('slides', [])
+        
+        if not slides:
+            return jsonify({"success": False, "error": "Слайды не найдены"})
+        
+        # Создаем папку для резервных копий
+        trash_dir = LESSONS_TRASH_DIR / "slides_bulk" / lesson_id
+        trash_dir.mkdir(parents=True, exist_ok=True)
+        
+        deleted_count = 0
+        failed_count = 0
+        
+        for slide in slides:
+            try:
+                slide_path = BASE_DIR / slide['path']
+                if slide_path.exists():
+                    backup_path = trash_dir / slide_path.name
+                    import shutil
+                    shutil.move(slide_path, backup_path)
+                    deleted_count += 1
+            except Exception as e:
+                debug_log(f"❌ Ошибка удаления слайда {slide['filename']}: {e}")
+                failed_count += 1
+        
+        return jsonify({
+            "success": True,
+            "message": f"Удалено {deleted_count} слайдов, ошибок: {failed_count}",
+            "deleted": deleted_count,
+            "failed": failed_count,
+            "backup_dir": str(trash_dir.relative_to(BASE_DIR))
+        })
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка массового удаления слайдов: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# 🔥 API ДЛЯ ЭКСПОРТА И ИМПОРТА ДАННЫХ УЧЕНИКОВ
+# =============================================================================
+
+@app.route('/api/students/export_full', methods=['GET'])
+@teacher_required
+def export_students_full():
+    """Полный экспорт данных учеников (включая прогресс)"""
+    try:
+        import zipfile
+        import tempfile
+        import json
+        
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+            # 1. Экспорт пользователей
+            for user_file in USERS_DIR.glob("*.json"):
+                with open(user_file, 'r', encoding='utf-8') as f:
+                    user_data = json.load(f)
+                    if user_data.get('role') == 'student':
+                        zipf.write(user_file, f"users/{user_file.name}")
+            
+            # 2. Экспорт данных учеников
+            for student_file in STUDENTS_DIR.glob("*.json"):
+                zipf.write(student_file, f"students/{student_file.name}")
+            
+            # 3. Экспорт прогресса
+            for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
+                zipf.write(progress_file, f"progress/{progress_file.name}")
+            
+            # 4. Создаем файл метаданных
+            metadata = {
+                "export_date": datetime.now().isoformat(),
+                "total_users": len(list(USERS_DIR.glob("*.json"))),
+                "total_students": len(list(STUDENTS_DIR.glob("*.json"))),
+                "total_progress": len(list(STUDENT_PROGRESS_DIR.glob("*.json"))),
+                "version": "1.0",
+                "system": "AI Teacher System"
+            }
+            
+            metadata_str = json.dumps(metadata, ensure_ascii=False, indent=2)
+            metadata_path = tempfile.NamedTemporaryFile(delete=False, suffix='.json', mode='w')
+            metadata_path.write(metadata_str)
+            metadata_path.close()
+            
+            zipf.write(metadata_path.name, "metadata.json")
+            os.unlink(metadata_path.name)
+        
+        temp_zip.close()
+        
+        return send_file(
+            temp_zip.name,
+            as_attachment=True,
+            download_name=f"students_full_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка экспорта данных: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/students/import', methods=['POST'])
+@teacher_required
+def import_students_data():
+    """Импорт данных учеников из ZIP-файла"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "Файл не найден"})
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Файл не выбран"})
+        
+        if not file.filename.endswith('.zip'):
+            return jsonify({"success": False, "error": "Только ZIP файлы"})
+        
+        import zipfile
+        import tempfile
+        import shutil
+        
+        # Создаем временную папку для распаковки
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, file.filename)
+        file.save(zip_path)
+        
+        results = {
+            "success": True,
+            "imported": {
+                "users": 0,
+                "students": 0,
+                "progress": 0
+            },
+            "errors": []
+        }
+        
+        # Распаковываем архив
+        with zipfile.ZipFile(zip_path, 'r') as zipf:
+            zipf.extractall(temp_dir)
+        
+        # Импортируем пользователей
+        users_dir = os.path.join(temp_dir, "users")
+        if os.path.exists(users_dir):
+            for user_file in os.listdir(users_dir):
+                if user_file.endswith('.json'):
+                    try:
+                        src_path = os.path.join(users_dir, user_file)
+                        dst_path = USERS_DIR / user_file
+                        
+                        # Проверяем, существует ли уже такой пользователь
+                        if dst_path.exists():
+                            # Создаем резервную копию
+                            backup_path = USERS_DIR / f"{user_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            shutil.copy2(dst_path, backup_path)
+                        
+                        shutil.copy2(src_path, dst_path)
+                        results["imported"]["users"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Ошибка импорта пользователя {user_file}: {str(e)}")
+        
+        # Импортируем данные учеников
+        students_dir = os.path.join(temp_dir, "students")
+        if os.path.exists(students_dir):
+            for student_file in os.listdir(students_dir):
+                if student_file.endswith('.json'):
+                    try:
+                        src_path = os.path.join(students_dir, student_file)
+                        dst_path = STUDENTS_DIR / student_file
+                        
+                        if dst_path.exists():
+                            backup_path = STUDENTS_DIR / f"{student_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            shutil.copy2(dst_path, backup_path)
+                        
+                        shutil.copy2(src_path, dst_path)
+                        results["imported"]["students"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Ошибка импорта данных ученика {student_file}: {str(e)}")
+        
+        # Импортируем прогресс
+        progress_dir = os.path.join(temp_dir, "progress")
+        if os.path.exists(progress_dir):
+            for progress_file in os.listdir(progress_dir):
+                if progress_file.endswith('.json'):
+                    try:
+                        src_path = os.path.join(progress_dir, progress_file)
+                        dst_path = STUDENT_PROGRESS_DIR / progress_file
+                        
+                        if dst_path.exists():
+                            backup_path = STUDENT_PROGRESS_DIR / f"{progress_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            shutil.copy2(dst_path, backup_path)
+                        
+                        shutil.copy2(src_path, dst_path)
+                        results["imported"]["progress"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Ошибка импорта прогресса {progress_file}: {str(e)}")
+        
+        # Очищаем временные файлы
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка импорта данных: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/students/export_progress', methods=['GET'])
+@teacher_required
+def export_students_progress():
+    """Экспорт только прогресса учеников"""
+    try:
+        import zipfile
+        import tempfile
+        
+        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+        
+        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
+            for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
+                zipf.write(progress_file, progress_file.name)
+        
+        temp_zip.close()
+        
+        return send_file(
+            temp_zip.name,
+            as_attachment=True,
+            download_name=f"students_progress_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка экспорта прогресса: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/llm/priority', methods=['POST'])
@@ -5414,68 +5799,6 @@ def get_all_students():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
-@app.route('/api/students/export')
-@teacher_required
-def export_students_data():
-    try:
-        import zipfile
-        import tempfile
-        
-        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-        
-        with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-            for user_file in USERS_DIR.glob("*.json"):
-                with open(user_file, 'r', encoding='utf-8') as f:
-                    user_data = json.load(f)
-                    if user_data.get('role') == 'student':
-                        zipf.write(user_file, f"users/{user_file.name}")
-            
-            for student_file in STUDENTS_DIR.glob("*.json"):
-                zipf.write(student_file, f"students/{student_file.name}")
-            
-            for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
-                zipf.write(progress_file, f"progress/{progress_file.name}")
-        
-        temp_zip.close()
-        
-        return send_file(
-            temp_zip.name,
-            as_attachment=True,
-            download_name=f"students_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-            mimetype='application/zip'
-        )
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/<student_user_id>')
-@teacher_required
-def get_student_details(student_user_id):
-    try:
-        user_data = load_user_data(student_user_id)
-        if not user_data or user_data.get('role') != 'student':
-            return jsonify({"success": False, "error": "Ученик не найден"})
-        
-        progress_data = {}
-        progress_file = STUDENT_PROGRESS_DIR / f"{user_data.get('student_data', {}).get('student_id', '')}.json"
-        if progress_file.exists():
-            with open(progress_file, 'r', encoding='utf-8') as f:
-                progress_data = json.load(f)
-        
-        return jsonify({
-            "success": True,
-            "student": {
-                'user_id': user_data['user_id'],
-                'username': user_data['username'],
-                'student_data': user_data.get('student_data', {}),
-                'created_at': user_data.get('created_at'),
-                'last_login': user_data.get('last_login'),
-                'rooms': user_data.get('student_data', {}).get('rooms', []),
-                'progress': progress_data
-            }
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
 @app.route('/api/student/profile')
 @student_required
 def get_student_profile():
@@ -5582,6 +5905,10 @@ if __name__ == '__main__':
     debug_log(f"🔥 Поддержка технических предметов: {'ВКЛЮЧЕНА' if TECHNICAL_SUPPORT_ENABLED else 'ВЫКЛЮЧЕНА'}")
     debug_log(f"🔥 Поддержка слайдов уроков: ВКЛЮЧЕНА")
     debug_log(f"🔥 Форматы слайдов: JPG, PNG, MP4, WebP")
+    debug_log(f"🔥 Добавлены API для загрузки слайдов уроков")
+    debug_log(f"🔥 Добавлены API для резервного копирования данных учеников")
+    debug_log(f"🔥 Ленивая инициализация DialogueManager активирована")
+    debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
     
     setup_llm_manager()
     
@@ -5596,15 +5923,12 @@ if __name__ == '__main__':
     debug_log(f"✅ Система готова. Async mode: {socketio.async_mode}")
     debug_log(f"✅ Максимальное количество комнат в памяти: {MAX_ROOMS}")
     debug_log(f"✅ Таймаут неактивных комнат: {ROOM_TIMEOUT} секунд")
-    debug_log(f"🔥 Добавлена поддержка технических предметов")
-    debug_log(f"🔥 Добавлена поддержка слайдов уроков")
-    debug_log(f"🚀 ОПТИМИЗАЦИЯ: Включена умная очистка текста")
-    debug_log(f"🔧 Ленивая инициализация DialogueManager активирована")
-    debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/student/progress/dashboard для личного кабинета")
-    debug_log(f"✅ ДОБАВЛЕН роут /lesson_slide для отдачи слайдов")
-    debug_log(f"✅ ДОБАВЛЕН WebSocket событие get_lesson_slides")
-    debug_log(f"✅ ДОБАВЛЕН API /api/lesson/slides/<lesson_id> для получения слайдов")
+    debug_log(f"✅ ДОБАВЛЕН новый API /api/lesson/slides/upload для загрузки слайдов")
+    debug_log(f"✅ ДОБАВЛЕН новый API /api/students/export_full для экспорта данных")
+    debug_log(f"✅ ДОБАВЛЕН новый API /api/students/import для восстановления данных")
+    debug_log(f"✅ ДОБАВЛЕН новый API /api/lesson/slides/bulk_delete для массового удаления слайдов")
+    debug_log(f"✅ ВСЕ НОВЫЕ API защищены декоратором @teacher_required")
+    debug_log(f"✅ СИСТЕМА ГОТОВА К РАБОТЕ! 🚀")
     
     socketio.run(
         app, 
