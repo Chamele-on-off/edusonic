@@ -1048,6 +1048,10 @@
             margin-bottom: 15px;
         }
 
+        .drag-drop-text {
+            margin-bottom: 15px;
+        }
+
         .drag-drop-text h4 {
             margin-bottom: 10px;
             color: #2c3e50;
@@ -1121,6 +1125,77 @@
 
         .warning-box h5 i {
             font-size: 1.2em;
+        }
+
+        /* Стили для управления аватарами */
+        .avatar-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            background: white;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .avatar-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .avatar-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .avatar-info {
+            flex: 1;
+        }
+
+        .avatar-name {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+            font-size: 1.1rem;
+        }
+
+        .avatar-details {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+
+        .avatar-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .avatar-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .avatar-btn.use {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .avatar-btn.use:hover {
+            background: #138496;
+        }
+
+        .avatar-btn.delete {
+            background: #dc3545;
+            color: white;
+        }
+
+        .avatar-btn.delete:hover {
+            background: #c82333;
         }
         
         @media (max-width: 768px) {
@@ -1240,6 +1315,17 @@
             .backup-stats-number {
                 font-size: 2rem;
             }
+
+            .avatar-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .avatar-actions {
+                align-self: stretch;
+                justify-content: flex-end;
+            }
         }
         
         @media (max-width: 480px) {
@@ -1301,6 +1387,11 @@
             
             .drag-drop-text h4 {
                 font-size: 16px;
+            }
+            
+            .avatar-actions {
+                align-self: stretch;
+                justify-content: flex-end;
             }
         }
     </style>
@@ -1508,6 +1599,7 @@
                 <div class="tab" data-tab="keys-advanced">Расширенное управление ключами</div>
                 <div class="tab" data-tab="lessons-management">Управление уроками</div>
                 <div class="tab" data-tab="slides-management">Слайды уроков</div>
+                <div class="tab" data-tab="avatars-management">Управление аватарами</div>
                 <div class="tab" data-tab="data-backup">Резервное копирование</div>
             </div>
             
@@ -1965,6 +2057,104 @@
                     </div>
                 </div>
             </div>
+
+            <!-- НОВАЯ ВКЛАДКА: Управление аватарами -->
+            <div class="tab-content" id="avatars-management-tab">
+                <div class="management-panel">
+                    <h3><i class="fas fa-user-circle"></i> Управление аватарами</h3>
+                    
+                    <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                        <h4>📝 Требования к аватарам</h4>
+                        <p><strong>Формат:</strong> ZIP архив с изображениями</p>
+                        <p><strong>Поддерживаемые форматы:</strong> JPG, PNG, GIF, BMP, WebP</p>
+                        <p><strong>Рекомендации:</strong></p>
+                        <ul>
+                            <li>Все кадры должны быть в одном размере (рекомендуется 400x400px)</li>
+                            <li>Используйте последовательные имена файлов: frame_001.jpg, frame_002.jpg...</li>
+                            <li>Минимальное количество кадров: 5</li>
+                            <li>Максимальное количество кадров: 100</li>
+                            <li>Максимальный размер архива: 50MB</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Статистика аватаров -->
+                    <div class="keys-management">
+                        <h4>📊 Статистика аватаров</h4>
+                        <div id="avatars-stats-info">
+                            <p>Загрузка статистики...</p>
+                        </div>
+                        <button id="refresh-avatars-stats-btn" class="btn" style="margin-top: 10px;">
+                            <i class="fas fa-sync-alt"></i> Обновить статистику
+                        </button>
+                    </div>
+                    
+                    <!-- Загрузка нового аватара -->
+                    <div class="lesson-form" style="margin-top: 30px;">
+                        <h4>🔼 Загрузка нового аватара</h4>
+                        
+                        <div class="form-group">
+                            <label for="avatar-name-input">Имя аватара:</label>
+                            <input type="text" id="avatar-name-input" placeholder="Введите уникальное имя для аватара" 
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                Будет использоваться в системе. Только латинские буквы, цифры и подчеркивания.
+                            </small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Выберите ZIP архив с кадрами:</label>
+                            <div class="drag-drop-zone" id="avatar-upload-dropzone">
+                                <div class="drag-drop-icon">
+                                    <i class="fas fa-file-archive"></i>
+                                </div>
+                                <div class="drag-drop-text">
+                                    <h4>Перетащите ZIP архив сюда</h4>
+                                    <p>или кликните для выбора файла</p>
+                                    <p style="font-size: 12px; color: #666;">Поддерживаются JPG, PNG, GIF, BMP, WebP</p>
+                                </div>
+                                <input type="file" id="avatar-upload-input" accept=".zip" style="display: none;">
+                            </div>
+                        </div>
+                        
+                        <div id="avatar-preview" style="margin: 15px 0; display: none;">
+                            <h5>📦 Предпросмотр архива:</h5>
+                            <div id="avatar-preview-info" style="background: white; padding: 15px; border-radius: 6px; border: 1px solid #e9ecef;"></div>
+                        </div>
+                        
+                        <div style="margin: 15px 0;">
+                            <label style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="force-overwrite-checkbox">
+                                <span>Перезаписать существующий аватар (если существует)</span>
+                            </label>
+                        </div>
+                        
+                        <button id="upload-avatar-btn" class="btn" style="background: #28a745; width: 100%; margin-top: 15px;">
+                            <i class="fas fa-upload"></i> Загрузить аватар
+                        </button>
+                        
+                        <div id="avatar-upload-status" class="api-status" style="margin-top: 15px;"></div>
+                    </div>
+                    
+                    <!-- Список существующих аватаров -->
+                    <div class="lesson-form" style="margin-top: 30px;">
+                        <h4>📋 Список аватаров</h4>
+                        
+                        <div id="avatars-list" class="file-list" style="max-height: 500px; overflow-y: auto;">
+                            <div class="avatar-item">
+                                <div class="avatar-info">
+                                    <div class="avatar-name">Загрузка списка аватаров...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button id="refresh-avatars-btn" class="btn" style="margin-top: 10px;">
+                            <i class="fas fa-sync-alt"></i> Обновить список
+                        </button>
+                    </div>
+                    
+                    <div id="avatars-management-status" class="success-message" style="margin-top: 20px;"></div>
+                </div>
+            </div>
             
             <!-- Вкладка для резервного копирования данных -->
             <div class="tab-content" id="data-backup-tab">
@@ -2185,6 +2375,21 @@
         const refreshSlidesBtn = document.getElementById('refresh-slides-btn');
         const slidesManagementStatus = document.getElementById('slides-management-status');
         
+        // Элементы для управления аватарами
+        const avatarsStatsInfo = document.getElementById('avatars-stats-info');
+        const refreshAvatarsStatsBtn = document.getElementById('refresh-avatars-stats-btn');
+        const avatarNameInput = document.getElementById('avatar-name-input');
+        const avatarUploadInput = document.getElementById('avatar-upload-input');
+        const avatarUploadDropzone = document.getElementById('avatar-upload-dropzone');
+        const avatarPreview = document.getElementById('avatar-preview');
+        const avatarPreviewInfo = document.getElementById('avatar-preview-info');
+        const forceOverwriteCheckbox = document.getElementById('force-overwrite-checkbox');
+        const uploadAvatarBtn = document.getElementById('upload-avatar-btn');
+        const avatarUploadStatus = document.getElementById('avatar-upload-status');
+        const avatarsList = document.getElementById('avatars-list');
+        const refreshAvatarsBtn = document.getElementById('refresh-avatars-btn');
+        const avatarsManagementStatus = document.getElementById('avatars-management-status');
+        
         // Элементы для резервного копирования
         const dataStatsInfo = document.getElementById('data-stats-info');
         const refreshDataStatsBtn = document.getElementById('refresh-data-stats-btn');
@@ -2231,7 +2436,11 @@
             'generated': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее']
         };
 
-        // Функции для работы с пользователями
+        // =============================================================================
+        // 🎯 ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АВАТАРАМИ
+        // =============================================================================
+
+        // Функции для управления пользователями
         function loadUsersList() {
             fetch('/api/users')
                 .then(response => response.json())
@@ -4172,7 +4381,317 @@
             });
         }
 
-        // Функции для резервного копирования
+        // =============================================================================
+        // 🎭 ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АВАТАРАМИ
+        // =============================================================================
+
+        function loadAvatarsStats() {
+            fetch('/api/avatars/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayAvatarsStats(data.stats);
+                    } else {
+                        avatarsStatsInfo.innerHTML = '<p>❌ Ошибка загрузки статистики: ' + data.error + '</p>';
+                    }
+                })
+                .catch(error => {
+                    avatarsStatsInfo.innerHTML = '<p>❌ Ошибка сети: ' + error + '</p>';
+                });
+        }
+
+        function displayAvatarsStats(stats) {
+            const sizeMB = stats.total_size_mb.toFixed(2);
+            
+            const statsHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e9ecef;">
+                        <div style="font-size: 2rem; font-weight: bold; color: #3498db;">${stats.total_avatars}</div>
+                        <div style="font-size: 0.9rem; color: #6c757d;">Аватаров</div>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e9ecef;">
+                        <div style="font-size: 2rem; font-weight: bold; color: #28a745;">${stats.total_frames}</div>
+                        <div style="font-size: 0.9rem; color: #6c757d;">Кадров</div>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #e9ecef;">
+                        <div style="font-size: 2rem; font-weight: bold; color: #6f42c1;">${sizeMB} MB</div>
+                        <div style="font-size: 0.9rem; color: #6c757d;">Общий размер</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px;">
+                    <h5>📁 Распределение по форматам:</h5>
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+                        ${Object.entries(stats.format_stats).map(([format, count]) => `
+                            <span style="background: #e3f2fd; color: #1976d2; padding: 5px 10px; border-radius: 20px; font-size: 12px;">
+                                ${format.toUpperCase()}: ${count}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            
+            avatarsStatsInfo.innerHTML = statsHTML;
+        }
+
+        function loadAvatarsList() {
+            fetch('/api/avatars/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayAvatarsList(data.stats.avatars);
+                    } else {
+                        avatarsList.innerHTML = '<div class="avatar-item"><div class="avatar-info"><div class="avatar-name">Ошибка загрузки списка аватаров</div></div></div>';
+                    }
+                })
+                .catch(error => {
+                    avatarsList.innerHTML = '<div class="avatar-item"><div class="avatar-info"><div class="avatar-name">Ошибка сети</div></div></div>';
+                });
+        }
+
+        function displayAvatarsList(avatars) {
+            if (avatars.length === 0) {
+                avatarsList.innerHTML = `
+                    <div style="text-align: center; padding: 40px 20px; color: #6c757d;">
+                        <i class="fas fa-user-circle" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                        <h4>Аватары не найдены</h4>
+                        <p>Загрузите свой первый аватар</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            avatars.forEach(avatar => {
+                const sizeKB = (avatar.total_size / 1024).toFixed(1);
+                const preview = avatar.first_frame ? 
+                    `<img src="${avatar.first_frame}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; margin-right: 15px;">` : 
+                    '<div style="width: 60px; height: 60px; background: #f8f9fa; border-radius: 4px; margin-right: 15px; display: flex; align-items: center; justify-content: center; color: #6c757d;"><i class="fas fa-user-circle fa-2x"></i></div>';
+                
+                html += `
+                    <div class="avatar-item">
+                        ${preview}
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="font-weight: bold; color: #2c3e50; font-size: 1.1rem;">
+                                    ${avatar.name}
+                                    ${avatar.name === currentAvatar ? '<span style="background: #3498db; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px;">Текущий</span>' : ''}
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="avatar-btn use" data-avatar-name="${avatar.name}" style="background: #17a2b8; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                        <i class="fas fa-play-circle"></i> Использовать
+                                    </button>
+                                    <button class="avatar-btn delete" data-avatar-name="${avatar.name}" style="background: #dc3545; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                                        <i class="fas fa-trash"></i> Удалить
+                                    </button>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.85rem; color: #6c757d;">
+                                <span style="margin-right: 15px;"><i class="fas fa-images"></i> ${avatar.frames_count} кадров</span>
+                                <span style="margin-right: 15px;"><i class="fas fa-hdd"></i> ${sizeKB} KB</span>
+                                <span style="margin-right: 15px;"><i class="fas fa-expand-arrows-alt"></i> ${avatar.dimensions.width}x${avatar.dimensions.height}</span>
+                                <span><i class="fas fa-file-image"></i> ${avatar.formats.join(', ').toUpperCase()}</span>
+                            </div>
+                            ${avatar.frame_names && avatar.frame_names.length > 0 ? `
+                                <div style="margin-top: 8px; font-size: 0.8rem; color: #999;">
+                                    Кадры: ${avatar.frame_names.slice(0, 3).join(', ')}${avatar.frame_names.length > 3 ? '...' : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            avatarsList.innerHTML = html;
+            
+            // Добавляем обработчики для кнопок
+            document.querySelectorAll('.avatar-btn.use').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const avatarName = this.dataset.avatarName;
+                    useAvatar(avatarName);
+                });
+            });
+            
+            document.querySelectorAll('.avatar-btn.delete').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const avatarName = this.dataset.avatarName;
+                    deleteAvatar(avatarName);
+                });
+            });
+        }
+
+        function validateAvatarArchive(file) {
+            const formData = new FormData();
+            formData.append('avatar_file', file);
+            
+            showApiStatus(avatarUploadStatus, '🔍 Проверка архива...', true);
+            
+            fetch('/api/avatars/validate', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let previewHTML = `
+                        <p><strong>✅ Архив валиден</strong></p>
+                        <p>Найдено кадров: <strong>${data.frames_count}</strong></p>
+                        <p>Первые файлы:</p>
+                        <ul style="margin: 10px 0; padding-left: 20px; max-height: 150px; overflow-y: auto; font-size: 12px;">
+                    `;
+                    
+                    data.frame_files.slice(0, 10).forEach(file => {
+                        previewHTML += `<li>${file}</li>`;
+                    });
+                    
+                    if (data.total_frames > 10) {
+                        previewHTML += `<li>... и еще ${data.total_frames - 10} файлов</li>`;
+                    }
+                    
+                    previewHTML += `</ul>`;
+                    
+                    avatarPreviewInfo.innerHTML = previewHTML;
+                    avatarPreview.style.display = 'block';
+                    
+                    // Автоматически заполняем имя аватара если поле пустое
+                    if (!avatarNameInput.value.trim()) {
+                        const nameFromFile = file.name.replace('.zip', '').replace(/\.[^/.]+$/, '');
+                        const cleanName = nameFromFile.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_').toLowerCase();
+                        avatarNameInput.value = cleanName;
+                    }
+                    
+                    showApiStatus(avatarUploadStatus, `✅ Готово к загрузке: ${data.frames_count} кадров`, true);
+                    
+                } else {
+                    showApiStatus(avatarUploadStatus, `❌ Ошибка валидации: ${data.error}`, false);
+                    avatarPreview.style.display = 'none';
+                }
+            })
+            .catch(error => {
+                showApiStatus(avatarUploadStatus, `❌ Ошибка сети: ${error}`, false);
+                avatarPreview.style.display = 'none';
+            });
+        }
+
+        function uploadAvatar() {
+            const avatarName = avatarNameInput.value.trim();
+            const fileInput = avatarUploadInput;
+            const forceOverwrite = forceOverwriteCheckbox.checked;
+            
+            if (!avatarName) {
+                showApiStatus(avatarUploadStatus, 'Введите имя аватара', false);
+                return;
+            }
+            
+            if (fileInput.files.length === 0) {
+                showApiStatus(avatarUploadStatus, 'Выберите ZIP архив', false);
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('avatar_file', fileInput.files[0]);
+            formData.append('avatar_name', avatarName);
+            formData.append('force_overwrite', forceOverwrite.toString());
+            
+            const uploadBtn = uploadAvatarBtn;
+            const originalText = uploadBtn.innerHTML;
+            
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+            uploadBtn.disabled = true;
+            
+            fetch('/api/avatars/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showApiStatus(avatarUploadStatus, 
+                        `✅ ${data.message}<br>
+                        Кадров: ${data.frames_count}`, true);
+                    
+                    // Очищаем форму
+                    avatarNameInput.value = '';
+                    fileInput.value = '';
+                    avatarPreview.style.display = 'none';
+                    forceOverwriteCheckbox.checked = false;
+                    
+                    // Обновляем статистику и список
+                    setTimeout(() => {
+                        loadAvatarsStats();
+                        loadAvatarsList();
+                        loadAvatars(); // Обновляем выпадающий список аватаров
+                    }, 1000);
+                    
+                } else {
+                    showApiStatus(avatarUploadStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(avatarUploadStatus, `❌ Ошибка сети: ${error}`, false);
+            })
+            .finally(() => {
+                uploadBtn.innerHTML = originalText;
+                uploadBtn.disabled = false;
+            });
+        }
+
+        function useAvatar(avatarName) {
+            // Устанавливаем выбранный аватар в выпадающий список
+            avatarSelect.value = avatarName;
+            currentAvatar = avatarName;
+            loadBtn.disabled = false;
+            
+            // Загружаем аватар
+            loadAvatarFrames(avatarName);
+            
+            showStatus(avatarsManagementStatus, `✅ Аватар "${avatarName}" выбран`);
+        }
+
+        function deleteAvatar(avatarName) {
+            if (!confirm(`Удалить аватар "${avatarName}"?\n\nАватар будет перемещен в корзину.`)) return;
+            
+            fetch('/api/avatars/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ avatar_name: avatarName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(avatarsManagementStatus, `✅ ${data.message}`);
+                    
+                    // Обновляем список
+                    setTimeout(() => {
+                        loadAvatarsStats();
+                        loadAvatarsList();
+                        loadAvatars(); // Обновляем выпадающий список
+                    }, 1000);
+                    
+                    // Если удаляемый аватар был текущим, сбрасываем выбор
+                    if (currentAvatar === avatarName) {
+                        currentAvatar = '';
+                        avatarSelect.value = '';
+                        loadBtn.disabled = true;
+                        avatar.src = '';
+                        statusDiv.textContent = 'Выберите аватар для загрузки';
+                    }
+                    
+                } else {
+                    showStatus(avatarsManagementStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showStatus(avatarsManagementStatus, `❌ Ошибка сети: ${error}`, false);
+            });
+        }
+
+        // =============================================================================
+        // 🎭 ФУНКЦИИ ДЛЯ РЕЗЕРВНОГО КОПИРОВАНИЯ
+        // =============================================================================
+
         function exportFullData() {
             const exportBtn = exportFullBtn;
             const originalText = exportBtn.innerHTML;
@@ -4309,6 +4828,10 @@
             pendingImportFile = null;
         }
 
+        // =============================================================================
+        // 🔧 ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        // =============================================================================
+
         // Инициализация комнаты
         function initRoom(roomId) {
             currentRoom = roomId;
@@ -4359,8 +4882,23 @@
             fetch('/api/avatars')
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
-                    if (data.error) throw new Error(data.error);
+                    if (data.error) {
+                        // Используем fallback - смотрим список папок через API статистики
+                        fetch('/api/avatars/stats')
+                            .then(response => response.json())
+                            .then(statsData => {
+                                if (statsData.success) {
+                                    updateAvatarSelect(statsData.stats.avatars);
+                                }
+                            })
+                            .catch(() => {
+                                // Последний fallback
+                                log('Используется fallback для загрузки аватаров');
+                            });
+                        return;
+                    }
                     
+                    // Обновляем выпадающий список
                     avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
                     data.avatars.forEach(function(avatar) {
                         const option = document.createElement('option');
@@ -4372,10 +4910,21 @@
                     log('Загружено аватаров: ' + data.avatars.length);
                 })
                 .catch(function(error) {
-                    log(error.message);
+                    log('Ошибка загрузки аватаров: ' + error.message);
                 });
         }
-        
+
+        // Новая функция для обновления выпадающего списка из статистики
+        function updateAvatarSelect(avatars) {
+            avatarSelect.innerHTML = '<option value="">Выберите аватар</option>';
+            avatars.forEach(function(avatar) {
+                const option = document.createElement('option');
+                option.value = avatar.name;
+                option.textContent = avatar.name;
+                avatarSelect.appendChild(option);
+            });
+        }
+
         // Загрузка кадров аватара и установка на конференцию
         function loadAvatarFrames(avatarName) {
             statusDiv.textContent = 'Загрузка ' + avatarName + '...';
@@ -4416,6 +4965,48 @@
         }
 
         // Инициализация обработчиков событий для нового функционала
+        function initAvatarsHandlers() {
+            // Загрузка аватара
+            avatarUploadDropzone.addEventListener('click', () => avatarUploadInput.click());
+            
+            avatarUploadInput.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    validateAvatarArchive(this.files[0]);
+                }
+            });
+            
+            // Drag and drop для аватаров
+            avatarUploadDropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+            
+            avatarUploadDropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+            
+            avatarUploadDropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length > 0) {
+                    const file = e.dataTransfer.files[0];
+                    if (file.name.endsWith('.zip')) {
+                        avatarUploadInput.files = e.dataTransfer.files;
+                        const event = new Event('change');
+                        avatarUploadInput.dispatchEvent(event);
+                    } else {
+                        showApiStatus(avatarUploadStatus, 'Только ZIP архивы разрешены', false);
+                    }
+                }
+            });
+            
+            uploadAvatarBtn.addEventListener('click', uploadAvatar);
+            refreshAvatarsStatsBtn.addEventListener('click', loadAvatarsStats);
+            refreshAvatarsBtn.addEventListener('click', loadAvatarsList);
+        }
+
         function initSlidesAndBackupHandlers() {
             // Загрузка слайдов
             slidesUploadDropzone.addEventListener('click', () => slidesUploadInput.click());
@@ -4511,6 +5102,10 @@
             confirmImportBtn.addEventListener('click', confirmImport);
             cancelImportBtn.addEventListener('click', cancelImport);
         }
+
+        // =============================================================================
+        // 🚀 ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        // =============================================================================
 
         // Инициализация
         document.addEventListener('DOMContentLoaded', function() {
@@ -4698,7 +5293,7 @@
                 loadLessonsStructure();
             });
             
-            // Обработчик создания примерных уроков
+            // Обработчик создания примерных урокй
             createSampleLessonsBtn.addEventListener('click', function() {
                 createSampleLessons();
             });
@@ -4751,6 +5346,7 @@
             });
             
             // Инициализация нового функционала
+            initAvatarsHandlers();
             initSlidesAndBackupHandlers();
             
             // При переходе на вкладку резервного копирования загружаем статистику
@@ -4758,6 +5354,9 @@
                 tab.addEventListener('click', function() {
                     if (this.dataset.tab === 'data-backup') {
                         loadDataStats();
+                    } else if (this.dataset.tab === 'avatars-management') {
+                        loadAvatarsStats();
+                        loadAvatarsList();
                     }
                 });
             });
@@ -4804,6 +5403,10 @@
                         } else if (tabId === 'lessons-management-tab') {
                             // При переходе на вкладку управления уроками обновляем список
                             loadLessonsList(1);
+                        } else if (tabId === 'avatars-management-tab') {
+                            // При переходе на вкладку управления аватарами
+                            loadAvatarsStats();
+                            loadAvatarsList();
                         }
                     }
                 });
