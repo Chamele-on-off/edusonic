@@ -974,6 +974,155 @@
             resize: vertical;
         }
         
+        /* Стили для предпросмотра слайдов */
+        .slide-preview-item {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .slide-preview-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .slide-preview-thumbnail {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: #6c757d;
+        }
+
+        .slide-preview-info {
+            text-align: center;
+        }
+
+        .slide-preview-name {
+            font-weight: bold;
+            color: #2c3e50;
+            word-break: break-all;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .slide-preview-size {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        /* Стили для зоны перетаскивания */
+        .drag-drop-zone {
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .drag-drop-zone:hover {
+            background: #f8f9fa;
+            border-color: #2980b9;
+        }
+
+        .drag-drop-zone.dragover {
+            background: #e3f2fd;
+            border-color: #1976d2;
+            transform: scale(1.02);
+        }
+
+        .drag-drop-icon {
+            font-size: 48px;
+            color: #3498db;
+            margin-bottom: 15px;
+        }
+
+        .drag-drop-text h4 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .drag-drop-text p {
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        /* Стили для статистики резервного копирования */
+        .backup-stats-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .backup-stats-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .backup-stats-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #3498db;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+
+        .backup-stats-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+
+        .backup-stats-details {
+            font-size: 0.85rem;
+            color: #495057;
+            border-top: 1px solid #e9ecef;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
+
+        /* Стили для предупреждений */
+        .warning-box {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ffeaa7;
+            margin: 15px 0;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+        }
+
+        .warning-box h5 {
+            color: #856404;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .warning-box h5 i {
+            font-size: 1.2em;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -1075,6 +1224,22 @@
                 align-self: stretch;
                 justify-content: flex-end;
             }
+            
+            .slide-preview-thumbnail {
+                height: 120px;
+            }
+            
+            .drag-drop-zone {
+                padding: 30px 15px;
+            }
+            
+            .drag-drop-icon {
+                font-size: 36px;
+            }
+            
+            .backup-stats-number {
+                font-size: 2rem;
+            }
         }
         
         @media (max-width: 480px) {
@@ -1124,6 +1289,18 @@
             .lesson-actions {
                 align-self: stretch;
                 justify-content: flex-end;
+            }
+            
+            .slide-preview-item {
+                padding: 10px;
+            }
+            
+            .drag-drop-zone {
+                padding: 20px 10px;
+            }
+            
+            .drag-drop-text h4 {
+                font-size: 16px;
             }
         }
     </style>
@@ -1330,6 +1507,8 @@
                 <div class="tab" data-tab="download">Скачать</div>
                 <div class="tab" data-tab="keys-advanced">Расширенное управление ключами</div>
                 <div class="tab" data-tab="lessons-management">Управление уроками</div>
+                <div class="tab" data-tab="slides-management">Слайды уроков</div>
+                <div class="tab" data-tab="data-backup">Резервное копирование</div>
             </div>
             
             <div class="tab-content active" id="knowledge-tab">
@@ -1702,6 +1881,167 @@
                     <div id="editor-status" class="success-message" style="margin-top: 15px;"></div>
                 </div>
             </div>
+            
+            <!-- Вкладка для управления слайдами уроков -->
+            <div class="tab-content" id="slides-management-tab">
+                <div class="management-panel">
+                    <h3><i class="fas fa-images"></i> Управление слайдами уроков</h3>
+                    
+                    <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                        <h4>📝 Поддерживаемые форматы</h4>
+                        <p>Вы можете загружать слайды в форматах:</p>
+                        <ul>
+                            <li><strong>Изображения:</strong> JPG, JPEG, PNG, WebP</li>
+                            <li><strong>Видео:</strong> MP4</li>
+                        </ul>
+                        <p>Слайды автоматически нумеруются: lesson_01.jpg, lesson_02.png и т.д.</p>
+                    </div>
+                    
+                    <div class="lesson-form">
+                        <h4>🔼 Загрузка слайдов</h4>
+                        
+                        <div class="form-group">
+                            <label for="slides-lesson-id">ID урока:</label>
+                            <input type="text" id="slides-lesson-id" placeholder="Введите ID урока (например: demo_math_введение)" 
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                ID урока можно найти в списке уроков. Пример: lesson_01_математика
+                            </small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Выберите слайды для загрузки:</label>
+                            <div class="drag-drop-zone" id="slides-upload-dropzone">
+                                <div class="drag-drop-icon">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <div class="drag-drop-text">
+                                    <h4>Перетащите файлы сюда или кликните для выбора</h4>
+                                    <p>Поддерживаются JPG, PNG, MP4 файлы</p>
+                                    <p style="font-size: 12px; color: #666;">Можно выбрать несколько файлов одновременно</p>
+                                </div>
+                                <input type="file" id="slides-upload-input" multiple accept=".jpg,.jpeg,.png,.mp4,.webp" style="display: none;">
+                            </div>
+                        </div>
+                        
+                        <div id="slides-preview" style="margin: 15px 0; display: none;">
+                            <h5>📸 Предпросмотр выбранных файлов:</h5>
+                            <div id="slides-preview-list" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;"></div>
+                        </div>
+                        
+                        <button id="upload-slides-btn" class="btn" style="background: #28a745; width: 100%; margin-top: 15px;">
+                            <i class="fas fa-upload"></i> Загрузить слайды
+                        </button>
+                        
+                        <div id="slides-upload-status" class="api-status" style="margin-top: 15px;"></div>
+                    </div>
+                    
+                    <div class="lesson-form" style="margin-top: 30px;">
+                        <h4>🔍 Поиск и управление слайдами</h4>
+                        
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                            <input type="text" id="search-slides-lesson" placeholder="Введите ID урока..." 
+                                   style="flex: 1; min-width: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <button id="search-slides-btn" class="btn">
+                                <i class="fas fa-search"></i> Найти слайды
+                            </button>
+                        </div>
+                        
+                        <div id="slides-search-results" style="margin-top: 20px; display: none;">
+                            <h5>📂 Найденные слайды:</h5>
+                            <div id="slides-list" class="file-list" style="max-height: 400px; overflow-y: auto;"></div>
+                            
+                            <div id="slides-actions" style="margin-top: 15px; display: none;">
+                                <button id="delete-all-slides-btn" class="btn" style="background: #dc3545; margin-right: 10px;">
+                                    <i class="fas fa-trash"></i> Удалить все слайды этого урока
+                                </button>
+                                <button id="refresh-slides-btn" class="btn" style="background: #17a2b8;">
+                                    <i class="fas fa-sync-alt"></i> Обновить список
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="slides-management-status" class="success-message" style="margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Вкладка для резервного копирования данных -->
+            <div class="tab-content" id="data-backup-tab">
+                <div class="management-panel">
+                    <h3><i class="fas fa-database"></i> Резервное копирование данных</h3>
+                    
+                    <div style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+                        <h4>📊 Статистика данных</h4>
+                        <div id="data-stats-info">
+                            <p>Загрузка статистики...</p>
+                        </div>
+                        <button id="refresh-data-stats-btn" class="btn" style="margin-top: 10px;">
+                            <i class="fas fa-sync-alt"></i> Обновить статистику
+                        </button>
+                    </div>
+                    
+                    <div class="download-section">
+                        <h4>📥 Экспорт данных</h4>
+                        
+                        <div style="margin-bottom: 20px; padding: 15px; background: #e7f4e4; border-radius: 8px;">
+                            <h5><i class="fas fa-download"></i> Полный экспорт</h5>
+                            <p>Скачайте полную базу данных системы:</p>
+                            <ul style="margin: 10px 0 10px 20px;">
+                                <li>Всех пользователей (учеников и учителей)</li>
+                                <li>Данные учеников и их комнаты</li>
+                                <li>Прогресс обучения по всем предметам</li>
+                            </ul>
+                            <button class="download-btn" id="export-full-btn" style="background: #28a745;">
+                                <i class="fas fa-file-archive"></i> Скачать полный архив (ZIP)
+                            </button>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                            <h5><i class="fas fa-chart-line"></i> Экспорт прогресса</h5>
+                            <p>Только данные о прогрессе учеников:</p>
+                            <button class="download-btn" id="export-progress-btn" style="background: #17a2b8;">
+                                <i class="fas fa-chart-bar"></i> Скачать прогресс обучения
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="upload-form" style="margin-top: 30px;">
+                        <h4>📤 Восстановление данных</h4>
+                        <p>Восстановите данные системы из ранее созданного архива:</p>
+                        
+                        <div class="drag-drop-zone" id="import-data-dropzone">
+                            <div class="drag-drop-icon">
+                                <i class="fas fa-file-import"></i>
+                            </div>
+                            <div class="drag-drop-text">
+                                <h5>Перетащите ZIP файл сюда</h5>
+                                <p>или кликните для выбора файла</p>
+                                <p style="font-size: 12px; color: #666;">Файл должен быть создан системой AI Teacher</p>
+                            </div>
+                            <input type="file" id="import-data-input" accept=".zip" style="display: none;">
+                        </div>
+                        
+                        <div id="import-warning" style="display: none; background: #fff3cd; color: #856404; padding: 15px; border-radius: 6px; margin: 15px 0;">
+                            <h5><i class="fas fa-exclamation-triangle"></i> Внимание!</h5>
+                            <p>Восстановление данных <strong>перезапишет</strong> существующие данные!</p>
+                            <p>Рекомендуется сделать резервную копию перед восстановлением.</p>
+                            <div style="margin-top: 15px;">
+                                <button id="confirm-import-btn" class="btn" style="background: #dc3545; margin-right: 10px;">
+                                    <i class="fas fa-check"></i> Подтвердить восстановление
+                                </button>
+                                <button id="cancel-import-btn" class="btn" style="background: #6c757d;">
+                                    <i class="fas fa-times"></i> Отмена
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div id="import-status" class="api-status" style="margin-top: 15px;"></div>
+                    </div>
+                    
+                    <div id="data-backup-status" class="success-message" style="margin-top: 20px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1828,6 +2168,36 @@
         const cancelEditBtn = document.getElementById('cancel-edit-btn');
         const editorStatus = document.getElementById('editor-status');
         
+        // Элементы для управления слайдами
+        const slidesLessonIdInput = document.getElementById('slides-lesson-id');
+        const slidesUploadInput = document.getElementById('slides-upload-input');
+        const slidesUploadDropzone = document.getElementById('slides-upload-dropzone');
+        const slidesPreview = document.getElementById('slides-preview');
+        const slidesPreviewList = document.getElementById('slides-preview-list');
+        const uploadSlidesBtn = document.getElementById('upload-slides-btn');
+        const slidesUploadStatus = document.getElementById('slides-upload-status');
+        const searchSlidesLessonInput = document.getElementById('search-slides-lesson');
+        const searchSlidesBtn = document.getElementById('search-slides-btn');
+        const slidesSearchResults = document.getElementById('slides-search-results');
+        const slidesList = document.getElementById('slides-list');
+        const slidesActions = document.getElementById('slides-actions');
+        const deleteAllSlidesBtn = document.getElementById('delete-all-slides-btn');
+        const refreshSlidesBtn = document.getElementById('refresh-slides-btn');
+        const slidesManagementStatus = document.getElementById('slides-management-status');
+        
+        // Элементы для резервного копирования
+        const dataStatsInfo = document.getElementById('data-stats-info');
+        const refreshDataStatsBtn = document.getElementById('refresh-data-stats-btn');
+        const exportFullBtn = document.getElementById('export-full-btn');
+        const exportProgressBtn = document.getElementById('export-progress-btn');
+        const importDataInput = document.getElementById('import-data-input');
+        const importDataDropzone = document.getElementById('import-data-dropzone');
+        const importWarning = document.getElementById('import-warning');
+        const confirmImportBtn = document.getElementById('confirm-import-btn');
+        const cancelImportBtn = document.getElementById('cancel-import-btn');
+        const importStatus = document.getElementById('import-status');
+        const dataBackupStatus = document.getElementById('data-backup-status');
+        
         // Socket.io
         const socket = io();
         
@@ -1842,6 +2212,7 @@
             subject: 'all',
             search: ''
         };
+        let pendingImportFile = null;
         
         // Маппинг предметов по классам
         const subjectsByClass = {
@@ -3545,6 +3916,398 @@
                 filterSubjectSelect.innerHTML = '<option value="all">Все предметы</option>';
             }
         }
+        
+        // Функции для управления слайдами уроков
+        function loadDataStats() {
+            fetch('/api/students')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayDataStats(data.students);
+                    } else {
+                        dataStatsInfo.innerHTML = '<p>❌ Ошибка загрузки статистики: ' + data.error + '</p>';
+                    }
+                })
+                .catch(error => {
+                    dataStatsInfo.innerHTML = '<p>❌ Ошибка сети: ' + error + '</p>';
+                });
+        }
+
+        function displayDataStats(students) {
+            const totalStudents = students.length;
+            const withProgress = students.filter(s => s.student_data && s.student_data.student_id).length;
+            const totalUsers = document.querySelectorAll('.user-item').length - 1; // Минус заголовок
+            
+            const statsHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-number">${totalUsers}</span>
+                        <div class="stat-label">Всего пользователей</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">${totalStudents}</span>
+                        <div class="stat-label">Всего учеников</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">${withProgress}</span>
+                        <div class="stat-label">С прогрессом</div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-number">${totalStudents}</span>
+                        <div class="stat-label">Активных</div>
+                    </div>
+                </div>
+            `;
+            
+            dataStatsInfo.innerHTML = statsHTML;
+        }
+
+        function uploadSlides() {
+            const lessonId = slidesLessonIdInput.value.trim();
+            const fileInput = slidesUploadInput;
+            
+            if (!lessonId) {
+                showApiStatus(slidesUploadStatus, 'Введите ID урока', false);
+                return;
+            }
+            
+            if (fileInput.files.length === 0) {
+                showApiStatus(slidesUploadStatus, 'Выберите файлы для загрузки', false);
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('lesson_id', lessonId);
+            
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append('files', fileInput.files[i]);
+            }
+            
+            const uploadBtn = uploadSlidesBtn;
+            const originalText = uploadBtn.innerHTML;
+            
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+            uploadBtn.disabled = true;
+            
+            fetch('/api/lesson/slides/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let message = `✅ Загружено ${data.uploaded} слайдов`;
+                    if (data.failed > 0) {
+                        message += `, ошибок: ${data.failed}`;
+                    }
+                    
+                    // Показываем детали
+                    if (data.details) {
+                        message += '<br><details style="margin-top: 10px;"><summary>Детали</summary>';
+                        data.details.forEach(detail => {
+                            if (detail.status === 'success') {
+                                message += `✅ ${detail.filename} → ${detail.slide_filename}<br>`;
+                            } else {
+                                message += `❌ ${detail.filename}: ${detail.error}<br>`;
+                            }
+                        });
+                        message += '</details>';
+                    }
+                    
+                    showApiStatus(slidesUploadStatus, message, true);
+                    
+                    // Очищаем форму
+                    fileInput.value = '';
+                    slidesPreview.style.display = 'none';
+                    slidesPreviewList.innerHTML = '';
+                    
+                    // Обновляем список слайдов если искали этот урок
+                    if (searchSlidesLessonInput.value === lessonId) {
+                        searchSlides();
+                    }
+                    
+                } else {
+                    showApiStatus(slidesUploadStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(slidesUploadStatus, `❌ Ошибка сети: ${error}`, false);
+            })
+            .finally(() => {
+                uploadBtn.innerHTML = originalText;
+                uploadBtn.disabled = false;
+            });
+        }
+
+        function searchSlides() {
+            const lessonId = searchSlidesLessonInput.value.trim();
+            
+            if (!lessonId) {
+                showStatus(slidesManagementStatus, 'Введите ID урока для поиска', false);
+                return;
+            }
+            
+            fetch(`/api/lesson/slides/${encodeURIComponent(lessonId)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const resultsDiv = slidesSearchResults;
+                    const slidesListElement = slidesList;
+                    const actionsDiv = slidesActions;
+                    
+                    if (data.success) {
+                        if (data.slides && data.slides.length > 0) {
+                            let html = '';
+                            data.slides.forEach(slide => {
+                                const fileType = slide.type === 'video' ? '🎬' : '🖼️';
+                                const fileSize = slide.path.split('/').pop().split('.').pop().toUpperCase();
+                                
+                                html += `
+                                    <div class="file-item">
+                                        <div class="file-info">
+                                            <div class="file-name">
+                                                ${fileType} Слайд ${slide.index}: ${slide.filename}
+                                            </div>
+                                            <div class="file-size">
+                                                Тип: ${slide.type === 'video' ? 'Видео' : 'Изображение'} (${fileSize}) | 
+                                                Размер: ${slide.index}
+                                            </div>
+                                        </div>
+                                        <div class="file-actions">
+                                            <a href="${slide.url}" target="_blank" class="file-btn" style="background: #17a2b8; color: white; text-decoration: none;">
+                                                <i class="fas fa-eye"></i> Просмотр
+                                            </a>
+                                            <button class="file-btn delete" data-slide-path="${slide.path}">
+                                                <i class="fas fa-trash"></i> Удалить
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            
+                            slidesListElement.innerHTML = html;
+                            resultsDiv.style.display = 'block';
+                            actionsDiv.style.display = 'block';
+                            
+                            // Добавляем обработчики для кнопок удаления
+                            document.querySelectorAll('#slides-list .file-btn.delete').forEach(btn => {
+                                btn.addEventListener('click', function() {
+                                    const slidePath = this.dataset.slidePath;
+                                    deleteSlide(slidePath);
+                                });
+                            });
+                            
+                        } else {
+                            slidesListElement.innerHTML = '<div class="file-item"><div class="file-info"><div class="file-name">Слайды не найдены</div></div></div>';
+                            resultsDiv.style.display = 'block';
+                            actionsDiv.style.display = 'none';
+                        }
+                    } else {
+                        showStatus(slidesManagementStatus, `❌ Ошибка: ${data.error}`, false);
+                        resultsDiv.style.display = 'none';
+                        actionsDiv.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    showStatus(slidesManagementStatus, `❌ Ошибка сети: ${error}`, false);
+                    slidesSearchResults.style.display = 'none';
+                    slidesActions.style.display = 'none';
+                });
+        }
+
+        function deleteSlide(slidePath) {
+            if (!confirm('Удалить этот слайд?')) return;
+            
+            fetch('/api/lesson/slides/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ slide_path: slidePath })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(slidesManagementStatus, '✅ Слайд удален');
+                    // Обновляем список
+                    searchSlides();
+                } else {
+                    showStatus(slidesManagementStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showStatus(slidesManagementStatus, `❌ Ошибка сети: ${error}`, false);
+            });
+        }
+
+        function deleteAllSlides() {
+            const lessonId = searchSlidesLessonInput.value.trim();
+            
+            if (!lessonId) {
+                showStatus(slidesManagementStatus, 'ID урока не указан', false);
+                return;
+            }
+            
+            if (!confirm(`Удалить ВСЕ слайды урока "${lessonId}"?`)) return;
+            
+            fetch('/api/lesson/slides/bulk_delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ lesson_id: lessonId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(slidesManagementStatus, 
+                        `✅ Удалено ${data.deleted} слайдов, ошибок: ${data.failed}`);
+                    // Обновляем список
+                    searchSlides();
+                } else {
+                    showStatus(slidesManagementStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showStatus(slidesManagementStatus, `❌ Ошибка сети: ${error}`, false);
+            });
+        }
+
+        // Функции для резервного копирования
+        function exportFullData() {
+            const exportBtn = exportFullBtn;
+            const originalText = exportBtn.innerHTML;
+            
+            exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Подготовка архива...';
+            exportBtn.disabled = true;
+            
+            fetch('/api/students/export_full')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка экспорта');
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `ai_teacher_full_backup_${new Date().toISOString().split('T')[0]}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showStatus(dataBackupStatus, 
+                        '✅ Полный архив данных успешно скачан!');
+                })
+                .catch(error => {
+                    showStatus(dataBackupStatus, 
+                        `❌ Ошибка экспорта: ${error.message}`, false);
+                })
+                .finally(() => {
+                    exportBtn.innerHTML = originalText;
+                    exportBtn.disabled = false;
+                });
+        }
+
+        function exportProgressData() {
+            fetch('/api/students/export_progress')
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error('Ошибка экспорта');
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `students_progress_${new Date().toISOString().split('T')[0]}.zip`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showStatus(dataBackupStatus, 
+                        '✅ Прогресс обучения успешно экспортирован!');
+                })
+                .catch(error => {
+                    showStatus(dataBackupStatus, 
+                        `❌ Ошибка экспорта: ${error.message}`, false);
+                });
+        }
+
+        function importDataFile(file) {
+            // Показываем предупреждение
+            importWarning.style.display = 'block';
+            importDataInput.style.display = 'none';
+            
+            // Сохраняем файл для импорта
+            pendingImportFile = file;
+        }
+
+        function confirmImport() {
+            if (!pendingImportFile) return;
+            
+            const formData = new FormData();
+            formData.append('file', pendingImportFile);
+            
+            const importBtn = confirmImportBtn;
+            const originalText = importBtn.innerHTML;
+            
+            importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Восстановление...';
+            importBtn.disabled = true;
+            
+            fetch('/api/students/import', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    let message = '✅ Данные успешно восстановлены!<br>';
+                    message += `Пользователей: ${data.imported.users}<br>`;
+                    message += `Данных учеников: ${data.imported.students}<br>`;
+                    message += `Прогресса: ${data.imported.progress}`;
+                    
+                    if (data.errors && data.errors.length > 0) {
+                        message += '<br><details style="margin-top: 10px;"><summary>Ошибки</summary>';
+                        data.errors.forEach(error => {
+                            message += `❌ ${error}<br>`;
+                        });
+                        message += '</details>';
+                    }
+                    
+                    showApiStatus(importStatus, message, true);
+                    
+                    // Обновляем данные на странице
+                    loadUsersList();
+                    loadStudentsList();
+                    loadDataStats();
+                    
+                } else {
+                    showApiStatus(importStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            })
+            .catch(error => {
+                showApiStatus(importStatus, `❌ Ошибка сети: ${error}`, false);
+            })
+            .finally(() => {
+                importBtn.innerHTML = originalText;
+                importBtn.disabled = false;
+                importWarning.style.display = 'none';
+                importDataInput.style.display = 'block';
+                pendingImportFile = null;
+            });
+        }
+
+        function cancelImport() {
+            importWarning.style.display = 'none';
+            importDataInput.style.display = 'block';
+            pendingImportFile = null;
+        }
 
         // Инициализация комнаты
         function initRoom(roomId) {
@@ -3650,6 +4413,103 @@
                     statusDiv.textContent = 'Ошибка: ' + error.message;
                     log(error.message);
                 });
+        }
+
+        // Инициализация обработчиков событий для нового функционала
+        function initSlidesAndBackupHandlers() {
+            // Загрузка слайдов
+            slidesUploadDropzone.addEventListener('click', () => slidesUploadInput.click());
+            
+            slidesUploadInput.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    slidesPreview.style.display = 'block';
+                    slidesPreviewList.innerHTML = '';
+                    
+                    Array.from(this.files).forEach((file, index) => {
+                        const fileType = file.type.startsWith('image/') ? '🖼️' : 
+                                         file.type.startsWith('video/') ? '🎬' : '📄';
+                        
+                        const div = document.createElement('div');
+                        div.style.cssText = 'background: white; padding: 10px; border-radius: 6px; border: 1px solid #ddd; max-width: 200px;';
+                        div.innerHTML = `
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">${fileType} ${index + 1}</div>
+                            <div style="font-weight: bold; font-size: 14px; word-break: break-all;">${file.name}</div>
+                            <div style="font-size: 11px; color: #999; margin-top: 5px;">${(file.size / 1024).toFixed(1)} KB</div>
+                        `;
+                        
+                        slidesPreviewList.appendChild(div);
+                    });
+                }
+            });
+            
+            uploadSlidesBtn.addEventListener('click', uploadSlides);
+            searchSlidesBtn.addEventListener('click', searchSlides);
+            refreshSlidesBtn.addEventListener('click', searchSlides);
+            deleteAllSlidesBtn.addEventListener('click', deleteAllSlides);
+            
+            // Drag and drop для загрузки слайдов
+            slidesUploadDropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+            
+            slidesUploadDropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+            
+            slidesUploadDropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length > 0) {
+                    slidesUploadInput.files = e.dataTransfer.files;
+                    const event = new Event('change');
+                    slidesUploadInput.dispatchEvent(event);
+                }
+            });
+            
+            // Резервное копирование
+            refreshDataStatsBtn.addEventListener('click', loadDataStats);
+            exportFullBtn.addEventListener('click', exportFullData);
+            exportProgressBtn.addEventListener('click', exportProgressData);
+            
+            // Импорт данных
+            importDataDropzone.addEventListener('click', () => importDataInput.click());
+            
+            importDataInput.addEventListener('change', function(e) {
+                if (this.files.length > 0) {
+                    importDataFile(this.files[0]);
+                }
+            });
+            
+            // Drag and drop для импорта
+            importDataDropzone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('dragover');
+            });
+            
+            importDataDropzone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+            });
+            
+            importDataDropzone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('dragover');
+                
+                if (e.dataTransfer.files.length > 0) {
+                    const file = e.dataTransfer.files[0];
+                    if (file.name.endsWith('.zip')) {
+                        importDataFile(file);
+                    } else {
+                        showApiStatus(importStatus, 'Только ZIP файлы разрешены', false);
+                    }
+                }
+            });
+            
+            confirmImportBtn.addEventListener('click', confirmImport);
+            cancelImportBtn.addEventListener('click', cancelImport);
         }
 
         // Инициализация
@@ -3888,6 +4748,18 @@
                 lessonEditorContainer.style.display = 'none';
                 currentLessonPath = '';
                 editorStatus.style.display = 'none';
+            });
+            
+            // Инициализация нового функционала
+            initSlidesAndBackupHandlers();
+            
+            // При переходе на вкладку резервного копирования загружаем статистику
+            document.querySelectorAll('.tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    if (this.dataset.tab === 'data-backup') {
+                        loadDataStats();
+                    }
+                });
             });
             
             // Выбор аватара
