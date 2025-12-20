@@ -19,7 +19,6 @@ import re
 # ==============================
 
 def student_required(f):
-    """Декоратор для защиты студент-эндпоинтов"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
@@ -35,7 +34,6 @@ def student_required(f):
 # ==============================
 
 def load_user_data(user_id):
-    """Загружает данные пользователя из USERS_DIR"""
     try:
         filepath = USERS_DIR / f"{user_id}.json"
         if not filepath.exists():
@@ -47,7 +45,6 @@ def load_user_data(user_id):
         return None
 
 def save_user_data(user_data):
-    """Сохраняет данные пользователя"""
     try:
         user_id = user_data.get('user_id')
         if not user_id:
@@ -61,35 +58,7 @@ def save_user_data(user_data):
         debug_log(f"Error saving user  {e}")
         return False
 
-def load_student_data(student_id):
-    """Загружает данные ученика из STUDENTS_DIR"""
-    try:
-        filepath = STUDENTS_DIR / f"{student_id}.json"
-        if not filepath.exists():
-            return None
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        debug_log(f"Error loading student data {student_id}: {e}")
-        return None
-
-def save_student_data(student_data):
-    """Сохраняет данные ученика"""
-    try:
-        student_id = student_data.get('student_id')
-        if not student_id:
-            return None
-        filepath = STUDENTS_DIR / f"{student_id}.json"
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(student_data, f, ensure_ascii=False, indent=2)
-        return student_id
-    except Exception as e:
-        debug_log(f"Error saving student  {e}")
-        return None
-
 def get_student_lessons_by_class(student_class: str):
-    """Возвращает уроки для ученика по классу"""
     lessons_by_subject = {}
     class_dir = LESSONS_STUDENTS_DIR / f"{student_class}_class"
     if class_dir.exists() and class_dir.is_dir():
@@ -114,7 +83,6 @@ def get_student_lessons_by_class(student_class: str):
     return lessons_by_subject
 
 def extract_lesson_number(filename: str) -> int:
-    """Извлекает номер урока из имени файла"""
     match = re.search(r'(?:lesson|урок)[_\s]*(\d+)', filename.lower())
     if match:
         return int(match.group(1))
@@ -124,20 +92,16 @@ def extract_lesson_number(filename: str) -> int:
     return 999
 
 def format_lesson_title(filename: str) -> str:
-    """Форматирует заголовок урока из имени файла"""
     title = re.sub(r'(?:lesson|урок)[_\s]*\d+[_\s]*', '', filename, flags=re.IGNORECASE)
     title = title.replace('_', ' ').strip()
     return title.title() or filename
 
 def initialize_student_progress(student_id: str, student_class: str):
-    """Инициализирует файл прогресса ученика"""
     try:
         progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
         progress_file.parent.mkdir(parents=True, exist_ok=True)
-        
         lessons_by_subject = get_student_lessons_by_class(student_class)
         progress_data = {"subjects": {}}
-        
         for subject, lessons in lessons_by_subject.items():
             lesson_ids = [lesson['id'] for lesson in lessons]
             progress_data["subjects"][subject] = {
@@ -146,7 +110,6 @@ def initialize_student_progress(student_id: str, student_class: str):
                 "total_lessons": len(lesson_ids),
                 "last_accessed": None
             }
-        
         with open(progress_file, 'w', encoding='utf-8') as f:
             json.dump(progress_data, f, ensure_ascii=False, indent=2)
         debug_log(f"✅ Создан начальный прогресс для ученика {student_id}")
@@ -160,7 +123,6 @@ def initialize_student_progress(student_id: str, student_class: str):
 @app.route('/api/student/profile')
 @student_required
 def get_student_profile():
-    """Получение профиля ученика"""
     try:
         user_data = load_user_data(session['user_id'])
         if not user_
@@ -191,7 +153,6 @@ def get_student_profile():
 @app.route('/api/student/progress', methods=['GET'])
 @student_required
 def get_student_progress_api():
-    """Получение прогресса ученика"""
     try:
         user_data = load_user_data(session['user_id'])
         if not user_data or not user_data.get('student_data'):
@@ -238,8 +199,6 @@ def get_student_progress_api():
             
             completed_count = len(completed_ids)
             total_lessons = len(lessons)
-            
-            # Ищем следующий урок
             next_lesson = None
             for lesson in subject_lessons:
                 if not lesson['completed']:
@@ -277,7 +236,6 @@ def get_student_progress_api():
 @app.route('/api/students')
 @teacher_required
 def get_all_students():
-    """Получение списка всех учеников"""
     try:
         students = []
         for user_file in USERS_DIR.glob("*.json"):
@@ -298,7 +256,6 @@ def get_all_students():
 @app.route('/api/student/<student_user_id>')
 @teacher_required
 def get_student_details(student_user_id):
-    """Получение деталей ученика"""
     try:
         user_data = load_user_data(student_user_id)
         if not user_data or user_data.get('role') != 'student':
@@ -326,32 +283,27 @@ def get_student_details(student_user_id):
         return jsonify({"success": False, "error": str(e)})
 
 # ==============================
-# 📤 Экспорт данных
+# 📤 Экспорт и импорт
 # ==============================
 
 @app.route('/api/students/export_full', methods=['GET'])
 @teacher_required
 def export_students_full():
-    """Полный экспорт данных учеников (включая прогресс)"""
     try:
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-            # 1. Экспорт пользователей
             for user_file in USERS_DIR.glob("*.json"):
                 with open(user_file, 'r', encoding='utf-8') as f:
                     user_data = json.load(f)
                 if user_data.get('role') == 'student':
                     zipf.write(user_file, f"users/{user_file.name}")
             
-            # 2. Экспорт данных учеников
             for student_file in STUDENTS_DIR.glob("*.json"):
                 zipf.write(student_file, f"students/{student_file.name}")
             
-            # 3. Экспорт прогресса
             for progress_file in STUDENT_PROGRESS_DIR.glob("*.json"):
                 zipf.write(progress_file, f"progress/{progress_file.name}")
             
-            # 4. Метаданные
             metadata = {
                 "export_date": datetime.now().isoformat(),
                 "total_users": len(list(USERS_DIR.glob("*.json"))),
@@ -378,14 +330,9 @@ def export_students_full():
         debug_log(f"❌ Ошибка экспорта данных: {e}")
         return jsonify({"success": False, "error": str(e)})
 
-# ==============================
-# 📥 Импорт данных
-# ==============================
-
 @app.route('/api/students/import', methods=['POST'])
 @teacher_required
 def import_students_data():
-    """Импорт данных учеников из ZIP-файла"""
     try:
         if 'file' not in request.files:
             return jsonify({"success": False, "error": "Файл не найден"})
@@ -395,7 +342,6 @@ def import_students_data():
         if not file.filename.endswith('.zip'):
             return jsonify({"success": False, "error": "Требуется ZIP-файл"})
         
-        # Распаковка
         temp_dir = tempfile.mkdtemp()
         file_path = os.path.join(temp_dir, 'import.zip')
         file.save(file_path)
@@ -403,13 +349,8 @@ def import_students_data():
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
         
-        results = {
-            "success": True,
-            "imported": {"users": 0, "students": 0, "progress": 0},
-            "errors": []
-        }
+        results = {"success": True, "imported": {"users": 0, "students": 0, "progress": 0}, "errors": []}
         
-        # Импорт пользователей
         users_dir = os.path.join(temp_dir, "users")
         if os.path.exists(users_dir):
             for user_file in os.listdir(users_dir):
@@ -425,7 +366,6 @@ def import_students_data():
                     except Exception as e:
                         results["errors"].append(f"Ошибка импорта пользователя {user_file}: {str(e)}")
         
-        # Импорт данных учеников
         students_dir = os.path.join(temp_dir, "students")
         if os.path.exists(students_dir):
             for student_file in os.listdir(students_dir):
@@ -441,7 +381,6 @@ def import_students_data():
                     except Exception as e:
                         results["errors"].append(f"Ошибка импорта данных ученика {student_file}: {str(e)}")
         
-        # Импорт прогресса
         progress_dir = os.path.join(temp_dir, "progress")
         if os.path.exists(progress_dir):
             for progress_file in os.listdir(progress_dir):
@@ -457,24 +396,10 @@ def import_students_data():
                     except Exception as e:
                         results["errors"].append(f"Ошибка импорта прогресса {progress_file}: {str(e)}")
         
-        # Очистка
         shutil.rmtree(temp_dir, ignore_errors=True)
         return jsonify(results)
     except Exception as e:
         debug_log(f"❌ Ошибка импорта данных: {e}")
         return jsonify({"success": False, "error": str(e)})
-
-# ==============================
-# 🛠️ Служебные функции
-# ==============================
-
-@app.route('/api/debug/student-lessons')
-@student_required
-def debug_student_lessons_route():
-    """Отладка: получение уроков ученика"""
-    user_data = load_user_data(session['user_id'])
-    student_class = user_data['student_data'].get('education_level', '5')
-    result = get_student_lessons_by_class(student_class)
-    return jsonify({"success": True, "lessons": result})
 
 debug_log("✅ Роуты учеников зарегистрированы")
