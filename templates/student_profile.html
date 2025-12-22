@@ -6,7 +6,6 @@
     <title>EduSonic AI - Завершение регистрации</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Стили такие же как в student.html для формы ввода данных */
         * {
             margin: 0;
             padding: 0;
@@ -43,7 +42,7 @@
             padding: 3rem;
             box-shadow: 0 20px 60px rgba(0,0,0,0.1);
             width: 100%;
-            max-width: 500px;
+            max-width: 600px;
             position: relative;
             overflow: hidden;
         }
@@ -148,6 +147,171 @@
             text-align: center;
             display: none;
         }
+        
+        /* Стили для дополнительных опций взрослых/студентов */
+        .adult-options {
+            background: linear-gradient(135deg, rgba(126, 118, 249, 0.05), rgba(106, 97, 229, 0.03));
+            border: 1px solid rgba(126, 118, 249, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .adult-options h4 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .radio-option:hover {
+            border-color: var(--primary);
+            background: rgba(126, 118, 249, 0.05);
+        }
+        
+        .radio-option.selected {
+            border-color: var(--primary);
+            background: rgba(126, 118, 249, 0.1);
+        }
+        
+        .radio-option input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            margin: 0;
+            accent-color: var(--primary);
+        }
+        
+        .radio-label {
+            flex: 1;
+            cursor: pointer;
+        }
+        
+        .radio-title {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 0.2rem;
+        }
+        
+        .radio-description {
+            font-size: 0.85rem;
+            color: var(--text-light);
+        }
+        
+        .cefr-levels {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 0.8rem;
+            margin-top: 1rem;
+        }
+        
+        .cefr-option {
+            padding: 1rem;
+            border: 2px solid #e1e1e1;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .cefr-option:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+        
+        .cefr-option.selected {
+            border-color: var(--primary);
+            background: rgba(126, 118, 249, 0.1);
+            box-shadow: 0 4px 12px rgba(126, 118, 249, 0.15);
+        }
+        
+        .cefr-level {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.3rem;
+        }
+        
+        .cefr-description {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+        
+        .info-text {
+            font-size: 0.9rem;
+            color: var(--text-light);
+            margin-top: 0.5rem;
+            line-height: 1.5;
+        }
+        
+        /* Анимации */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .auth-container {
+                padding: 2rem 1.5rem;
+                margin: 10px;
+            }
+            
+            .logo h1 {
+                font-size: 1.7rem;
+            }
+            
+            .cefr-levels {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+                align-items: flex-start;
+            }
+            
+            .auth-container {
+                padding: 1.5rem 1rem;
+            }
+            
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+            
+            .cefr-levels {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .radio-option {
+                flex-direction: column;
+                text-align: center;
+                align-items: flex-start;
+            }
+        }
     </style>
 </head>
 <body>
@@ -197,6 +361,71 @@
                 <input type="number" id="studentAge" required placeholder="Введите ваш возраст" min="4" max="80">
             </div>
             
+            <!-- Дополнительные опции для взрослых/студентов -->
+            <div id="adultOptions" class="adult-options">
+                <h4><i class="fas fa-cogs"></i> Настройки обучения</h4>
+                
+                <div class="radio-group">
+                    <div class="radio-option" onclick="selectStudyMode('anything')">
+                        <input type="radio" id="studyModeAnything" name="studyMode" value="anything" checked>
+                        <div class="radio-label">
+                            <div class="radio-title">Изучать что угодно</div>
+                            <div class="radio-description">Свободные беседы на любые темы без структурированных уроков</div>
+                        </div>
+                    </div>
+                    
+                    <div class="radio-option" onclick="selectStudyMode('language')">
+                        <input type="radio" id="studyModeLanguage" name="studyMode" value="language">
+                        <div class="radio-label">
+                            <div class="radio-title">Изучать английский язык</div>
+                            <div class="radio-description">Структурированные уроки английского с адаптацией под ваш уровень</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Поле для выбора уровня CEFR (только для режима изучения языка) -->
+                <div id="cefrLevelSection" style="display: none;">
+                    <label style="margin-bottom: 0.8rem; display: block;">
+                        <i class="fas fa-flag"></i> Уровень английского (CEFR)
+                    </label>
+                    
+                    <div class="cefr-levels">
+                        <div class="cefr-option" onclick="selectCefrLevel('A1')">
+                            <div class="cefr-level">A1</div>
+                            <div class="cefr-description">Начальный</div>
+                        </div>
+                        <div class="cefr-option" onclick="selectCefrLevel('A2')">
+                            <div class="cefr-level">A2</div>
+                            <div class="cefr-description">Элементарный</div>
+                        </div>
+                        <div class="cefr-option" onclick="selectCefrLevel('B1')">
+                            <div class="cefr-level">B1</div>
+                            <div class="cefr-description">Средний</div>
+                        </div>
+                        <div class="cefr-option" onclick="selectCefrLevel('B2')">
+                            <div class="cefr-level">B2</div>
+                            <div class="cefr-description">Выше среднего</div>
+                        </div>
+                        <div class="cefr-option" onclick="selectCefrLevel('C1')">
+                            <div class="cefr-level">C1</div>
+                            <div class="cefr-description">Продвинутый</div>
+                        </div>
+                        <div class="cefr-option" onclick="selectCefrLevel('C2')">
+                            <div class="cefr-level">C2</div>
+                            <div class="cefr-description">В совершенстве</div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-text">
+                        CEFR (Common European Framework of Reference) — международная система оценки уровня владения языком.
+                        Выберите уровень, который лучше всего описывает ваши текущие знания английского.
+                    </div>
+                </div>
+                
+                <input type="hidden" id="studyMode" value="anything">
+                <input type="hidden" id="cefrLevel" value="A1">
+            </div>
+            
             <button type="submit" class="btn" id="saveProfileBtn">
                 <i class="fas fa-save"></i> Сохранить и начать обучение
             </button>
@@ -210,7 +439,33 @@
     </div>
 
     <script>
+        // Текущие значения
+        let currentStudyMode = 'anything';
+        let currentCefrLevel = 'A1';
+        
         document.addEventListener('DOMContentLoaded', function() {
+            // Отслеживаем изменение уровня образования
+            document.getElementById('educationLevel').addEventListener('change', function() {
+                const selectedLevel = this.value;
+                const isAdultOrStudent = selectedLevel === 'student' || selectedLevel === 'adult';
+                const adultOptions = document.getElementById('adultOptions');
+                
+                if (isAdultOrStudent) {
+                    adultOptions.style.display = 'block';
+                    updateFormHeight();
+                } else {
+                    adultOptions.style.display = 'none';
+                    // Сбрасываем значения для школьников
+                    currentStudyMode = 'anything';
+                    currentCefrLevel = 'A1';
+                }
+            });
+            
+            // Изначально выбираем первый радио-вариант
+            selectStudyMode('anything');
+            selectCefrLevel('A1');
+            
+            // Обработка отправки формы
             document.getElementById('profileForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
@@ -218,6 +473,7 @@
                 const level = document.getElementById('educationLevel').value;
                 const age = document.getElementById('studentAge').value;
                 
+                // Валидация
                 if (!name) {
                     showError('Пожалуйста, введите имя');
                     return;
@@ -233,22 +489,49 @@
                     return;
                 }
                 
+                // Для взрослых/студентов проверяем выбор режима
+                if (level === 'student' || level === 'adult') {
+                    if (!currentStudyMode) {
+                        showError('Пожалуйста, выберите режим обучения');
+                        return;
+                    }
+                    
+                    if (currentStudyMode === 'language' && !currentCefrLevel) {
+                        showError('Пожалуйста, выберите уровень английского языка');
+                        return;
+                    }
+                }
+                
                 const saveBtn = document.getElementById('saveProfileBtn');
                 const originalText = saveBtn.innerHTML;
                 saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Сохранение...';
                 saveBtn.disabled = true;
                 
                 try {
+                    // Подготавливаем данные для отправки
+                    const profileData = {
+                        name: name,
+                        level: level,
+                        age: age,
+                        is_adult: level === 'student' || level === 'adult'
+                    };
+                    
+                    // Добавляем настройки для взрослых/студентов
+                    if (profileData.is_adult) {
+                        profileData.study_mode = currentStudyMode;
+                        if (currentStudyMode === 'language') {
+                            profileData.language_level = currentCefrLevel;
+                        }
+                    }
+                    
+                    console.log('Отправляемые данные:', profileData);
+                    
                     const response = await fetch('/auth/complete-profile', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({
-                            name: name,
-                            level: level,
-                            age: age
-                        })
+                        body: JSON.stringify(profileData)
                     });
                     
                     const result = await response.json();
@@ -264,26 +547,128 @@
                         saveBtn.disabled = false;
                     }
                 } catch (error) {
+                    console.error('Ошибка сети:', error);
                     showError('Ошибка сети: ' + error.message);
                     saveBtn.innerHTML = originalText;
                     saveBtn.disabled = false;
                 }
             });
             
-            function showError(message) {
-                const errorDiv = document.getElementById('errorMessage');
-                errorDiv.textContent = message;
-                errorDiv.style.display = 'block';
-            }
-            
-            function showSuccess(message) {
-                const successDiv = document.getElementById('successMessage');
-                successDiv.textContent = message;
-                successDiv.style.display = 'block';
-            }
-            
+            // Фокусируемся на имени при загрузке
             document.getElementById('studentName').focus();
         });
+        
+        // Выбор режима обучения
+        function selectStudyMode(mode) {
+            currentStudyMode = mode;
+            
+            // Обновляем UI радио-кнопок
+            document.querySelectorAll('.radio-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            if (mode === 'anything') {
+                document.getElementById('studyModeAnything').parentElement.classList.add('selected');
+                document.getElementById('studyModeAnything').checked = true;
+                document.getElementById('cefrLevelSection').style.display = 'none';
+            } else if (mode === 'language') {
+                document.getElementById('studyModeLanguage').parentElement.classList.add('selected');
+                document.getElementById('studyModeLanguage').checked = true;
+                document.getElementById('cefrLevelSection').style.display = 'block';
+                // Автоматически выбираем A1 если еще не выбран уровень
+                if (!currentCefrLevel) {
+                    selectCefrLevel('A1');
+                }
+            }
+            
+            // Обновляем скрытые поля
+            document.getElementById('studyMode').value = mode;
+            updateFormHeight();
+        }
+        
+        // Выбор уровня CEFR
+        function selectCefrLevel(level) {
+            currentCefrLevel = level;
+            
+            // Обновляем UI выбора уровня
+            document.querySelectorAll('.cefr-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            // Находим выбранный элемент по тексту внутри
+            document.querySelectorAll('.cefr-option').forEach(option => {
+                if (option.querySelector('.cefr-level').textContent === level) {
+                    option.classList.add('selected');
+                }
+            });
+            
+            // Обновляем скрытое поле
+            document.getElementById('cefrLevel').value = level;
+        }
+        
+        // Обновление высоты формы для плавной анимации
+        function updateFormHeight() {
+            const form = document.getElementById('profileForm');
+            form.style.transition = 'height 0.3s ease';
+            form.style.height = form.scrollHeight + 'px';
+        }
+        
+        // Показать сообщение об ошибке
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            // Скрыть через 5 секунд
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Показать сообщение об успехе
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+        }
+        
+        // Функция для предварительного просмотра выбора
+        function previewSelection() {
+            const level = document.getElementById('educationLevel').value;
+            const name = document.getElementById('studentName').value;
+            const age = document.getElementById('studentAge').value;
+            
+            let preview = `Имя: ${name || 'Не указано'}, Уровень: ${getLevelText(level)}, Возраст: ${age || 'Не указан'}`;
+            
+            if (level === 'student' || level === 'adult') {
+                preview += `, Режим: ${currentStudyMode === 'anything' ? 'Свободное обучение' : 'Английский язык'}`;
+                if (currentStudyMode === 'language') {
+                    preview += ` (Уровень: ${currentCefrLevel})`;
+                }
+            }
+            
+            console.log('Предварительный просмотр:', preview);
+        }
+        
+        // Получение текстового представления класса
+        function getLevelText(level) {
+            const levels = {
+                '1': '1 класс',
+                '2': '2 класс', 
+                '3': '3 класс',
+                '4': '4 класс',
+                '5': '5 класс',
+                '6': '6 класс',
+                '7': '7 класс',
+                '8': '8 класс',
+                '9': '9 класс',
+                '10': '10 класс',
+                '11': '11 класс',
+                'student': 'Студент',
+                'adult': 'Взрослый'
+            };
+            return levels[level] || level;
+        }
     </script>
 </body>
 </html>
