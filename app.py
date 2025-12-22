@@ -110,7 +110,7 @@ room_llm_mode = defaultdict(lambda: get_llm_mode())
 room_teacher_speaking = defaultdict(bool)
 room_practice_active = defaultdict(bool)
 room_current_question_index = defaultdict(int)
-room_current_avatar = defaultdict(lambda: 'woman')
+room_current_avatar = defaultdict(lambda: 'Woman')
 room_last_activity = defaultdict(lambda: time.time())
 
 # PeerJS tracking
