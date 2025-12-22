@@ -1,10 +1,11 @@
 # dialogue.py
 # ИСПРАВЛЕННАЯ ВЕРСИЯ с полной ленивой инициализацией
 # + ДОБАВЛЕНА ПОДДЕРЖКА СЛАЙДОВ ИЗОБРАЖЕНИЙ ДЛЯ УРОКОВ
+# + ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ И УРОВНЕЙ CEFR
 
 import json
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Any
 from difflib import SequenceMatcher
 import random
 import re
@@ -17,7 +18,17 @@ from practice_manager import PracticeManager
 
 # 🔥 ИМПОРТ ДЛЯ ЯЗЫКОВОЙ ИНТЕГРАЦИИ
 try:
-    from language_integration import LanguageIntegration, is_language_subject, get_language_settings
+    from language_integration import (
+        LanguageIntegration, 
+        is_language_subject, 
+        get_language_settings,
+        detect_cefr_level,
+        get_cefr_level_config,
+        create_bilingual_lesson_prompt_cefr,
+        get_adult_study_modes,
+        get_available_cefr_levels,
+        should_use_cefr_prompt
+    )
     LANGUAGE_SUPPORT_ENABLED = True
 except ImportError:
     LANGUAGE_SUPPORT_ENABLED = False
@@ -180,10 +191,16 @@ class DialogueManager:
         self.student_data = {}
         self.has_student_data = False
         
+        # 🔥 НОВЫЕ ПОЛЯ ДЛЯ ВЗРОСЛЫХ И ЯЗЫКОВЫХ УРОВНЕЙ
+        self.is_adult_student = False
+        self.adult_study_mode = None  # 'language' или 'anything'
+        self.cefr_level = None  # A1, A2, B1, B2, C1, C2
+        self.cefr_config = None
+        
         # 🔥 ЛЕНИВЫЕ ДАННЫЕ УРОКОВ
         self._lessons = None
         self._lessons_by_class = None
-        self.available_classes = ["5", "6", "7", "8", "9", "10", "11"]
+        self.available_classes = ["5", "6", "7", "8", "9", "10", "11", "adult"]
         
         # Маппинг английских названий предметов
         self.subject_mapping = {
@@ -407,7 +424,7 @@ class DialogueManager:
         }
 
     def _load_lessons(self):
-        """Загрузка уроков по классам"""
+        """Загрузка уроков по классам ВКЛЮЧАЯ ВЗРОСЛЫХ"""
         self._lessons = {}
         self._lessons_by_class = {}
         
@@ -419,13 +436,20 @@ class DialogueManager:
             # 1. Загружаем демо-уроки
             self._load_lessons_from_dir(self.demo_lessons_dir, "demo")
             
-            # 2. Загружаем уроки для учеников ПО КЛАССАМ
+            # 2. Загружаем уроки для учеников ПО КЛАССАМ (ВКЛЮЧАЯ adult)
             if self.students_base_dir.exists():
                 for class_dir in self.students_base_dir.iterdir():
-                    if class_dir.is_dir() and "_class" in class_dir.name:
-                        class_level = class_dir.name.replace("_class", "")
-                        if class_level in self.available_classes:
-                            self._load_student_lessons_by_class(class_dir, class_level)
+                    if class_dir.is_dir():
+                        class_name = class_dir.name
+                        
+                        if "_class" in class_name:
+                            # Школьные классы (5_class, 6_class и т.д.)
+                            class_level = class_name.replace("_class", "")
+                            if class_level in self.available_classes:
+                                self._load_student_lessons_by_class(class_dir, class_level)
+                        elif class_name == "adult_language":
+                            # 🔥 НОВОЕ: Уроки для взрослых по языкам
+                            self._load_adult_language_lessons(class_dir)
             
             # 3. Загружаем сгенерированные уроки
             self._load_lessons_from_dir(self.generated_lessons_dir, "generated")
@@ -438,6 +462,62 @@ class DialogueManager:
                     
         except Exception as e:
             debug_log(f"Ошибка доступа к папке уроков: {e}")
+
+    def _load_adult_language_lessons(self, adult_lang_dir: Path):
+        """🔥 НОВЫЙ МЕТОД: Загрузка уроков для взрослых по языкам и уровням"""
+        debug_log(f"🎓 Загрузка уроков для взрослых из: {adult_lang_dir}")
+        
+        if not adult_lang_dir.exists():
+            debug_log(f"⚠️ Папка для взрослых не существует: {adult_lang_dir}")
+            return
+        
+        # Проходим по всем уровням CEFR
+        for level_dir in adult_lang_dir.iterdir():
+            if level_dir.is_dir() and "_english" in level_dir.name:
+                level = level_dir.name.replace("_english", "")
+                
+                # Добавляем уровень в список доступных классов
+                if "adult" not in self.lessons_by_class:
+                    self._lessons_by_class["adult"] = {}
+                
+                subject = "английский язык"
+                
+                if subject not in self._lessons_by_class["adult"]:
+                    self._lessons_by_class["adult"][subject] = []
+                
+                # Загружаем уроки для этого уровня
+                for lesson_file in level_dir.glob("*.txt"):
+                    try:
+                        lesson_number = self._extract_lesson_number(lesson_file.stem)
+                        lesson_title = self._format_lesson_title(lesson_file.stem)
+                        
+                        lesson_data = {
+                            'id': f"adult_{level}_{lesson_file.stem}",
+                            'title': lesson_title,
+                            'file_path': lesson_file,
+                            'type': 'adult_language',
+                            'subject': subject,
+                            'class_level': 'adult',
+                            'lesson_number': lesson_number,
+                            'full_path': f"students/adult_language/{level_dir.name}/{lesson_file.name}",
+                            'cefr_level': level,
+                            'target_language': 'english'
+                        }
+                        
+                        # Добавляем в общий список
+                        if subject not in self._lessons:
+                            self._lessons[subject] = []
+                        self._lessons[subject].append(lesson_data)
+                        
+                        # Добавляем в список для взрослых
+                        self._lessons_by_class["adult"][subject].append(lesson_data)
+                        
+                        debug_log(f"🎓 Загружен урок для взрослых: {lesson_title} (уровень {level})")
+                        
+                    except Exception as e:
+                        debug_log(f"Ошибка загрузки урока для взрослых {lesson_file}: {e}")
+        
+        debug_log(f"✅ Уроки для взрослых загружены")
 
     def _load_legacy_lessons(self):
         """Исправленная загрузка старых уроков (рекурсивный поиск)"""
@@ -526,7 +606,8 @@ class DialogueManager:
                    "история", "обществознание", "информатика", "химия"],
             "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
                    "литература", "английский язык", "французский язык", "немецкий язык", "испанский язык",
-                   "история", "обществознание", "информатика", "химия"]
+                   "история", "обществознание", "информатика", "химия"],
+            "adult": ["английский язык"]  # 🔥 НОВОЕ: Для взрослых только английский
         }
         
         subjects = subjects_by_class.get(class_level, [])
@@ -558,6 +639,15 @@ class DialogueManager:
                     'lesson_number': lesson_number,
                     'full_path': f"{class_level}_class/{subject}/{lesson_file.name}"
                 }
+                
+                # 🔥 ДОПОЛНИТЕЛЬНЫЕ ПОЛЯ ДЛЯ ВЗРОСЛЫХ
+                if class_level == "adult" and subject == "английский язык":
+                    # Ищем уровень CEFR в имени папки
+                    for parent in lesson_file.parents:
+                        if "_english" in parent.name:
+                            lesson_data['cefr_level'] = parent.name.replace("_english", "")
+                            lesson_data['target_language'] = 'english'
+                            break
                 
                 # Добавляем в общий список по предметам
                 if subject not in self._lessons:
@@ -875,6 +965,15 @@ class DialogueManager:
             level = self.student_data.get('education_level', '5')
             name = self.student_data.get('name', 'ученик')
             
+            # 🔥 ОСОБЕННОСТИ ДЛЯ ВЗРОСЛЫХ
+            adult_adjustment = ""
+            if self.is_adult_student:
+                adult_adjustment = f"\nВЗРОСЛЫЙ УЧЕНИК: Используй более сложную лексику, уважай жизненный опыт."
+                if self.cefr_level:
+                    adult_adjustment += f"\nУРОВЕНЬ ЯЗЫКА: {self.cefr_level} - {self.cefr_config.get('description', '')}"
+                if self.adult_study_mode == 'anything':
+                    adult_adjustment += "\nРЕЖИМ 'ИЗУЧАТЬ ЧТО УГОДНО': Отвечай на любые вопросы, обсуждай любые темы."
+            
             # 🔥 АДАПТИРУЕМ ПРОМПТ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
             subject_type_instructions = ""
             if TECHNICAL_SUPPORT_ENABLED and self.current_subject:
@@ -891,6 +990,7 @@ class DialogueManager:
 - Уровень: {level} класс
 - Предмет: {self.current_subject or 'не выбран'}
 
+{adult_adjustment}
 {subject_type_instructions}
 
 СТИЛЬ ОБЩЕНИЯ:
@@ -972,6 +1072,14 @@ class DialogueManager:
         
         self.last_subject_prompt_time = current_time
         
+        # 🔥 ДЛЯ ВЗРОСЛОГО В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return None  # Не предлагаем предметы в этом режиме
+        
+        # 🔥 ДЛЯ ВЗРОСЛОГО В РЕЖИМЕ "АНГЛИЙСКИЙ"
+        if self.is_adult_student and self.adult_study_mode == 'language':
+            return f"Добро пожаловать на урок английского языка уровня {self.cefr_level}! Скажите 'начать урок', чтобы начать."
+        
         # 🔥 ДЛЯ УЧЕНИКА: показываем предметы его класса
         if self.has_student_data and self.student_data.get('education_level'):
             student_class = self.student_data.get('education_level')
@@ -1006,6 +1114,10 @@ class DialogueManager:
         if self.lesson_started or self.practice_active:
             return original_response
         
+        # Если это взрослый в режиме "изучать что угодно" - не предлагаем предметы
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return original_response
+        
         # Если есть данные ученика и выбран предмет, не предлагаем выбор
         if self.has_student_data and self.current_subject:
             return original_response
@@ -1034,6 +1146,13 @@ class DialogueManager:
                 name = self.student_data.get('name', 'ученик')
                 age = self.student_data.get('age', '12')
                 level = self.student_data.get('education_level', '5')
+                
+                # 🔥 СПЕЦИАЛЬНОЕ ПРИВЕТСТВИЕ ДЛЯ ВЗРОСЛЫХ
+                if self.is_adult_student:
+                    if self.adult_study_mode == 'anything':
+                        return f"Здравствуйте, {name}! Я ваш AI-учитель. В режиме 'изучать что угодно' мы можем обсудить любую тему. О чем бы вы хотели поговорить?"
+                    elif self.adult_study_mode == 'language':
+                        return f"Здравствуйте, {name}! Добро пожаловать на урок английского языка уровня {self.cefr_level}. Готовы начать?"
                 
                 greeting_variants = [
                     f"Привет, {name}! Я твой виртуальный учитель. Рад видеть тебя! Ты в {level} классе, это отлично!",
@@ -1099,6 +1218,17 @@ class DialogueManager:
             # ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ: инициализируем LLM при первом использовании
             _ = self.llm
             
+            # 🔥 ОБНОВЛЕННЫЙ: ПРОВЕРКА ДЛЯ ВЗРОСЛЫХ И CEFR
+            use_cefr_prompt = False
+            if (self.is_adult_student and 
+                self.adult_study_mode == 'language' and 
+                self.is_language_subject and
+                self.cefr_level and
+                LANGUAGE_SUPPORT_ENABLED):
+                
+                use_cefr_prompt = True
+                debug_log(f"🎓 Используем CEFR промпт для взрослых: уровень {self.cefr_level}")
+            
             # ОБНОВЛЕННЫЙ ПРОМПТ: Добавляем данные ученика и ТРЕБОВАНИЯ К ВОПРОСАМ
             age = self.student_data.get('age', '12')
             level = self.student_data.get('education_level', '5')
@@ -1107,8 +1237,17 @@ class DialogueManager:
             # 🔥 УМНЫЙ ВЫБОР ПРОМПТА В ЗАВИСИМОСТИ ОТ ТИПА ПРЕДМЕТА
             system_prompt = ""
             
-            # 1. ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - ИСПОЛЬЗУЕМ СПЕЦИАЛЬНЫЙ ПРОМПТ
-            if is_language and LANGUAGE_SUPPORT_ENABLED:
+            # 1. ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК ДЛЯ ВЗРОСЛЫХ С CEFR
+            if use_cefr_prompt and LANGUAGE_SUPPORT_ENABLED:
+                system_prompt = create_bilingual_lesson_prompt_cefr(
+                    topic=topic,
+                    target_language=self.target_language,
+                    cefr_level=self.cefr_level
+                )
+                debug_log(f"🎓 Используем CEFR промпт для уровня {self.cefr_level}")
+            
+            # 2. ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК (СТАРАЯ ЛОГИКА)
+            elif is_language and LANGUAGE_SUPPORT_ENABLED:
                 system_prompt = LanguageIntegration.create_bilingual_lesson_prompt(
                     topic=topic,
                     target_language=self.target_language,
@@ -1117,7 +1256,7 @@ class DialogueManager:
                 )
                 debug_log(f"🎯 Используем языковой промт для уровня {self.language_level}")
             
-            # 2. ЕСЛИ ЭТО ТЕХНИЧЕСКИЙ ПРЕДМЕТ - ИСПОЛЬЗУЕМ ТЕХНИЧЕСКИЙ ПРОМПТ
+            # 3. ЕСЛИ ЭТО ТЕХНИЧЕСКИЙ ПРЕДМЕТ - ИСПОЛЬЗУЕМ ТЕХНИЧЕСКИЙ ПРОМПТ
             elif TECHNICAL_PROMPTS_ENABLED and self.current_subject and self.is_technical_subject:
                 system_prompt = get_lesson_prompt(
                     subject=self.current_subject,
@@ -1127,7 +1266,7 @@ class DialogueManager:
                 )
                 debug_log(f"🎯 Используем технический промпт для предмета: {self.current_subject}")
             
-            # 3. ОБЩИЙ ПРОМПТ ДЛЯ ОСТАЛЬНЫХ ПРЕДМЕТОВ
+            # 4. ОБЩИЙ ПРОМПТ ДЛЯ ОСТАЛЬНЫХ ПРЕДМЕТОВ
             else:
                 system_prompt = f"""Ты - эксперт по созданию образовательных материалов.
 
@@ -1196,10 +1335,31 @@ class DialogueManager:
                 sentences = re.split(r'(?<=[.!?])\s+', lesson_content)
                 lesson_content = '\n\n'.join(sentences)
             
-            # Создаем файл урока в папке generated
-            lesson_id = f"generated_{topic.lower().replace(' ', '_')}_{int(time.time())}"
-            filename = f"{lesson_id}.txt"
-            lesson_path = self.generated_lessons_dir / filename
+            # 🔥 ВЫБОР ПУТИ ДЛЯ СОХРАНЕНИЯ УРОКА
+            lesson_id = ""
+            lesson_path = None
+            
+            # Для взрослых с CEFR - сохраняем в специальную папку
+            if use_cefr_prompt and self.is_adult_student:
+                # Генерируем путь для взрослого урока
+                import uuid
+                lesson_id = f"adult_{self.cefr_level}_{topic.lower().replace(' ', '_')}_{int(time.time())}"
+                level_dir = self.lessons_dir / "students" / "adult_language" / f"{self.cefr_level}_english"
+                level_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Находим следующий номер урока
+                existing_lessons = list(level_dir.glob("lesson_*.txt"))
+                lesson_number = len(existing_lessons) + 1
+                
+                filename = f"lesson_{lesson_number:02d}_{topic.lower().replace(' ', '_')[:30]}.txt"
+                lesson_path = level_dir / filename
+                
+                debug_log(f"🎓 Сохраняем урок для взрослых: {lesson_path}")
+            else:
+                # Стандартное сохранение
+                lesson_id = f"generated_{topic.lower().replace(' ', '_')}_{int(time.time())}"
+                filename = f"{lesson_id}.txt"
+                lesson_path = self.generated_lessons_dir / filename
             
             # Создаем папку если не существует
             lesson_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1221,7 +1381,7 @@ class DialogueManager:
                 'subject': subject,
                 'class_level': self.student_data.get('education_level', 'general') if self.has_student_data else 'general',
                 'lesson_number': 999,
-                'full_path': f"generated/{filename}",
+                'full_path': str(lesson_path.relative_to(self.lessons_dir)),
                 'is_language': is_language,
                 'is_technical': self.is_technical_subject if TECHNICAL_SUPPORT_ENABLED else False,
                 'subject_type': self.subject_type if TECHNICAL_SUPPORT_ENABLED else "general"
@@ -1232,9 +1392,26 @@ class DialogueManager:
                 lesson_data['language_level'] = self.language_level
                 lesson_data['bilingual_ratio'] = self.bilingual_ratio
             
+            # 🔥 ДОПОЛНИТЕЛЬНЫЕ ПОЛЯ ДЛЯ ВЗРОСЛЫХ CEFR
+            if use_cefr_prompt and self.is_adult_student:
+                lesson_data['cefr_level'] = self.cefr_level
+                lesson_data['target_language'] = self.target_language
+                lesson_data['class_level'] = 'adult'
+                lesson_data['type'] = 'adult_generated'
+            
             if subject not in self.lessons:
                 self.lessons[subject] = []
             self.lessons[subject].append(lesson_data)
+            
+            # Также добавляем в lessons_by_class для взрослых
+            if self.is_adult_student and 'adult' not in self.lessons_by_class:
+                self.lessons_by_class['adult'] = {}
+            
+            if self.is_adult_student and subject not in self.lessons_by_class['adult']:
+                self.lessons_by_class['adult'][subject] = []
+            
+            if self.is_adult_student:
+                self.lessons_by_class['adult'][subject].append(lesson_data)
             
             debug_log(f"✅ Урок успешно сгенерирован и добавлен в список: {lesson_id}")
             return lesson_data
@@ -1276,6 +1453,12 @@ class DialogueManager:
                 topic = re.sub(r'[.?]$', '', topic)
                 if topic and len(topic) > 2:
                     debug_log(f"🎯 Обнаружен запрос на генерацию урока по теме: '{topic}'")
+                    
+                    # 🔥 ПРОВЕРКА ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+                    if self.is_adult_student and self.adult_study_mode == 'anything':
+                        # В этом режиме просто отвечаем на вопросы, не создаем структурированные уроки
+                        debug_log("🎓 Взрослый в режиме 'изучать что угодно' - не создаем структурированный урок")
+                        return False
                     
                     # ПРОВЕРЯЕМ, ЯЗЫКОВОЙ ЛИ ЭТО УРОК
                     is_language = False
@@ -1323,6 +1506,13 @@ class DialogueManager:
                 self.subject_type = lesson_data.get('subject_type', 'technical')
                 debug_log(f"🎯 Начинаем технический урок: {self.current_subject}")
             
+            # 🔥 УСТАНАВЛИВАЕМ ФЛАГИ ДЛЯ ВЗРОСЛЫХ И CEFR
+            if lesson_data.get('cefr_level'):
+                self.cefr_level = lesson_data.get('cefr_level')
+                if LANGUAGE_SUPPORT_ENABLED:
+                    self.cefr_config = get_cefr_level_config(self.cefr_level)
+                debug_log(f"🎓 Начинаем урок для взрослых: уровень {self.cefr_level}")
+            
             # ЕСЛИ ЭТО ЯЗЫКОВОЙ УРОК - УСТАНАВЛИВАЕМ НАСТРОЙКИ
             if lesson_data.get('is_language', False):
                 self.is_language_subject = True
@@ -1366,6 +1556,8 @@ class DialogueManager:
                     'target_language': self.target_language if lesson_data.get('is_language') else None,
                     'is_technical': lesson_data.get('is_technical', False),
                     'subject_type': lesson_data.get('subject_type', 'general'),
+                    'cefr_level': self.cefr_level,
+                    'is_adult': self.is_adult_student,
                     'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
                 }, room=self.room_id)
                 debug_log(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
@@ -1459,7 +1651,9 @@ class DialogueManager:
                 'timestamp': time.time(),
                 'type': 'technical' if self.is_technical_subject else 'infographic',
                 'subject_type': self.subject_type,
-                'is_technical': self.is_technical_subject
+                'is_technical': self.is_technical_subject,
+                'cefr_level': self.cefr_level,
+                'is_adult': self.is_adult_student
             }, room=self.room_id)
             
             debug_log(f"✅ SVG визуализация отправлена в комнату {self.room_id}")
@@ -1475,7 +1669,8 @@ class DialogueManager:
                 'svg_code': fallback_svg,
                 'timestamp': time.time(),
                 'type': 'error_fallback',
-                'is_technical': self.is_technical_subject
+                'is_technical': self.is_technical_subject,
+                'cefr_level': self.cefr_level
             }, room=self.room_id)
 
     def enable_visualization(self):
@@ -1531,7 +1726,7 @@ class DialogueManager:
         
         # Уведомляем клиент
         if self.room_id and self.socketio:
-            self.socketio.emit('lesson_started', {
+            lesson_data = {
                 'lesson_id': self.selected_lesson['id'],
                 'title': self.selected_lesson['title'],
                 'subject': self.current_subject,
@@ -1541,7 +1736,14 @@ class DialogueManager:
                 'is_technical': self.is_technical_subject,
                 'subject_type': self.subject_type,
                 'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
-            }, room=self.room_id)
+            }
+            
+            # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+            if self.is_adult_student and self.cefr_level:
+                lesson_data['cefr_level'] = self.cefr_level
+                lesson_data['is_adult'] = True
+            
+            self.socketio.emit('lesson_started', lesson_data, room=self.room_id)
         
         student_name = self.student_data.get('name', 'ученик')
         return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
@@ -1556,6 +1758,11 @@ class DialogueManager:
         # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА ЕСЛИ ЕЩЕ НЕ ОПРЕДЕЛЕН
         if self.current_subject and not self.subject_type:
             self._determine_subject_type()
+        
+        # 🔥 ПРОВЕРКА: ЕСЛИ ЭТО ВЗРОСЛЫЙ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            # В этом режиме просто обрабатываем диалог без уроков
+            return self._handle_adult_anything_mode(text)
         
         # ПЕРВОЕ: Проверяем, не нужен ли языковой урок
         if self.current_subject and not self.lesson_started:
@@ -1729,6 +1936,54 @@ class DialogueManager:
         
         return None
 
+    def _handle_adult_anything_mode(self, text: str) -> Optional[str]:
+        """🔥 НОВЫЙ МЕТОД: Обработка диалога для взрослых в режиме 'изучать что угодно'"""
+        debug_log(f"🎓 Взрослый в режиме 'изучать что угодно': {text}")
+        
+        # Просто передаем вопрос в LLM без структурированных уроков
+        self._add_to_conversation_history(text, is_user=True)
+        
+        # Используем специальный промпт для взрослых
+        age = self.student_data.get('age', '30')
+        name = self.student_data.get('name', 'студент')
+        
+        system_prompt = f"""Ты - опытный преподаватель для взрослого студента.
+
+ОСОБЕННОСТИ УЧЕНИКА:
+- Имя: {name}
+- Возраст: {age} лет
+- Уровень: взрослый студент
+- Режим: 'изучать что угодно' - обсуждаем любые темы
+
+СТИЛЬ ОБЩЕНИЯ:
+- Уважай жизненный опыт взрослого человека
+- Давай глубокие, содержательные ответы
+- Обсуждай сложные темы
+- Будь профессиональным, но дружелюбным
+- Используй примеры из реальной жизни
+
+ОТВЕТЫ ДОЛЖНЫ БЫТЬ:
+- Информативными и полезными
+- Соответствующими возрасту и опыту
+- Содержательными (3-5 предложений)
+- На русском языке
+
+Контекст разговора: {self._get_conversation_context()}"""
+        
+        llm_response = self.llm._query_llm_api(
+            prompt=text,
+            context=self._get_conversation_context(),
+            subject="общее",
+            system_prompt=system_prompt,
+            max_tokens=300
+        )
+        
+        if llm_response:
+            self._add_to_conversation_history(llm_response, is_user=False)
+            return llm_response
+        
+        return "Я готов обсудить с вами любую тему. Что вас интересует?"
+
     def _determine_subject_type(self):
         """Определяет тип текущего предмета"""
         if not self.current_subject:
@@ -1896,6 +2151,13 @@ class DialogueManager:
         
         debug_log(f"🔥 Автопредложение уроков для {student_name} ({student_class} класс), предмет: {subject}")
         
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            if self.adult_study_mode == 'anything':
+                return f"{student_name}, привет! Вы находитесь в режиме 'изучать что угодно'. Можете задавать любые вопросы на любые темы!"
+            elif self.adult_study_mode == 'language':
+                return f"{student_name}, привет! Добро пожаловать на урок английского языка уровня {self.cefr_level}. Скажите 'начать урок', чтобы начать!"
+        
         # Находим уроки
         lessons = self.get_lessons_for_student_subject(subject)
         
@@ -1955,6 +2217,13 @@ class DialogueManager:
             self.is_technical_subject = (self.subject_type in ["technical", "natural_science"])
             debug_log(f"🎯 Для выбранного урока определен тип: {self.subject_type}")
         
+        # 🔥 ОПРЕДЕЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student and selected_lesson.get('cefr_level'):
+            self.cefr_level = selected_lesson.get('cefr_level')
+            if LANGUAGE_SUPPORT_ENABLED:
+                self.cefr_config = get_cefr_level_config(self.cefr_level)
+            debug_log(f"🎓 Для выбранного урока определен CEFR уровень: {self.cefr_level}")
+        
         # ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
         student_name = self.student_data.get('name', 'ученик')
         return f"Отлично, {student_name}! Выбран урок: '{selected_lesson['title']}'. " \
@@ -1966,6 +2235,30 @@ class DialogueManager:
             return "Давайте выберем предмет для изучения!"
         
         student_name = self.student_data.get('name', 'ученик')
+        
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            if self.adult_study_mode == 'anything':
+                return f"{student_name}, вы в режиме 'изучать что угодно'. Можете задавать любые вопросы!"
+            elif self.adult_study_mode == 'language':
+                # ПОЛУЧАЕМ СЛЕДУЮЩИЙ УРОК ПО ПРЕДМЕТУ
+                next_lesson = self.get_next_lesson_for_student(self.current_subject)
+                
+                if next_lesson:
+                    progress = self.get_student_progress(self.current_subject)
+                    completed_count = len(progress.get('completed_lessons', []))
+                    total_lessons = len(self.get_lessons_for_student_subject(self.current_subject))
+                    
+                    response = f"{student_name}, отлично! "
+                    response += f"Твой прогресс по английскому языку уровня {self.cefr_level}: {completed_count}/{total_lessons} уроков. "
+                    response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
+                    
+                    # КРИТИЧЕСКО ВАЖНО: Сохраняем следующий урок как выбранный
+                    self.selected_lesson = next_lesson
+                    
+                    return response
+                else:
+                    return f"{student_name}, ты уже завершил все уроки английского языка уровня {self.cefr_level}! Хочешь повторить какой-то урок?"
         
         # ПОЛУЧАЕМ СЛЕДУЮЩИЙ УРОК ПО ПРЕДМЕТУ
         next_lesson = self.get_next_lesson_for_student(self.current_subject)
@@ -1994,6 +2287,13 @@ class DialogueManager:
             return "Давайте выберем предмет для изучения!"
         
         student_name = self.student_data.get('name', 'ученик')
+        
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            if self.adult_study_mode == 'anything':
+                return f"{student_name}, вы можете задавать любые вопросы на любые темы!"
+            elif self.adult_study_mode == 'language':
+                return f"{student_name}, хотите продолжить изучение английского языка уровня {self.cefr_level}?"
         
         # ПРЕДЛАГАЕМ ВЫБОР:
         options = [
@@ -2033,7 +2333,8 @@ class DialogueManager:
             # ГАРАНТИЯ: проверяем, что клиент знает о начале урока
             if self.room_id and self.socketio and self.selected_lesson:
                 time.sleep(0.5)  # Небольшая задержка для надежности
-                self.socketio.emit('lesson_started', {
+                
+                lesson_data = {
                     'lesson_id': self.selected_lesson['id'],
                     'title': self.selected_lesson['title'],
                     'subject': self.current_subject,
@@ -2043,7 +2344,14 @@ class DialogueManager:
                     'is_technical': self.is_technical_subject,
                     'subject_type': self.subject_type,
                     'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
-                }, room=self.room_id)
+                }
+                
+                # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+                if self.is_adult_student and self.cefr_level:
+                    lesson_data['cefr_level'] = self.cefr_level
+                    lesson_data['is_adult'] = True
+                
+                self.socketio.emit('lesson_started', lesson_data, room=self.room_id)
                 debug_log(f"📢 Уведомление 'lesson_started' отправлено в комнату {self.room_id}")
             
             return start_message
@@ -2057,6 +2365,10 @@ class DialogueManager:
             return None
         
         debug_log(f"🚀 Явный старт урока для ученика: {self.current_subject}")
+        
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return f"Вы находитесь в режиме 'изучать что угодно'. Можете задавать любые вопросы на любые темы!"
         
         # 1. Получаем следующий урок
         next_lesson = self.get_next_lesson_for_student(self.current_subject)
@@ -2078,7 +2390,14 @@ class DialogueManager:
         # 3. Определяем тип предмета
         self._determine_subject_type()
         
-        # 4. Загружаем содержание
+        # 4. Определяем CEFR для взрослых
+        if self.is_adult_student and next_lesson.get('cefr_level'):
+            self.cefr_level = next_lesson.get('cefr_level')
+            if LANGUAGE_SUPPORT_ENABLED:
+                self.cefr_config = get_cefr_level_config(self.cefr_level)
+            debug_log(f"🎓 Определен CEFR уровень: {self.cefr_level}")
+        
+        # 5. Загружаем содержание
         self.lesson_content = self._load_lesson_content(next_lesson['file_path'])
         self.current_paragraph = 0
         
@@ -2089,16 +2408,16 @@ class DialogueManager:
         if not self.lesson_content:
             return "Ошибка загрузки урока."
         
-        # 5. Инициализируем базу знаний
+        # 6. Инициализируем базу знаний
         if self.current_subject:
             from knowledge.knowledge_base import KnowledgeBase
             self.knowledge_base = KnowledgeBase(self.current_subject)
         
-        # 6. Очищаем историю
+        # 7. Очищаем историю
         self.conversation_history = []
         self.conversation_context = []
         
-        # 7. Обновляем прогресс ученика
+        # 8. Обновляем прогресс ученика
         student_id = self.student_data.get('student_id')
         if student_id:
             self.save_student_progress(
@@ -2107,7 +2426,7 @@ class DialogueManager:
                 completed=False
             )
         
-        # 8. Возвращаем первый абзац
+        # 9. Возвращаем первый абзац
         first_paragraph = self._get_next_paragraph()
         
         student_name = self.student_data.get('name', 'ученик')
@@ -2122,10 +2441,33 @@ class DialogueManager:
         # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА
         self._determine_subject_type()
         
+        # 🔥 ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО" - просто устанавливаем предмет
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            student_name = self.student_data.get('name', 'студент')
+            return f"Отлично, {student_name}! Теперь вы можете задавать любые вопросы на любые темы. О чем бы вы хотели поговорить?"
+        
         # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДЛЯ УЧЕНИКА - СРАЗУ ВЫБИРАЕМ УРОК И УСТАНАВЛИВАЕМ ЕГО
         if self.has_student_data:
             student_name = self.student_data.get('name', 'ученик')
             level = self.student_data.get('education_level', '5')
+            
+            # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+            if level == 'adult' and subject == 'английский язык':
+                # Для взрослых английский язык
+                if not self.cefr_level:
+                    # Определяем уровень CEFR если не установлен
+                    if LANGUAGE_SUPPORT_ENABLED:
+                        age = int(self.student_data.get('age', 25))
+                        self.cefr_level = detect_cefr_level(
+                            age, 
+                            self.student_data.get('language_level', 'B1'),
+                            'adult'
+                        )
+                        self.cefr_config = get_cefr_level_config(self.cefr_level)
+                    else:
+                        self.cefr_level = 'B1'  # Дефолтный уровень
+                    
+                    debug_log(f"🎓 Определен CEFR уровень для взрослого: {self.cefr_level}")
             
             # ВАЖНО: Ищем уроки для этого класса и предмета
             # Пробуем разные варианты названия предмета
@@ -2162,6 +2504,10 @@ class DialogueManager:
                     self.lessons_by_class[level][subject] = direct_lessons
             
             if not found_lessons:
+                # 🔥 ДЛЯ ВЗРОСЛЫХ С АНГЛИЙСКИМ - предлагаем генерацию урока
+                if level == 'adult' and subject == 'английский язык':
+                    return f"{student_name}, у меня пока нет готовых уроков английского для уровня {self.cefr_level}. Хотите, чтобы я создал для вас урок на определенную тему?"
+                
                 return f"{student_name}, у меня пока нет уроков по {subject} для {level} класса."
             
             # КРИТИЧЕСКО ВАЖНО: НАХОДИМ СЛЕДУЮЩИЙ УРОК И УСТАНАВЛИВАЕМ ЕГО
@@ -2180,6 +2526,13 @@ class DialogueManager:
             self.selected_lesson = next_lesson
             debug_log(f"✅ Урок установлен для ученика: {next_lesson['title']}")
             
+            # 🔥 ОПРЕДЕЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ ИЗ УРОКА
+            if self.is_adult_student and next_lesson.get('cefr_level'):
+                self.cefr_level = next_lesson.get('cefr_level')
+                if LANGUAGE_SUPPORT_ENABLED:
+                    self.cefr_config = get_cefr_level_config(self.cefr_level)
+                debug_log(f"🎓 Установлен CEFR уровень из урока: {self.cefr_level}")
+            
             # Теперь урок готов к запуску по команде 'начать урок'
             progress = self.get_student_progress(subject)
             completed_count = len(progress.get('completed_lessons', []))
@@ -2190,9 +2543,17 @@ class DialogueManager:
                 total_lessons = 0
             
             if completed_count > 0:
-                return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Скажи 'начать урок', чтобы начать урок!"
+                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
+                if self.is_adult_student and self.cefr_level:
+                    return f"{student_name}, отлично! Ваш прогресс по английскому языку уровня {self.cefr_level}: {completed_count}/{total_lessons} уроков. Скажите 'начать урок', чтобы начать урок!"
+                else:
+                    return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Скажи 'начать урок', чтобы начать урок!"
             else:
-                return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}'. Скажи 'начать урок', чтобы начать урок!"
+                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
+                if self.is_adult_student and self.cefr_level:
+                    return f"{student_name}, отлично! Это будет ваш первый урок английского языка уровня {self.cefr_level}. Тема: '{next_lesson['title']}'. Скажите 'начать урок', чтобы начать урок!"
+                else:
+                    return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}'. Скажи 'начать урок', чтобы начать урок!"
         
         # ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ: используем ту же логику диалога, что и в демо-комнатах
         available_lessons = self._get_available_lessons(subject)
@@ -2236,6 +2597,13 @@ class DialogueManager:
         # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА ПЕРЕД НАЧАЛОМ
         self._determine_subject_type()
         
+        # 🔥 ОПРЕДЕЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        if self.selected_lesson.get('cefr_level'):
+            self.cefr_level = self.selected_lesson.get('cefr_level')
+            if LANGUAGE_SUPPORT_ENABLED:
+                self.cefr_config = get_cefr_level_config(self.cefr_level)
+            debug_log(f"🎓 Установлен CEFR уровень из урока: {self.cefr_level}")
+        
         # Начинаем урок
         self.lesson_started = True
         self.current_state = "lesson_reading"
@@ -2266,7 +2634,7 @@ class DialogueManager:
             
             if self.room_id and self.socketio:
                 # Уведомляем клиент
-                self.socketio.emit('lesson_started', {
+                lesson_data = {
                     'lesson_id': self.selected_lesson['id'],
                     'title': self.selected_lesson['title'],
                     'subject': self.current_subject,
@@ -2276,13 +2644,24 @@ class DialogueManager:
                     'is_technical': self.is_technical_subject,
                     'subject_type': self.subject_type,
                     'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
-                }, room=self.room_id)
+                }
+                
+                # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+                if self.cefr_level:
+                    lesson_data['cefr_level'] = self.cefr_level
+                    lesson_data['is_adult'] = self.is_adult_student
+                
+                self.socketio.emit('lesson_started', lesson_data, room=self.room_id)
             
             # Персонализированное начало
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
-                return f"{name_prefix}Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
+                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
+                if self.is_adult_student and self.cefr_level:
+                    return f"{name_prefix}Отлично! Начинаем урок английского языка уровня {self.cefr_level}. {first_paragraph}"
+                else:
+                    return f"{name_prefix}Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
             else:
                 return f"Отлично! Начинаем урок по {self.current_subject}. {first_paragraph}"
                 
@@ -2356,6 +2735,13 @@ class DialogueManager:
                 age = self.student_data.get('age', '12')
                 level = self.student_data.get('education_level', '5')
                 
+                # 🔥 ОСОБОЕ ПРИВЕТСТВИЕ ДЛЯ ВЗРОСЛЫХ
+                if self.is_adult_student:
+                    if self.adult_study_mode == 'anything':
+                        return f"Здравствуйте, {student_name}! Вы находитесь в режиме 'изучать что угодно'. Можете задавать любые вопросы на любые темы!"
+                    elif self.adult_study_mode == 'language':
+                        return f"Здравствуйте, {student_name}! Добро пожаловать на урок английского языка уровня {self.cefr_level}. Готовы начать?"
+                
                 personalized_greetings = [
                     f"Привет, {student_name}! Я твой виртуальный учитель. Очень рад тебя видеть! Ты в {level} классе, это прекрасный возраст для учебы!",
                     f"Здравствуй, {student_name}! Я твой AI-репетитор. Вижу, ты учишься в {level} классе. Готов помочь тебе с учебой!",
@@ -2400,6 +2786,10 @@ class DialogueManager:
             
             # 🔥 НОВОЕ: Сбрасываем слайды
             self.lesson_slides = []
+            
+            # 🔥 СБРАСЫВАЕМ CEFR ДЛЯ ВЗРОСЛЫХ (но не is_adult_student)
+            self.cefr_level = None
+            self.cefr_config = None
             
             # ПЕРСОНАЛИЗИРОВАННОЕ СООБЩЕНИЕ ДЛЯ УЧЕНИКА
             if self.has_student_data:
@@ -2459,13 +2849,19 @@ class DialogueManager:
             
             # 🔥 НОВОЕ: Отправляем абзац с информацией о слайде
             if self.room_id and self.socketio:
-                self.socketio.emit('lesson_paragraph', {
+                paragraph_data = {
                     'text': paragraph,
                     'paragraph_index': self.current_paragraph - 1,
                     'total_paragraphs': len(self.lesson_content),
                     'slide_url': slide_url,
                     'has_slide': slide_url is not None
-                }, room=self.room_id)
+                }
+                
+                # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+                if self.cefr_level:
+                    paragraph_data['cefr_level'] = self.cefr_level
+                
+                self.socketio.emit('lesson_paragraph', paragraph_data, room=self.room_id)
             
             # Генерация визуализации (оставляем как есть)
             if (self.visualization_enabled and paragraph and 
@@ -2488,13 +2884,19 @@ class DialogueManager:
             
             # 🔥 НОВОЕ: Отправляем событие о завершении урока
             if self.room_id and self.socketio:
-                self.socketio.emit('lesson_completed', {
+                lesson_completed_data = {
                     'room_id': self.room_id,
                     'lesson_id': self.selected_lesson['id'] if self.selected_lesson else None,
                     'title': self.selected_lesson['title'] if self.selected_lesson else None,
                     'total_paragraphs': len(self.lesson_content),
                     'total_slides': len(self.lesson_slides)
-                }, room=self.room_id)
+                }
+                
+                # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+                if self.cefr_level:
+                    lesson_completed_data['cefr_level'] = self.cefr_level
+                
+                self.socketio.emit('lesson_completed', lesson_completed_data, room=self.room_id)
             
             # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
@@ -2519,9 +2921,19 @@ class DialogueManager:
         # self.current_paragraph = 0         # ← НЕ СБРАСЫВАЕМ!
         # self.lesson_slides = []            # ← НЕ СБРАСЫВАЕМ!
         
+        # 🔥 НЕ СБРАСЫВАЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        # self.cefr_level = None            # ← НЕ СБРАСЫВАЕМ!
+        # self.cefr_config = None           # ← НЕ СБРАСЫВАЕМ!
+        
         # ОБНОВЛЕНИЕ: Передаем данные ученика в менеджер практики
         if hasattr(self.practice_manager, 'student_data'):
             self.practice_manager.student_data = self.student_data
+        
+        # 🔥 ПЕРЕДАЕМ CEFR ДЛЯ ВЗРОСЛЫХ В МЕНЕДЖЕР ПРАКТИКИ
+        if hasattr(self.practice_manager, 'cefr_level'):
+            self.practice_manager.cefr_level = self.cefr_level
+        if hasattr(self.practice_manager, 'cefr_config'):
+            self.practice_manager.cefr_config = self.cefr_config
         
         # 🔥 ИСПРАВЛЕНИЕ: УНИФИЦИРОВАННАЯ ЛОГИКА ПРАКТИКИ ДЛЯ ВСЕХ ПРЕДМЕТОВ
         lesson_context = " ".join(self.lesson_content)
@@ -2538,15 +2950,25 @@ class DialogueManager:
             self.practice_manager.subject_type = self.subject_type
         if hasattr(self.practice_manager, 'student_data'):
             self.practice_manager.student_data = self.student_data
+        if hasattr(self.practice_manager, 'is_adult_student'):
+            self.practice_manager.is_adult_student = self.is_adult_student
+        if hasattr(self.practice_manager, 'cefr_level'):
+            self.practice_manager.cefr_level = self.cefr_level
         
         # Уведомляем клиентов о начале практики
         if self.room_id:
-            self.socketio.emit('practice_started', {
+            practice_data = {
                 'room_id': self.room_id,
                 'is_technical': self.is_technical_subject,
                 'subject_type': self.subject_type,
                 'lesson_title': self.selected_lesson['title'] if self.selected_lesson else None
-            })
+            }
+            
+            # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+            if self.cefr_level:
+                practice_data['cefr_level'] = self.cefr_level
+            
+            self.socketio.emit('practice_started', practice_data)
         
         # 🔥 ИСПРАВЛЕНИЕ: ВСЕГДА используем get_next_question() для всех предметов
         debug_log("🔄 Получение первого вопроса практики через get_next_question()...")
@@ -2566,7 +2988,11 @@ class DialogueManager:
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
-                return f"{name_prefix}Отлично! Переходим к практике. Первый вопрос: {first_question}"
+                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
+                if self.is_adult_student and self.cefr_level:
+                    return f"{name_prefix}Отлично! Переходим к практике английского языка уровня {self.cefr_level}. Первый вопрос: {first_question}"
+                else:
+                    return f"{name_prefix}Отлично! Переходим к практике. Первый вопрос: {first_question}"
             else:
                 return f"Отлично! Переходим к практике. Первый вопрос: {first_question}"
         else:
@@ -2623,7 +3049,11 @@ class DialogueManager:
             if self.has_student_data:
                 student_name = self.student_data.get('name', '')
                 name_prefix = f"{student_name}, " if student_name else ""
-                return f"{name_prefix}Отлично! Ты ответил на все {self.max_questions} вопросов практики. Урок завершен!"
+                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
+                if self.is_adult_student and self.cefr_level:
+                    return f"{name_prefix}Отлично! Вы ответили на все {self.max_questions} вопросов практики английского языка уровня {self.cefr_level}. Урок завершен!"
+                else:
+                    return f"{name_prefix}Отлично! Ты ответил на все {self.max_questions} вопросов практики. Урок завершен!"
             else:
                 return f"Отлично! Вы ответили на все {self.max_questions} вопросов практики. Урок завершен!"
         
@@ -2679,6 +3109,10 @@ class DialogueManager:
         # self.current_paragraph = 0     # ← НЕ сбрасываем!
         # self.lesson_slides = []        # ← НЕ сбрасываем!
         
+        # 🔥 НЕ СБРАСЫВАЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        # self.cefr_level = None        # ← НЕ сбрасываем!
+        # self.cefr_config = None       # ← НЕ сбрасываем!
+        
         # Останавливаем генерацию вопросов
         if hasattr(self.practice_manager, 'stop_async_generation'):
             self.practice_manager.stop_async_generation()
@@ -2712,12 +3146,20 @@ class DialogueManager:
         if TECHNICAL_SUPPORT_ENABLED and self.is_technical_subject:
             technical_instructions = f"\nПРЕДМЕТ ТЕХНИЧЕСКИЙ: Используй формулы и научные обозначения! Сохраняй математические символы и объясняй их."
         
+        # 🔥 ДОБАВЛЕНИЕ ДЛЯ ВЗРОСЛЫХ И CEFR
+        adult_instructions = ""
+        if self.is_adult_student:
+            adult_instructions = f"\nВЗРОСЛЫЙ УЧЕНИК: Уважай жизненный опыт, давай глубокие ответы."
+            if self.cefr_level:
+                adult_instructions += f"\nУРОВЕНЬ ЯЗЫКА: {self.cefr_level} - адаптируй сложность ответа."
+        
         universal_prompt = f"""
 КОНТЕКСТ УРОКА (последние абзацы): {current_context}
 
 ОТВЕТ УЧЕНИКА: {question}
 
 {technical_instructions}
+{adult_instructions}
 
 ИНСТРУКЦИИ ДЛЯ УЧИТЕЛЯ:
 1. Проанализируй контекст урока и ответ ученика
@@ -2847,6 +3289,12 @@ class DialogueManager:
         # Сброс данных ученика
         self.student_data = {}
         self.has_student_data = False
+        self.is_adult_student = False
+        self.adult_study_mode = None
+        
+        # 🔥 СБРОС CEFR ДЛЯ ВЗРОСЛЫХ
+        self.cefr_level = None
+        self.cefr_config = None
         
         # 🔥 СБРОС НАСТРОЕК ТИПОВ ПРЕДМЕТОВ
         self.is_technical_subject = False
@@ -2869,6 +3317,14 @@ class DialogueManager:
         # НЕ загружаем в set_student_data или __init__
         if self._lessons is None:
             self._ensure_lessons_loaded()
+        
+        # 🔥 ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО" - пустой список
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return []
+        
+        # 🔥 ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "АНГЛИЙСКИЙ" - только английский
+        if self.is_adult_student and self.adult_study_mode == 'language':
+            return ['английский язык']
         
         # ДЛЯ УЧЕНИКА: предметы его класса
         if self.has_student_data and self.student_data.get('education_level'):
@@ -2901,6 +3357,28 @@ class DialogueManager:
         # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЛЕНИВАЯ ЗАГРУЗКА УРОКОВ
         if self._lessons is None:
             self._ensure_lessons_loaded()
+        
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            if self.adult_study_mode == 'anything':
+                return []  # Нет уроков в этом режиме
+            elif self.adult_study_mode == 'language' and subject == 'английский язык':
+                # Для взрослых английский язык - фильтруем по уровню CEFR
+                if student_class in self.lessons_by_class and subject in self.lessons_by_class[student_class]:
+                    all_lessons = self.lessons_by_class[student_class][subject]
+                    # Если есть CEFR уровень - фильтруем по нему
+                    if self.cefr_level:
+                        filtered_lessons = [lesson for lesson in all_lessons if lesson.get('cefr_level') == self.cefr_level]
+                        if filtered_lessons:
+                            debug_log(f"🎓 Найдено уроков для взрослых уровня {self.cefr_level}: {len(filtered_lessons)}")
+                            return sorted(filtered_lessons, key=lambda x: x.get('lesson_number', 999))
+                        else:
+                            # Если нет уроков для этого уровня, возвращаем все
+                            debug_log(f"🎓 Нет уроков для уровня {self.cefr_level}, возвращаем все")
+                            return sorted(all_lessons, key=lambda x: x.get('lesson_number', 999))
+                    else:
+                        # Нет CEFR уровня - возвращаем все уроки английского для взрослых
+                        return sorted(all_lessons, key=lambda x: x.get('lesson_number', 999))
         
         # Способ 1: Через lessons_by_class
         if student_class in self.lessons_by_class:
@@ -2945,6 +3423,67 @@ class DialogueManager:
     def _find_lessons_directly(self, class_level: str, subject: str) -> List[dict]:
         """Прямой поиск уроков в файловой системе"""
         lessons = []
+        
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+        if class_level == 'adult' and subject == 'английский язык':
+            # Ищем уроки в adult_language/{level}_english/
+            adult_lang_dir = self.students_base_dir / "adult_language"
+            if adult_lang_dir.exists():
+                # Если есть CEFR уровень - ищем только его папку
+                if self.cefr_level:
+                    level_dir = adult_lang_dir / f"{self.cefr_level}_english"
+                    if level_dir.exists():
+                        debug_log(f"🎓 Поиск уроков для взрослых уровня {self.cefr_level}: {level_dir}")
+                        lesson_files = list(level_dir.glob("*.txt"))
+                    else:
+                        # Если папки уровня нет, ищем во всех уровнях
+                        debug_log(f"🎓 Папки уровня {self.cefr_level} нет, ищем во всех уровнях")
+                        lesson_files = []
+                        for subdir in adult_lang_dir.iterdir():
+                            if subdir.is_dir() and "_english" in subdir.name:
+                                lesson_files.extend(subdir.glob("*.txt"))
+                else:
+                    # Нет CEFR уровня - ищем во всех уровнях
+                    debug_log("🎓 Поиск уроков для взрослых во всех уровнях")
+                    lesson_files = []
+                    for subdir in adult_lang_dir.iterdir():
+                        if subdir.is_dir() and "_english" in subdir.name:
+                            lesson_files.extend(subdir.glob("*.txt"))
+                
+                # Обрабатываем найденные файлы
+                for lesson_file in lesson_files:
+                    try:
+                        lesson_id = lesson_file.stem
+                        lesson_number = self._extract_lesson_number(lesson_id)
+                        lesson_title = self._format_lesson_title(lesson_id)
+                        
+                        # Извлекаем уровень CEFR из пути
+                        cefr_level = "unknown"
+                        for parent in lesson_file.parents:
+                            if "_english" in parent.name:
+                                cefr_level = parent.name.replace("_english", "")
+                                break
+                        
+                        lesson_data = {
+                            'id': f"adult_{cefr_level}_{lesson_id}",
+                            'title': lesson_title,
+                            'file_path': lesson_file,
+                            'type': 'adult_language',
+                            'subject': subject,
+                            'class_level': class_level,
+                            'lesson_number': lesson_number,
+                            'full_path': str(lesson_file.relative_to(self.lessons_dir)),
+                            'cefr_level': cefr_level,
+                            'target_language': 'english'
+                        }
+                        
+                        lessons.append(lesson_data)
+                        debug_log(f"🎓 Добавлен урок для взрослых: {lesson_title} (уровень {cefr_level})")
+                        
+                    except Exception as e:
+                        debug_log(f"🎓 Ошибка обработки файла {lesson_file}: {e}")
+                
+                return lessons
         
         # 🔥 ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ ПАПКИ КЛАССА
         class_dir = self.students_base_dir / f"{class_level}_class"
@@ -3015,6 +3554,10 @@ class DialogueManager:
         
         student_class = self.student_data.get('education_level', '5')
         
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return None  # Нет уроков в этом режиме
+        
         # ИСПРАВЛЕНИЕ: Сначала получаем все уроки для этого класса и предмета
         lessons = self.get_lessons_for_student_subject(subject)
         
@@ -3047,6 +3590,17 @@ class DialogueManager:
         if not student_id:
             return {}
         
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return {
+                "completed_lessons": [],
+                "current_lesson": None,
+                "total_lessons": 0,
+                "last_updated": 0,
+                "study_mode": "anything",
+                "has_structured_lessons": False
+            }
+        
         # НОВОЕ: Загружаем прогресс из файла
         progress_file = Path("students_progress") / f"{student_id}.json"
         try:
@@ -3055,12 +3609,18 @@ class DialogueManager:
                     all_progress = json.load(f)
                     
                     if subject:
-                        return all_progress.get(subject, {
+                        subject_progress = all_progress.get(subject, {
                             "completed_lessons": [],
                             "current_lesson": None,
                             "total_lessons": len(self.get_lessons_for_student_subject(subject)) if subject else 0,
                             "last_updated": 0
                         })
+                        
+                        # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+                        if self.is_adult_student and self.cefr_level:
+                            subject_progress['cefr_level'] = self.cefr_level
+                        
+                        return subject_progress
                     else:
                         return all_progress
         except Exception as e:
@@ -3068,18 +3628,29 @@ class DialogueManager:
         
         # Возвращаем пустой прогресс если файла нет
         if subject:
-            return {
+            progress_data = {
                 "completed_lessons": [],
                 "current_lesson": None,
                 "total_lessons": len(self.get_lessons_for_student_subject(subject)) if subject else 0,
                 "last_updated": 0
             }
+            
+            # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+            if self.is_adult_student and self.cefr_level:
+                progress_data['cefr_level'] = self.cefr_level
+            
+            return progress_data
         else:
             return {}
 
     def save_student_progress(self, lesson_id: str, subject: str, completed: bool = True):
         """НОВЫЙ МЕТОД: Сохраняет прогресс ученика"""
         if not self.has_student_data:
+            return
+        
+        # 🔥 НЕ СОХРАНЯЕМ ПРОГРЕСС ДЛЯ ВЗРОСЛЫХ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            debug_log("🎓 Взрослый в режиме 'изучать что угодно' - не сохраняем прогресс")
             return
         
         student_id = self.student_data.get('student_id')
@@ -3119,6 +3690,10 @@ class DialogueManager:
             
             # Обновляем общее количество уроков
             subject_progress["total_lessons"] = len(self.get_lessons_for_student_subject(subject))
+        
+        # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student and self.cefr_level:
+            subject_progress['cefr_level'] = self.cefr_level
         
         # Сохраняем
         try:
@@ -3186,18 +3761,30 @@ class DialogueManager:
         self.student_data = student_data
         self.has_student_data = bool(student_data)
         
-        if self.has_student_data:
+        # 🔥 ОПРЕДЕЛЯЕМ, ЭТО ВЗРОСЛЫЙ УЧЕНИК
+        education_level = student_data.get('education_level', '')
+        self.is_adult_student = (education_level == 'adult')
+        
+        if self.is_adult_student:
+            self.adult_study_mode = student_data.get('study_mode', 'language')
+            self.cefr_level = student_data.get('language_level', 'B1')
+            
+            if LANGUAGE_SUPPORT_ENABLED and self.cefr_level:
+                self.cefr_config = get_cefr_level_config(self.cefr_level)
+            
+            debug_log(f"🎓 Установлены данные взрослого ученика: {student_data.get('name', 'неизвестно')}, режим: {self.adult_study_mode}, уровень CEFR: {self.cefr_level}")
+        elif self.has_student_data:
             student_name = student_data.get('name', 'неизвестно')
             student_class = student_data.get('education_level', 'неизвестно')
             debug_log(f"🎓 Установлены данные ученика: {student_name} ({student_class} класс)")
             
-            # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: НЕ загружаем уроки здесь!
-            # Прогресс загружается лениво при вызове get_student_progress
-            debug_log(f"📊 Прогресс ученика будет загружен при необходимости (лениво)")
+        # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: НЕ загружаем уроки здесь!
+        # Прогресс загружается лениво при вызове get_student_progress
+        debug_log(f"📊 Прогресс ученика будет загружен при необходимости (лениво)")
 
     def get_practice_status(self) -> Dict:
         """Возвращает статус практики"""
-        return {
+        practice_status = {
             "practice_active": self.practice_active,
             "waiting_for_answer": self.waiting_for_answer,
             "current_question": self.current_practice_question,
@@ -3207,6 +3794,13 @@ class DialogueManager:
             "is_technical": self.is_technical_subject,
             "subject_type": self.subject_type
         }
+        
+        # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        if self.cefr_level:
+            practice_status['cefr_level'] = self.cefr_level
+            practice_status['is_adult'] = self.is_adult_student
+        
+        return practice_status
 
     def force_start_practice(self, lesson_context: str, subject: str) -> str:
         """Принудительно запускает практику (для тестирования)"""
@@ -3225,6 +3819,10 @@ class DialogueManager:
             # Инициализируем менеджер практики
             self.practice_manager.initialize_practice_generation(lesson_context, subject)
             
+            # 🔥 ПЕРЕДАЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+            if hasattr(self.practice_manager, 'cefr_level'):
+                self.practice_manager.cefr_level = self.cefr_level
+            
             # Получаем первый вопрос
             debug_log("🔄 Получение первого вопроса практики...")
             first_question = self.practice_manager.get_next_question()
@@ -3236,7 +3834,11 @@ class DialogueManager:
                     "question": first_question,
                     "answer": ""
                 }
-                return f"Практика запущена. Первый вопрос: {first_question}"
+                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
+                if self.is_adult_student and self.cefr_level:
+                    return f"Практика английского языка уровня {self.cefr_level} запущена. Первый вопрос: {first_question}"
+                else:
+                    return f"Практика запущена. Первый вопрос: {first_question}"
             else:
                 self.practice_active = False
                 return "Не удалось запустить практику"
@@ -3256,7 +3858,7 @@ class DialogueManager:
 
     def get_visualization_status(self) -> Dict:
         """Возвращает статус визуализации - ТОЛЬКО SVG"""
-        return {
+        viz_status = {
             "visualization_enabled": self.visualization_enabled,
             "visualization_counter": self.visualization_counter,
             "last_visualization_time": self.last_visualization_time,
@@ -3265,6 +3867,13 @@ class DialogueManager:
             "is_technical": self.is_technical_subject,
             "subject_type": self.subject_type
         }
+        
+        # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        if self.cefr_level:
+            viz_status['cefr_level'] = self.cefr_level
+            viz_status['is_adult'] = self.is_adult_student
+        
+        return viz_status
 
     def force_visualization(self, text: str) -> bool:
         """Принудительно генерирует SVG инфографику для текста"""
@@ -3286,7 +3895,7 @@ class DialogueManager:
         user_messages = [msg for msg in self.conversation_history if msg['is_user']]
         teacher_messages = [msg for msg in self.conversation_history if not msg['is_user']]
         
-        return {
+        stats = {
             "total_messages": len(self.conversation_history),
             "user_messages": len(user_messages),
             "teacher_messages": len(teacher_messages),
@@ -3303,6 +3912,14 @@ class DialogueManager:
             "is_language": self.is_language_subject,
             "target_language": self.target_language if self.is_language_subject else None
         }
+        
+        # 🔥 ДОБАВЛЯЕМ ДАННЫЕ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            stats['is_adult'] = True
+            stats['adult_study_mode'] = self.adult_study_mode
+            stats['cefr_level'] = self.cefr_level
+        
+        return stats
 
     def debug_info(self) -> Dict:
         """Возвращает отладочную информацию"""
@@ -3313,7 +3930,7 @@ class DialogueManager:
         if self.has_student_data and self.current_subject:
             student_progress = self.get_student_progress(self.current_subject)
         
-        return {
+        debug_info = {
             "current_state": self.current_state,
             "current_subject": self.current_subject,
             "lesson_started": self.lesson_started,
@@ -3355,6 +3972,19 @@ class DialogueManager:
             "lesson_slides_count": len(self.lesson_slides),
             "current_slide_index": self.current_paragraph - 2 if self.current_paragraph >= 2 else None
         }
+        
+        # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ВЗРОСЛЫХ И CEFR
+        if self.is_adult_student:
+            debug_info['is_adult_student'] = True
+            debug_info['adult_study_mode'] = self.adult_study_mode
+            debug_info['cefr_level'] = self.cefr_level
+            debug_info['cefr_config'] = self.cefr_config
+            
+            if LANGUAGE_SUPPORT_ENABLED:
+                debug_info['available_cefr_levels'] = get_available_cefr_levels() if hasattr(get_available_cefr_levels, '__call__') else []
+                debug_info['adult_study_modes'] = get_adult_study_modes() if hasattr(get_adult_study_modes, '__call__') else []
+        
+        return debug_info
 
     def export_conversation_history(self) -> List[Dict]:
         """Экспортирует историю диалога"""
@@ -3395,6 +4025,15 @@ class DialogueManager:
             }
             base_commands.update(student_commands)
         
+        # 🔥 ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            adult_commands = {
+                "сменить тему": "Сменить тему обсуждения (режим 'изучать что угодно')",
+                "уровень языка": "Показать текущий уровень CEFR",
+                "следующий урок английского": "Начать следующий урок английского"
+            }
+            base_commands.update(adult_commands)
+        
         # 🔥 ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ ДЛЯ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
         if self.is_technical_subject:
             technical_commands = {
@@ -3411,7 +4050,7 @@ class DialogueManager:
         if self.lesson_started and self.selected_lesson and self.room_id and self.socketio:
             debug_log(f"🔧 ПРИНУДИТЕЛЬНАЯ отправка lesson_started для комнаты {self.room_id}")
             
-            self.socketio.emit('lesson_started', {
+            lesson_data = {
                 'lesson_id': self.selected_lesson['id'],
                 'title': self.selected_lesson['title'],
                 'subject': self.current_subject,
@@ -3421,13 +4060,19 @@ class DialogueManager:
                 'is_technical': self.is_technical_subject,
                 'subject_type': self.subject_type,
                 'slides_count': len(self.lesson_slides)  # 🔥 НОВОЕ: отправляем количество слайдов
-            }, room=self.room_id)
+            }
+            
+            # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+            if self.cefr_level:
+                lesson_data['cefr_level'] = self.cefr_level
+                lesson_data['is_adult'] = self.is_adult_student
+            
+            self.socketio.emit('lesson_started', lesson_data, room=self.room_id)
             
             # Также отправляем текущий абзац если есть
             if self.lesson_content and self.current_paragraph > 0:
-                current_paragraph = self.lesson_content[self.current_paragraph - 1]
                 self.socketio.emit('speech_text', {
-                    'text': f"Учитель: {current_paragraph}",
+                    'text': f"Учитель: {self.lesson_content[self.current_paragraph - 1]}",
                     'sid': 'teacher',
                     'is_teacher': True
                 }, room=self.room_id)
@@ -3463,6 +4108,62 @@ class DialogueManager:
             "student_class": student_class,
             "subjects": []
         }
+        
+        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+        if self.is_adult_student:
+            result['is_adult'] = True
+            result['adult_study_mode'] = self.adult_study_mode
+            result['cefr_level'] = self.cefr_level
+            
+            if self.adult_study_mode == 'anything':
+                result['message'] = "Режим 'изучать что угодно' - нет структурированных уроков"
+                return result
+            elif self.adult_study_mode == 'language':
+                # Только английский язык для взрослых
+                subject = "английский язык"
+                if student_class in self.lessons_by_class and subject in self.lessons_by_class[student_class]:
+                    lessons = self.lessons_by_class[student_class][subject]
+                    
+                    # Фильтруем по уровню CEFR если установлен
+                    if self.cefr_level:
+                        filtered_lessons = [lesson for lesson in lessons if lesson.get('cefr_level') == self.cefr_level]
+                        if filtered_lessons:
+                            lessons = filtered_lessons
+                    
+                    # Получаем прогресс
+                    progress = self.get_student_progress(subject)
+                    completed_ids = progress.get('completed_lessons', [])
+                    
+                    # Сортируем уроки
+                    sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+                    
+                    subject_lessons = []
+                    for lesson in sorted_lessons:
+                        is_completed = lesson['id'] in completed_ids
+                        subject_lessons.append({
+                            'id': lesson['id'],
+                            'title': lesson['title'],
+                            'subject': lesson['subject'],
+                            'class_level': lesson.get('class_level', student_class),
+                            'lesson_number': lesson.get('lesson_number'),
+                            'completed': is_completed,
+                            'file_path': str(lesson.get('file_path', '')),
+                            'type': lesson.get('type', 'adult_language'),
+                            'subject_type': 'language',
+                            'cefr_level': lesson.get('cefr_level', self.cefr_level)
+                        })
+                    
+                    result["subjects"].append({
+                        'subject': subject,
+                        'subject_type': 'language',
+                        'lessons': subject_lessons,
+                        'total_lessons': len(subject_lessons),
+                        'completed_lessons': len([l for l in subject_lessons if l['completed']]),
+                        'progress_percent': int((len([l for l in subject_lessons if l['completed']]) / len(subject_lessons)) * 100) if subject_lessons else 0,
+                        'cefr_level': self.cefr_level
+                    })
+                
+                return result
         
         if student_class in self.lessons_by_class:
             for subject, lessons in self.lessons_by_class[student_class].items():
@@ -3517,13 +4218,20 @@ class DialogueManager:
 
     def get_slides_status(self) -> Dict:
         """Возвращает статус слайдов для текущего урока"""
-        return {
+        slides_status = {
             "slides_enabled": self.slides_enabled,
             "slides_count": len(self.lesson_slides),
             "current_slide_index": self.current_paragraph - 2 if self.current_paragraph >= 2 else None,
             "lesson_has_slides": len(self.lesson_slides) > 0,
             "current_lesson": self.selected_lesson['title'] if self.selected_lesson else None
         }
+        
+        # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+        if self.cefr_level:
+            slides_status['cefr_level'] = self.cefr_level
+            slides_status['is_adult'] = self.is_adult_student
+        
+        return slides_status
 
     def force_show_slide(self, slide_index: int) -> bool:
         """Принудительно показывает слайд по индексу"""
@@ -3547,12 +4255,49 @@ class DialogueManager:
         
         return False
 
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С ВЗРОСЛЫМИ И CEFR
+    def set_adult_study_mode(self, mode: str):
+        """Установка режима обучения для взрослых"""
+        if mode in ['language', 'anything']:
+            self.adult_study_mode = mode
+            debug_log(f"🎓 Установлен режим обучения для взрослых: {mode}")
+        else:
+            debug_log(f"⚠️ Неизвестный режим обучения для взрослых: {mode}")
+
+    def set_cefr_level(self, level: str):
+        """Установка уровня CEFR"""
+        if level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
+            self.cefr_level = level
+            if LANGUAGE_SUPPORT_ENABLED:
+                self.cefr_config = get_cefr_level_config(level)
+            debug_log(f"🎓 Установлен уровень CEFR: {level}")
+        else:
+            debug_log(f"⚠️ Неизвестный уровень CEFR: {level}")
+
+    def get_adult_info(self) -> Dict:
+        """Возвращает информацию о настройках взрослого ученика"""
+        if not self.is_adult_student:
+            return {"is_adult": False}
+        
+        info = {
+            "is_adult": True,
+            "study_mode": self.adult_study_mode,
+            "cefr_level": self.cefr_level,
+            "has_structured_lessons": self.adult_study_mode == 'language'
+        }
+        
+        if self.cefr_config:
+            info['cefr_description'] = self.cefr_config.get('description', '')
+            info['bilingual_ratio'] = self.cefr_config.get('bilingual_ratio', 0.5)
+        
+        return info
+
 # Тестирование
 if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    debug_log("🧪 Тестирование DialogueManager с поддержкой слайдов...")
+    debug_log("🧪 Тестирование DialogueManager с поддержкой взрослых и CEFR...")
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
@@ -3573,4 +4318,21 @@ if __name__ == "__main__":
     response = dm.process_input("привет")
     debug_log(f"👋 Ответ на приветствие: {response[:100]}...")
     
-    debug_log("✅ Тестирование завершено! Поддержка слайдов добавлена.")
+    # Тест данных взрослого ученика
+    adult_data = {
+        'name': 'Иван',
+        'education_level': 'adult',
+        'age': '30',
+        'student_id': 'test_adult_123',
+        'study_mode': 'language',
+        'language_level': 'B1'
+    }
+    
+    dm.set_student_data(adult_data)
+    debug_log(f"🎓 Установлены данные взрослого ученика: {dm.is_adult_student}, режим: {dm.adult_study_mode}, CEFR: {dm.cefr_level}")
+    
+    # Тест доступных предметов для взрослого
+    adult_subjects = dm.get_available_subjects()
+    debug_log(f"🎓 Доступные предметы для взрослого: {adult_subjects}")
+    
+    debug_log("✅ Тестирование завершено! Поддержка взрослых и CEFR добавлена.")
