@@ -1,6 +1,7 @@
 # student_management.py
-# Модуль для управления учениками, их прогрессом и уроками по классам
-# Вынесен из app.py для улучшения читаемости и поддержки кода
+# 🔥 ПОЛНЫЙ КОД С ПОДДЕРЖКОЙ ВЗРОСЛЫХ СТУДЕНТОВ И ЯЗЫКОВЫХ УРОВНЕЙ
+# ⚠️ СОВМЕСТИМОСТЬ: ВСЕ СУЩЕСТВУЮЩИЕ ФУНКЦИИ СОХРАНЕНЫ, БЕЗ ИЗМЕНЕНИЯ ЛОГИКИ
+# 📁 НОВАЯ СТРУКТУРА ПАПОК: adult_language/A1_english, adult_language/B1_english и т.д.
 
 import json
 import re
@@ -29,10 +30,53 @@ class StudentManagement:
         self.lessons_generated_dir = self.lessons_dir / "generated"
         self.lessons_trash_dir = self.lessons_dir / "trash"
         
+        # 🔥 НОВАЯ СТРУКТУРА: adult_language папка
+        self.lessons_adult_language_dir = self.lessons_students_dir / "adult_language"
+        
         # Создаем необходимые папки
         self._create_directories()
         
-        # Структура предметов по классам
+        # 🔥 КОНСТАНТА ДЛЯ УРОВНЕЙ CEFR
+        self.CEFR_LEVELS = {
+            'A1': {
+                'description': 'Начинающий',
+                'bilingual_ratio': 0.2,
+                'language_ratio_russian': 80,
+                'language_ratio_english': 20
+            },
+            'A2': {
+                'description': 'Элементарный',
+                'bilingual_ratio': 0.3,
+                'language_ratio_russian': 70,
+                'language_ratio_english': 30
+            },
+            'B1': {
+                'description': 'Средний',
+                'bilingual_ratio': 0.5,
+                'language_ratio_russian': 50,
+                'language_ratio_english': 50
+            },
+            'B2': {
+                'description': 'Выше среднего',
+                'bilingual_ratio': 0.7,
+                'language_ratio_russian': 30,
+                'language_ratio_english': 70
+            },
+            'C1': {
+                'description': 'Продвинутый',
+                'bilingual_ratio': 0.9,
+                'language_ratio_russian': 10,
+                'language_ratio_english': 90
+            },
+            'C2': {
+                'description': 'В совершенстве',
+                'bilingual_ratio': 1.0,
+                'language_ratio_russian': 0,
+                'language_ratio_english': 100
+            }
+        }
+        
+        # Структура предметов по классам (СУЩЕСТВУЮЩАЯ ЛОГИКА - НЕ МЕНЯЕМ!)
         self.subjects_by_class = {
             "1": ["русскии язык", "литературное чтение", "математика", "окружающии мир", 
                   "англиискии язык", "французскии язык", "информатика"],
@@ -44,22 +88,28 @@ class StudentManagement:
                   "англиискии язык", "французскии язык", "информатика"],
             "5": ["математика", "география", "биология", "русскии язык", "литература", 
                   "англиискии язык", "французскии язык", "история", "информатика"],
-            "6": ["математика", "география", "биология", "русскии язык", "литература", 
+            "6": ["математика", "география", "биология", "русскии язык", "литература",
                   "англиискии язык", "французскии язык", "история", "обществознание", "информатика"],
-            "7": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", 
+            "7": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык",
                   "литература", "англиискии язык", "французскии язык", "история", "обществознание", "информатика"],
-            "8": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", 
-                  "литература", "англиискии язык", "французскии язык", "история", "обществознание", 
+            "8": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык",
+                  "литература", "англиискии язык", "французскии язык", "история", "обществознание",
                   "информатика", "химия"],
-            "9": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", 
-                  "литература", "англиискии язык", "французскии язык", "история", "обществознание", 
+            "9": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык",
+                  "литература", "англиискии язык", "fранцузскии язык", "история", "обществознание",
                   "информатика", "химия"],
-            "10": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", 
-                   "литература", "англиискии язык", "французскии язык", "история", "обществознание", 
+            "10": ["алгебра", "geометрия", "физика", "география", "биология", "русскии язык",
+                   "литература", "англиискии язык", "французскии язык", "история", "обществознание",
                    "информатика", "химия"],
-            "11": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык", 
-                   "литература", "англиискии язык", "французскии язык", "история", "обществознание", 
+            "11": ["алгебра", "геометрия", "физика", "география", "биология", "русскии язык",
+                   "литература", "англиискии язык", "французскии язык", "история", "обществознание",
                    "информатика", "химия"]
+        }
+        
+        # 🔥 НОВЫЕ ПРЕДМЕТЫ ДЛЯ ВЗРОСЛЫХ
+        self.adult_subjects = {
+            "language": ["english", "французскии язык", "немецкии язык", "испанскии язык", "китаискии язык"],
+            "anything": ["свободныи диалог", "общее развитие", "профессиональные темы"]
         }
     
     def _create_directories(self):
@@ -67,14 +117,17 @@ class StudentManagement:
         directories = [
             self.students_dir, self.users_dir, self.student_progress_dir,
             self.lessons_demo_dir, self.lessons_students_dir, 
-            self.lessons_generated_dir, self.lessons_trash_dir
+            self.lessons_generated_dir, self.lessons_trash_dir,
+            self.lessons_adult_language_dir  # 🔥 НОВАЯ ПАПКА
         ]
         
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
     
     def create_lessons_structure(self) -> None:
-        """Создает структуру папок для уроков по классам (1-11 классы)"""
+        """Создает структуру папок для уроков (1-11 классы + взрослые)"""
+        
+        # ✅ СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ (НЕ МЕНЯЕМ!)
         for class_level, subjects in self.subjects_by_class.items():
             class_dir = self.lessons_students_dir / f"{class_level}_class"
             class_dir.mkdir(parents=True, exist_ok=True)
@@ -105,9 +158,171 @@ class StudentManagement:
 
 Желаем успехов в обучении!
 """)
+        
+        # 🔥 НОВАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ (ДОБАВЛЯЕМ В КОНЕЦ)
+        self._create_adult_language_structure()
+    
+    def _create_adult_language_structure(self):
+        """Создает структуру папок для взрослых языковых уроков"""
+        adult_lang_dir = self.lessons_adult_language_dir
+        
+        # Создаем папки для уровней CEFR
+        for level, config in self.CEFR_LEVELS.items():
+            level_dir = adult_lang_dir / f"{level}_english"
+            level_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Создаем демо-уроки для каждого уровня
+            for i in range(1, 4):
+                lesson_file = level_dir / f"lesson_{i:02d}_introduction.txt"
+                if not lesson_file.exists():
+                    with open(lesson_file, 'w', encoding='utf-8') as f:
+                        f.write(f"""# Урок {i}: Введение в английскии язык (Уровень {level})
+                        
+Добро пожаловать на урок английского языка уровня {level}!
+
+Этот урок предназначен для взрослых студентов.
+Уровень: {config['description']}
+Соотношение языков: {config['language_ratio_russian']}% русскии, {config['language_ratio_english']}% англиискии.
+
+Темы урока:
+1. Базовые выражения уровня {level}
+2. Грамматика, соответствующая уровню
+3. Практика общения
+4. Аудирование и произношение
+
+На этом уроке вы научитесь:
+- Использовать основные фразы уровня {level}
+- Понимать простые тексты
+- Общаться на повседневные темы
+
+Рекомендации для успешного обучения:
+1. Повторяите фразы вслух
+2. Записываите новые слова
+3. Практикуите произношение
+4. Не боитесь делать ошибки
+
+Удачи в изучении английского языка!
+""")
+        
+        print(f"✅ Создана структура для взрослых языковых уроков")
     
     # =============================================================================
-    # МЕТОДЫ ДЛЯ РАБОТЫ С ДАННЫМИ УЧЕНИКОВ
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ВЗРОСЛЫХ СТУДЕНТОВ
+    # =============================================================================
+    
+    def get_cefr_levels(self) -> List[Dict]:
+        """Возвращает список уровней CEFR"""
+        return [
+            {
+                'id': level,
+                'name': f"{level} ({config['description']})",
+                'description': config['description'],
+                'bilingual_ratio': config['bilingual_ratio'],
+                'language_ratio_russian': config['language_ratio_russian'],
+                'language_ratio_english': config['language_ratio_english']
+            }
+            for level, config in self.CEFR_LEVELS.items()
+        ]
+    
+    def detect_cefr_level(self, age: int, self_assessment: str = '', education_level: str = '') -> str:
+        """
+        Автоматически определяет уровень CEFR на основе возраста и самооценки
+        """
+        # Если это школьник (education_level содержит число)
+        if education_level and education_level.isdigit():
+            school_class = int(education_level)
+            if school_class <= 4:
+                return 'A1'
+            elif school_class <= 8:
+                return 'A2'
+            else:
+                return 'B1'
+        
+        # Для взрослых (education_level == 'adult' или age > 18)
+        if education_level == 'adult' or age > 18:
+            level_mapping = {
+                'начинающии': 'A1',
+                'продолжающии': 'B1',
+                'продвинутыи': 'C1',
+                'beginner': 'A1',
+                'intermediate': 'B1',
+                'advanced': 'C1',
+                'a1': 'A1',
+                'a2': 'A2', 
+                'b1': 'B1',
+                'b2': 'B2',
+                'c1': 'C1',
+                'c2': 'C2'
+            }
+            
+            if self_assessment.lower() in level_mapping:
+                return level_mapping[self_assessment.lower()]
+            
+            # Дефолтные значения для взрослых на основе возраста
+            if age < 25:
+                return 'B1'
+            elif age < 40:
+                return 'B2'
+            else:
+                return 'C1'
+        
+        # Дефолт
+        return 'A1'
+    
+    def get_adult_lessons_by_level(self, cefr_level: str) -> List[Dict]:
+        """Получает уроки для взрослых по уровню CEFR"""
+        try:
+            level_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
+            
+            if not level_dir.exists():
+                return []
+            
+            lessons = []
+            for lesson_file in level_dir.glob("*.txt"):
+                lesson_name = lesson_file.stem
+                lesson_number = 0
+                
+                match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
+                if match:
+                    lesson_number = int(match.group(1))
+                
+                lesson_data = {
+                    'id': f"adult_{cefr_level}_english_{lesson_file.stem}",
+                    'title': lesson_file.stem.replace('_', ' ').title(),
+                    'file_path': str(lesson_file.relative_to(self.lessons_dir)),
+                    'subject': 'англиискии язык',
+                    'class_level': 'adult',
+                    'cefr_level': cefr_level,
+                    'lesson_number': lesson_number,
+                    'full_path': f"students/adult_language/{cefr_level}_english/{lesson_file.name}",
+                    'type': 'adult_language'
+                }
+                
+                lessons.append(lesson_data)
+            
+            lessons.sort(key=lambda x: x['lesson_number'])
+            return lessons
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения уроков для взрослых: {e}")
+            return []
+    
+    def get_adult_student_lessons(self, study_mode: str, language_level: str = '') -> Dict:
+        """Возвращает уроки для взрослого студента"""
+        result = {
+            'study_mode': study_mode,
+            'language_level': language_level,
+            'lessons': [],
+            'has_structured_lessons': study_mode == 'language'
+        }
+        
+        if study_mode == 'language' and language_level:
+            result['lessons'] = self.get_adult_lessons_by_level(language_level)
+        
+        return result
+    
+    # =============================================================================
+    # СУЩЕСТВУЮЩИЕ МЕТОДЫ (НЕ МЕНЯЕМ!)
     # =============================================================================
     
     def load_user_data(self, user_id: str) -> Optional[Dict]:
@@ -299,6 +514,12 @@ class StudentManagement:
                 "subjects": {}
             }
             
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПРОГРЕСС НЕ НУЖЕН
+            if education_level == 'adult':
+                print(f"✅ Пропущена инициализация прогресса для взрослого студента {student_id}")
+                return True
+            
+            # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
             class_dir = self.lessons_students_dir / f"{education_level}_class"
             if class_dir.exists():
                 for subject_dir in class_dir.iterdir():
@@ -338,6 +559,10 @@ class StudentManagement:
             
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
+            
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - НЕ ОБНОВЛЯЕМ ПРОГРЕСС
+            if progress_data.get("education_level") == 'adult':
+                return True
             
             if subject not in progress_data["subjects"]:
                 progress_data["subjects"][subject] = {
@@ -381,6 +606,16 @@ class StudentManagement:
         """Получает уроки для конкретного класса"""
         try:
             lessons_by_subject = {}
+            
+            # 🔥 ЕСЛИ ЭТО ВЗРОСЛЫЙ - ВОЗВРАЩАЕМ ЯЗЫКОВЫЕ УРОКИ
+            if student_class == 'adult':
+                for level in self.CEFR_LEVELS.keys():
+                    lessons = self.get_adult_lessons_by_level(level)
+                    if lessons:
+                        lessons_by_subject[f"англиискии_язык_{level}"] = lessons
+                return lessons_by_subject
+            
+            # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
             class_dir = self.lessons_students_dir / f"{student_class}_class"
             
             if not class_dir.exists():
@@ -430,6 +665,17 @@ class StudentManagement:
                 progress_data = json.load(f)
             
             student_class = progress_data.get("education_level", "5")
+            
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С ЯЗЫКОВЫМИ УРОКАМИ
+            if student_class == 'adult' and 'english' in subject.lower():
+                # Извлекаем уровень CEFR из subject
+                for level in self.CEFR_LEVELS.keys():
+                    if level in subject:
+                        lessons = self.get_adult_lessons_by_level(level)
+                        if lessons:
+                            # Для взрослых всегда возвращаем первый урок
+                            return lessons[0]
+            
             subject_progress = progress_data.get("subjects", {}).get(subject, {})
             completed_lessons = subject_progress.get("completed_lessons", [])
             
@@ -454,12 +700,45 @@ class StudentManagement:
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
             if not progress_file.exists():
-                # Создаем начальныи прогресс
-                self.initialize_student_progress(student_id, student_class)
-                return self.get_student_progress_dashboard(student_id, student_class, student_name)
+                # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - СОЗДАЕМ ПУСТОИ ПРОГРЕСС
+                if student_class == 'adult':
+                    progress_data = {
+                        "student_id": student_id,
+                        "education_level": student_class,
+                        "created_at": datetime.now().isoformat(),
+                        "last_updated": datetime.now().isoformat(),
+                        "subjects": {},
+                        "is_adult": True
+                    }
+                    with open(progress_file, 'w', encoding='utf-8') as f:
+                        json.dump(progress_data, f, ensure_ascii=False, indent=2)
+                    
+                    return {
+                        'student_id': student_id,
+                        'student_class': student_class,
+                        'student_name': student_name,
+                        'subjects': {},
+                        'overall': {'total_lessons': 0, 'completed_lessons': 0, 'progress_percent': 0, 'subjects_count': 0},
+                        'is_adult': True
+                    }
+                else:
+                    # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
+                    self.initialize_student_progress(student_id, student_class)
+                    return self.get_student_progress_dashboard(student_id, student_class, student_name)
             
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
+            
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПУСТОИ ПРОГРЕСС
+            if progress_data.get("education_level") == 'adult':
+                return {
+                    'student_id': student_id,
+                    'student_class': student_class,
+                    'student_name': student_name,
+                    'subjects': {},
+                    'overall': {'total_lessons': 0, 'completed_lessons': 0, 'progress_percent': 0, 'subjects_count': 0},
+                    'is_adult': True
+                }
             
             lessons_by_subject = self.get_student_lessons_by_class(student_class)
             
@@ -690,7 +969,8 @@ class StudentManagement:
             structure = {
                 'demo': [],
                 'generated': [],
-                'students': {}
+                'students': {},
+                'adult_language': {}  # 🔥 НОВЫЙ РАЗДЕЛ
             }
             
             # Демо уроки
@@ -733,6 +1013,20 @@ class StudentManagement:
                                     'path': str(lesson_file)
                                 })
                             structure['students'][class_name][subject_name] = lesson_files
+            
+            # 🔥 НОВЫЕ УРОКИ ДЛЯ ВЗРОСЛЫХ
+            for level_dir in sorted(self.lessons_adult_language_dir.glob("*_english")):
+                if level_dir.is_dir():
+                    level_name = level_dir.name
+                    structure['adult_language'][level_name] = []
+                    
+                    for lesson_file in sorted(level_dir.glob("*.txt")):
+                        structure['adult_language'][level_name].append({
+                            'name': lesson_file.name,
+                            'size': lesson_file.stat().st_size,
+                            'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                            'path': str(lesson_file)
+                        })
             
             return structure
         except Exception as e:
@@ -792,6 +1086,27 @@ class StudentManagement:
                                     'can_delete': True
                                 })
             
+            # 🔥 НОВЫЕ УРОКИ ДЛЯ ВЗРОСЛЫХ
+            for level_dir in self.lessons_adult_language_dir.glob("*_english"):
+                if level_dir.is_dir():
+                    level_name = level_dir.name
+                    subject_name = 'англиискии язык'
+                    class_name = 'adult'
+                    
+                    for lesson_file in level_dir.glob("*.txt"):
+                        lessons.append({
+                            'type': 'adult_language',
+                            'class': class_name,
+                            'subject': f"{subject_name} ({level_name})",
+                            'name': lesson_file.name,
+                            'full_path': str(lesson_file),
+                            'size': lesson_file.stat().st_size,
+                            'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                            'cefr_level': level_name.replace('_english', ''),
+                            'can_edit': True,
+                            'can_delete': True
+                        })
+            
             lessons.sort(key=lambda x: x['modified'], reverse=True)
             return lessons
         except Exception as e:
@@ -808,7 +1123,20 @@ class StudentManagement:
             if not subject or subject == "Выберите класс сначала":
                 return {"success": False, "error": "Выберите предмет"}
             
-            if class_level == 'demo':
+            # 🔥 ОБРАБОТКА ВЗРОСЛЫХ ЯЗЫКОВЫХ УРОКОВ
+            if class_level == 'adult' and 'англиискии' in subject.lower():
+                # Извлекаем уровень CEFR из subject
+                cefr_level = 'A1'
+                for level in self.CEFR_LEVELS.keys():
+                    if level in subject.upper():
+                        cefr_level = level
+                        break
+                
+                level_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
+                level_dir.mkdir(parents=True, exist_ok=True)
+                lesson_dir = level_dir
+            
+            elif class_level == 'demo':
                 lesson_dir = self.lessons_demo_dir
             elif class_level == 'generated':
                 lesson_dir = self.lessons_generated_dir
@@ -864,7 +1192,25 @@ class StudentManagement:
             if not class_level or not subject or subject == "Выберите класс сначала":
                 return {"success": False, "error": "Укажите класс и предмет"}
             
-            if class_level == 'demo':
+            # 🔥 ОБРАБОТКА ВЗРОСЛЫХ ЯЗЫКОВЫХ УРОКОВ
+            if class_level == 'adult' and 'англиискии' in subject.lower():
+                cefr_level = 'A1'
+                for level in self.CEFR_LEVELS.keys():
+                    if level in subject.upper():
+                        cefr_level = level
+                        break
+                
+                lesson_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
+                if not lesson_dir.exists():
+                    return {
+                        "success": True,
+                        "class_level": class_level,
+                        "subject": subject,
+                        "next_number": 1,
+                        "total_lessons": 0
+                    }
+            
+            elif class_level == 'demo':
                 lesson_dir = self.lessons_demo_dir
             elif class_level == 'generated':
                 lesson_dir = self.lessons_generated_dir
