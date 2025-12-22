@@ -892,7 +892,7 @@ def _fast_room_initialization(room_id):
                 room_llm_mode[room_id] = get_llm_mode()
             
             if room_id not in room_current_avatar:
-                room_current_avatar[room_id] = 'woman'
+                pass
             
             # DialogueManager НЕ создаем здесь - только при необходимости
             
