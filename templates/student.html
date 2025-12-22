@@ -539,6 +539,28 @@
             animation: spin 1s linear infinite;
         }
         
+        /* Специальные стили для взрослых/студентов */
+        .adult-mode-card {
+            background: linear-gradient(135deg, rgba(126, 118, 249, 0.05), rgba(106, 97, 229, 0.03));
+            border: 2px dashed var(--primary);
+        }
+        
+        .free-conversation-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            width: 100%;
+        }
+        
+        .cefr-badge {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+        
         /* Анимации */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -695,7 +717,7 @@
         <div id="progressTab" class="tab-content active">
             <div class="info-message" id="progressMessage">
                 <i class="fas fa-info-circle"></i>
-                <span>Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение</span>
+                <span id="progressMessageText">Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение</span>
             </div>
             
             <div id="progressContainer">
@@ -712,7 +734,7 @@
         <div id="lessonsTab" class="tab-content">
             <div class="info-message" id="lessonsMessage">
                 <i class="fas fa-info-circle"></i>
-                <span>Выберите предмет для просмотра всех доступных уроков</span>
+                <span id="lessonsMessageText">Выберите предмет для просмотра всех доступных уроков</span>
             </div>
             
             <div id="lessonsSubjectSelect" style="margin-bottom: 1.5rem;">
@@ -902,19 +924,35 @@
             const detailsContainer = document.getElementById('studentDetails');
             if (!currentStudentData) return;
             
-            const details = `
+            let details = `
                 <div class="detail-item">
                     <span class="detail-label">Имя</span>
                     <span class="detail-value">${currentStudentData.name || 'Не указано'}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Класс</span>
+                    <span class="detail-label">Уровень образования</span>
                     <span class="detail-value">${getLevelText(currentStudentData.education_level || currentStudentData.level)}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Возраст</span>
                     <span class="detail-value">${currentStudentData.age || 'Не указан'} лет</span>
                 </div>
+            `;
+            
+            // Для взрослых/студентов показываем дополнительную информацию
+            if (currentStudentData.is_adult) {
+                const modeText = currentStudentData.study_mode === 'language'
+                    ? `Английский <span class="cefr-badge">${currentStudentData.language_level || 'A1'}</span>`
+                    : 'Свободный диалог';
+                details += `
+                    <div class="detail-item">
+                        <span class="detail-label">Режим обучения</span>
+                        <span class="detail-value">${modeText}</span>
+                    </div>
+                `;
+            }
+            
+            details += `
                 <div class="detail-item">
                     <span class="detail-label">ID ученика</span>
                     <span class="detail-value" style="font-size: 0.85rem;">${currentStudentData.student_id || 'Не указан'}</span>
@@ -924,7 +962,7 @@
             detailsContainer.innerHTML = details;
         }
         
-        // Получение текстового представления класса
+        // Получение текстового представления класса/уровня
         function getLevelText(level) {
             const levels = {
                 '1': '1 класс',
@@ -953,6 +991,16 @@
             try {
                 showLoading('progress');
                 
+                // Обновляем текст сообщения в зависимости от типа пользователя
+                const progressMessage = document.getElementById('progressMessageText');
+                if (currentStudentData?.is_adult) {
+                    if (currentStudentData.study_mode === 'anything') {
+                        progressMessage.textContent = 'Вы в режиме свободного диалога. Уроки не предусмотрены.';
+                    } else if (currentStudentData.study_mode === 'language') {
+                        progressMessage.textContent = `Вы изучаете английский язык (уровень ${currentStudentData.language_level || 'A1'})`;
+                    }
+                }
+                
                 // Используем новый исправленный API
                 const response = await fetch('/api/student/progress/dashboard');
                 const data = await response.json();
@@ -961,8 +1009,8 @@
                     subjectsData = data.progress.subjects;
                     renderProgressSubjects(data.progress.subjects);
                 } else {
-                    document.getElementById('progressMessage').className = 'error-message';
-                    document.getElementById('progressMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Не удалось загрузить данные о прогрессе';
+                    // Если нет предметов, показываем соответствующий интерфейс
+                    renderProgressSubjects({});
                 }
                 
                 hideLoading('progress');
@@ -978,11 +1026,43 @@
         function renderProgressSubjects(subjects) {
             const container = document.getElementById('progressContainer');
             
+            // Если это взрослый/студент в режиме "изучать что угодно"
+            if (currentStudentData?.is_adult && currentStudentData.study_mode === 'anything') {
+                container.innerHTML = `
+                    <div class="subject-card adult-mode-card">
+                        <div class="subject-header">
+                            <div class="subject-icon">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <div class="subject-title">
+                                <h4>Свободный диалог</h4>
+                                <p>Режим "изучать что угодно" без структурированных уроков</p>
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 1.5rem 0; text-align: center;">
+                            <p style="color: var(--text-light); margin-bottom: 1rem;">
+                                Вы можете общаться с AI-учителем на любые темы без ограничений по программе
+                            </p>
+                            <button class="btn free-conversation-btn" onclick="startFreeConversation()">
+                                <i class="fas fa-comment-alt"></i> Начать свободную конференцию
+                            </button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Если нет предметов
             if (!subjects || Object.keys(subjects).length === 0) {
                 container.innerHTML = `
                     <div class="info-message">
                         <i class="fas fa-info-circle"></i>
-                        <span>У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.</span>
+                        <span id="noSubjectsMessage">
+                            ${currentStudentData?.is_adult 
+                                ? 'Для вашего уровня английского пока нет уроков' 
+                                : 'У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.'}
+                        </span>
                     </div>
                 `;
                 return;
@@ -997,15 +1077,28 @@
                 const nextLesson = subjectData.next_lesson;
                 const hasLessons = subjectData.has_lessons || totalLessons > 0;
                 
+                // Определяем класс для карточки
+                const cardClass = currentStudentData?.is_adult ? 'subject-card adult-mode-card' : 'subject-card';
+                
+                // Определяем описание
+                let description = subjectDescriptions[subjectName] || 'Изучение предмета';
+                if (currentStudentData?.is_adult && subjectName === 'английский язык') {
+                    description = `Уровень ${currentStudentData.language_level || 'A1'}`;
+                }
+                
                 html += `
-                    <div class="subject-card">
+                    <div class="${cardClass}">
                         <div class="subject-header">
                             <div class="subject-icon">
                                 <i class="${subjectIcons[subjectName] || subjectIcons.default}"></i>
                             </div>
                             <div class="subject-title">
-                                <h4>${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</h4>
-                                <p>${subjectDescriptions[subjectName] || 'Изучение предмета'}</p>
+                                <h4>${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
+                                ${currentStudentData?.is_adult && subjectName === 'английский язык' 
+                                    ? `<span class="cefr-badge">${currentStudentData.language_level || 'A1'}</span>` 
+                                    : ''}
+                                </h4>
+                                <p>${description}</p>
                             </div>
                         </div>
                         
@@ -1046,8 +1139,88 @@
                 `;
             }
             
+            // Для взрослых/студентов добавляем возможность свободной конференции
+            if (currentStudentData?.is_adult) {
+                html += `
+                    <div class="subject-card adult-mode-card">
+                        <div class="subject-header">
+                            <div class="subject-icon">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <div class="subject-title">
+                                <h4>Свободная конференция</h4>
+                                <p>Обсудить любую тему вне уроков</p>
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 1.5rem 0; text-align: center;">
+                            <button class="btn free-conversation-btn" onclick="startFreeConversation()">
+                                <i class="fas fa-comment-alt"></i> Начать свободный диалог
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+            
             html += '</div>';
             container.innerHTML = html;
+        }
+        
+        // Начать свободную конференцию (для взрослых/студентов)
+        async function startFreeConversation() {
+            try {
+                console.log('🚀 Начинаем свободную конференцию');
+                
+                let apiEndpoint, requestBody;
+                
+                if (currentStudentData?.is_adult) {
+                    // Для взрослых/студентов используем специальный API
+                    apiEndpoint = '/api/student/create-adult-room';
+                    requestBody = {
+                        study_mode: currentStudentData.study_mode || 'anything'
+                    };
+                    
+                    if (currentStudentData.study_mode === 'language') {
+                        requestBody.language_level = currentStudentData.language_level || 'A1';
+                    }
+                } else {
+                    // Для школьников используем обычный API
+                    apiEndpoint = '/api/student/create-conference';
+                    requestBody = {
+                        subject: 'свободный диалог'
+                    };
+                }
+                
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const roomName = data.conference?.room_id || data.room_id;
+                    console.log(`✅ Свободная конференция создана: ${roomName}`);
+                    
+                    // Открываем конференцию
+                    window.open(`/conference?room=${roomName}&student=true&free_conversation=true`, '_blank');
+                } else {
+                    throw new Error(data.error || 'Ошибка создания свободной конференции');
+                }
+            } catch (error) {
+                console.error('❌ Ошибка создания свободной конференции:', error);
+                
+                // Fallback: создаем комнату вручную
+                const timestamp = Date.now();
+                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                const roomName = `free_conversation_${studentName}_${timestamp}`;
+                
+                alert(`Создана свободная конференция: ${roomName}`);
+                window.open(`/conference?room=${roomName}&student=true&free_conversation=true`, '_blank');
+            }
         }
         
         // Продолжить следующий урок
@@ -1124,6 +1297,30 @@
             try {
                 showLoading('lessons');
                 
+                // Обновляем текст сообщения
+                const lessonsMessage = document.getElementById('lessonsMessageText');
+                if (currentStudentData?.is_adult) {
+                    if (currentStudentData.study_mode === 'anything') {
+                        lessonsMessage.textContent = 'В режиме "изучать что угодно" уроки не предусмотрены. Используйте свободную конференцию.';
+                        document.getElementById('lessonsSubjectSelect').innerHTML = '';
+                        document.getElementById('lessonsList').innerHTML = `
+                            <div class="info-message">
+                                <i class="fas fa-comments"></i>
+                                <span>Используйте свободную конференцию для общения на любые темы</span>
+                            </div>
+                            <div style="text-align: center; margin-top: 1.5rem;">
+                                <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
+                                    <i class="fas fa-comment-alt"></i> Начать свободную конференцию
+                                </button>
+                            </div>
+                        `;
+                        hideLoading('lessons');
+                        return;
+                    } else if (currentStudentData.study_mode === 'language') {
+                        lessonsMessage.textContent = `Уроки английского языка (уровень ${currentStudentData.language_level || 'A1'})`;
+                    }
+                }
+                
                 const response = await fetch('/api/student/lessons-by-class');
                 const data = await response.json();
                 
@@ -1135,8 +1332,16 @@
                     const firstSubject = Object.keys(data.lessons)[0];
                     loadLessonsForSubject(firstSubject);
                 } else {
-                    document.getElementById('lessonsMessage').className = 'error-message';
-                    document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Уроки для вашего класса пока не загружены';
+                    // Нет уроков
+                    if (currentStudentData?.is_adult && currentStudentData.study_mode === 'language') {
+                        document.getElementById('lessonsMessage').className = 'info-message';
+                        document.getElementById('lessonsMessageText').textContent = 
+                            `Для английского языка уровня ${currentStudentData.language_level || 'A1'} уроки пока не загружены`;
+                    } else {
+                        document.getElementById('lessonsMessage').className = 'info-message';
+                        document.getElementById('lessonsMessageText').textContent = 
+                            'Уроки для вашего класса пока не загружены';
+                    }
                     hideLoading('lessons');
                 }
             } catch (error) {
@@ -1159,7 +1364,13 @@
             
             for (const [subjectName, subjectData] of Object.entries(subjects)) {
                 const lessonCount = subjectData.lessons ? subjectData.lessons.length : 0;
-                const displayName = `${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)} (${lessonCount} уроков)`;
+                let displayName = `${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)} (${lessonCount} уроков)`;
+                
+                // Для взрослых добавляем уровень
+                if (currentStudentData?.is_adult && subjectName === 'английский язык') {
+                    displayName = `Английский язык ${currentStudentData.language_level || 'A1'} (${lessonCount} уроков)`;
+                }
+                
                 html += `<option value="${subjectName}">${displayName}</option>`;
             }
             
@@ -1231,11 +1442,17 @@
                 return (a.lesson_number || 999) - (b.lesson_number || 999);
             });
             
+            // Определяем заголовок
+            let title = subjectName.charAt(0).toUpperCase() + subjectName.slice(1);
+            if (currentStudentData?.is_adult && subjectName === 'английский язык') {
+                title = `Английский язык (уровень ${currentStudentData.language_level || 'A1'})`;
+            }
+            
             let html = `
                 <div class="lessons-container">
                     <div style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
                         <i class="fas fa-book"></i> 
-                        <span>Уроки по предмету: ${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</span>
+                        <span>Уроки: ${title}</span>
                         <span style="font-size: 0.9rem; color: var(--text-light); margin-left: auto;">
                             ${lessons.length} уроков
                         </span>
@@ -1259,7 +1476,9 @@
                                 ${lesson.title}
                             </h5>
                             <p>
-                                ${lesson.subject} • ${lesson.class_level || currentStudentData?.education_level || 'Не указан'} класс
+                                ${subjectName} • ${currentStudentData?.is_adult 
+                                    ? `Уровень ${currentStudentData.language_level || 'A1'}`
+                                    : `${lesson.class_level || currentStudentData?.education_level || 'Не указан'} класс`}
                                 ${isCompleted ? '• <span style="color: var(--success);">Завершен</span>' : 
                                  isCurrent ? '• <span style="color: #3b82f6;">Текущий</span>' : 
                                  '• <span style="color: var(--text-light);">Ожидает</span>'}
@@ -1277,10 +1496,17 @@
             
             html += `
                 </div>
-                <div style="margin-top: 1rem; text-align: center;">
-                    <a href="#" class="btn" onclick="createAndOpenConference('${subjectName}', event)" style="width: 100%;">
-                        <i class="fas fa-plus-circle"></i> Создать новую комнату для ${subjectName}
-                    </a>
+                <div style="margin-top: 1rem;">
+                    <div style="display: flex; gap: 1rem;">
+                        <a href="#" class="btn" onclick="createAndOpenConference('${subjectName}', event)" style="flex: 1;">
+                            <i class="fas fa-plus-circle"></i> Создать комнату для ${subjectName}
+                        </a>
+                        ${currentStudentData?.is_adult ? `
+                            <a href="#" class="btn btn-secondary" onclick="startFreeConversation()" style="flex: 1;">
+                                <i class="fas fa-comment-alt"></i> Свободная конференция
+                            </a>
+                        ` : ''}
+                    </div>
                 </div>
             `;
             container.innerHTML = html;
@@ -1386,21 +1612,33 @@
             try {
                 console.log(`🚀 Создаем комнату для предмета: ${subjectName}`);
                 
+                // Для взрослых/студентов используем другой API
+                let apiEndpoint, requestBody;
+                
+                if (currentStudentData?.is_adult && subjectName === 'английский язык') {
+                    apiEndpoint = '/api/student/create-adult-room';
+                    requestBody = {
+                        study_mode: 'language',
+                        language_level: currentStudentData.language_level || 'A1'
+                    };
+                } else {
+                    apiEndpoint = '/api/student/create-conference';
+                    requestBody = { subject: subjectName };
+                }
+                
                 // Создаем новую комнату через API
-                const response = await fetch('/api/student/create-conference', {
+                const response = await fetch(apiEndpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        subject: subjectName
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const data = await response.json();
                 
-                if (data.success && data.conference) {
-                    const roomName = data.conference.room_id;
+                if (data.success && (data.conference || data.room_id)) {
+                    const roomName = data.conference?.room_id || data.room_id;
                     console.log(`✅ Комната создана: ${roomName}`);
                     
                     // Открываем конференцию
@@ -1448,6 +1686,14 @@
             
             if (lessonId && lessonId !== 'next') {
                 url += `&lesson_id=${encodeURIComponent(lessonId)}`;
+            }
+            
+            // Добавляем информацию о взрослых/студентах
+            if (currentStudentData?.is_adult) {
+                url += `&is_adult=true&study_mode=${currentStudentData.study_mode}`;
+                if (currentStudentData.study_mode === 'language') {
+                    url += `&language_level=${currentStudentData.language_level || 'A1'}`;
+                }
             }
             
             console.log(`🔗 Переход по ссылке: ${url}`);
