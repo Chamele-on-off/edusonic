@@ -1,7 +1,8 @@
 """
-🔥 language_integration.py
-Интеграция языковых функций в систему AI-учителя
+🔥 language_integration.py v2.0
+ИНТЕГРАЦИЯ ЯЗЫКОВЫХ ФУНКЦИЙ И УРОВНЕЙ CEFR ДЛЯ ВЗРОСЛЫХ
 Минимальные изменения, максимальная совместимость
+Без нарушения рабочей логики системы
 """
 
 import re
@@ -16,7 +17,7 @@ def debug_log(message: str):
 class LanguageIntegration:
     """Класс для интеграции языковых функций в существующую систему"""
     
-    # 🔥 КОНФИГУРАЦИЯ ЯЗЫКОВЫХ ПРЕДМЕТОВ
+    # 🔥 КОНФИГУРАЦИЯ ЯЗЫКОВЫХ ПРЕДМЕТОВ (СУЩЕСТВУЮЩАЯ)
     LANGUAGE_SUBJECTS = {
         'english': {
             'russian_names': ['английский язык', 'английский'],
@@ -56,7 +57,112 @@ class LanguageIntegration:
         }
     }
     
-    # 🔥 ТИПЫ ЯЗЫКОВЫХ УПРАЖНЕНИЙ ПО УРОВНЯМ
+    # 🔥 НОВАЯ КОНСТАНТА: УРОВНИ CEFR ДЛЯ ВЗРОСЛЫХ
+    CEFR_LEVELS = {
+        'A1': {
+            'description': 'Начинающий',
+            'prompt_adjustment': '''
+            УРОВЕНЬ A1 (НАЧИНАЮЩИЙ):
+            - Используй максимально простые предложения (3-5 слов)
+            - 80% русский язык, 20% английский
+            - Только базовая лексика (hello, my name is, thank you)
+            - Повторяй ключевые фразы по 2-3 раза
+            - Не используй сложные грамматические конструкции
+            - Только Present Simple время
+            - Каждое новое слово переводи и объясняй
+            ''',
+            'bilingual_ratio': 0.2,
+            'max_questions': 5,
+            'vocabulary_per_lesson': 8,
+            'sentence_length': '3-5 слов'
+        },
+        'A2': {
+            'description': 'Элементарный',
+            'prompt_adjustment': '''
+            УРОВЕНЬ A2 (ЭЛЕМЕНТАРНЫЙ):
+            - Простые предложения (5-7 слов)
+            - 70% русский, 30% английский
+            - Базовая повседневная лексика (семья, работа, хобби)
+            - Простые вопросы и ответы
+            - Present Simple, Present Continuous, Past Simple
+            - Давай упражнения на заполнение пропусков
+            ''',
+            'bilingual_ratio': 0.3,
+            'max_questions': 6,
+            'vocabulary_per_lesson': 12,
+            'sentence_length': '5-7 слов'
+        },
+        'B1': {
+            'description': 'Средний',
+            'prompt_adjustment': '''
+            УРОВЕНЬ B1 (СРЕДНИЙ):
+            - Развернутые предложения (7-10 слов)
+            - 50% русский, 50% английский
+            - Широкая бытовая и учебная лексика
+            - Объяснение грамматики на русском, практика на английском
+            - Все основные времена (Present, Past, Future)
+            - Диалоги и ситуации из реальной жизни
+            - Упражнения на перефразирование
+            ''',
+            'bilingual_ratio': 0.5,
+            'max_questions': 7,
+            'vocabulary_per_lesson': 15,
+            'sentence_length': '7-10 слов'
+        },
+        'B2': {
+            'description': 'Выше среднего',
+            'prompt_adjustment': '''
+            УРОВЕНЬ B2 (ВЫШЕ СРЕДНЕГО):
+            - Сложные предложения с придаточными
+            - 30% русский, 70% английский
+            - Абстрактные темы, аргументация, мнения
+            - Нюансы грамматики (условные предложения, пассивный залог)
+            - Идиомы и устойчивые выражения
+            - Обсуждение новостей, фильмов, книг
+            - Упражнения на эссе и дискуссии
+            ''',
+            'bilingual_ratio': 0.7,
+            'max_questions': 8,
+            'vocabulary_per_lesson': 18,
+            'sentence_length': '10-15 слов'
+        },
+        'C1': {
+            'description': 'Продвинутый',
+            'prompt_adjustment': '''
+            УРОВЕНЬ C1 (ПРОДВИНУТЫЙ):
+            - Сложные тексты и дискуссии
+            - 10% русский (только пояснения), 90% английский
+            - Академическая и профессиональная лексика
+            - Стилистические нюансы, синонимы, антонимы
+            - Дебаты и презентации
+            - Анализ сложных текстов
+            - Упражнения на академическое письмо
+            ''',
+            'bilingual_ratio': 0.9,
+            'max_questions': 9,
+            'vocabulary_per_lesson': 20,
+            'sentence_length': '15+ слов'
+        },
+        'C2': {
+            'description': 'В совершенстве',
+            'prompt_adjustment': '''
+            УРОВЕНЬ C2 (В СОВЕРШЕНСТВЕ):
+            - 100% английский язык
+            - Сложнейшие тексты любой тематики
+            - Нюансы, ирония, сарказм, юмор
+            - Академическое письмо и исследования
+            - Профессиональные дискуссии и переговоры
+            - Литературный анализ
+            - Упражнения на творческое письмо
+            ''',
+            'bilingual_ratio': 1.0,
+            'max_questions': 10,
+            'vocabulary_per_lesson': 25,
+            'sentence_length': 'сложные конструкции'
+        }
+    }
+    
+    # 🔥 ТИПЫ ЯЗЫКОВЫХ УПРАЖНЕНИЙ ПО УРОВНЯМ (СУЩЕСТВУЮЩАЯ)
     LANGUAGE_EXERCISE_TYPES = {
         'beginner': [
             'vocabulary',        # Словарный запас
@@ -78,6 +184,52 @@ class LanguageIntegration:
             'debate',           # Дискуссия
             'essay',            # Эссе
             'summary'           # Резюмирование
+        ]
+    }
+    
+    # 🔥 ТИПЫ УПРАЖНЕНИЙ ПО УРОВНЯМ CEFR
+    CEFR_EXERCISE_TYPES = {
+        'A1': [
+            'vocabulary_matching',  # Сопоставление слов с картинками
+            'fill_blank_simple',    # Заполнение пропусков в простых предложениях
+            'multiple_choice_basic',# Выбор из 2-3 вариантов
+            'repeat_after_me',      # Повторение за учителем
+            'word_order'            # Расстановка слов в правильном порядке
+        ],
+        'A2': [
+            'dialogue_completion',  # Завершение диалога
+            'sentence_translation', # Перевод простых предложений
+            'true_false',           # Верно/неверно
+            'wh_questions',         # Вопросы who, what, where, when
+            'fill_blank_dialogue'   # Заполнение пропусков в диалоге
+        ],
+        'B1': [
+            'paragraph_translation',# Перевод абзацев
+            'grammar_correction',   # Исправление грамматических ошибок
+            'reading_comprehension',# Чтение с вопросами
+            'role_play',            # Ролевые игры
+            'sentence_transformation' # Преобразование предложений
+        ],
+        'B2': [
+            'essay_writing',        # Написание эссе
+            'debate_preparation',   # Подготовка к дебатам
+            'article_summary',      # Резюме статьи
+            'phrasal_verbs',        # Упражнения на фразовые глаголы
+            'idiom_matching'        # Сопоставление идиом
+        ],
+        'C1': [
+            'academic_writing',     # Академическое письмо
+            'presentation_prep',    # Подготовка презентации
+            'literary_analysis',    # Литературный анализ
+            'negotiation_practice', # Практика переговоров
+            'translation_complex'   # Перевод сложных текстов
+        ],
+        'C2': [
+            'creative_writing',     # Творческое письмо
+            'simultaneous_translation', # Устный перевод
+            'philosophical_discussion', # Философские дискуссии
+            'literary_criticism',   # Литературная критика
+            'research_proposal'     # Написание исследовательского предложения
         ]
     }
     
@@ -176,6 +328,100 @@ class LanguageIntegration:
             'exercise_types': LanguageIntegration.LANGUAGE_EXERCISE_TYPES.get(suggested_level, []),
             'description': f'Уровень {suggested_level} ({int(bilingual_ratio * 100)}% иностранного языка)'
         }
+    
+    @staticmethod
+    def detect_cefr_level(age: int, self_assessment: str = '', education_level: str = '') -> str:
+        """
+        Автоматически определяет уровень CEFR на основе возраста, самооценки и уровня образования
+        
+        Args:
+            age: Возраст ученика
+            self_assessment: Самооценка уровня (A1, B2 и т.д.)
+            education_level: Уровень образования (5, 6, ... adult)
+            
+        Returns:
+            Уровень CEFR (A1, A2, B1, B2, C1, C2)
+        """
+        # 🔥 ЕСЛИ ЭТО ШКОЛЬНИК - используем упрощенную систему
+        if education_level and education_level != 'adult':
+            # Для школьников используем возраст
+            if age <= 10:
+                return 'A1'
+            elif age <= 12:
+                return 'A2'
+            elif age <= 14:
+                return 'B1'
+            elif age <= 16:
+                return 'B2'
+            else:
+                return 'C1'
+        
+        # 🔥 ЕСЛИ ЭТО ВЗРОСЛЫЙ (adult)
+        # Проверяем самооценку
+        if self_assessment:
+            self_assessment_upper = self_assessment.upper()
+            if self_assessment_upper in LanguageIntegration.CEFR_LEVELS:
+                return self_assessment_upper
+            
+            # Маппинг русских/английских названий
+            level_mapping = {
+                'начинающий': 'A1',
+                'начальный': 'A1',
+                'beginner': 'A1',
+                'элементарный': 'A2',
+                'elementary': 'A2',
+                'средний': 'B1',
+                'intermediate': 'B1',
+                'выше среднего': 'B2',
+                'upper intermediate': 'B2',
+                'продвинутый': 'C1',
+                'advanced': 'C1',
+                'профессиональный': 'C2',
+                'proficient': 'C2',
+                'в совершенстве': 'C2'
+            }
+            
+            if self_assessment.lower() in level_mapping:
+                return level_mapping[self_assessment.lower()]
+        
+        # 🔥 ДЕФОЛТНЫЕ ЗНАЧЕНИЯ ПО ВОЗРАСТУ ДЛЯ ВЗРОСЛЫХ
+        if age < 18:
+            return 'B1'
+        elif age < 25:
+            return 'B2'
+        elif age < 40:
+            return 'C1'
+        else:
+            return 'C1'  # Взрослые обычно имеют более высокий уровень
+    
+    @staticmethod
+    def get_cefr_level_config(cefr_level: str) -> Dict:
+        """
+        Возвращает конфигурацию для уровня CEFR
+        
+        Args:
+            cefr_level: Уровень CEFR (A1, A2, B1, B2, C1, C2)
+            
+        Returns:
+            Конфигурация уровня
+        """
+        level = cefr_level.upper()
+        default_config = {
+            'description': 'Неизвестный уровень',
+            'prompt_adjustment': '',
+            'bilingual_ratio': 0.5,
+            'max_questions': 5,
+            'vocabulary_per_lesson': 10,
+            'sentence_length': 'стандартная',
+            'exercise_types': []
+        }
+        
+        if level in LanguageIntegration.CEFR_LEVELS:
+            config = LanguageIntegration.CEFR_LEVELS[level].copy()
+            config['exercise_types'] = LanguageIntegration.CEFR_EXERCISE_TYPES.get(level, [])
+            return config
+        
+        return default_config
     
     @staticmethod
     def create_bilingual_lesson_prompt(
@@ -302,6 +548,130 @@ class LanguageIntegration:
         Создай интересный, практичный и эффективный билингвальный урок.
         Ученик должен чувствовать прогресс и понимание.
         Урок должен мотивировать продолжать изучение языка.
+        
+        Верни ТОЛЬКО текст урока, без дополнительных комментариев.
+        """
+        
+        return prompt
+    
+    @staticmethod
+    def create_bilingual_lesson_prompt_cefr(
+        topic: str, 
+        target_language: str = 'english',
+        cefr_level: str = 'A1',
+        **kwargs
+    ) -> str:
+        """
+        Создает промпт для генерации билингвального урока с учетом уровня CEFR
+        
+        Args:
+            topic: Тема урока
+            target_language: Изучаемый язык
+            cefr_level: Уровень CEFR (A1, A2, B1, B2, C1, C2)
+            
+        Returns:
+            Промпт для LLM
+        """
+        # Получаем конфигурацию уровня
+        level_config = LanguageIntegration.get_cefr_level_config(cefr_level)
+        
+        bilingual_ratio = level_config.get('bilingual_ratio', 0.5)
+        foreign_percent = int(bilingual_ratio * 100)
+        russian_percent = 100 - foreign_percent
+        
+        # 🔥 ОСНОВНОЙ ПРОМПТ С УЧЕТОМ CEFR
+        prompt = f"""
+        🔥 СОЗДАЙ БИЛИНГВАЛЬНЫЙ ЯЗЫКОВОЙ УРОК ДЛЯ ВЗРОСЛЫХ (УРОВЕНЬ {cefr_level.upper()})
+        
+        ===== ОСНОВНЫЕ ПАРАМЕТРЫ =====
+        ТЕМА УРОКА: {topic}
+        ИЗУЧАЕМЫЙ ЯЗЫК: {target_language.upper()}
+        УРОВЕНЬ CEFR: {cefr_level.upper()} ({level_config.get('description', '')})
+        СООТНОШЕНИЕ ЯЗЫКОВ: {russian_percent}% русский / {foreign_percent}% {target_language}
+        СЛОЖНОСТЬ: {level_config.get('sentence_length', 'стандартная')}
+        
+        ===== НАСТРОЙКИ УРОВНЯ {cefr_level.upper()} =====
+        {level_config.get('prompt_adjustment', '')}
+        
+        ===== КРИТИЧЕСКИ ВАЖНЫЕ ТРЕБОВАНИЯ ДЛЯ УРОВНЯ {cefr_level.upper()} =====
+        
+        1. 🎯 СТРУКТУРА УРОКА:
+           • Соотношение языков: строго {russian_percent}% русский, {foreign_percent}% {target_language}
+           • Новые слова: не более {level_config.get('vocabulary_per_lesson', 10)} слов за урок
+           • Длина предложений: {level_config.get('sentence_length', 'стандартная')}
+           • Темп урока: медленный и повторяющиися для A1-A2, быстрее для B1+
+        
+        2. 📝 ФОРМАТИРОВАНИЕ:
+           • Новые слова: **house** (дом) - НЕ давай транскрипцию в скобках []
+           • Примеры: **I have a house.** (У меня есть дом.)
+           • Грамматика: объясняй на русском, примеры на {target_language}
+           • Для уровней A1-A2: используй МНОГО повторении
+           • Для уровней B2-C2: добавляи идиомы и сложные конструкции
+        
+        3. ❓ ИНТЕРАКТИВНЫЕ ЭЛЕМЕНТЫ:
+           • Вопросы на понимание: {level_config.get('max_questions', 5)} вопросов
+           • Типы упражнении: {', '.join(level_config.get('exercise_types', ['базовые']))}
+           • Практика: реалистичные ситуации для взрослых
+        
+        4. ✨ ПРАКТИЧЕСКАЯ ПОЛЕЗНОСТЬ:
+           • Фразы, которые можно использовать СЕГОДНЯ
+           • Ситуации из реальной жизни взрослых
+           • Деловая лексика для уровней B1+
+           • Культурные нюансы для уровней B2+
+        
+        5. 🎓 ОСОБЕННОСТИ ВЗРОСЛЫХ УЧЕНИКОВ:
+           • Учитываи жизненныи опыт
+           • Деловые/профессиональные темы для уровней B1+
+           • Абстрактные понятия для уровней B2+
+           • Критическое мышление для уровней C1-C2
+        
+        ===== ТИПЫ УПРАЖНЕНИЙ ДЛЯ УРОВНЯ {cefr_level.upper()} =====
+        {', '.join(level_config.get('exercise_types', []))}
+        
+        ===== ПРИМЕР СТРУКТУРЫ ДЛЯ УРОВНЯ {cefr_level.upper()} =====
+        
+        {"[ТОЛЬКО ДЛЯ A1-A2]" if cefr_level in ['A1', 'A2'] else ""}
+        [РУССКИЙ] Очень простое введение. "Сегодня мы научимся..."
+        [{target_language.upper()}] New words: **word1** (перевод1), **word2** (перевод2)
+        [РУССКИЙ] Повтори слова 2 раза. "Скажи со мной: word1, word1"
+        [{target_language.upper()}] Simple sentence: **Sentence.** (Translation)
+        [РУССКИЙ] Объяснение. "Это значит..."
+        [{target_language.upper()}] ❓ Simple question: Question? (Ответ: одно слово)
+        
+        {"[ДЛЯ B1-B2]" if cefr_level in ['B1', 'B2'] else ""}
+        [РУССКИЙ] Введение с контекстом. "В реальной жизни это используется..."
+        [{target_language.upper()}] Vocabulary: **word1** (перевод), **word2** (перевод)
+        [{target_language.upper()}] Examples: **Sentence1.** (Translation1) **Sentence2.** (Translation2)
+        [РУССКИЙ] Краткое объяснение грамматики
+        [{target_language.upper()}] Dialogue: A: ... B: ...
+        [{target_language.upper()}] ❓ Comprehension questions: 1. ... 2. ...
+        
+        {"[ДЛЯ C1-C2]" if cefr_level in ['C1', 'C2'] else ""}
+        [{target_language.upper()}] Introduction and context (90% на целевом языке)
+        [{target_language.upper()}] Advanced vocabulary with nuances
+        [{target_language.upper()}] Complex examples with cultural references
+        [{target_language.upper()}] Grammar nuances and exceptions
+        [{target_language.upper()}] Debate topic or essay question
+        [РУССКИЙ] ТОЛЬКО если нужно объяснить очень сложную концепцию
+        
+        ===== ВАЖНЕИШИЕ ПРАВИЛА ДЛЯ ВЗРОСЛЫХ =====
+        
+        🔥 НИКОГДА НЕ ДЕЛАЙ С ВЗРОСЛЫМИ:
+        • Детских примеров (игрушки, мультики и т.д.)
+        • Слишком медленного темпа для уровней B1+
+        • Очевидных объяснений для продвинутых уровней
+        
+        🔥 ВСЕГДА ДЕЛАЙ С ВЗРОСЛЫМИ:
+        • Уважаи их жизненныи опыт
+        • Даваи практические, полезные знания
+        • Обсуждаи актуальные темы
+        • Для уровней B1+ добавляи профессиональную лексику
+        
+        ===== ИТОГОВАЯ ИНСТРУКЦИЯ =====
+        
+        Создаи КАЧЕСТВЕННЫИ, ПРАКТИЧНЫИ урок для взрослого ученика уровня {cefr_level}.
+        Урок должен быть полезным СЕГОДНЯ.
+        Ученик должен почувствовать прогресс и мотивацию продолжать.
         
         Верни ТОЛЬКО текст урока, без дополнительных комментариев.
         """
@@ -466,7 +836,7 @@ class LanguageIntegration:
             УРОВЕНЬ: {level}
             ТЕМА: {topic}
             
-            Создай упражнение на грамматику.
+            Создай упражнение на грамматика.
             
             ВКЛЮЧИ:
             1. Краткое объяснение правила на русском
@@ -510,6 +880,199 @@ class LanguageIntegration:
         """
         
         return exercise_templates.get(exercise_type, default_template)
+    
+    @staticmethod
+    def create_cefr_exercise_prompt(
+        cefr_level: str,
+        exercise_type: str,
+        topic: str,
+        target_language: str = 'english',
+        vocabulary: List[str] = None
+    ) -> str:
+        """
+        Создает промпт для генерации упражнения с учетом уровня CEFR
+        
+        Args:
+            cefr_level: Уровень CEFR (A1, A2, B1, B2, C1, C2)
+            exercise_type: Тип упражнения
+            topic: Тема упражнения
+            target_language: Изучаемый язык
+            vocabulary: Список слов (опционально)
+            
+        Returns:
+            Промпт для LLM
+        """
+        level_config = LanguageIntegration.get_cefr_level_config(cefr_level)
+        
+        # 🔥 ШАБЛОНЫ ДЛЯ РАЗНЫХ УРОВНЕЙ CEFR
+        cefr_exercise_templates = {
+            'A1': {
+                'vocabulary_matching': f"""
+                СОЗДАЙ УПРАЖНЕНИЕ ДЛЯ НАЧИНАЮЩИХ (A1)
+                
+                УРОВЕНЬ: A1 (Начинающий)
+                ЯЗЫК: {target_language}
+                ТЕМА: {topic}
+                
+                Создай упражнение "Сопоставь картинку со словом".
+                
+                ВКЛЮЧИ:
+                1. 5 очень простых слов на {target_language} по теме "{topic}"
+                2. Простые описания "картинок" на русском (например: "🍎 - красный фрукт")
+                3. ОЧЕНЬ простую инструкцию на русском
+                
+                ФОРМАТ:
+                [Инструкция: Соедини слово с картинкой]
+                
+                Слова:
+                1. apple
+                2. house
+                3. car
+                4. book
+                5. cat
+                
+                Картинки:
+                A. 🍎 - красный фрукт
+                B. 🏠 - место где живут
+                C. 🚗 - транспорт
+                D. 📖 - можно читать
+                E. 🐱 - домашнее животное
+                
+                ПРАВИЛЬНЫЕ ОТВЕТЫ: [не включай]
+                
+                Все должно быть ОЧЕНЬ ПРОСТО!
+                """,
+                
+                'fill_blank_simple': f"""
+                СОЗДАЙ ПРОСТОЕ УПРАЖНЕНИЕ "ЗАПОЛНИ ПРОПУСКИ" (A1)
+                
+                УРОВЕНЬ: A1
+                ЯЗЫК: {target_language}
+                ТЕМА: {topic}
+                
+                Создай ОЧЕНЬ простое упражнение с 3 пропусками.
+                
+                ВКЛЮЧИ:
+                1. Простое предложение с пропусками
+                2. Слова для выбора (max 3 слова)
+                3. Простую инструкцию на русском
+                
+                ФОРМАТ:
+                [Инструкция: Выбери правильное слово]
+                
+                I ___ a student. (am / is / are)
+                My name ___ Anna. (am / is / are)
+                I ___ 25 years old. (am / is / are)
+                
+                Слова: am, is, are
+                
+                ПРАВИЛЬНЫЕ ОТВЕТЫ: [не включай]
+                
+                Максимально просто!
+                """
+            },
+            'B1': {
+                'reading_comprehension': f"""
+                СОЗДАЙ УПРАЖНЕНИЕ НА ЧТЕНИЕ С ВОПРОСАМИ (B1)
+                
+                УРОВЕНЬ: B1 (Средний)
+                ЯЗЫК: {target_language}
+                ТЕМА: {topic}
+                
+                Создай короткий текст (5-7 предложений) и 3 вопроса.
+                
+                ВКЛЮЧИ:
+                1. Текст на {target_language} по теме "{topic}"
+                2. 3 вопроса на понимание
+                3. Инструкцию на русском
+                
+                ФОРМАТ:
+                [Инструкция: Прочитай текст и ответь на вопросы]
+                
+                Текст:
+                [Короткий текст на целевом языке]
+                
+                Вопросы:
+                1. [Вопрос 1]
+                2. [Вопрос 2]
+                3. [Вопрос 3]
+                
+                ПРАВИЛЬНЫЕ ОТВЕТЫ: [не включай]
+                
+                Текст должен быть понятным для уровня B1.
+                """
+            },
+            'C1': {
+                'academic_writing': f"""
+                СОЗДАЙ АКАДЕМИЧЕСКОЕ УПРАЖНЕНИЕ (C1)
+                
+                УРОВЕНЬ: C1 (Продвинутый)
+                ЯЗЫК: {target_language}
+                ТЕМА: {topic}
+                
+                Создай задание для академического письма.
+                
+                ВКЛЮЧИ:
+                1. Тему для эссе или исследования
+                2. Требования (объем, структура, стиль)
+                3. Критерии оценки
+                4. Инструкцию на {target_language}
+                
+                ФОРМАТ:
+                [Instruction in {target_language}]
+                
+                Topic: [Complex topic for essay]
+                
+                Requirements:
+                - Length: 300-500 words
+                - Structure: Introduction, Body, Conclusion
+                - Style: Academic, formal
+                - Include: Arguments, examples, counterarguments
+                
+                Assessment Criteria:
+                1. Content and arguments (40%)
+                2. Structure and organization (30%)
+                3. Language and vocabulary (20%)
+                4. Grammar and accuracy (10%)
+                
+                CORRECT ANSWERS: [not included - this is a writing task]
+                
+                Make it challenging for C1 level.
+                """
+            }
+        }
+        
+        # Ищем шаблон для уровня и типа
+        level_templates = cefr_exercise_templates.get(cefr_level, {})
+        
+        if exercise_type in level_templates:
+            return level_templates[exercise_type]
+        
+        # Fallback на общий шаблон для уровня
+        default_cefr_template = f"""
+        СОЗДАЙ УПРАЖНЕНИЕ ДЛЯ УРОВНЯ {cefr_level.upper()}
+        
+        УРОВЕНЬ: {cefr_level} ({level_config.get('description', '')})
+        ЯЗЫК: {target_language}
+        ТЕМА: {topic}
+        ТИП УПРАЖНЕНИЯ: {exercise_type}
+        
+        Создай упражнение соответствующее уровню {cefr_level}.
+        
+        ОСОБЕННОСТИ УРОВНЯ {cefr_level.upper()}:
+        - Сложность: {level_config.get('sentence_length', 'стандартная')}
+        - Соотношение языков: {int((1 - level_config.get('bilingual_ratio', 0.5)) * 100)}% русский, {int(level_config.get('bilingual_ratio', 0.5) * 100)}% {target_language}
+        - Типичные упражнения: {', '.join(level_config.get('exercise_types', []))}
+        
+        ВКЛЮЧИ:
+        1. Упражнение соответствующее уровню {cefr_level}
+        2. Инструкцию на {'русском' if cefr_level in ['A1', 'A2', 'B1'] else target_language}
+        3. Четкие формулировки
+        
+        Создай качественное упражнение для взрослого ученика.
+        """
+        
+        return default_cefr_template
     
     @staticmethod
     def split_text_by_language(text: str) -> List[Tuple[str, str]]:
@@ -649,6 +1212,99 @@ class LanguageIntegration:
             'score': 0.0,
             'feedback': 'Попробуйте еще раз. Обратите внимание на правильный ответ.'
         }
+    
+    @staticmethod
+    def get_adult_study_modes() -> List[Dict]:
+        """
+        Возвращает доступные режимы обучения для взрослых
+        
+        Returns:
+            Список режимов обучения
+        """
+        return [
+            {
+                'id': 'language',
+                'name': 'Английский язык',
+                'description': 'Структурированное изучение английского по уровням CEFR',
+                'has_lessons': True,
+                'has_progress': True
+            },
+            {
+                'id': 'anything',
+                'name': 'Изучать что угодно',
+                'description': 'Свободный диалог на любые темы без структурированных уроков',
+                'has_lessons': False,
+                'has_progress': False
+            }
+        ]
+    
+    @staticmethod
+    def get_available_cefr_levels() -> List[Dict]:
+        """
+        Возвращает список доступных уровней CEFR
+        
+        Returns:
+            Список уровней с описанием
+        """
+        levels = []
+        for level_id, config in LanguageIntegration.CEFR_LEVELS.items():
+            levels.append({
+                'id': level_id,
+                'name': f"{level_id} ({config['description']})",
+                'description': config['description'],
+                'bilingual_ratio': config['bilingual_ratio'],
+                'foreign_percent': int(config['bilingual_ratio'] * 100),
+                'russian_percent': 100 - int(config['bilingual_ratio'] * 100),
+                'max_questions': config['max_questions'],
+                'vocabulary_per_lesson': config['vocabulary_per_lesson'],
+                'sentence_length': config['sentence_length']
+            })
+        return levels
+    
+    @staticmethod
+    def generate_adult_lesson_path(cefr_level: str, lesson_number: int, topic: str = None) -> str:
+        """
+        Генерирует путь для урока взрослого студента
+        
+        Args:
+            cefr_level: Уровень CEFR
+            lesson_number: Номер урока
+            topic: Тема урока (опционально)
+            
+        Returns:
+            Путь к файлу урока
+        """
+        import re
+        
+        # Базовая структура
+        base_path = f"students/adult_language/{cefr_level}_english"
+        
+        # Формируем имя файла
+        if topic:
+            # Очищаем тему для использования в имени файла
+            topic_slug = re.sub(r'[^\w\s-]', '', topic.lower())
+            topic_slug = re.sub(r'\s+', '_', topic_slug)
+            topic_slug = topic_slug[:30]
+            filename = f"lesson_{lesson_number:02d}_{topic_slug}.txt"
+        else:
+            filename = f"lesson_{lesson_number:02d}_general.txt"
+        
+        return f"{base_path}/{filename}"
+    
+    @staticmethod
+    def should_use_cefr_prompt(education_level: str, study_mode: str = None) -> bool:
+        """
+        Определяет, нужно ли использовать промпты CEFR
+        
+        Args:
+            education_level: Уровень образования (5, 6, ..., 'adult')
+            study_mode: Режим обучения ('language' или 'anything')
+            
+        Returns:
+            True если нужно использовать CEFR промпты
+        """
+        return (education_level == 'adult' and 
+                study_mode == 'language')
 
 # 🔥 УТИЛИТНЫЕ ФУНКЦИИ ДЛЯ БЫСТРОГО ДОСТУПА
 
@@ -674,9 +1330,29 @@ def get_language_settings(subject_name: str, student_age: int = 12) -> Dict:
         'max_questions': level_info['max_questions']
     }
 
+def detect_cefr_level(age: int, self_assessment: str = '', education_level: str = '') -> str:
+    """Определение уровня CEFR (удобная обертка)"""
+    return LanguageIntegration.detect_cefr_level(age, self_assessment, education_level)
+
+def get_cefr_level_config(cefr_level: str) -> Dict:
+    """Получение конфигурации уровня CEFR (удобная обертка)"""
+    return LanguageIntegration.get_cefr_level_config(cefr_level)
+
+def create_bilingual_lesson_prompt_cefr(topic: str, target_language: str = 'english', cefr_level: str = 'A1', **kwargs) -> str:
+    """Создание промпта для урока с учетом CEFR (удобная обертка)"""
+    return LanguageIntegration.create_bilingual_lesson_prompt_cefr(topic, target_language, cefr_level, **kwargs)
+
+def get_adult_study_modes() -> List[Dict]:
+    """Получение режимов обучения для взрослых (удобная обертка)"""
+    return LanguageIntegration.get_adult_study_modes()
+
+def get_available_cefr_levels() -> List[Dict]:
+    """Получение доступных уровней CEFR (удобная обертка)"""
+    return LanguageIntegration.get_available_cefr_levels()
+
 # 🔥 ТЕСТИРОВАНИЕ
 if __name__ == "__main__":
-    print("🧪 Тестирование LanguageIntegration...")
+    print("🧪 Тестирование LanguageIntegration с поддержкой CEFR...")
     
     # Тест 1: Определение языкового предмета
     test_subjects = [
@@ -694,17 +1370,49 @@ if __name__ == "__main__":
         target_lang = LanguageIntegration.get_target_language(subject)
         print(f"  {subject}: {'✅ Языковой' if is_lang else '❌ Не языковой'} ({target_lang})")
     
-    # Тест 2: Анализ уровня ученика
-    print("\n👤 Анализ уровня ученика:")
-    for age in [8, 12, 16, 20]:
-        level_info = LanguageIntegration.analyze_student_level(age)
-        print(f"  Возраст {age}: {level_info['description']}")
+    # Тест 2: Определение уровня CEFR
+    print("\n👤 Определение уровня CEFR:")
+    test_cases = [
+        (10, "beginner", "5"),
+        (15, "intermediate", "8"),
+        (25, "advanced", "adult"),
+        (30, "B2", "adult"),
+        (45, "средний", "adult"),
+        (20, "", "adult")
+    ]
     
-    # Тест 3: Разделение текста по языкам
-    print("\n🔤 Разделение текста по языкам:")
-    test_text = "Hello, привет! My name is Иван. Я учу English."
-    fragments = LanguageIntegration.split_text_by_language(test_text)
-    for fragment, lang in fragments:
-        print(f"  '{fragment[:20]}...' → {lang}")
+    for age, self_assessment, education_level in test_cases:
+        cefr_level = LanguageIntegration.detect_cefr_level(age, self_assessment, education_level)
+        print(f"  Возраст {age}, оценка '{self_assessment}', образование '{education_level}': {cefr_level}")
+    
+    # Тест 3: Получение конфигурации уровня
+    print("\n⚙️ Конфигурация уровней CEFR:")
+    for level in ['A1', 'B1', 'C1']:
+        config = LanguageIntegration.get_cefr_level_config(level)
+        print(f"  {level}: {config.get('description')}, {int(config.get('bilingual_ratio', 0) * 100)}% иностранного")
+    
+    # Тест 4: Генерация промптов CEFR
+    print("\n📝 Генерация промптов CEFR:")
+    for level in ['A1', 'B2', 'C1']:
+        prompt = LanguageIntegration.create_bilingual_lesson_prompt_cefr(
+            topic="Знакомство",
+            target_language="english",
+            cefr_level=level
+        )
+        print(f"  Уровень {level}: промпт длиной {len(prompt)} символов")
+        # Показать начало промпта
+        print(f"    Начало: {prompt[:100]}...")
+    
+    # Тест 5: Режимы обучения для взрослых
+    print("\n🎓 Режимы обучения для взрослых:")
+    modes = LanguageIntegration.get_adult_study_modes()
+    for mode in modes:
+        print(f"  {mode['name']}: {mode['description']}")
+    
+    # Тест 6: Все уровни CEFR
+    print("\n📊 Все уровни CEFR:")
+    levels = LanguageIntegration.get_available_cefr_levels()
+    for level in levels:
+        print(f"  {level['id']}: {level['name']}, {level['russian_percent']}% русский, {level['foreign_percent']}% английский")
     
     print("\n✅ Тестирование завершено!")
