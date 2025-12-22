@@ -1502,7 +1502,7 @@
                 
                 <div class="mode-description">
                     <h4>📚 Режим "Сначала база знаний, потом LLM"</h4>
-                    <p>Традиционный подход, который экономит запросы к LLM:</p>
+                    <p>Традиционный подход, который экономит запросы к LLМ:</p>
                     <ol class="mode-steps">
                         <li>Поиск в локальной базе знаний</li>
                         <li>Проверка сохраненных ответов LLM</li>
@@ -1577,7 +1577,7 @@
         
         <img id="avatar" src="" alt="Аватар">
         
-        <div id="status">Выберите аватар для загрузка</div>
+        <div id="status">Выберите аватар для загрузки</div>
 
         <div id="debug"></div>
 
@@ -1615,6 +1615,7 @@
                         <option value="биология">Биология</option>
                         <option value="литература">Литература</option>
                         <option value="русский язык">Русский язык</option>
+                        <option value="английский язык">Английский язык</option>
                         <option value="общее">Общее</option>
                     </select>
                     <textarea id="knowledge-text" placeholder="Введите текст для добавления в базу знаний. Формат: 
@@ -1649,7 +1650,7 @@
                     <h3>Добавить новый урок</h3>
                     
                     <div class="form-group">
-                        <label for="lesson-class">Класс:</label>
+                        <label for="lesson-class">Класс/Уровень:</label>
                         <select id="lesson-class" class="subject-select">
                             <option value="demo">Демо-уроки</option>
                             <option value="1">1 класс</option>
@@ -1663,6 +1664,13 @@
                             <option value="9">9 класс</option>
                             <option value="10">10 класс</option>
                             <option value="11">11 класс</option>
+                            <!-- Уровни для взрослых -->
+                            <option value="adult_A1">Взрослые — A1</option>
+                            <option value="adult_A2">Взрослые — A2</option>
+                            <option value="adult_B1">Взрослые — B1</option>
+                            <option value="adult_B2">Взрослые — B2</option>
+                            <option value="adult_C1">Взрослые — C1</option>
+                            <option value="adult_C2">Взрослые — C2</option>
                             <option value="generated">Авто-генерированные</option>
                         </select>
                     </div>
@@ -1764,6 +1772,7 @@
                         <option value="биология">Биология</option>
                         <option value="литература">Литература</option>
                         <option value="русский язык">Русский язык</option>
+                        <option value="английский язык">Английский язык</option>
                         <option value="общее">Общее</option>
                     </select>
                     <div class="download-buttons">
@@ -1790,6 +1799,13 @@
                         <option value="9">9 класс</option>
                         <option value="10">10 класс</option>
                         <option value="11">11 класс</option>
+                        <!-- Уровни для взрослых -->
+                        <option value="adult_A1">Взрослые — A1</option>
+                        <option value="adult_A2">Взрослые — A2</option>
+                        <option value="adult_B1">Взрослые — B1</option>
+                        <option value="adult_B2">Взрослые — B2</option>
+                        <option value="adult_C1">Взрослые — C1</option>
+                        <option value="adult_C2">Взрослые — C2</option>
                         <option value="generated">Авто-генерированные</option>
                     </select>
                     <div class="download-buttons">
@@ -1912,6 +1928,13 @@
                                     <option value="9">9 класс</option>
                                     <option value="10">10 класс</option>
                                     <option value="11">11 класс</option>
+                                    <!-- Уровни для взрослых -->
+                                    <option value="adult_A1">Взрослые — A1</option>
+                                    <option value="adult_A2">Взрослые — A2</option>
+                                    <option value="adult_B1">Взрослые — B1</option>
+                                    <option value="adult_B2">Взрослые — B2</option>
+                                    <option value="adult_C1">Взрослые — C1</option>
+                                    <option value="adult_C2">Взрослые — C2</option>
                                     <option value="generated">Авто-генерированные</option>
                                 </select>
                                 <select id="filter-subject" class="subject-select" style="width: 150px;">
@@ -2433,7 +2456,14 @@
             '10': ['алгебра', 'геометрия', 'физика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика', 'химия'],
             '11': ['алгебра', 'геометрия', 'физика', 'география', 'биология', 'русский язык', 'литература', 'английский язык', 'французский язык', 'история', 'обществознание', 'информатика', 'химия'],
             'demo': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее'],
-            'generated': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее']
+            'generated': ['математика', 'физика', 'химия', 'биология', 'история', 'обществознание', 'литература', 'русский язык', 'английский язык', 'французский язык', 'география', 'информатика', 'общее'],
+            // Уровни для взрослых
+            'adult_A1': ['английский язык'],
+            'adult_A2': ['английский язык'],
+            'adult_B1': ['английский язык'],
+            'adult_B2': ['английский язык'],
+            'adult_C1': ['английский язык'],
+            'adult_C2': ['английский язык']
         };
 
         // =============================================================================
@@ -3002,6 +3032,9 @@
                                 <strong>Зарегистрирован:</strong> ${created} | 
                                 <strong>Последний вход:</strong> ${lastLogin}
                                 ${studentData.rooms ? ` | <strong>Комнат:</strong> ${studentData.rooms.length}` : ''}
+                                ${studentData.is_adult ? ` | <strong>Взрослый/Студент</strong>` : ''}
+                                ${studentData.study_mode ? ` | <strong>Режим:</strong> ${studentData.study_mode === 'language' ? 'Английский' : 'Свободный'}` : ''}
+                                ${studentData.language_level ? ` | <strong>Уровень:</strong> ${studentData.language_level}` : ''}
                             </div>
                         </div>
                         <div class="student-actions">
@@ -3059,6 +3092,11 @@
                                 <p><strong>Уровень образования:</strong> ${studentData.education_level || 'Не указан'}</p>
                                 <p><strong>Возраст:</strong> ${studentData.age || 'Не указан'}</p>
                                 <p><strong>ID ученика:</strong> ${studentData.student_id || 'Не указан'}</p>
+                                <p><strong>Тип ученика:</strong> ${studentData.is_adult ? 'Взрослый/Студент' : 'Школьник'}</p>
+                                ${studentData.is_adult ? `
+                                    <p><strong>Режим обучения:</strong> ${studentData.study_mode === 'language' ? 'Английский язык' : 'Изучать что угодно'}</p>
+                                    ${studentData.language_level ? `<p><strong>Уровень английского:</strong> ${studentData.language_level}</p>` : ''}
+                                ` : ''}
                                 <p><strong>Дата регистрации:</strong> ${student.created_at ? new Date(student.created_at).toLocaleDateString('ru-RU') : 'Неизвестно'}</p>
                                 <p><strong>Последний вход:</strong> ${student.last_login ? new Date(student.last_login).toLocaleDateString('ru-RU') : 'Никогда'}</p>
                                 <p><strong>Количество комнат:</strong> ${studentData.rooms ? studentData.rooms.length : 0}</p>
@@ -3492,6 +3530,8 @@
                             filenameBase = 'demo';
                         } else if (selectedClass === 'generated') {
                             filenameBase = 'generated';
+                        } else if (selectedClass.startsWith('adult_')) {
+                            filenameBase = selectedClass.replace('adult_', 'adult_');
                         }
                         
                         let subjectSlug = selectedSubject.toLowerCase().replace(/[^\wа-яё]/g, '_');
@@ -3512,7 +3552,7 @@
         }
 
         function loadSubjectsForClass(classLevel) {
-            if (classLevel === 'demo' || classLevel === 'generated') {
+            if (classLevel === 'demo' || classLevel === 'generated' || classLevel.startsWith('adult_')) {
                 const subjects = subjectsByClass[classLevel] || [];
                 updateSubjectSelect(subjects);
             } else if (classLevel && classLevel.match(/^\d+$/)) {
@@ -3585,6 +3625,9 @@
             
             if (selectedClass === 'demo') {
                 apiEndpoint = '/api/add_demo_lesson';
+            } else if (selectedClass.startsWith('adult_')) {
+                // Для взрослых используем специальный endpoint
+                apiEndpoint = '/api/add_adult_lesson';
             }
             
             fetch(apiEndpoint, {
@@ -3719,6 +3762,8 @@
                     filename = 'demo_lessons.zip';
                 } else if (classLevel === 'generated') {
                     filename = 'generated_lessons.zip';
+                } else if (classLevel.startsWith('adult_')) {
+                    filename = `${classLevel}_lessons.zip`;
                 } else {
                     filename = `lessons_${classLevel}_class.zip`;
                 }
@@ -3804,6 +3849,24 @@
                                             ${subject}: ${files.length} уроков
                                         </div>`;
                                     }
+                                }
+                            }
+                        }
+                        
+                        // Уроки для взрослых
+                        if (data.structure.adult_language) {
+                            html += '<h5>📁 Уроки для взрослых:</h5>';
+                            for (const [level, files] of Object.entries(data.structure.adult_language)) {
+                                if (files && files.length > 0) {
+                                    html += `<h6>${level}:</h6>`;
+                                    html += '<ul>';
+                                    files.slice(0, 5).forEach(file => {
+                                        html += `<li>${file.name}</li>`;
+                                    });
+                                    if (files.length > 5) {
+                                        html += `<li>... и ещё ${files.length - 5} файлов</li>`;
+                                    }
+                                    html += '</ul>';
                                 }
                             }
                         }
@@ -4146,6 +4209,7 @@
             const totalStudents = students.length;
             const withProgress = students.filter(s => s.student_data && s.student_data.student_id).length;
             const totalUsers = document.querySelectorAll('.user-item').length - 1; // Минус заголовок
+            const adultStudents = students.filter(s => s.student_data?.is_adult).length;
             
             const statsHTML = `
                 <div class="stats-grid">
@@ -4162,8 +4226,8 @@
                         <div class="stat-label">С прогрессом</div>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-number">${totalStudents}</span>
-                        <div class="stat-label">Активных</div>
+                        <span class="stat-number">${adultStudents}</span>
+                        <div class="stat-label">Взрослых/Студентов</div>
                     </div>
                 </div>
             `;
