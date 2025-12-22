@@ -1288,13 +1288,13 @@ def create_student_rooms(student_data):
                 'subject': subject,
                 'subject_name': subject,
                 'room_name': room_name,
-                'avatar': 'woman',
+                'avatar': 'Woman',
                 'conference_id': conference_id,
                 'student_data': room_student_data[room_name]
             })
         
         student_data['rooms'] = created_rooms
-        student_data['default_avatar'] = 'woman'
+        student_data['default_avatar'] = 'Woman'
         student_data['conference_id'] = conference_id
         
         student_manager.save_student_data(student_data)
@@ -2480,7 +2480,7 @@ def delete_avatar():
             return jsonify({"success": False, "error": "Не указано имя аватара"})
         
         # Проверяем, что это не системный аватар
-        system_avatars = ['woman', 'man', 'teacher', 'default']
+        system_avatars = ['Woman', 'man', 'teacher', 'default']
         if avatar_name in system_avatars:
             return jsonify({"success": False, "error": "Нельзя удалить системный аватар"})
         
@@ -3658,7 +3658,7 @@ def get_student_rooms(student_id):
             "student_id": student_id,
             "student_name": student_data.get('name'),
             "rooms": rooms,
-            "default_avatar": student_data.get('default_avatar', 'woman'),
+            "default_avatar": student_data.get('default_avatar', 'Woman'),
             "total_rooms": len(rooms)
         })
     except Exception as e:
