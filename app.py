@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """
-ZINDAKI TTS SERVICE - Полная исправленная версия
-torch.hub.load() возвращает кортеж из 5 элементов!
-Структура: (model, symbols, sample_rate, example_text, apply_tts_function)
+ZINDAKI TTS SERVICE - Полная исправленная версия с правильной сигнатурой apply_tts
 """
 
 import os
@@ -131,8 +129,7 @@ def load_all_models():
             # Устанавливаем директорию кэша
             torch.hub.set_dir('/app/cache/torch/hub')
             
-            # ВАЖНО: torch.hub.load() возвращает кортеж из 5 элементов!
-            # Структура: (model, symbols, sample_rate, example_text, apply_tts)
+            # Загружаем модель - возвращает кортеж из 5 элементов
             tts_result = torch.hub.load(
                 repo_or_dir='snakers4/silero-models',
                 model='silero_tts',
@@ -148,27 +145,29 @@ def load_all_models():
             # Распаковываем кортеж
             model = tts_result[0]           # Модель TTS
             symbols = tts_result[1]         # Алфавит/символы
-            sample_rate = tts_result[2]     # Частота дискретизации (обычно 16000)
+            sample_rate = tts_result[2]     # Частота дискретизации
             example_text = tts_result[3]    # Пример текста
             apply_tts_func = tts_result[4]  # Функция apply_tts
             
             print(f"   📊 Sample rate: {sample_rate}")
             print(f"   📝 Пример текста: {example_text[:50]}...")
+            print(f"   🔤 Символы: {symbols[:50]}...")
             
             # Перемещаем модель на CPU
-            model.to('cpu')
+            device = torch.device('cpu')
+            model.to(device)
             
-            # Тестируем генерацию
+            # Тестируем генерацию с ПРАВИЛЬНЫМИ параметрами
             try:
                 test_text = "Привет, это тестовая фраза." if language == 'ru' else "Hello, this is a test phrase."
                 
-                # Используем функцию apply_tts из кортежа
+                # ПРАВИЛЬНЫЙ вызов apply_tts!
                 audio = apply_tts_func(
-                    text=test_text,
-                    speaker=correct_speaker,
+                    texts=[test_text],      # Должен быть список!
+                    model=model,
                     sample_rate=sample_rate,
-                    put_accent=True,
-                    put_yo=True if language == 'ru' else False
+                    symbols=symbols,
+                    device=device
                 )
                 
                 test_passed = True
@@ -176,17 +175,19 @@ def load_all_models():
                 print(f"   ⏱️  Размер аудио: {audio.shape}")
             except Exception as test_error:
                 print(f"   ⚠️ Тест генерации не удался: {test_error}")
+                import traceback
+                traceback.print_exc()
                 test_passed = False
             
             # Сохраняем модель и все компоненты
             tts_models[model_key] = {
                 'model': model,
-                'apply_tts_func': apply_tts_func,  # Сохраняем функцию apply_tts
+                'symbols': symbols,
                 'sample_rate': sample_rate,
                 'example_text': example_text,
-                'symbols': symbols,
+                'apply_tts_func': apply_tts_func,
                 'correct_speaker': correct_speaker,
-                'device': 'cpu',
+                'device': device,
                 'tested': test_passed,
                 'loaded_at': datetime.now().isoformat()
             }
@@ -233,7 +234,7 @@ def get_model(language, user_speaker):
         try:
             torch.hub.set_dir('/app/cache/torch/hub')
             
-            # ВАЖНО: получаем кортеж из 5 элементов
+            # Загружаем модель
             tts_result = torch.hub.load(
                 repo_or_dir='snakers4/silero-models',
                 model='silero_tts',
@@ -250,16 +251,18 @@ def get_model(language, user_speaker):
             example_text = tts_result[3]
             apply_tts_func = tts_result[4]
             
-            model.to('cpu')
+            # Перемещаем на CPU
+            device = torch.device('cpu')
+            model.to(device)
             
             tts_models[model_key] = {
                 'model': model,
-                'apply_tts_func': apply_tts_func,  # Сохраняем функцию apply_tts
+                'symbols': symbols,
                 'sample_rate': sample_rate,
                 'example_text': example_text,
-                'symbols': symbols,
+                'apply_tts_func': apply_tts_func,
                 'correct_speaker': correct_speaker,
-                'device': 'cpu',
+                'device': device,
                 'loaded_at': datetime.now().isoformat()
             }
             
@@ -285,12 +288,16 @@ def generate_audio(text, language, user_speaker, sample_rate, put_accent=True, p
         
         # Получаем модель с правильным именем диктора
         model_info = get_model(language, user_speaker)
-        correct_speaker = model_info['correct_speaker']
-        apply_tts_func = model_info['apply_tts_func']  # Берем функцию apply_tts
+        model = model_info['model']
+        symbols = model_info['symbols']
         target_sample_rate = model_info['sample_rate']
+        apply_tts_func = model_info['apply_tts_func']
+        device = model_info['device']
+        correct_speaker = model_info['correct_speaker']
         
         print(f"   🔊 Использую голос: {correct_speaker}")
         print(f"   🎚️  Частота дискретизации: {target_sample_rate}Hz")
+        print(f"   ⚙️  Устройство: {device}")
         
         start_time = time.time()
         
@@ -298,13 +305,14 @@ def generate_audio(text, language, user_speaker, sample_rate, put_accent=True, p
         if len(text) > 1000:
             print(f"   ⚠️ Текст длинный, может занять время...")
         
-        # Генерация аудио используя функцию apply_tts из кортежа
+        # Генерация аудио с ПРАВИЛЬНЫМИ параметрами
+        # ВАЖНО: texts должен быть списком!
         audio = apply_tts_func(
-            text=text,
-            speaker=correct_speaker,  # Используем ПРАВИЛЬНОЕ имя
+            texts=[text],                # ДОЛЖЕН БЫТЬ СПИСКОМ!
+            model=model,
             sample_rate=target_sample_rate,
-            put_accent=put_accent,
-            put_yo=put_yo if language == 'ru' else False
+            symbols=symbols,
+            device=device
         )
         
         # Сохраняем во временный файл
