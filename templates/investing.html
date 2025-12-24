@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zindaki Academy AI - Голосовой ИИ-репетитор нового поколения</title>
+    <title>Zindaki Academy AI - Партнерам и Инвесторам</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -14,6 +14,8 @@
             --accent: #FF7B9C;    /* Пастельный розовый */
             --text: #2D3748;     /* Основной цвет текста */
             --text-light: #718096; /* Вторичный цвет текста */
+            --success: #48BB78;   /* Зеленый для успеха */
+            --warning: #ED8936;   /* Оранжевый для предупреждений */
         }
         
         * {
@@ -148,6 +150,17 @@
             transform: translateY(-2px);
         }
         
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #38A169);
+            color: white;
+            box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
+        }
+        
         /* Floating Admin Button */
         .admin-float-btn {
             position: fixed;
@@ -267,6 +280,48 @@
             box-shadow: 0 6px 20px rgba(255, 123, 156, 0.4);
         }
         
+        /* Launch Banner */
+        .launch-banner {
+            background: linear-gradient(135deg, var(--warning), #ED8936);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+            margin: 2rem auto;
+            border-radius: 20px;
+            max-width: 1000px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .launch-banner:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="rgba(255,255,255,0.1)" d="M0,0 L100,0 L100,100 L0,100 Z"></path></svg>');
+            background-size: cover;
+        }
+        
+        .launch-content {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .launch-banner h3 {
+            font-size: clamp(1.5rem, 3vw, 2rem);
+            margin-bottom: 1rem;
+            line-height: 1.3;
+        }
+        
+        .launch-banner p {
+            font-size: clamp(1rem, 2vw, 1.2rem);
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            line-height: 1.5;
+        }
+        
         /* Features Section */
         .section {
             padding: 8rem 2rem;
@@ -351,6 +406,46 @@
             font-size: 1.05rem;
             line-height: 1.6;
             flex-grow: 1;
+        }
+        
+        /* Market Section */
+        .market-section {
+            background: linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%);
+        }
+        
+        .market-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto 4rem;
+        }
+        
+        .market-stat {
+            background: white;
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.04);
+            transition: all 0.3s ease;
+        }
+        
+        .market-stat:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
+        }
+        
+        .market-stat .stat-number {
+            font-size: clamp(2.5rem, 4vw, 3rem);
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            line-height: 1;
+        }
+        
+        .market-stat .stat-label {
+            font-size: 1.1rem;
+            color: var(--text-light);
         }
         
         /* Demo Section */
@@ -481,65 +576,90 @@
             margin-bottom: 1rem;
         }
         
-        /* Pricing Section */
-        .pricing-tabs {
+        /* Integration Section */
+        .integration-section {
+            background: #F8FAFC;
+        }
+        
+        .integration-timeline {
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .integration-timeline:before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 100%;
+            background: var(--primary);
+            opacity: 0.3;
+        }
+        
+        .timeline-item {
             display: flex;
-            justify-content: center;
+            align-items: center;
             margin-bottom: 3rem;
             position: relative;
-            flex-wrap: wrap;
-            gap: 1rem;
         }
         
-        .pricing-tabs:after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), transparent);
+        .timeline-item:nth-child(odd) {
+            flex-direction: row-reverse;
         }
         
-        .tab-btn {
-            padding: 1rem 2rem;
-            background: none;
-            border: none;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
+        .timeline-content {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            width: 45%;
             position: relative;
-            color: var(--text-light);
-            transition: all 0.3s ease;
-            border-radius: 8px;
         }
         
-        .tab-btn.active {
-            color: var(--primary);
-            background: rgba(126, 118, 249, 0.1);
-        }
-        
-        .tab-btn.active:after {
+        .timeline-content:before {
             content: '';
             position: absolute;
-            bottom: -1px;
-            left: 20%;
-            width: 60%;
-            height: 3px;
+            top: 50%;
+            width: 20px;
+            height: 20px;
             background: var(--primary);
-            border-radius: 3px 3px 0 0;
-            z-index: 2;
+            border-radius: 50%;
         }
         
-        .pricing-grid {
+        .timeline-item:nth-child(even) .timeline-content:before {
+            right: -60px;
+            transform: translateY(-50%);
+        }
+        
+        .timeline-item:nth-child(odd) .timeline-content:before {
+            left: -60px;
+            transform: translateY(-50%);
+        }
+        
+        .timeline-content h4 {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+        }
+        
+        .timeline-content p {
+            color: var(--text-light);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+        
+        /* Partnership Models */
+        .partnership-models {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 2rem;
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
         }
         
-        .pricing-card {
+        .partnership-card {
             background: white;
             border-radius: 20px;
             padding: 2.5rem 2rem;
@@ -548,19 +668,21 @@
             position: relative;
             overflow: hidden;
             border: 1px solid rgba(0,0,0,0.03);
-            display: flex;
-            flex-direction: column;
-            height: 100%;
+            text-align: center;
         }
         
-        .pricing-card.popular {
+        .partnership-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.08);
+        }
+        
+        .partnership-card.featured {
             border: 2px solid var(--primary);
             transform: scale(1.02);
-            box-shadow: 0 10px 30px rgba(126, 118, 249, 0.1);
         }
         
-        .pricing-card.popular:before {
-            content: 'Популярный';
+        .partnership-card.featured:before {
+            content: 'Рекомендуем';
             position: absolute;
             top: 15px;
             right: -30px;
@@ -572,43 +694,46 @@
             font-weight: 600;
         }
         
-        .pricing-card h3 {
+        .partnership-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            color: white;
+            font-size: 2rem;
+        }
+        
+        .partnership-card h3 {
             font-size: 1.5rem;
             margin-bottom: 1rem;
             color: var(--text);
-            font-weight: 600;
         }
         
-        .price {
-            font-size: clamp(2.5rem, 4vw, 3rem);
+        .investment-amount {
+            font-size: 2rem;
             font-weight: 700;
-            margin-bottom: 1.5rem;
             color: var(--primary);
-            line-height: 1;
+            margin: 1.5rem 0;
         }
         
-        .price span {
-            font-size: 1rem;
-            font-weight: 400;
-            color: var(--text-light);
-        }
-        
-        .pricing-features {
+        .partnership-features {
             list-style: none;
-            margin-bottom: 2rem;
-            flex-grow: 1;
+            margin: 1.5rem 0;
+            text-align: left;
         }
         
-        .pricing-features li {
+        .partnership-features li {
             margin-bottom: 0.7rem;
             position: relative;
             padding-left: 1.5rem;
             color: var(--text-light);
-            font-size: 0.95rem;
-            line-height: 1.4;
         }
         
-        .pricing-features li:before {
+        .partnership-features li:before {
             content: '✓';
             position: absolute;
             left: 0;
@@ -616,24 +741,55 @@
             font-weight: bold;
         }
         
-        /* Pricing Containers */
-        .pricing-container {
-            display: none;
-            animation: fadeIn 0.5s ease;
+        /* Contact Form */
+        .contact-section {
+            background: linear-gradient(135deg, var(--light) 0%, #ffffff 100%);
         }
         
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .contact-form {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.08);
         }
         
-        .pricing-container.active {
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 1rem;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(126, 118, 249, 0.1);
+        }
+        
+        .form-row {
             display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
         }
         
-        /* Web3 Section */
-        .web3-section {
-            background: #F8FAFC;
+        textarea.form-control {
+            min-height: 150px;
+            resize: vertical;
         }
         
         /* CTA Section */
@@ -757,6 +913,27 @@
             .section {
                 padding: 5rem 1.5rem;
             }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .timeline-item:nth-child(odd) {
+                flex-direction: row;
+            }
+            
+            .timeline-content {
+                width: 100%;
+                margin-bottom: 2rem;
+            }
+            
+            .timeline-content:before {
+                display: none;
+            }
+            
+            .integration-timeline:before {
+                display: none;
+            }
         }
         
         @media (max-width: 768px) {
@@ -842,24 +1019,6 @@
                 margin-bottom: 3rem;
             }
             
-            .pricing-tabs {
-                flex-direction: column;
-                align-items: center;
-                gap: 0.5rem;
-            }
-            
-            .tab-btn {
-                margin: 0.3rem 0;
-                width: 100%;
-                max-width: 300px;
-            }
-            
-            .tab-btn.active:after {
-                bottom: -0.5rem;
-                left: 25%;
-                width: 50%;
-            }
-            
             .demo-visual {
                 height: 300px;
                 margin: 2rem 0;
@@ -884,6 +1043,18 @@
             .conference-demo {
                 padding: 2rem 1rem;
             }
+            
+            .contact-form {
+                padding: 2rem 1rem;
+            }
+            
+            .market-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .partnership-models {
+                grid-template-columns: 1fr;
+            }
         }
         
         @media (max-width: 480px) {
@@ -899,13 +1070,11 @@
                 min-width: 120px;
             }
             
-            .features-grid,
-            .pricing-grid {
+            .features-grid {
                 grid-template-columns: 1fr;
             }
             
-            .feature-card,
-            .pricing-card {
+            .feature-card {
                 padding: 2rem 1.5rem;
             }
             
@@ -927,6 +1096,10 @@
             .nav-buttons {
                 flex-direction: column;
                 gap: 0.5rem;
+            }
+            
+            .timeline-item {
+                flex-direction: column !important;
             }
         }
         
@@ -952,16 +1125,18 @@
             </a>
             
             <div class="nav-links" id="navLinks">
-                <a href="/#features">Возможности</a>
-                <a href="/#demo">Демо</a>
-                <a href="/#pricing">Тарифы</a>
-                <a href="/#conference">Попробовать</a>
+                <a href="#opportunity">Возможности</a>
+                <a href="#market">Рынок</a>
+                <a href="#technology">Технологии</a>
+                <a href="#partnership">Партнерство</a>
+                <a href="#contact">Контакты</a>
             </div>
             
             <div class="nav-buttons" id="navButtons">
+                <a href="/" class="btn btn-secondary">На главную</a>
                 <a href="/login" class="btn btn-primary">
                     <i class="fas fa-sign-in-alt"></i>
-                    Войти в систему
+                    Демо-версия
                 </a>
             </div>
             
@@ -973,8 +1148,8 @@
 
     <!-- Floating Admin Button -->
     <a href="/login" class="admin-float-btn">
-        <i class="fas fa-sign-in-alt"></i>
-        <div class="tooltip">Войти в систему</div>
+        <i class="fas fa-play"></i>
+        <div class="tooltip">Запустить демо</div>
     </a>
 
     <!-- Hero Section -->
@@ -982,230 +1157,315 @@
         <div class="particles" id="particles-js"></div>
         <div class="hero-content">
             <h1>Zindaki Academy AI</h1>
-            <p>Интеллектуальный голосовой репетитор нового поколения</p>
+            <p>Инновации в образовании для партнеров и инвесторов</p>
             <div class="cta-buttons">
-                <button id="tryTeacherBtn" class="btn btn-conference">
-                    <i class="fas fa-robot"></i> Запустить AI-учителя
+                <button id="tryDemoBtn" class="btn btn-conference">
+                    <i class="fas fa-robot"></i> Запустить демо
                 </button>
-                <button id="startTestingBtn" class="btn btn-secondary">Начать тестирование →</button>
+                <a href="#opportunity" class="btn btn-secondary">Узнать больше →</a>
             </div>
         </div>
     </section>
 
-    <!-- Why EduSonic Section -->
-    <section class="section" id="features">
-        <h2 class="section-title">Почему Zindaki Academy AI?</h2>
+    <!-- Launch Banner -->
+    <section class="section">
+        <div class="launch-banner">
+            <div class="launch-content">
+                <h3>🚀 Запуск платформы - Февраль 2026</h3>
+                <p>Проект находится в активной стадии разработки. Мы ищем стратегических партнеров и инвесторов для совместного выхода на рынок образовательных технологий.</p>
+                <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                    <a href="#contact" class="btn btn-primary">
+                        <i class="fas fa-handshake"></i> Стать партнером
+                    </a>
+                    <a href="https://zindaki-edu.ru" target="_blank" class="btn btn-success">
+                        <i class="fas fa-external-link-alt"></i> Официальный сайт
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Opportunity Section -->
+    <section class="section" id="opportunity">
+        <h2 class="section-title">Инвестиционные возможности</h2>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon">
                     <i class="fas fa-chart-line"></i>
                 </div>
-                <h3>Для инвесторов</h3>
-                <p>Доступ к рынку EdTech $400+ млрд с уникальной технологией голосового обучения и Web3-интеграцией.</p>
+                <h3>Рынок EdTech</h3>
+                <p>Глобальный рынок образовательных технологий оценивается в $400+ млрд с ежегодным ростом 15-20%. Российский сегмент - один из самых быстрорастущих.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
-                    <i class="fas fa-chalkboard-teacher"></i>
+                    <i class="fas fa-robot"></i>
                 </div>
-                <h3>Для преподавателей</h3>
-                <p>Автоматизация рутинных задач, анализ успеваемости и эмоционального состояния учеников в реальном времени.</p>
+                <h3>Уникальная технология</h3>
+                <p>Первая в России платформа с полноценным голосовым AI-репетитором. Патентованные технологии обработки естественного языка и адаптивного обучения.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">
                     <i class="fas fa-school"></i>
                 </div>
                 <h3>Для учебных заведений</h3>
-                <p>Снижение затрат на обучение до 60% с сохранением персонализированного подхода к каждому студенту.</p>
+                <p>Готовое решение для школ, колледжей и вузов. Снижение затрат на обучение до 60% при повышении качества образования.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Market Section -->
+    <section class="section market-section" id="market">
+        <h2 class="section-title">Рыночные перспективы</h2>
+        
+        <div class="market-stats">
+            <div class="market-stat">
+                <div class="stat-number">$400+ млрд</div>
+                <div class="stat-label">Глобальный рынок EdTech</div>
+            </div>
+            <div class="market-stat">
+                <div class="stat-number">20% CAGR</div>
+                <div class="stat-label">Среднегодовой рост</div>
+            </div>
+            <div class="market-stat">
+                <div class="stat-number">45,000+</div>
+                <div class="stat-label">Школ в России</div>
+            </div>
+            <div class="market-stat">
+                <div class="stat-number">60%</div>
+                <div class="stat-label">Экономия для школ</div>
+            </div>
+        </div>
+        
+        <div class="features-grid">
+            <div class="feature-card">
+                <h3>Рынок B2B</h3>
+                <p>Интеграция с государственными и частными учебными заведениями. Готовые решения для дистанционного и смешанного обучения.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Рынок B2C</h3>
+                <p>Прямые продажи родителям и студентам. Подписка на услуги AI-репетитора с различными тарифными планами.</p>
+            </div>
+            <div class="feature-card">
+                <h3>Государственные заказы</h3>
+                <p>Участие в национальных проектах "Образование" и "Цифровая экономика". Государственные тендеры и гранты.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Section -->
+    <section class="section" id="technology">
+        <h2 class="section-title">Технологические преимущества</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-microphone"></i>
+                </div>
+                <h3>Голосовой AI</h3>
+                <p>Продвинутая система распознавания и синтеза речи на русском языке. Естественное общение с учеником на уровне человека.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <h3>Адаптивное обучение</h3>
+                <p>Система анализирует успеваемость и подстраивает материал под уровень ученика. Персонализированные учебные траектории.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-database"></i>
+                </div>
+                <h3>Локальная LLM</h3>
+                <p>Собственная языковая модель, работающая локально. Полная конфиденциальность данных и независимость от внешних API.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Integration Timeline -->
+    <section class="section integration-section">
+        <h2 class="section-title">План интеграции</h2>
+        <div class="integration-timeline">
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h4>Q1 2025 - Техническая доработка</h4>
+                    <p>Оптимизация AI-моделей, улучшение качества голосового взаимодействия, тестирование на фокус-группах.</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h4>Q2-3 2025 - Пилотные проекты</h4>
+                    <p>Внедрение в 10-15 школах-партнерах, сбор обратной связи, доработка продукта.</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h4>Q4 2025 - Подготовка к запуску</h4>
+                    <p>Масштабирование инфраструктуры, обучение первых тьюторов, подготовка маркетинговых материалов.</p>
+                </div>
+            </div>
+            <div class="timeline-item">
+                <div class="timeline-content">
+                    <h4>Февраль 2026 - Официальный запуск</h4>
+                    <p>Публичный запуск платформы, начало массовых продаж, расширение команды.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Partnership Models -->
+    <section class="section" id="partnership">
+        <h2 class="section-title">Модели партнерства</h2>
+        <div class="partnership-models">
+            <div class="partnership-card">
+                <div class="partnership-icon">
+                    <i class="fas fa-handshake"></i>
+                </div>
+                <h3>Стратегический партнер</h3>
+                <div class="investment-amount">от 5 млн ₽</div>
+                <ul class="partnership-features">
+                    <li>Доля в компании 10-20%</li>
+                    <li>Место в совете директоров</li>
+                    <li>Приоритетный доступ к технологиям</li>
+                    <li>Участие в принятии решений</li>
+                    <li>Дивиденды от прибыли</li>
+                </ul>
+                <a href="#contact" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Обсудить условия</a>
+            </div>
+            
+            <div class="partnership-card featured">
+                <div class="partnership-icon">
+                    <i class="fas fa-school"></i>
+                </div>
+                <h3>Партнер-интегратор</h3>
+                <div class="investment-amount">от 1 млн ₽</div>
+                <ul class="partnership-features">
+                    <li>Эксклюзивная территория</li>
+                    <li>Техническая поддержка</li>
+                    <li>Маркетинговые материалы</li>
+                    <li>Обучение сотрудников</li>
+                    <li>Роялти 20-30% от продаж</li>
+                </ul>
+                <a href="#contact" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Стать интегратором</a>
+            </div>
+            
+            <div class="partnership-card">
+                <div class="partnership-icon">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                <h3>Учебное заведение</h3>
+                <div class="investment-amount">от 500 тыс ₽/год</div>
+                <ul class="partnership-features">
+                    <li>Корпоративная лицензия</li>
+                    <li>Интеграция с LMS</li>
+                    <li>Техническая поддержка 24/7</li>
+                    <li>Обучение преподавателей</li>
+                    <li>Кастомизация под нужды</li>
+                </ul>
+                <a href="#contact" class="btn btn-secondary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Запросить КП</a>
             </div>
         </div>
     </section>
 
     <!-- Demo Section -->
-    <section class="demo-section" id="demo">
-        <h2 class="section-title" style="color: white;">Как это работает?</h2>
+    <section class="demo-section">
         <div class="demo-container">
+            <h2 class="section-title" style="color: white;">Убедитесь в эффективности</h2>
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Опыт обучения, который адаптируется к каждому ученику через естественное голосовое взаимодействие и анализ эмоций.
+                Запустите демо-версию и убедитесь в возможностях платформы. Пообщайтесь с AI-репетитором и оцените технологию будущего уже сегодня.
             </p>
             <div class="demo-visual">
                 <i class="fas fa-robot floating" style="font-size: 5rem; opacity: 0.8;"></i>
             </div>
-            <button id="demoTestingBtn" class="btn btn-primary" style="background: white; color: var(--primary);">Начать тестирование</button>
+            <button id="demoTestingBtn" class="btn btn-primary" style="background: white; color: var(--primary);">Запустить демо-версию</button>
         </div>
     </section>
 
-    <!-- Conference Demo Section -->
-    <section class="section conference-section" id="conference-demo">
-        <h2 class="section-title">Попробуйте AI-учителя прямо сейчас</h2>
-        <div class="demo-container">
-            <p style="max-width: 800px; margin-bottom: 2rem; font-size: 1.2rem; text-align: center;">
-                Интерактивная демо-версия с голосовым AI-учителем. Общайтесь, задавайте вопросы и получайте персонализированные объяснения в реальном времени.
-            </p>
-            
-            <div class="conference-demo">
-                <div class="conference-stats">
-                    <div class="stat-item">
-                        <span class="stat-number">15,000+</span>
-                        <div class="stat-label">Уроков проведено</div>
+    <!-- Contact Section -->
+    <section class="section contact-section" id="contact">
+        <h2 class="section-title">Свяжитесь с нами</h2>
+        
+        <div class="contact-form">
+            <form id="investmentForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Имя *</label>
+                        <input type="text" id="name" class="form-control" required>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-number">95%</span>
-                        <div class="stat-label">Удовлетворенность</div>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-number">24/7</span>
-                        <div class="stat-label">Доступность</div>
+                    <div class="form-group">
+                        <label for="company">Компания / Организация</label>
+                        <input type="text" id="company" class="form-control">
                     </div>
                 </div>
                 
-                <div class="conference-features">
-                    <div class="conference-feature">
-                        <i class="fas fa-microphone"></i>
-                        <h4>Голосовое общение</h4>
-                        <p>Общайтесь с AI-учителем естественным голосом</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" class="form-control" required>
                     </div>
-                    <div class="conference-feature">
-                        <i class="fas fa-brain"></i>
-                        <h4>Искусственный интеллект</h4>
-                        <p>Персонализированные объяснения и ответы</p>
-                    </div>
-                    <div class="conference-feature">
-                        <i class="fas fa-chalkboard"></i>
-                        <h4>Интерактивная доска</h4>
-                        <p>Визуализация и совместная работа</p>
-                    </div>
-                    <div class="conference-feature">
-                        <i class="fas fa-graduation-cap"></i>
-                        <h4>Все предметы</h4>
-                        <p>Математика, физика, история и многое другое</p>
+                    <div class="form-group">
+                        <label for="phone">Телефон *</label>
+                        <input type="tel" id="phone" class="form-control" required>
                     </div>
                 </div>
                 
-                <div style="margin: 2rem 0;">
-                    <button id="start-conference-btn" class="btn btn-conference" style="padding: 1.2rem 2.5rem; font-size: 1.1rem; text-decoration: none;">
-                        <i class="fas fa-play"></i> Запустить AI-учителя
+                <div class="form-group">
+                    <label for="interest">Интересующее направление *</label>
+                    <select id="interest" class="form-control" required>
+                        <option value="">Выберите вариант</option>
+                        <option value="investment">Инвестиции в проект</option>
+                        <option value="partnership">Стратегическое партнерство</option>
+                        <option value="integration">Интеграция для учебного заведения</option>
+                        <option value="distribution">Дистрибьюция</option>
+                        <option value="other">Другое</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="budget">Предполагаемый бюджет (руб.)</label>
+                    <select id="budget" class="form-control">
+                        <option value="">Не указано</option>
+                        <option value="500k">до 500,000 ₽</option>
+                        <option value="1m">500,000 - 1,000,000 ₽</option>
+                        <option value="5m">1,000,000 - 5,000,000 ₽</option>
+                        <option value="10m">5,000,000 - 10,000,000 ₽</option>
+                        <option value="10m+">свыше 10,000,000 ₽</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="message">Сообщение *</label>
+                    <textarea id="message" class="form-control" required placeholder="Расскажите о ваших целях и ожиданиях..."></textarea>
+                </div>
+                
+                <div class="form-group" style="text-align: center;">
+                    <button type="submit" class="btn btn-primary" style="padding: 1rem 3rem;">
+                        <i class="fas fa-paper-plane"></i> Отправить заявку
                     </button>
                 </div>
                 
-                <p style="color: var(--text-light); font-size: 0.9rem; margin-top: 1rem;">
-                    <i class="fas fa-info-circle"></i> Для работы потребуется разрешить доступ к микрофону
+                <p style="text-align: center; color: var(--text-light); font-size: 0.9rem; margin-top: 1rem;">
+                    Мы свяжемся с вами в течение 24 часов для обсуждения деталей сотрудничества.
                 </p>
-            </div>
-        </div>
-    </section>
-
-    <!-- Pricing Section -->
-    <section class="section" id="pricing">
-        <h2 class="section-title">Наши тарифы</h2>
-        <div class="pricing-tabs">
-            <button class="tab-btn active" data-tab="individual">Для частных лиц</button>
-            <button class="tab-btn" data-tab="corporate">Для организаций</button>
+            </form>
         </div>
         
-        <!-- Individual Pricing -->
-        <div id="individual-pricing" class="pricing-grid pricing-container active">
-            <div class="pricing-card">
-                <h3>Демо-версия</h3>
-                <div class="price">Бесплатно</div>
-                <ul class="pricing-features">
-                    <li>Полноценный демо-урок</li>
-                    <li>Доступ ко всем предметам</li>
-                    <li>Голосовое взаимодействие</li>
-                    <li>Интерактивная доска</li>
-                    <li>Базовые функции ИИ</li>
-                </ul>
-                <button class="startDemoBtn btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Запустить демо</button>
-            </div>
-            <div class="pricing-card popular">
-                <h3>Премиум</h3>
-                <div class="price">$19 <span>/месяц</span></div>
-                <ul class="pricing-features">
-                    <li>Все доступные предметы</li>
-                    <li>Неограниченные уроки</li>
-                    <li>NFT-сертификаты</li>
-                    <li>Приоритетная поддержка</li>
-                    <li>Доступ к бета-функциям</li>
-                </ul>
-                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Выбрать тариф</a>
-            </div>
-            <div class="pricing-card">
-                <h3>Семейный</h3>
-                <div class="price">$35 <span>/месяц</span></div>
-                <ul class="pricing-features">
-                    <li>До 5 пользователей</li>
-                    <li>Совместная статистика</li>
-                    <li>NFT-портфолио</li>
-                    <li>Персональный консультант</li>
-                </ul>
-                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Для семьи</a>
-            </div>
-        </div>
-        
-        <!-- Corporate Pricing -->
-        <div id="corporate-pricing" class="pricing-grid pricing-container">
-            <div class="pricing-card">
-                <h3>Классный</h3>
-                <div class="price">$600 <span>/год</span></div>
-                <ul class="pricing-features">
-                    <li>До 30 учеников</li>
-                    <li>Автоматическая проверка</li>
-                    <li>Аналитика успеваемости</li>
-                    <li>Поддержка 5 языков</li>
-                    <li>Отчеты для администрации</li>
-                </ul>
-                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Запросить демо</a>
-            </div>
-            <div class="pricing-card popular">
-                <h3>Школьный</h3>
-                <div class="price">$2500 <span>/год</span></div>
-                <ul class="pricing-features">
-                    <li>До 200 учеников</li>
-                    <li>Интеграция с LMS</li>
-                    <li>Глубокая аналитика</li>
-                    <li>API доступ</li>
-                    <li>White-label интерфейс</li>
-                </ul>
-                <a href="/login" class="btn btn-primary" style="width: 100%; text-decoration: none; display: block; text-align: center;">Запросить КП</a>
-            </div>
-            <div class="pricing-card">
-                <h3>Корпоративный</h3>
-                <div class="price">Индивидуально</div>
-                <ul class="pricing-features">
-                    <li>Неограниченные лицензии</li>
-                    <li>Кастомная интеграция</li>
-                    <li>Собственный брендинг</li>
-                    <li>Персональный менеджер</li>
-                    <li>Обучение преподавателей</li>
-                </ul>
-                <a href="/login" class="btn btn-secondary" style="width: 100%; border-color: var(--primary); color: var(--primary); text-decoration: none; display: block; text-align: center;">Обсудить проект</a>
-            </div>
-        </div>
-    </section>
-
-    <!-- Web3 Section -->
-    <section class="section web3-section">
-        <h2 class="section-title">Learn-to-Earn с Web3</h2>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-coins"></i>
+        <div style="max-width: 800px; margin: 3rem auto 0; text-align: center;">
+            <h3 style="margin-bottom: 1rem; color: var(--text);">Контакты для связи</h3>
+            <div style="display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap;">
+                <div style="text-align: center;">
+                    <i class="fas fa-envelope" style="font-size: 1.5rem; color: var(--primary); margin-bottom: 0.5rem;"></i>
+                    <div style="font-weight: 500;">Email</div>
+                    <a href="mailto:partners@zindaki-edu.ru" style="color: var(--text-light); text-decoration: none;">partners@zindaki-edu.ru</a>
                 </div>
-                <h3>Токены $EDU</h3>
-                <p>Студенты зарабатывают криптотокены за учебные достижения, которые можно обменять на премиум-контент или реальные деньги.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-certificate"></i>
+                <div style="text-align: center;">
+                    <i class="fas fa-globe" style="font-size: 1.5rem; color: var(--primary); margin-bottom: 0.5rem;"></i>
+                    <div style="font-weight: 500;">Сайт</div>
+                    <a href="https://zindaki-edu.ru" target="_blank" style="color: var(--text-light); text-decoration: none;">zindaki-edu.ru</a>
                 </div>
-                <h3>NFT-дипломы</h3>
-                <p>Все учебные достижения сохраняются как уникальные NFT-сертификаты в блокчейне с защитой от подделки.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-vote-yea"></i>
+                <div style="text-align: center;">
+                    <i class="fas fa-map-marker-alt" style="font-size: 1.5rem; color: var(--primary); margin-bottom: 0.5rem;"></i>
+                    <div style="font-weight: 500;">Офис</div>
+                    <div style="color: var(--text-light);">Москва, Россия</div>
                 </div>
-                <h3>DAO для образования</h3>
-                <p>Преподаватели и студенты участвуют в управлении платформой через децентрализованную автономную организацию.</p>
             </div>
         </div>
     </section>
@@ -1213,60 +1473,64 @@
     <!-- CTA Section -->
     <section class="demo-section cta-section">
         <div class="demo-container">
-            <h2 class="section-title" style="color: white;">Готовы к образованию будущего?</h2>
+            <h2 class="section-title" style="color: white;">Готовы инвестировать в будущее образования?</h2>
             <p style="max-width: 700px; margin-bottom: 2rem; font-size: 1.2rem;">
-                Запустите демо-версию и убедитесь в возможностях платформы!
+                Присоединяйтесь к проекту, который меняет подход к обучению. Станьте частью революции в образовательных технологиях.
             </p>
             <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;">
-                <button id="ctaDemoBtn" class="btn btn-primary" style="background: white; color: var(--accent); text-decoration: none;">Запустить демо</button>
-                <a href="#contact" class="btn btn-secondary" style="border-color: white; color: white; text-decoration: none;">Инвестировать в проект</a>
+                <a href="#contact" class="btn btn-primary" style="background: white; color: var(--accent); text-decoration: none;">Обсудить инвестиции</a>
+                <button id="finalDemoBtn" class="btn btn-secondary" style="border-color: white; color: white; text-decoration: none;">Запустить демо</button>
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer id="contact">
+    <footer>
         <div class="footer-content">
             <div class="footer-column">
                 <h3>Zindaki Academy AI</h3>
-                <p>Инновационная платформа для голосового обучения с интеграцией ИИ и блокчейн-технологий.</p>
+                <p>Инновационная платформа для голосового обучения с искусственным интеллектом. Проект в стадии активной разработки.</p>
                 <div class="social-links">
                     <a href="https://t.me/edusonic_ai" target="_blank"><i class="fab fa-telegram"></i></a>
-                    <a href="https://twitter.com/edusonic_ai" target="_blank"><i class="fab fa-twitter"></i></a>
-                    <a href="https://linkedin.com/company/edusonic-ai" target="_blank"><i class="fab fa-linkedin"></i></a>
-                    <a href="https://github.com/edusonic-ai" target="_blank"><i class="fab fa-github"></i></a>
+                    <a href="https://vk.com/edusonic_ai" target="_blank"><i class="fab fa-vk"></i></a>
+                    <a href="https://youtube.com/edusonic_ai" target="_blank"><i class="fab fa-youtube"></i></a>
                 </div>
             </div>
             <div class="footer-column">
-                <h3>Продукт</h3>
+                <h3>Для партнеров</h3>
                 <ul>
-                    <li><a href="#features">Возможности</a></li>
-                    <li><a href="#pricing">Тарифы</a></li>
-                    <li><a href="#conference-demo">Демо</a></li>
-                    <li><a href="https://blog.edusonic.ai" target="_blank">Блог</a></li>
-                </ul>
-            </div>
-            <div class="footer-column">
-                <h3>Компания</h3>
-                <ul>
-                    <li><a href="/about">О нас</a></li>
-                    <li><a href="/jobs">Вакансии</a></li>
-                    <li><a href="/partners">Партнёры</a></li>
-                    <li><a href="/contact">Контакты</a></li>
+                    <li><a href="#opportunity">Возможности</a></li>
+                    <li><a href="#market">Рыночные перспективы</a></li>
+                    <li><a href="#technology">Технологии</a></li>
+                    <li><a href="#partnership">Модели партнерства</a></li>
+                    <li><a href="#contact">Контакты</a></li>
                 </ul>
             </div>
             <div class="footer-column">
                 <h3>Ресурсы</h3>
                 <ul>
-                    <li><a href="/docs">Документация</a></li>
-                    <li><a href="/api">API для разработчиков</a></li>
-                    <li><a href="/faq">Частые вопросы</a></li>
-                    <li><a href="/support">Техподдержка</a></li>
+                    <li><a href="/">Для учеников</a></li>
+                    <li><a href="/login">Демо-версия</a></li>
+                    <li><a href="https://zindaki-edu.ru" target="_blank">Официальный сайт</a></li>
+                    <li><a href="#">Документация</a></li>
+                    <li><a href="#">FAQ</a></li>
+                </ul>
+            </div>
+            <div class="footer-column">
+                <h3>Компания</h3>
+                <ul>
+                    <li><a href="#">О проекте</a></li>
+                    <li><a href="#">Команда</a></li>
+                    <li><a href="#">Новости</a></li>
+                    <li><a href="#">Блог</a></li>
+                    <li><a href="#contact">Связаться</a></li>
                 </ul>
             </div>
         </div>
         <div class="copyright">
-            © 2023 Zindaki Academy AI. Все права защищены. <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
+            © 2024 Zindaki Academy AI. Проект находится в стадии разработки. Запуск запланирован на февраль 2026 года. <br>
+            <a href="/privacy" style="color: rgba(255,255,255,0.7);">Политика конфиденциальности</a> | 
+            <a href="/terms" style="color: rgba(255,255,255,0.7);">Условия использования</a>
         </div>
     </footer>
 
@@ -1286,7 +1550,7 @@
             window.open(url, '_blank');
         }
 
-        // Инициализация частиц с более заметными параметрами
+        // Инициализация частиц
         particlesJS("particles-js", {
             "particles": {
                 "number": {
@@ -1390,30 +1654,39 @@
             "retina_detect": true
         });
 
-        // Управление вкладками тарифов
+        // Обработка формы
         document.addEventListener('DOMContentLoaded', function() {
-            const tabButtons = document.querySelectorAll('.tab-btn');
+            const investmentForm = document.getElementById('investmentForm');
             
-            tabButtons.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    // Удаляем активный класс у всех кнопок
-                    tabButtons.forEach(b => b.classList.remove('active'));
+            if (investmentForm) {
+                investmentForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
                     
-                    // Добавляем активный класс текущей кнопке
-                    this.classList.add('active');
+                    // Собираем данные формы
+                    const formData = {
+                        name: document.getElementById('name').value,
+                        company: document.getElementById('company').value,
+                        email: document.getElementById('email').value,
+                        phone: document.getElementById('phone').value,
+                        interest: document.getElementById('interest').value,
+                        budget: document.getElementById('budget').value,
+                        message: document.getElementById('message').value
+                    };
                     
-                    // Получаем ID контейнера из data-атрибута
-                    const tabId = this.getAttribute('data-tab');
+                    // Здесь должна быть отправка данных на сервер
+                    // Вместо этого показываем сообщение об успехе
+                    alert('Спасибо за вашу заявку! Мы свяжемся с вами в ближайшее время для обсуждения деталей сотрудничества.');
                     
-                    // Скрываем все контейнеры
-                    document.querySelectorAll('.pricing-container').forEach(container => {
-                        container.classList.remove('active');
+                    // Сбрасываем форму
+                    investmentForm.reset();
+                    
+                    // Прокручиваем к началу формы
+                    window.scrollTo({
+                        top: investmentForm.offsetTop - 100,
+                        behavior: 'smooth'
                     });
-                    
-                    // Показываем нужный контейнер
-                    document.getElementById(`${tabId}-pricing`).classList.add('active');
                 });
-            });
+            }
             
             // Мобильное меню
             const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
@@ -1464,7 +1737,7 @@
 
             // Анимация появления элементов при скролле
             const animateOnScroll = function() {
-                const elements = document.querySelectorAll('.feature-card, .pricing-card, .section-title');
+                const elements = document.querySelectorAll('.feature-card, .market-stat, .partnership-card, .section-title, .timeline-content');
                 
                 elements.forEach(element => {
                     const elementPosition = element.getBoundingClientRect().top;
@@ -1479,7 +1752,7 @@
 
             // Инициализация анимации
             window.addEventListener('load', function() {
-                document.querySelectorAll('.feature-card, .pricing-card, .section-title').forEach(el => {
+                document.querySelectorAll('.feature-card, .market-stat, .partnership-card, .section-title, .timeline-content').forEach(el => {
                     el.style.opacity = '0';
                     el.style.transform = 'translateY(20px)';
                     el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
@@ -1492,11 +1765,9 @@
 
             // Обработчики для кнопок демо
             const demoButtons = [
-                document.getElementById('tryTeacherBtn'),
-                document.getElementById('startTestingBtn'),
+                document.getElementById('tryDemoBtn'),
                 document.getElementById('demoTestingBtn'),
-                document.getElementById('start-conference-btn'),
-                document.getElementById('ctaDemoBtn')
+                document.getElementById('finalDemoBtn')
             ];
             
             // Добавляем обработчики для кнопок демо
@@ -1504,11 +1775,6 @@
                 if (btn) {
                     btn.addEventListener('click', openDemoConference);
                 }
-            });
-            
-            // Добавляем обработчики для кнопок "Запустить демо" в карточках тарифов
-            document.querySelectorAll('.startDemoBtn').forEach(btn => {
-                btn.addEventListener('click', openDemoConference);
             });
         });
     </script>
