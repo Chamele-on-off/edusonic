@@ -8,7 +8,6 @@ from flask import Flask, render_template, send_from_directory, jsonify, request,
 import os
 from pathlib import Path
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from gtts import gTTS
 import io
 import base64
 import time
@@ -39,6 +38,8 @@ import zipfile
 from student_management import StudentManagement
 # 🔥 ИМПОРТ НОВОГО МОДУЛЯ ДЛЯ УПРАВЛЕНИЯ УРОКАМИ
 from lesson_manager import LessonManager
+# 🔥 ИМПОРТ МЕНЕДЖЕРА РЕЧИ
+from speech_manager import get_speech_manager
 
 # =============================================================================
 # НАСТРОЙКА FLASK И SOCKETIO
@@ -70,6 +71,9 @@ student_manager.create_lessons_structure()
 
 # 🔥 ИНИЦИАЛИЗАЦИЯ МЕНЕДЖЕРА УРОКОВ
 lesson_manager = LessonManager(BASE_DIR)
+
+# 🔥 ИНИЦИАЛИЗАЦИЯ МЕНЕДЖЕРА РЕЧИ
+speech_manager = get_speech_manager(socketio)
 
 # Получаем пути из менеджеров
 MATERIALS_DIR = lesson_manager.materials_dir
@@ -961,28 +965,6 @@ def ensure_dialogue_manager_for_room(room_id):
         debug_log(f"❌ Ошибка создания DialogueManager для {room_id}: {e}")
         return False
 
-def clean_text_for_speech(text: str) -> str:
-    """Тщательная очистка текста для озвучивания"""
-    if not text:
-        return ""
-    
-    text = re.sub(r'[#\*\_\~`]', '', text)
-    text = re.sub(r'\n+', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\\n', ' ', text)
-    text = re.sub(r'\\t', ' ', text)
-    text = re.sub(r'\\r', ' ', text)
-    text = re.sub(r'[^\u0400-\u04FFa-zA-Z0-9\s\.,!?;:()\-—]', '', text)
-    text = re.sub(r'[\.\,]{2,}', '.', text)
-    text = re.sub(r'\s+([\.,!?;:)])', r'\1', text)
-    text = re.sub(r'([(\-])\s+', r'\1', text)
-    text = text.strip()
-    
-    if text and len(text) > 1:
-        text = text[0].upper() + text[1:]
-    
-    return text
-
 def reset_speaking_state(room_id, is_teacher=False):
     """Сбрасывает состояние речи для указанной комнаты"""
     room_speaking[room_id] = False
@@ -993,132 +975,6 @@ def reset_speaking_state(room_id, is_teacher=False):
 # =============================================================================
 # 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
 # =============================================================================
-
-def is_foreign_text(text):
-    """🔥 СУПЕР-БЫСТРАЯ проверка на иностранный текст"""
-    if not text:
-        return False
-    
-    # Быстрая проверка первых 200 символов
-    sample = text[:200]
-    
-    # 1. Ищем латинские буквы
-    if not re.search(r'[a-zA-Z]', sample):
-        return False  # Нет латинских букв - точно не иностранный
-    
-    # 2. Игнорируем общепринятые английские слова в русском контексте
-    common_english_in_russian = ['ok', 'hello', 'hi', 'yes', 'no', 'bye', 'sorry', 'please', 'thank you', 'okay']
-    words = re.findall(r'\b[a-zA-Z]{2,}\b', sample.lower())
-    
-    if not words:
-        return False
-    
-    # Подсчитываем уникальные НЕ общепринятые слова
-    foreign_words = [w for w in words if w not in common_english_in_russian]
-    unique_foreign_words = set(foreign_words)
-    
-    # Если есть хотя бы 2 уникальных НЕ общепринятых английских слова
-    if len(unique_foreign_words) >= 2:
-        return True
-    
-    # Или если есть длинное иностранное слово (более 4 букв)
-    long_foreign_words = [w for w in foreign_words if len(w) > 4]
-    if len(long_foreign_words) > 0:
-        return True
-    
-    return False
-
-def text_to_speech(text, lang='ru'):
-    """🔥 ОПТИМИЗИРОВАННАЯ ВЕРСИЯ: Быстрое озвучивание с опциональным автоопределением"""
-    try:
-        if not text.strip():
-            return None
-            
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Автоопределение ТОЛЬКО если явно запрошено
-        if lang == 'auto':
-            # Быстрая проверка - есть ли латинские буквы?
-            has_latin = bool(re.search(r'[a-zA-Z]', text))
-            has_cyrillic = bool(re.search(r'[а-яА-ЯеЕ]', text))
-            
-            # Если ЕСТЬ латиница И кириллица - смешанный режим
-            if has_latin and has_cyrillic:
-                return text_to_speech_mixed(text)
-            # Если ТОЛЬКО латиница - английский
-            elif has_latin and not has_cyrillic:
-                lang = 'en'
-            # По умолчанию - русский (для ТОЛЬКО кириллицы или цифр/знаков)
-            else:
-                lang = 'ru'
-        
-        # 🔥 БЫСТРАЯ ГЕНЕРАЦИЯ БЕЗ ДОПОЛНИТЕЛЬНОГО АНАЛИЗА
-        tts = gTTS(text=text, lang=lang, slow=False, lang_check=False)
-        mp3_fp = io.BytesIO()
-        tts.write_to_fp(mp3_fp)
-        mp3_fp.seek(0)
-        return base64.b64encode(mp3_fp.read()).decode('utf-8')
-        
-    except Exception as e:
-        debug_log(f"Error in text_to_speech: {e}")
-        # Fallback - используем русский язык
-        try:
-            tts = gTTS(text=text, lang='ru', slow=False, lang_check=False)
-            mp3_fp = io.BytesIO()
-            tts.write_to_fp(mp3_fp)
-            mp3_fp.seek(0)
-            return base64.b64encode(mp3_fp.read()).decode('utf-8')
-        except Exception as e2:
-            debug_log(f"Fallback error in text_to_speech: {e2}")
-            return None
-
-def text_to_speech_mixed(text):
-    """🔥 ОПТИМИЗИРОВАННАЯ ФУНКЦИЯ: Озвучивание смешанного текста"""
-    try:
-        # 🔥 ОПТИМИЗИРОВАННЫЙ ШАБЛОН: ищем последовательности букв одного языка
-        # Разбиваем по границам языка (кириллица/латиница)
-        pattern = r'([а-яА-ЯеЕ][а-яА-ЯеЕ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
-        fragments = re.findall(pattern, text)
-        
-        if not fragments:
-            return text_to_speech(text, 'ru')  # Fallback
-        
-        audio_chunks = []
-        
-        for fragment in fragments:
-            fragment = fragment.strip()
-            if not fragment:
-                continue
-                
-            # Определяем язык фрагмента - быстрая проверка
-            has_cyrillic = bool(re.search(r'[а-яА-ЯеЕ]', fragment))
-            lang = 'ru' if has_cyrillic else 'en'
-            
-            try:
-                tts = gTTS(text=fragment, lang=lang, slow=False, lang_check=False)
-                chunk_fp = io.BytesIO()
-                tts.write_to_fp(chunk_fp)
-                chunk_fp.seek(0)
-                audio_chunks.append(chunk_fp.read())
-                
-                # 🔥 КОРОТКАЯ ПАУЗА МЕЖДУ ФРАГМЕНТАМИ (50ms silence)
-                silence = bytes([0] * 800)  # 50ms при 16kHz
-                audio_chunks.append(silence)
-                
-            except Exception as e:
-                debug_log(f"Error processing fragment '{fragment[:30]}...': {e}")
-                continue
-        
-        if audio_chunks:
-            # 🔥 УБИРАЕМ ПОСЛЕДНЮЮ ПАУЗУ
-            if audio_chunks[-1] == bytes([0] * 800):
-                audio_chunks.pop()
-                
-            combined_audio = b''.join(audio_chunks)
-            return base64.b64encode(combined_audio).decode('utf-8')
-        
-        return None
-    except Exception as e:
-        debug_log(f"Error in text_to_speech_mixed: {e}")
-        return text_to_speech(text, 'ru')
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
     """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкой технических предметов"""
@@ -1132,20 +988,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     elif room_id in room_dialogue and room_dialogue[room_id]:
         subject = room_dialogue[room_id].current_subject
     
-    # 🔥 УМНАЯ ОЧИСТКА В ЗАВИСИМОСТИ ОТ ПРЕДМЕТА
-    cleaned_text = ""
-    try:
-        if TECHNICAL_SUPPORT_ENABLED and subject:
-            # Используем умную очистку для технических предметов
-            cleaned_text = clean_text_for_speech_technical(text, subject)
-            debug_log(f"🎯 Использована умная очистка для предмета: {subject}")
-        else:
-            # Стандартная очистка
-            cleaned_text = clean_text_for_speech(text)
-            debug_log(f"🎯 Использована стандартная очистка")
-    except Exception as e:
-        debug_log(f"⚠️ Ошибка умной очистки: {e}, используется стандартная")
-        cleaned_text = clean_text_for_speech(text)
+    # 🔥 ИСПОЛЬЗУЕМ МЕНЕДЖЕР РЕЧИ ДЛЯ ОЧИСТКИ
+    cleaned_text = speech_manager.clean_text(text, subject)
     
     if not cleaned_text.strip():
         debug_log("⚠️ Текст пуст после очистки, пропускаем озвучивание")
@@ -1157,32 +1001,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ:
-    # 1. Если force_lang указан - используем его (самый быстрый путь)
-    # 2. Иначе определяем только если есть латинские буквы
-    # 3. По умолчанию - русский (самый частый случай)
-    
-    audio_data = None
-    
-    if force_lang:
-        # 🔥 ЯВНО УКАЗАН ЯЗЫК - САМЫЙ БЫСТРЫЙ ПУТЬ
-        audio_data = text_to_speech(cleaned_text, lang=force_lang)
-    else:
-        # 🔥 БЫСТРАЯ ЭВРИСТИКА: проверяем только на латинские буквы
-        # Это ДЕШЕВО - просто поиск по регулярке
-        has_latin = bool(re.search(r'[a-zA-Z]', cleaned_text))
-        
-        if not has_latin:
-            # 🔥 ТОЛЬКО РУССКИЙ ТЕКСТ - БЫСТРЫЙ ПУТЬ
-            audio_data = text_to_speech(cleaned_text, lang='ru')
-        else:
-            # Есть латинские буквы - нужна более точная проверка
-            if is_foreign_text(cleaned_text):
-                # 🔥 ЕСТЬ ИНОСТРАННЫЙ ТЕКСТ - автоопределение
-                audio_data = text_to_speech(cleaned_text, lang='auto')
-            else:
-                # 🔥 ТОЛЬКО ОБЩЕПРИНЯТЫЕ СЛОВА - РУССКИЙ
-                audio_data = text_to_speech(cleaned_text, lang='ru')
+    # 🔥 ИСПОЛЬЗУЕМ МЕНЕДЖЕР РЕЧИ ДЛЯ ГЕНЕРАЦИИ АУДИО
+    audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang)
     
     if audio_data:
         emit('speech_audio', {
@@ -1192,7 +1012,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             'voice_type': voice_type,
             'is_teacher': is_teacher,
             'subject': subject if subject else 'general',
-            'optimized': True,  # 🔥 Флаг что использовалась оптимизация
+            'optimized': True,
             'technical_support': TECHNICAL_SUPPORT_ENABLED
         }, room=room_id)
         
@@ -4248,7 +4068,7 @@ def test_formula_cleaning():
         if TECHNICAL_SUPPORT_ENABLED:
             cleaned_text = clean_text_for_speech_technical(text, subject)
         else:
-            cleaned_text = clean_text_for_speech(text)
+            cleaned_text = speech_manager.clean_text(text, subject)
         
         contains_formula_check = False
         if TECHNICAL_SUPPORT_ENABLED:
@@ -5137,6 +4957,7 @@ if __name__ == '__main__':
     debug_log(f"🔥 ДОБАВЛЕНА ПОДДЕРЖКА ЯЗЫКОВЫХ УРОВНЕЙ CEFR (A1-C2)")
     debug_log(f"🔥 РЕЖИМЫ ДЛЯ ВЗРОСЛЫХ: 'изучать что угодно' и 'английский язык'")
     debug_log(f"🔥 СТРУКТУРА ПАПОК: lessons/students/adult_language/[A1-C2]_english/")
+    debug_log(f"🔥 ДОБАВЛЕН МЕНЕДЖЕР РЕЧИ (SpeechManager) - все функции TTS вынесены в отдельный модуль")
     
     setup_llm_manager()
     
@@ -5155,6 +4976,7 @@ if __name__ == '__main__':
     debug_log(f"✅ ДОБАВЛЕН новый API /api/student/adult/lessons для взрослых студентов")
     debug_log(f"✅ ДОБАВЛЕН новый API /api/student/create-adult-room для создания комнат взрослых")
     debug_log(f"✅ ВСЕ НОВЫЕ API защищены декораторами @student_required/@teacher_required")
+    debug_log(f"✅ МЕНЕДЖЕР РЕЧИ ИНИЦИАЛИЗИРОВАН И ГОТОВ К РАБОТЕ")
     debug_log(f"✅ СИСТЕМА ГОТОВА К РАБОТЕ! 🚀")
     
     socketio.run(
