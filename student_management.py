@@ -6,13 +6,14 @@
 import json
 import re
 import uuid
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+import time
+import os
 import shutil
 import zipfile
 import tempfile
-import os
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Any
 
 class StudentManagement:
     """Класс для управления учениками, их прогрессом и уроками"""
@@ -320,6 +321,91 @@ class StudentManagement:
             result['lessons'] = self.get_adult_lessons_by_level(language_level)
         
         return result
+    
+    def create_adult_student_room(self, student_data: Dict, study_mode: str = 'anything', language_level: str = None) -> Dict:
+        """Создает комнату для взрослого студента"""
+        try:
+            student_id = student_data.get('student_id')
+            student_name = student_data.get('name', 'adult_student')
+            
+            # Генерируем имя комнаты
+            name_slug = re.sub(r'[^\w]', '_', student_name.lower()).strip('_')
+            timestamp = int(time.time() * 1000)
+            
+            if study_mode == 'language' and language_level:
+                # Для языковых уроков
+                room_name = f"adult_language_{language_level}_{name_slug}_{timestamp}"
+                subject = f"английский язык ({language_level})"
+            else:
+                # Для режима "изучать что угодно"
+                room_name = f"adult_free_{name_slug}_{timestamp}"
+                subject = "свободный диалог"
+            
+            # Обновляем данные ученика
+            student_data['current_room'] = room_name
+            student_data['current_subject'] = subject
+            student_data['study_mode'] = study_mode
+            if language_level:
+                student_data['language_level'] = language_level
+            
+            # Сохраняем
+            self.save_student_data(student_data)
+            
+            return {
+                'success': True,
+                'room_id': room_name,
+                'subject': subject,
+                'study_mode': study_mode,
+                'language_level': language_level
+            }
+            
+        except Exception as e:
+            print(f"❌ Ошибка создания комнаты для взрослого: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def get_adult_student_dashboard(self, student_id: str, student_data: Dict) -> Dict:
+        """Получает дашборд для взрослого студента"""
+        try:
+            study_mode = student_data.get('study_mode', 'anything')
+            language_level = student_data.get('language_level', 'A1')
+            
+            result = {
+                'student_id': student_id,
+                'student_name': student_data.get('name', 'Взрослый студент'),
+                'student_class': 'adult',
+                'is_adult': True,
+                'study_mode': study_mode,
+                'language_level': language_level,
+                'subjects': {}
+            }
+            
+            if study_mode == 'language':
+                # Получаем языковые уроки
+                lessons = self.get_adult_lessons_by_level(language_level)
+                if lessons:
+                    result['subjects'][f'английский язык ({language_level})'] = {
+                        'lessons': lessons,
+                        'total_lessons': len(lessons),
+                        'completed_lessons': 0,  # Можно добавить логику прогресса
+                        'progress_percent': 0,
+                        'subject_type': 'language',
+                        'has_lessons': True
+                    }
+            
+            return result
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения дашборда взрослого: {e}")
+            return {
+                'student_id': student_id,
+                'student_name': student_data.get('name', 'Взрослый студент'),
+                'student_class': 'adult',
+                'is_adult': True,
+                'study_mode': study_mode,
+                'language_level': language_level,
+                'subjects': {},
+                'error': str(e)
+            }
     
     # =============================================================================
     # СУЩЕСТВУЮЩИЕ МЕТОДЫ (НЕ МЕНЯЕМ!)
@@ -1248,3 +1334,82 @@ class StudentManagement:
         except Exception as e:
             print(f"❌ Ошибка получения номера урока: {e}")
             return {"success": False, "error": str(e)}
+
+    # =============================================================================
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С КОМНАТАМИ ВЗРОСЛЫХ
+    # =============================================================================
+
+    def create_adult_free_conference(self, student_data: Dict) -> Dict:
+        """Создает свободную конференцию для взрослого студента (режим 'изучать что угодно')"""
+        try:
+            student_id = student_data.get('student_id')
+            student_name = student_data.get('name', 'adult_student')
+            
+            # Генерируем имя комнаты
+            name_slug = re.sub(r'[^\w]', '_', student_name.lower()).strip('_')
+            timestamp = int(time.time() * 1000)
+            room_name = f"adult_free_{name_slug}_{timestamp}"
+            
+            # Обновляем данные ученика
+            student_data['current_room'] = room_name
+            student_data['current_subject'] = 'свободный диалог'
+            student_data['study_mode'] = 'anything'
+            
+            # Сохраняем
+            self.save_student_data(student_data)
+            
+            return {
+                'success': True,
+                'room_id': room_name,
+                'subject': 'свободный диалог',
+                'study_mode': 'anything'
+            }
+            
+        except Exception as e:
+            print(f"❌ Ошибка создания свободной конференции для взрослого: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def get_adult_student_progress(self, student_id: str) -> Dict:
+        """Получает прогресс взрослого студента"""
+        try:
+            # Загружаем данные студента
+            student_data = self.load_student_data(student_id)
+            if not student_data:
+                return {
+                    'success': False,
+                    'error': 'Данные студента не найдены',
+                    'is_adult': True,
+                    'study_mode': 'anything'
+                }
+            
+            study_mode = student_data.get('study_mode', 'anything')
+            language_level = student_data.get('language_level', 'A1')
+            
+            result = {
+                'success': True,
+                'student_id': student_id,
+                'student_name': student_data.get('name', 'Взрослый студент'),
+                'is_adult': True,
+                'study_mode': study_mode,
+                'language_level': language_level,
+                'has_structured_lessons': study_mode == 'language'
+            }
+            
+            if study_mode == 'language':
+                # Получаем уроки для уровня
+                lessons = self.get_adult_lessons_by_level(language_level)
+                result['lessons'] = lessons
+                result['total_lessons'] = len(lessons)
+                result['completed_lessons'] = 0  # Можно добавить логику прогресса
+                result['progress_percent'] = 0 if len(lessons) == 0 else 0
+            
+            return result
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения прогресса взрослого студента: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'is_adult': True,
+                'study_mode': 'anything'
+            }
