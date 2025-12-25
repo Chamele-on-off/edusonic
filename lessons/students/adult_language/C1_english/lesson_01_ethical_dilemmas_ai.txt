@@ -1,0 +1,26 @@
+# Урок 1: Этические дилеммы искусственного интеллекта (Уровень C1)
+
+## Preamble: The AI Conundrum in Contemporary Discourse
+As artificial intelligence systems become increasingly sophisticated and integrated into the fabric of our daily lives, a complex tapestry of ethical considerations has emerged, demanding rigorous philosophical scrutiny and pragmatic policy responses. This lesson engages with the multifaceted ethical landscape of AI development and deployment, examining tensions between innovation and regulation, autonomy and control, progress and precaution.
+
+## Philosophical Underpinnings: Deontological vs Consequentialist Frameworks
+Any substantive discussion of AI ethics must acknowledge the competing moral frameworks that inform our judgments. Deontological approaches, rooted in Kantian philosophy, emphasize adherence to universal principles and duties regardless of outcomes. In contrast, consequentialist perspectives, particularly utilitarianism, evaluate actions based on their anticipated consequences. These divergent approaches yield markedly different prescriptions for AI governance.
+
+**Key tension:** Should AI development be constrained by absolute prohibitions (deontological) or permitted when net benefits outweigh harms (consequentialist)?
+
+## Section 1: Algorithmic Bias and Distributive Justice
+The phenomenon of algorithmic bias represents perhaps the most empirically documented ethical challenge in contemporary AI systems. When training data reflects historical prejudices or demographic imbalances, machine learning models inevitably perpetuate and sometimes amplify these inequities.
+
+**Case in point:** Facial recognition systems demonstrating significantly higher error rates for women and people of color, with profound implications for surveillance, law enforcement, and access to services.
+
+**Discussion questions:**
+1. To what extent can algorithmic bias be technically mitigated versus requiring fundamental social change?
+2. Who bears moral responsibility for biased algorithms: developers, companies, regulators, or society collectively?
+3. How should we balance the efficiency gains of automated decision-making against the risks of encoded discrimination?
+
+## Section 2: Autonomy, Agency, and the Question of Moral Patiency
+As AI systems exhibit increasingly sophisticated behavioral patterns, thorny questions emerge regarding moral status and responsibility. Can an artificial entity be considered a moral patient (worthy of ethical consideration) or even a moral agent (capable of making ethical decisions)?
+
+**The consciousness conundrum:** Current scientific consensus maintains that no existing AI possesses subjective experience or phenomenal consciousness. However, the philosophical "hard problem of consciousness" remains unresolved, leaving open speculative possibilities about future systems.
+
+**Practical implications:** If a
