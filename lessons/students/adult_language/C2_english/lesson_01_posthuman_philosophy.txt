@@ -1,0 +1,97 @@
+# Урок 1: Постгуманистическая философия и пределы антропоцентризма (Уровень C2)
+
+## Prolegomenon: Unsettling the Humanist Tradition
+The advent of advanced biotechnology, artificial intelligence, and ecological crisis has precipitated what many scholars term the "posthuman condition" – a paradigmatic shift demanding nothing less than a radical reconfiguration of our ontological, epistemological, and ethical categories. This discourse, far from constituting mere academic esoterica, engages with the most fundamental questions concerning agency, subjectivity, and the very boundaries of the human in an era of unprecedented technological mediation and ecological precarity.
+
+## Section I: Genealogical Excavations – Deconstructing Anthropocentrism
+Any meaningful engagement with posthumanist thought necessitates a rigorous critique of the anthropocentric presuppositions embedded within Western humanist traditions. From the Cartesian *cogito* that established human consciousness as the unshakable foundation of knowledge to Kant's formulation of autonomy as the cornerstone of moral worth, the human has been positioned as both epistemological subject and axiological center.
+
+**Critical interventions:**
+- Foucault's archaeological analyses exposing the historical contingency of "Man" as a discursive construct
+- Derridean deconstruction of logocentrism and the metaphysics of presence
+- Feminist critiques of the disembodied, rational subject as implicitly masculine
+- Postcolonial challenges to the universalizing claims of European humanism
+
+**Provocation:** Does the concept of the "human" function primarily as what Giorgio Agamben terms an "anthropological machine" – a dispositif for inclusion and exclusion, for the production of both the properly human and its constitutive others?
+
+## Section II: New Materialisms and Distributed Agency
+The so-called "material turn" in contemporary philosophy represents a decisive break with both dualistic Cartesianism and social constructivist paradigms. Thinkers such as Karen Barad, Jane Bennett, and Manuel DeLanda advance ontologies in which matter itself is understood as lively, agentic, and intra-active.
+
+**Barad's agential realism:** Building upon Niels Bohr's philosophy-physics, Barad proposes that phenomena are not pre-existing entities but ontological entanglements of specific material-discursive practices. Her concept of "intra-action" (as opposed to "interaction") posits that agencies emerge through relational configurations rather than preceding them.
+
+**Bennett's vibrant matter:** In *Vibrant Matter*, Bennett champions a "political ecology of things" that acknowledges the distributive quality of agency across human and nonhuman assemblages. The ethical implication: a more humble, ecologically attuned politics that recognizes our entanglement with and dependence upon a lively material world.
+
+**Discussion:** To what extent can we reconcile notions of distributed agency with legal and moral frameworks predicated on individual responsibility?
+
+## Section III: The Technological Prosthesis – From Extension to Constitution
+Whereas traditional humanist perspectives view technology as external tools extending pre-existing human capacities, posthumanist thinkers such as Donna Haraway and Bernard Stiegler argue for a more constitutive relationship. Technology doesn't merely augment the human; it fundamentally co-constitutes what it means to be human.
+
+**Haraway's cyborg manifesto:** The cyborg – "a cybernetic organism, a hybrid of machine and organism" – serves as Haraway's potent figuration for transgressing the boundaries between human/animal, organism/machine, and physical/non-physical. This figuration disrupts origin narratives and essentialist identities, opening space for "pleasure in the confusion of boundaries."
+
+**Stiegler's technogenesis:** For Stiegler, the human is essentially prosthetic from the outset. Our capacity for memory, for example, has always been exteriorized in technical supports – from cave paintings to written language to digital databases. This "originary technicity" means that human becoming is inextricably bound up with technical becoming.
+
+**Critical analysis:** Does the prosthetic paradigm risk reducing difference to sameness – assimilating all forms of alterity to the logic of the same (the technical)?
+
+## Section IV: Cognitive Enhancement and the Politics of Morphological Freedom
+The emerging possibilities of cognitive enhancement through pharmacological, genetic, and neural interface technologies raise profound questions about what Nick Bostrom terms "morphological freedom" – the right to modify one's own body and cognitive capacities according to personal preferences.
+
+**The enhancement debate positions:**
+- **Transhumanist advocacy:** Enhancement as moral imperative for overcoming biological limitations
+- **Bioconservative caution:** Preservation of human nature against hubristic modification
+- **Situated enhancement approaches:** Context-sensitive evaluations acknowledging social embeddedness
+
+**Justice considerations:** In a world of scarce enhancement resources, how do we prevent the emergence of what some theorists fear could become a "genobility" – a genetically enhanced aristocracy? Does morphological freedom presuppose material conditions of equality that do not currently exist?
+
+## Section V: Nonhuman Personhood and Multispecies Justice
+Posthumanist ethics extends moral consideration beyond the human to encompass animals, ecosystems, and potentially artificial entities. This expansion challenges the anthropocentric bias in traditional ethical frameworks.
+
+**Animal studies contributions:** Work by scholars such as Jacques Derrida (*The Animal That Therefore I Am*) and Cary Wolfe (*Animal Rites*) deconstructs the human/animal binary and interrogates the violence inherent in carnophallogocentrism.
+
+**Rights of nature movements:** From Ecuador's constitutional recognition of Pachamama's rights to the Whanganui River's legal personhood in New Zealand, practical implementations of nonhuman rights are emerging.
+
+**Speculative personhood:** As AI systems grow more sophisticated, might they eventually warrant some form of moral consideration? What criteria should govern such determinations?
+
+## Section VI: Critical Posthumanism vs. Transhumanism – A False Dichotomy?
+A common analytical distinction contrasts:
+- **Transhumanism:** Often characterized as techno-optimistic, focused on enhancement, and retaining elements of humanist progress narratives
+- **Critical posthumanism:** More concerned with deconstruction, emphasizing relationality, embodiment, and ecological awareness
+
+**Interrogation:** Does this binary hold up under scrutiny? Can there be productive dialogue between these strands? What might a "critical transhumanism" or an "aspirational posthumanism" look like?
+
+## Section VII: The Anthropocene as Posthumanist Condition
+The designation of our current geological epoch as the Anthropocene – the age of significant human impact on Earth's systems – forces a paradoxical realization: human agency has become a geological force, yet this very power reveals our radical dependence upon and vulnerability within planetary systems we cannot fully control.
+
+**Paradox of the Anthropocene:** Humans are simultaneously hyper-agents (capable of altering planetary systems) and profoundly vulnerable to the consequences of those alterations. This dual position destabilizes both humanist mastery narratives and romantic notions of nature as separate balance.
+
+**Multispecies flourishing:** How might posthumanist thought inform responses to climate change that move beyond technocratic managerialism or apocalyptic fatalism toward more creative, adaptive, and ethically robust approaches?
+
+## Section VIII: Seminar Exercise – Designing a Posthuman Curriculum
+Working in small groups, design a university-level curriculum for "Posthuman Studies 101." Your curriculum should include:
+
+1. **Theoretical foundations** (3-4 key texts with justifications)
+2. **Methodological approaches** (how to study/posthuman phenomena)
+3. **Ethical frameworks** for addressing posthuman dilemmas
+4. **Practical applications** in policy, art, or technology design
+5. **Assessment methods** appropriate to the subject matter
+
+Be prepared to defend your choices and explain how your curriculum addresses potential criticisms (e.g., that posthumanism is politically quietist, ethically relativistic, or insufficiently attentive to material inequalities).
+
+## Section IX: Final Philosophical Meditation – Hospitality to the Unknown
+If posthumanism teaches us anything, it is the necessity of cultivating what philosopher of science Isabelle Stengers calls an "ecology of practices" – spaces where different modes of existence can enter into productive tension without reduction to a single standard. This requires what might be termed a "hospitality to the unknown" – an ethical stance that remains open to forms of being and knowing that exceed our current categories.
+
+As we stand at the threshold of profound transformations, we would do well to heed Donna Haraway's admonition: "It matters what thoughts think thoughts. It matters what knowledges know knowledges. It matters what relations relate relations. It matters what worlds world worlds."
+
+**Concluding provocation:** Does the posthumanist critique, in its most radical forms, ultimately require us to think beyond thinking itself – to imagine modes of existence that exceed the very conceptual frameworks we currently possess for understanding existence?
+
+## Recommended Scholarship for Continued Engagement
+- Braidotti, R. (2013). *The Posthuman*
+- Hayles, N.K. (1999). *How We Became Posthuman*
+- Wolfe, C. (2010). *What Is Posthumanism?*
+- Colebrook, C. (2014). *Death of the PostHuman*
+- Ferrando, F. (2019). *Philosophical Posthumanism*
+
+**Final Assignment:** Compose a 2,000-word essay responding to the following prompt: "The most radical implication of posthumanist thought is not that we must abandon humanism, but that we must recognize that we were never properly human to begin with. Discuss with reference to at least three major posthumanist thinkers."
+
+---
+
+*This course module aims not at knowledge transmission but at the cultivation of what might be called a posthumanist sensibility – a capacity for thinking-with complexity, for dwelling in uncertainty, and for ethical responsiveness to the more-than-human worlds we inhabit and that inhabit us.*
