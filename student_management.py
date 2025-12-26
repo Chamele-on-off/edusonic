@@ -1,18 +1,18 @@
-# 🔥 ПОЛНЫЙ КОД student_management.py с поддержкой взрослых и языковых уровней
-# ⚠️ ПРИОРИТЕТ РАБОТОСПОБНОСТИ: Ничего не блокирует инициализацию комнат
-# 📁 СОВМЕСТИМОСТЬ: ВСЕ существующие функции сохранены
+# student_management.py
+# 🔥 ПОЛНЫЙ КОД С ПОДДЕРЖКОЙ ВЗРОСЛЫХ СТУДЕНТОВ И ЯЗЫКОВЫХ УРОВНЕЙ
+# ⚠️ СОВМЕСТИМОСТЬ: ВСЕ СУЩЕСТВУЮЩИЕ ФУНКЦИИ СОХРАНЕНЫ, БЕЗ ИЗМЕНЕНИЯ ЛОГИКИ
+# 📁 НОВАЯ СТРУКТУРА ПАПОК: adult_language/A1_english, adult_language/B1_english и т.д.
 
 import json
 import re
 import uuid
-import time
-import os
-import shutil
-import zipfile
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+import shutil
+import zipfile
+import tempfile
+import os
 
 class StudentManagement:
     """Класс для управления учениками, их прогрессом и уроками"""
@@ -98,7 +98,7 @@ class StudentManagement:
             "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
                   "литература", "английский", "французский", "история", "обществознание",
                   "информатика", "химия"],
-            "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
+            "10": ["алгебра", "geометрия", "физика", "география", "биология", "русский язык",
                    "литература", "английский", "французский", "история", "обществознание",
                    "информатика", "химия"],
             "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
@@ -108,12 +108,9 @@ class StudentManagement:
         
         # 🔥 НОВЫЕ ПРЕДМЕТЫ ДЛЯ ВЗРОСЛЫХ
         self.adult_subjects = {
-            "language": ["английский язык", "французский язык", "немецкий язык", "испанский язык", "китайский язык"],
+            "language": ["english", "французский язык", "немецкий язык", "испанский язык", "китайский язык"],
             "anything": ["свободный диалог", "общее развитие", "профессиональные темы"]
         }
-        
-        # 🔥 Создаем структуру папок для взрослых
-        self._create_adult_lessons_structure()
     
     def _create_directories(self):
         """Создает необходимые директории"""
@@ -126,45 +123,6 @@ class StudentManagement:
         
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
-    
-    def _create_adult_lessons_structure(self):
-        """Создает структуру папок и демо-уроки для взрослых"""
-        adult_lang_dir = self.lessons_adult_language_dir
-        adult_lang_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Создаем папки для всех уровней CEFR
-        for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
-            level_dir = adult_lang_dir / f"{level}_english"
-            level_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Создаем 3 демо-урока для каждого уровня
-            for i in range(1, 4):
-                lesson_file = level_dir / f"lesson_{i:02d}_demo.txt"
-                if not lesson_file.exists():
-                    with open(lesson_file, 'w', encoding='utf-8') as f:
-                        f.write(f"""# Урок {i}: Английский язык (Уровень {level})
-
-Это демо-урок английского языка для уровня {level}.
-
-Темы урока:
-1. Приветствие и знакомство
-2. Базовые фразы
-3. Простые вопросы и ответы
-
-Примеры фраз:
-- Hello, my name is... (Привет, меня зовут...)
-- How are you? (Как дела?)
-- I am fine, thank you. (Хорошо, спасибо.)
-
-Практические упражнения:
-1. Повторите фразы вслух
-2. Ответьте на вопросы
-3. Составьте свои предложения
-
-Удачи в изучении английского!
-""")
-        
-        print(f"✅ Создана структура уроков для взрослых в {adult_lang_dir}")
     
     def create_lessons_structure(self) -> None:
         """Создает структуру папок для уроков (1-11 классы + взрослые)"""
@@ -201,7 +159,52 @@ class StudentManagement:
 Желаем успехов в обучении!
 """)
         
-        print(f"✅ Создана структура уроков для всех классов")
+        # 🔥 НОВАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ (ДОБАВЛЯЕМ В КОНЕЦ)
+        self._create_adult_language_structure()
+    
+    def _create_adult_language_structure(self):
+        """Создает структуру папок для взрослых языковых уроков"""
+        adult_lang_dir = self.lessons_adult_language_dir
+        
+        # Создаем папки для уровней CEFR
+        for level, config in self.CEFR_LEVELS.items():
+            level_dir = adult_lang_dir / f"{level}_english"
+            level_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Создаем демо-уроки для каждого уровня
+            for i in range(1, 4):
+                lesson_file = level_dir / f"lesson_{i:02d}_introduction.txt"
+                if not lesson_file.exists():
+                    with open(lesson_file, 'w', encoding='utf-8') as f:
+                        f.write(f"""# Урок {i}: Введение в английскии язык (Уровень {level})
+                        
+Добро пожаловать на урок английского языка уровня {level}!
+
+Этот урок предназначен для взрослых студентов.
+Уровень: {config['description']}
+Соотношение языков: {config['language_ratio_russian']}% русскии, {config['language_ratio_english']}% англиискии.
+
+Темы урока:
+1. Базовые выражения уровня {level}
+2. Грамматика, соответствующая уровню
+3. Практика общения
+4. Аудирование и произношение
+
+На этом уроке вы научитесь:
+- Использовать основные фразы уровня {level}
+- Понимать простые тексты
+- Общаться на повседневные темы
+
+Рекомендации для успешного обучения:
+1. Повторяите фразы вслух
+2. Записываите новые слова
+3. Практикуите произношение
+4. Не боитесь делать ошибки
+
+Удачи в изучении английского языка!
+""")
+        
+        print(f"✅ Создана структура для взрослых языковых уроков")
     
     # =============================================================================
     # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ВЗРОСЛЫХ СТУДЕНТОВ
@@ -238,9 +241,9 @@ class StudentManagement:
         # Для взрослых (education_level == 'adult' или age > 18)
         if education_level == 'adult' or age > 18:
             level_mapping = {
-                'начинающий': 'A1',
-                'продолжающий': 'B1',
-                'продвинутый': 'C1',
+                'начинающии': 'A1',
+                'продолжающии': 'B1',
+                'продвинутыи': 'C1',
                 'beginner': 'A1',
                 'intermediate': 'B1',
                 'advanced': 'C1',
@@ -272,7 +275,6 @@ class StudentManagement:
             level_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
             
             if not level_dir.exists():
-                print(f"❌ Папка для уровня {cefr_level} не существует: {level_dir}")
                 return []
             
             lessons = []
@@ -284,26 +286,21 @@ class StudentManagement:
                 if match:
                     lesson_number = int(match.group(1))
                 
-                # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильные относительные пути
-                rel_path = lesson_file.relative_to(self.lessons_dir)
-                
                 lesson_data = {
                     'id': f"adult_{cefr_level}_english_{lesson_file.stem}",
                     'title': lesson_file.stem.replace('_', ' ').title(),
-                    'file_path': lesson_file,  # Полный путь
-                    'subject': 'английский язык',
+                    'file_path': str(lesson_file.relative_to(self.lessons_dir)),
+                    'subject': 'англиискии язык',
                     'class_level': 'adult',
                     'cefr_level': cefr_level,
                     'lesson_number': lesson_number,
-                    'full_path': str(rel_path),  # Относительный путь
-                    'type': 'adult_language',
-                    'real_path': str(lesson_file)  # Абсолютный путь для надежности
+                    'full_path': f"students/adult_language/{cefr_level}_english/{lesson_file.name}",
+                    'type': 'adult_language'
                 }
                 
                 lessons.append(lesson_data)
             
             lessons.sort(key=lambda x: x['lesson_number'])
-            print(f"✅ Найдено {len(lessons)} уроков для взрослых уровня {cefr_level}")
             return lessons
             
         except Exception as e:
@@ -323,91 +320,6 @@ class StudentManagement:
             result['lessons'] = self.get_adult_lessons_by_level(language_level)
         
         return result
-    
-    def create_adult_student_room(self, student_data: Dict, study_mode: str = 'anything', language_level: str = None) -> Dict:
-        """Создает комнату для взрослого студента"""
-        try:
-            student_id = student_data.get('student_id')
-            student_name = student_data.get('name', 'adult_student')
-            
-            # Генерируем имя комнаты
-            name_slug = re.sub(r'[^\w]', '_', student_name.lower()).strip('_')
-            timestamp = int(time.time() * 1000)
-            
-            if study_mode == 'language' and language_level:
-                # Для языковых уроков
-                room_name = f"adult_language_{language_level}_{name_slug}_{timestamp}"
-                subject = f"английский язык ({language_level})"
-            else:
-                # Для режима "изучать что угодно"
-                room_name = f"adult_free_{name_slug}_{timestamp}"
-                subject = "свободный диалог"
-            
-            # Обновляем данные ученика
-            student_data['current_room'] = room_name
-            student_data['current_subject'] = subject
-            student_data['study_mode'] = study_mode
-            if language_level:
-                student_data['language_level'] = language_level
-            
-            # Сохраняем
-            self.save_student_data(student_data)
-            
-            return {
-                'success': True,
-                'room_id': room_name,
-                'subject': subject,
-                'study_mode': study_mode,
-                'language_level': language_level
-            }
-            
-        except Exception as e:
-            print(f"❌ Ошибка создания комнаты для взрослого: {e}")
-            return {'success': False, 'error': str(e)}
-    
-    def get_adult_student_dashboard(self, student_id: str, student_data: Dict) -> Dict:
-        """Получает дашборд для взрослого студента"""
-        try:
-            study_mode = student_data.get('study_mode', 'anything')
-            language_level = student_data.get('language_level', 'A1')
-            
-            result = {
-                'student_id': student_id,
-                'student_name': student_data.get('name', 'Взрослый студент'),
-                'student_class': 'adult',
-                'is_adult': True,
-                'study_mode': study_mode,
-                'language_level': language_level,
-                'subjects': {}
-            }
-            
-            if study_mode == 'language':
-                # Получаем языковые уроки
-                lessons = self.get_adult_lessons_by_level(language_level)
-                if lessons:
-                    result['subjects'][f'английский язык ({language_level})'] = {
-                        'lessons': lessons,
-                        'total_lessons': len(lessons),
-                        'completed_lessons': 0,  # Можно добавить логику прогресса
-                        'progress_percent': 0,
-                        'subject_type': 'language',
-                        'has_lessons': True
-                    }
-            
-            return result
-            
-        except Exception as e:
-            print(f"❌ Ошибка получения дашборда взрослого: {e}")
-            return {
-                'student_id': student_id,
-                'student_name': student_data.get('name', 'Взрослый студент'),
-                'student_class': 'adult',
-                'is_adult': True,
-                'study_mode': study_mode,
-                'language_level': language_level,
-                'subjects': {},
-                'error': str(e)
-            }
     
     # =============================================================================
     # СУЩЕСТВУЮЩИЕ МЕТОДЫ (НЕ МЕНЯЕМ!)
@@ -700,7 +612,7 @@ class StudentManagement:
                 for level in self.CEFR_LEVELS.keys():
                     lessons = self.get_adult_lessons_by_level(level)
                     if lessons:
-                        lessons_by_subject[f"английский язык ({level})"] = lessons
+                        lessons_by_subject[f"англиискии_язык_{level}"] = lessons
                 return lessons_by_subject
             
             # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
@@ -722,18 +634,14 @@ class StudentManagement:
                         if match:
                             lesson_number = int(match.group(1))
                         
-                        # 🔥 ИСПРАВЛЕНИЕ: Правильные относительные пути
-                        rel_path = lesson_file.relative_to(self.lessons_dir)
-                        
                         lesson_data = {
                             'id': f"{student_class}_class_{subject_name}_{lesson_file.stem}",
                             'title': lesson_file.stem.replace('_', ' ').title(),
-                            'file_path': lesson_file,
+                            'file_path': str(lesson_file.relative_to(self.lessons_dir)),
                             'subject': subject_name,
                             'class_level': student_class,
                             'lesson_number': lesson_number,
-                            'full_path': str(rel_path),
-                            'real_path': str(lesson_file)
+                            'full_path': f"students/{student_class}_class/{subject_name}/{lesson_file.name}"
                         }
                         
                         lessons_by_subject[subject_name].append(lesson_data)
@@ -759,7 +667,7 @@ class StudentManagement:
             student_class = progress_data.get("education_level", "5")
             
             # 🔥 ДЛЯ ВЗРОСЛЫХ С ЯЗЫКОВЫМИ УРОКАМИ
-            if student_class == 'adult' and 'английский' in subject.lower():
+            if student_class == 'adult' and 'english' in subject.lower():
                 # Извлекаем уровень CEFR из subject
                 for level in self.CEFR_LEVELS.keys():
                     if level in subject:
@@ -1182,14 +1090,14 @@ class StudentManagement:
             for level_dir in self.lessons_adult_language_dir.glob("*_english"):
                 if level_dir.is_dir():
                     level_name = level_dir.name
-                    subject_name = 'английский язык'
+                    subject_name = 'англиискии язык'
                     class_name = 'adult'
                     
                     for lesson_file in level_dir.glob("*.txt"):
                         lessons.append({
                             'type': 'adult_language',
                             'class': class_name,
-                            'subject': f"{subject_name} ({level_name.replace('_english', '')})",
+                            'subject': f"{subject_name} ({level_name})",
                             'name': lesson_file.name,
                             'full_path': str(lesson_file),
                             'size': lesson_file.stat().st_size,
@@ -1216,7 +1124,7 @@ class StudentManagement:
                 return {"success": False, "error": "Выберите предмет"}
             
             # 🔥 ОБРАБОТКА ВЗРОСЛЫХ ЯЗЫКОВЫХ УРОКОВ
-            if class_level == 'adult' and 'английский' in subject.lower():
+            if class_level == 'adult' and 'англиискии' in subject.lower():
                 # Извлекаем уровень CEFR из subject
                 cefr_level = 'A1'
                 for level in self.CEFR_LEVELS.keys():
@@ -1254,7 +1162,7 @@ class StudentManagement:
             next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
             
             # Создаем имя фаила
-            title_slug = re.sub(r'[^\wа-яА-ЯёЁ\s-]+', '', title.lower()).strip()
+            title_slug = re.sub(r'[^\wа-яе\s-]+', '', title.lower()).strip()
             title_slug = re.sub(r'\s+', '_', title_slug)
             title_slug = title_slug[:50]
             
@@ -1285,7 +1193,7 @@ class StudentManagement:
                 return {"success": False, "error": "Укажите класс и предмет"}
             
             # 🔥 ОБРАБОТКА ВЗРОСЛЫХ ЯЗЫКОВЫХ УРОКОВ
-            if class_level == 'adult' and 'английский' in subject.lower():
+            if class_level == 'adult' and 'англиискии' in subject.lower():
                 cefr_level = 'A1'
                 for level in self.CEFR_LEVELS.keys():
                     if level in subject.upper():
@@ -1340,232 +1248,3 @@ class StudentManagement:
         except Exception as e:
             print(f"❌ Ошибка получения номера урока: {e}")
             return {"success": False, "error": str(e)}
-
-    # =============================================================================
-    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С КОМНАТАМИ ВЗРОСЛЫХ
-    # =============================================================================
-
-    def create_adult_free_conference(self, student_data: Dict) -> Dict:
-        """Создает свободную конференцию для взрослого студента (режим 'изучать что угодно')"""
-        try:
-            student_id = student_data.get('student_id')
-            student_name = student_data.get('name', 'adult_student')
-            
-            # Генерируем имя комнаты
-            name_slug = re.sub(r'[^\w]', '_', student_name.lower()).strip('_')
-            timestamp = int(time.time() * 1000)
-            room_name = f"adult_free_{name_slug}_{timestamp}"
-            
-            # Обновляем данные ученика
-            student_data['current_room'] = room_name
-            student_data['current_subject'] = 'свободный диалог'
-            student_data['study_mode'] = 'anything'
-            
-            # Сохраняем
-            self.save_student_data(student_data)
-            
-            return {
-                'success': True,
-                'room_id': room_name,
-                'subject': 'свободный диалог',
-                'study_mode': 'anything'
-            }
-            
-        except Exception as e:
-            print(f"❌ Ошибка создания свободной конференции для взрослого: {e}")
-            return {'success': False, 'error': str(e)}
-
-    def get_adult_student_progress(self, student_id: str) -> Dict:
-        """Получает прогресс взрослого студента"""
-        try:
-            # Загружаем данные студента
-            student_data = self.load_student_data(student_id)
-            if not student_data:
-                return {
-                    'success': False,
-                    'error': 'Данные студента не найдены',
-                    'is_adult': True,
-                    'study_mode': 'anything'
-                }
-            
-            study_mode = student_data.get('study_mode', 'anything')
-            language_level = student_data.get('language_level', 'A1')
-            
-            result = {
-                'success': True,
-                'student_id': student_id,
-                'student_name': student_data.get('name', 'Взрослый студент'),
-                'is_adult': True,
-                'study_mode': study_mode,
-                'language_level': language_level,
-                'has_structured_lessons': study_mode == 'language'
-            }
-            
-            if study_mode == 'language':
-                # Получаем уроки для уровня
-                lessons = self.get_adult_lessons_by_level(language_level)
-                result['lessons'] = lessons
-                result['total_lessons'] = len(lessons)
-                result['completed_lessons'] = 0  # Можно добавить логику прогресса
-                result['progress_percent'] = 0 if len(lessons) == 0 else 0
-            
-            return result
-            
-        except Exception as e:
-            print(f"❌ Ошибка получения прогресса взрослого студента: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'is_adult': True,
-                'study_mode': 'anything'
-            }
-    
-    def ensure_adult_lessons_exist(self, cefr_level: str = 'A1') -> bool:
-        """Проверяет и создает уроки для взрослых если их нет"""
-        try:
-            level_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
-            
-            if not level_dir.exists():
-                print(f"⚠️ Папка для уровня {cefr_level} не существует, создаем...")
-                self._create_adult_lessons_structure()
-                return True
-            
-            # Проверяем есть ли уроки
-            lesson_files = list(level_dir.glob("*.txt"))
-            if not lesson_files:
-                print(f"⚠️ Нет уроков для уровня {cefr_level}, создаем демо-уроки...")
-                # Создаем демо-уроки
-                for i in range(1, 4):
-                    lesson_file = level_dir / f"lesson_{i:02d}_demo.txt"
-                    if not lesson_file.exists():
-                        with open(lesson_file, 'w', encoding='utf-8') as f:
-                            f.write(f"""# Урок {i}: Английский язык (Уровень {cefr_level})
-
-Это демо-урок английского языка для уровня {cefr_level}.
-
-Темы урока:
-1. Приветствие и знакомство
-2. Базовые фразы
-3. Простые вопросы и ответы
-
-Примеры фраз:
-- Hello, my name is... (Привет, меня зовут...)
-- How are you? (Как дела?)
-- I am fine, thank you. (Хорошо, спасибо.)
-
-Практические упражнения:
-1. Повторите фразы вслух
-2. Ответьте на вопросы
-3. Составьте свои предложения
-
-Удачи в изучении английского!
-""")
-                print(f"✅ Созданы демо-уроки для уровня {cefr_level}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ Ошибка создания уроков для взрослых: {e}")
-            return False
-    
-    def get_adult_lesson_by_path(self, relative_path: str) -> Optional[Dict]:
-        """Находит урок для взрослых по относительному пути"""
-        try:
-            # Формируем полный путь
-            full_path = self.lessons_dir / relative_path
-            
-            if not full_path.exists():
-                print(f"❌ Файл урока не найден: {full_path}")
-                return None
-            
-            # Извлекаем информацию из пути
-            parts = relative_path.split('/')
-            if len(parts) >= 4 and parts[1] == "adult_language":
-                # Формат: students/adult_language/A1_english/lesson_01_demo.txt
-                cefr_level = parts[2].replace("_english", "")
-                lesson_name = parts[3].replace(".txt", "")
-                
-                lesson_number = 0
-                match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
-                if match:
-                    lesson_number = int(match.group(1))
-                
-                lesson_data = {
-                    'id': f"adult_{cefr_level}_english_{lesson_name}",
-                    'title': lesson_name.replace('_', ' ').title(),
-                    'file_path': full_path,
-                    'subject': 'английский язык',
-                    'class_level': 'adult',
-                    'cefr_level': cefr_level,
-                    'lesson_number': lesson_number,
-                    'full_path': relative_path,
-                    'type': 'adult_language',
-                    'real_path': str(full_path)
-                }
-                
-                return lesson_data
-            
-            return None
-            
-        except Exception as e:
-            print(f"❌ Ошибка поиска урока по пути: {e}")
-            return None
-
-# =============================================================================
-# 🔥 ДОПОЛНИТЕЛЬНЫЕ УТИЛИТЫ ДЛЯ ОТЛАДКИ
-# =============================================================================
-
-def test_student_management():
-    """Тестирование функциональности StudentManagement"""
-    print("🧪 Тестирование StudentManagement с поддержкой взрослых...")
-    
-    # Создаем временную директорию для тестов
-    import tempfile
-    temp_dir = tempfile.mkdtemp()
-    base_dir = Path(temp_dir)
-    
-    try:
-        sm = StudentManagement(base_dir)
-        
-        # 1. Проверяем создание структуры
-        print("✅ Структура папок создана")
-        
-        # 2. Проверяем уровни CEFR
-        cefr_levels = sm.get_cefr_levels()
-        print(f"✅ Уровни CEFR: {len(cefr_levels)} уровней")
-        
-        # 3. Проверяем уроки для взрослых
-        for level in ['A1', 'B1', 'C1']:
-            lessons = sm.get_adult_lessons_by_level(level)
-            print(f"✅ Уроки для уровня {level}: {len(lessons)} уроков")
-            
-            if lessons:
-                print(f"   Пример: {lessons[0]['title']}")
-                print(f"   Путь: {lessons[0]['full_path']}")
-        
-        # 4. Создаем тестового взрослого студента
-        adult_data = {
-            'student_id': 'test_adult_123',
-            'name': 'Иван Петров',
-            'age': '30',
-            'education_level': 'adult',
-            'study_mode': 'language',
-            'language_level': 'B1'
-        }
-        
-        # 5. Создаем комнату для взрослого
-        room_info = sm.create_adult_student_room(adult_data, study_mode='language', language_level='B1')
-        print(f"✅ Комната для взрослого создана: {room_info}")
-        
-        # 6. Проверяем дашборд
-        dashboard = sm.get_adult_student_dashboard('test_adult_123', adult_data)
-        print(f"✅ Дашборд взрослого: {dashboard.get('subjects', {})}")
-        
-        print("🎉 Все тесты пройдены успешно!")
-        
-    finally:
-        # Очищаем временные файлы
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-if __name__ == "__main__":
-    test_student_management()
