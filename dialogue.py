@@ -2944,7 +2944,10 @@ class DialogueManager:
                 }
                 
                 # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
+                if self.cefr_level:
+                    lesson_completed_data['cefr_level'] = self.cefr_level
                 
+                self.socketio.emit('lesson_completed', lesson_completed_data, room=self.room_id)
             
             # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
