@@ -1755,14 +1755,19 @@ class DialogueManager:
         
         text_lower = text.lower().strip()
         
+        # 🔥 ПРИОРИТЕТ: Обработка взрослых в режиме "изучать что угодно"
+        if self.is_adult_student and self.adult_study_mode == 'anything':
+            return self._handle_adult_anything_mode(text)
+        
+        # 🔥 ПРИОРИТЕТ: Обработка взрослых в режиме "язык"
+        if self.is_adult_student and self.adult_study_mode == 'language' and not self.lesson_started:
+            # Проверяем команды начала урока
+            if any(cmd in text_lower for cmd in ['начать урок', 'начнем', 'старт', 'готов', 'приступаем']):
+                return self._start_adult_language_lesson()
+        
         # 🔥 ОПРЕДЕЛЯЕМ ТИП ПРЕДМЕТА ЕСЛИ ЕЩЕ НЕ ОПРЕДЕЛЕН
         if self.current_subject and not self.subject_type:
             self._determine_subject_type()
-        
-        # 🔥 ПРОВЕРКА: ЕСЛИ ЭТО ВЗРОСЛЫЙ В РЕЖИМЕ "ИЗУЧАТЬ ЧТО УГОДНО"
-        if self.is_adult_student and self.adult_study_mode == 'anything':
-            # В этом режиме просто обрабатываем диалог без уроков
-            return self._handle_adult_anything_mode(text)
         
         # ПЕРВОЕ: Проверяем, не нужен ли языковой урок
         if self.current_subject and not self.lesson_started:
@@ -1983,6 +1988,52 @@ class DialogueManager:
             return llm_response
         
         return "Я готов обсудить с вами любую тему. Что вас интересует?"
+
+    def _start_adult_language_lesson(self) -> str:
+        """🔥 НОВЫЙ МЕТОД: Начало языкового урока для взрослых"""
+        debug_log(f"🎓 Начало языкового урока для взрослых (уровень: {self.cefr_level})")
+        
+        if not self.has_student_data or not self.current_subject:
+            return "Нет данных ученика или предмета"
+        
+        # Находим уроки для уровня CEFR
+        student_class = 'adult'
+        subject = 'английский язык'
+        
+        if student_class in self.lessons_by_class and subject in self.lessons_by_class[student_class]:
+            # Фильтруем уроки по уровню CEFR
+            all_lessons = self.lessons_by_class[student_class][subject]
+            if self.cefr_level:
+                filtered_lessons = [lesson for lesson in all_lessons if lesson.get('cefr_level') == self.cefr_level]
+                if filtered_lessons:
+                    lessons = filtered_lessons
+                else:
+                    lessons = all_lessons
+            else:
+                lessons = all_lessons
+            
+            if lessons:
+                # Находим следующий незавершенный урок
+                progress = self.get_student_progress(subject)
+                completed_ids = progress.get('completed_lessons', [])
+                
+                for lesson in sorted(lessons, key=lambda x: x.get('lesson_number', 999)):
+                    if lesson['id'] not in completed_ids:
+                        self.selected_lesson = lesson
+                        break
+                
+                if not self.selected_lesson:
+                    # Все уроки завершены, берем первый
+                    self.selected_lesson = lessons[0]
+                
+                debug_log(f"🎓 Выбран урок для взрослых: {self.selected_lesson['title']}")
+                
+                # Запускаем урок
+                return self._start_student_lesson()
+            else:
+                return f"У меня пока нет уроков английского языка для уровня {self.cefr_level}. Хотите, чтобы я создал урок на определенную тему?"
+        
+        return f"У меня пока нет уроков английского языка для уровня {self.cefr_level}. Скажите 'хочу изучить [тема]', чтобы создать урок."
 
     def _determine_subject_type(self):
         """Определяет тип текущего предмета"""
