@@ -1,7 +1,6 @@
 # dialogue.py
-# ИСПРАВЛЕННАЯ ВЕРСИЯ с полной ленивой инициализацией
-# + ДОБАВЛЕНА ПОДДЕРЖКА СЛАЙДОВ ИЗОБРАЖЕНИЙ ДЛЯ УРОКОВ
-# + ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ И УРОВНЕЙ CEFR
+# ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ с поддержкой взрослых, языковых уровней CEFR и неблокирующей инициализацией
+# 🔥 ПРИОРИТЕТ: РАБОТОСПОСОБНОСТЬ + НЕ БЛОКИРОВАТЬ АКТИВАЦИЮ КОМНАТ
 
 import json
 from pathlib import Path
@@ -116,7 +115,7 @@ class DialogueManager:
         self.socketio = socketio
         
         # 🔥 КРИТИЧЕСКО ВАЖНО: ПОЛНОСТЬЮ ЛЕНИВАЯ ИНИЦИАЛИЗАЦИЯ
-        # НИКАКИХ операций с диском, парсинга файлов, инициализации LLM
+        # НИКАКИХ операций с диском, парсинга файлов, инициализации LLM при создании
         
         # Базовые поля состояния
         self.dialogue_states = {
@@ -464,22 +463,21 @@ class DialogueManager:
             debug_log(f"Ошибка доступа к папке уроков: {e}")
 
     def _load_adult_language_lessons(self, adult_lang_dir: Path):
-        """🔥 НОВЫЙ МЕТОД: Загрузка уроков для взрослых по языкам и уровням"""
+        """🔥 ИСПРАВЛЕННЫЙ: Загрузка уроков для взрослых по языкам и уровням"""
         debug_log(f"🎓 Загрузка уроков для взрослых из: {adult_lang_dir}")
         
         if not adult_lang_dir.exists():
             debug_log(f"⚠️ Папка для взрослых не существует: {adult_lang_dir}")
             return
         
+        # Инициализируем структуру для взрослых
+        if "adult" not in self._lessons_by_class:
+            self._lessons_by_class["adult"] = {}
+    
         # Проходим по всем уровням CEFR
         for level_dir in adult_lang_dir.iterdir():
             if level_dir.is_dir() and "_english" in level_dir.name:
                 level = level_dir.name.replace("_english", "")
-                
-                # Добавляем уровень в список доступных классов
-                if "adult" not in self.lessons_by_class:
-                    self._lessons_by_class["adult"] = {}
-                
                 subject = "английский язык"
                 
                 if subject not in self._lessons_by_class["adult"]:
@@ -488,6 +486,9 @@ class DialogueManager:
                 # Загружаем уроки для этого уровня
                 for lesson_file in level_dir.glob("*.txt"):
                     try:
+                        # ✅ ИСПРАВЛЕНИЕ: Правильный относительный путь
+                        rel_path = lesson_file.relative_to(self.lessons_dir)
+                        
                         lesson_number = self._extract_lesson_number(lesson_file.stem)
                         lesson_title = self._format_lesson_title(lesson_file.stem)
                         
@@ -499,9 +500,10 @@ class DialogueManager:
                             'subject': subject,
                             'class_level': 'adult',
                             'lesson_number': lesson_number,
-                            'full_path': f"students/adult_language/{level_dir.name}/{lesson_file.name}",
+                            'full_path': str(rel_path),  # ✅ Правильный путь
                             'cefr_level': level,
-                            'target_language': 'english'
+                            'target_language': 'english',
+                            'real_path': str(lesson_file)  # ✅ Абсолютный путь для надежности
                         }
                         
                         # Добавляем в общий список
@@ -512,12 +514,12 @@ class DialogueManager:
                         # Добавляем в список для взрослых
                         self._lessons_by_class["adult"][subject].append(lesson_data)
                         
-                        debug_log(f"🎓 Загружен урок для взрослых: {lesson_title} (уровень {level})")
+                        debug_log(f"🎓 Загружен урок для взрослых: {lesson_title} (уровень {level}, путь: {rel_path})")
                         
                     except Exception as e:
-                        debug_log(f"Ошибка загрузки урока для взрослых {lesson_file}: {e}")
+                        debug_log(f"❌ Ошибка загрузки урока для взрослых {lesson_file}: {e}")
         
-        debug_log(f"✅ Уроки для взрослых загружены")
+        debug_log(f"✅ Уроки для взрослых загружены. Доступно: {len(self._lessons_by_class.get('adult', {}).get('английский язык', []))} уроков")
 
     def _load_legacy_lessons(self):
         """Исправленная загрузка старых уроков (рекурсивный поиск)"""
@@ -637,7 +639,7 @@ class DialogueManager:
                     'subject': subject,
                     'class_level': class_level,
                     'lesson_number': lesson_number,
-                    'full_path': f"{class_level}_class/{subject}/{lesson_file.name}"
+                    'full_path': str(lesson_file.relative_to(self.lessons_dir))
                 }
                 
                 # 🔥 ДОПОЛНИТЕЛЬНЫЕ ПОЛЯ ДЛЯ ВЗРОСЛЫХ
@@ -4343,6 +4345,58 @@ class DialogueManager:
         
         return info
 
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ОТЛАДКИ И ПЕРЕЗАГРУЗКИ
+    def reload_adult_lessons(self):
+        """Принудительная перезагрузка уроков для взрослых (для отладки)"""
+        debug_log("🔄 Принудительная перезагрузка уроков для взрослых...")
+        
+        # Сбрасываем кэш
+        self._lessons = {}
+        self._lessons_by_class = {}
+        self._lessons_loaded = False
+        
+        # Перезагружаем
+        self._ensure_lessons_loaded()
+        
+        # Проверяем что загрузилось
+        if "adult" in self.lessons_by_class:
+            for subject, lessons in self.lessons_by_class["adult"].items():
+                debug_log(f"✅ Взрослые уроки: {subject} - {len(lessons)} уроков")
+                for lesson in lessons[:3]:  # Первые 3 для проверки
+                    debug_log(f"   📄 {lesson['title']} (путь: {lesson.get('full_path', 'нет')})")
+
+    def check_adult_lessons_structure(self):
+        """Проверяет структуру уроков для взрослых"""
+        debug_log("🔍 Проверка структуры уроков для взрослых...")
+        
+        adult_lang_dir = self.students_base_dir / "adult_language"
+        if not adult_lang_dir.exists():
+            debug_log(f"❌ Папка adult_language не существует: {adult_lang_dir}")
+            return False
+        
+        debug_log(f"✅ Папка adult_language существует: {adult_lang_dir}")
+        
+        # Проверяем наличие папок уровней
+        levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
+        for level in levels:
+            level_dir = adult_lang_dir / f"{level}_english"
+            if level_dir.exists():
+                lesson_count = len(list(level_dir.glob("*.txt")))
+                debug_log(f"✅ Уровень {level}: {lesson_count} уроков")
+            else:
+                debug_log(f"⚠️ Папка уровня {level} не существует: {level_dir}")
+        
+        # Загружаем уроки через обычный метод
+        self._ensure_lessons_loaded()
+        
+        if "adult" in self.lessons_by_class:
+            for subject, lessons in self.lessons_by_class["adult"].items():
+                debug_log(f"📚 Взрослые уроки в памяти: {subject} - {len(lessons)} уроков")
+                for lesson in lessons[:5]:
+                    debug_log(f"   📄 {lesson['title']} (id: {lesson['id']}, путь: {lesson.get('full_path', 'нет')})")
+        
+        return True
+
 # Тестирование
 if __name__ == "__main__":
     # Тестирование базовой функциональности
@@ -4352,6 +4406,9 @@ if __name__ == "__main__":
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
+    
+    # Проверяем структуру уроков для взрослых
+    dm.check_adult_lessons_structure()
     
     # Тест метода поиска слайдов
     test_lesson_path = Path("lessons/demo/demo_physics.txt")
