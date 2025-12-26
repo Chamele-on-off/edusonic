@@ -2,7 +2,7 @@
 # ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
 # ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG) И РЕЗЕРВНОГО КОПИРОВАНИЯ
 # ВЕРСИЯ С ПОДДЕРЖКОЙ ДОБАВЛЕНИЯ НОВЫХ АВАТАРОВ ЧЕРЕЗ TEACHER.HTML
-# 🔥 ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ СТУДЕНТОВ И ЯЗЫКОВЫХ УРОВНЕЙ (A1-C2) - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# 🔥 ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ СТУДЕНТОВ И ЯЗЫКОВЫХ УРОВНЕЙ (A1-C2)
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -486,7 +486,7 @@ def complete_profile():
             
             # 🔥 Создаем демо-уроки для взрослых если нужно
             if is_adult and study_mode == 'language':
-                student_manager._create_adult_lessons_structure()
+                student_manager.create_adult_language_lessons(language_level)
             
             return jsonify({
                 "success": True,
@@ -608,7 +608,7 @@ def get_adult_student_lessons():
         student_data = user_data.get('student_data', {})
         
         # Проверяем, что это взрослый
-        if not student_data.get('is_adult', False):
+        if student_data.get('education_level') != 'adult':
             return jsonify({"success": False, "error": "Не взрослый студент"})
         
         study_mode = student_data.get('study_mode', 'language')
@@ -658,181 +658,81 @@ def get_adult_student_lessons():
         debug_log(f"❌ Ошибка получения уроков для взрослых: {e}")
         return jsonify({"success": False, "error": str(e)})
 
-# 🔥 НОВЫЙ МЕТОД ДЛЯ СОЗДАНИЯ КОМНАТЫ ВЗРОСЛОГО
-def create_adult_student_room(student_data: dict, study_mode: str = 'anything', language_level: str = None) -> dict:
-    """Создает комнату для взрослого студента"""
-    try:
-        student_id = student_data.get('student_id')
-        student_name = student_data.get('name', 'adult_student')
-        
-        # Генерируем имя комнаты
-        name_slug = re.sub(r'[^\w]', '_', student_name.lower()).strip('_')
-        timestamp = int(time.time() * 1000)
-        random_num = random.randint(1000, 9999)
-        
-        if study_mode == 'language' and language_level:
-            # Для языковых уроков
-            room_name = f"adult_language_{language_level}_{name_slug}_{timestamp}_{random_num}"
-            subject = f"английский язык ({language_level})"
-        else:
-            # Для режима "изучать что угодно"
-            room_name = f"adult_free_{name_slug}_{timestamp}_{random_num}"
-            subject = "свободный диалог"
-        
-        # Обновляем данные ученика
-        student_data['current_room'] = room_name
-        student_data['current_subject'] = subject
-        student_data['study_mode'] = study_mode
-        if language_level:
-            student_data['language_level'] = language_level
-        
-        # Сохраняем в глобальную переменную
-        room_student_data[room_name] = {
-            **student_data,
-            'subject': subject,
-            'is_adult': True,
-            'study_mode': study_mode,
-            'language_level': language_level
-        }
-        
-        # Быстрая инициализация комнаты
-        _fast_room_initialization(room_name)
-        
-        return {
-            'success': True,
-            'room_id': room_name,
-            'subject': subject,
-            'study_mode': study_mode,
-            'language_level': language_level,
-            'conference_url': f'/conference?room={room_name}&student=true&adult=true&study_mode={study_mode}&language_level={language_level or ""}'
-        }
-        
-    except Exception as e:
-        debug_log(f"❌ Ошибка создания комнаты для взрослого: {e}")
-        return {'success': False, 'error': str(e)}
-
-# 🔥 НОВЫЙ API ДЛЯ СОЗДАНИЯ КОМНАТЫ ВЗРОСЛОГО
 @app.route('/api/student/create-adult-room', methods=['POST'])
 @student_required
-def create_adult_room_api():
-    """API для создания комнаты для взрослого студента"""
+def create_adult_room():
+    """Создает комнату для взрослого студента"""
     try:
-        user_data = student_manager.load_user_data(session['user_id'])
-        if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
-        
         data = request.json
-        study_mode = data.get('study_mode', 'anything')
-        language_level = data.get('language_level')
+        subject = data.get('subject', 'english')
+        lesson_id = data.get('lesson_id', '')
         
-        # Проверяем, что это взрослый
-        student_data = user_data['student_data']
-        if not student_data.get('is_adult', False):
-            return jsonify({"success": False, "error": "Не взрослый студент"})
-        
-        # Если режим "язык" но не указан уровень - используем сохраненный
-        if study_mode == 'language' and not language_level:
-            language_level = student_data.get('language_level', 'A1')
-        
-        # Создаем комнату
-        result = create_adult_student_room(student_data, study_mode, language_level)
-        
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify({"success": False, "error": result.get('error', 'Ошибка создания комнаты')})
-            
-    except Exception as e:
-        debug_log(f"❌ Ошибка создания комнаты для взрослого: {e}")
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/student/adult-dashboard')
-@student_required
-def get_adult_dashboard():
-    """Получает дашборд для взрослого студента"""
-    try:
         user_data = student_manager.load_user_data(session['user_id'])
-        if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
+        if not user_data:
+            return jsonify({"success": False, "error": "Пользователь не найден"})
         
-        student_data = user_data['student_data']
-        student_id = student_data.get('student_id')
+        student_data = user_data.get('student_data', {})
         
         # Проверяем, что это взрослый
-        if not student_data.get('is_adult', False):
+        if student_data.get('education_level') != 'adult':
             return jsonify({"success": False, "error": "Не взрослый студент"})
         
-        study_mode = student_data.get('study_mode', 'anything')
+        study_mode = student_data.get('study_mode', 'language')
         language_level = student_data.get('language_level', 'A1')
         
-        # Получаем прогресс
-        progress_data = {}
-        if student_id:
-            progress_file = STUDENT_PROGRESS_DIR / f"{student_id}.json"
-            if progress_file.exists():
-                with open(progress_file, 'r', encoding='utf-8') as f:
-                    progress_data = json.load(f)
+        # Генерируем уникальный ID комнаты
+        conference_id = str(int(time.time() * 1000))
+        student_name = student_data.get('name', 'adult_student').replace(' ', '_').lower()
         
-        result = {
-            'student_id': student_id,
-            'student_name': student_data.get('name', 'Взрослый студент'),
-            'student_class': 'adult',
-            'is_adult': True,
+        if study_mode == 'anything':
+            # Режим "изучать что угодно" - свободная комната
+            room_id = f"adult_anything_{student_name}_{conference_id}"
+            room_subject = 'general'
+        else:
+            # Режим английского - комната с уровнем
+            room_id = f"adult_{language_level}_english_{student_name}_{conference_id}"
+            room_subject = f"{language_level}_english"
+        
+        # Сохраняем данные студента в комнату
+        room_student_data[room_id] = {
+            **student_data,
+            'subject': room_subject,
+            'conference_id': conference_id,
             'study_mode': study_mode,
             'language_level': language_level,
-            'subjects': {}
+            'is_adult': True,
+            'room_type': 'free_conversation' if study_mode == 'anything' else 'structured_lesson'
         }
         
-        if study_mode == 'language':
-            # Получаем языковые уроки
+        # Быстрая инициализация комнаты (без блокировок)
+        _fast_room_initialization(room_id)
+        
+        # Если есть lesson_id, загружаем урок
+        if lesson_id and study_mode == 'language':
+            # Находим файл урока
+            lesson_path = None
             level_dir = LESSONS_STUDENTS_DIR / "adult_language" / f"{language_level}_english"
-            lessons = []
             if level_dir.exists():
                 for lesson_file in level_dir.glob("*.txt"):
-                    with open(lesson_file, 'r', encoding='utf-8') as f:
-                        first_line = f.readline().strip('# ').strip()
-                        title = first_line if first_line else lesson_file.stem.replace('_', ' ').title()
-                    
-                    lessons.append({
-                        'id': f"adult_{language_level}_{lesson_file.stem}",
-                        'title': title,
-                        'level': language_level,
-                        'file_path': str(lesson_file.relative_to(LESSONS_DIR)),
-                        'type': 'adult_language'
-                    })
+                    if f"adult_{language_level}_{lesson_file.stem}" == lesson_id:
+                        lesson_path = lesson_file
+                        break
             
-            # Получаем прогресс для языковых уроков
-            completed_lessons = progress_data.get("subjects", {}).get(f"английский язык ({language_level})", {}).get("completed_lessons", [])
-            completed_count = len(completed_lessons)
-            total_lessons = len(lessons)
-            
-            result['subjects'][f'английский язык ({language_level})'] = {
-                'lessons': lessons,
-                'total_lessons': total_lessons,
-                'completed_lessons': completed_count,
-                'progress_percent': int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0,
-                'subject_type': 'language',
-                'has_lessons': len(lessons) > 0
-            }
-        
-        # Рассчитываем общий прогресс
-        total_completed = sum(subj['completed_lessons'] for subj in result['subjects'].values())
-        total_lessons = sum(subj['total_lessons'] for subj in result['subjects'].values())
-        
-        result['overall'] = {
-            'total_lessons': total_lessons,
-            'completed_lessons': total_completed,
-            'progress_percent': int((total_completed / total_lessons) * 100) if total_lessons > 0 else 0,
-            'subjects_count': len(result['subjects'])
-        }
+            if lesson_path:
+                room_student_data[room_id]['lesson_id'] = lesson_id
+                room_student_data[room_id]['lesson_path'] = str(lesson_path.relative_to(LESSONS_DIR))
         
         return jsonify({
             "success": True,
-            "dashboard": result
+            "room_id": room_id,
+            "conference_url": f"/conference?room={room_id}&student=true&subject={room_subject}",
+            "student_data": room_student_data[room_id],
+            "study_mode": study_mode,
+            "language_level": language_level
         })
         
     except Exception as e:
-        debug_log(f"❌ Ошибка получения дашборда взрослого: {e}")
+        debug_log(f"❌ Ошибка создания комнаты для взрослого: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
@@ -1159,7 +1059,7 @@ def create_student_conference(student_data, subject=None):
         
         return {
             'room_id': room_id,
-            'conference_url': f'/conference?room={room_id}&student=true&subject={room_subject}',
+            'conference_url': f'/conference?room={room_id}',
             'student_data': room_student_data[room_id]
         }
     except Exception as e:
@@ -2012,9 +1912,6 @@ def conference():
     subject = request.args.get('subject', '')
     subject_name = request.args.get('subject_name', '')
     lesson_id = request.args.get('lesson_id', '')
-    adult = request.args.get('adult', 'false') == 'true'
-    study_mode = request.args.get('study_mode', '')
-    language_level = request.args.get('language_level', '')
     
     return render_template('conference.html', 
                          room_id=room_id, 
@@ -2022,10 +1919,7 @@ def conference():
                          student_mode=student_mode,
                          subject=subject,
                          subject_name=subject_name,
-                         lesson_id=lesson_id,
-                         adult=adult,
-                         study_mode=study_mode,
-                         language_level=language_level)
+                         lesson_id=lesson_id)
 
 def add_visualization_to_queue(room_id, topic, context):
     if room_id not in room_visualization_queue:
@@ -3909,16 +3803,9 @@ def get_student_progress_dashboard():
         if not user_data or not user_data.get('student_data'):
             return jsonify({"success": False, "error": "Данные ученика не найдены"})
         
-        # 🔥 ПРОВЕРЯЕМ, ЯВЛЯЕТСЯ ЛИ СТУДЕНТ ВЗРОСЛЫМ
-        student_data = user_data['student_data']
-        if student_data.get('is_adult', False):
-            # Используем API для взрослых
-            response = get_adult_dashboard()
-            return response
-        
-        student_id = student_data.get('student_id')
-        student_class = student_data.get('education_level', '5')
-        student_name = student_data.get('name', '')
+        student_id = user_data['student_data'].get('student_id')
+        student_class = user_data['student_data'].get('education_level', '5')
+        student_name = user_data['student_data'].get('name', '')
         
         if not student_id:
             return jsonify({"success": False, "error": "Student ID not found"})
@@ -5052,97 +4939,6 @@ def generate_technical_exercise():
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
-# 🔥 НОВЫЕ API ДЛЯ ПОЛУЧЕНИЯ УРОКОВ ВЗРОСЛЫХ СТУДЕНТОВ
-# =============================================================================
-
-@app.route('/api/adult/lessons/available', methods=['GET'])
-@student_required
-def get_available_adult_lessons():
-    """Получает доступные уроки для взрослого студента"""
-    try:
-        user_data = student_manager.load_user_data(session['user_id'])
-        if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
-        
-        student_data = user_data['student_data']
-        study_mode = student_data.get('study_mode', 'anything')
-        language_level = student_data.get('language_level', 'A1')
-        
-        if study_mode == 'anything':
-            return jsonify({
-                "success": True,
-                "study_mode": "anything",
-                "lessons": [],
-                "message": "Режим 'изучать что угодно' - уроки не требуются"
-            })
-        
-        # Получаем уроки для языкового уровня
-        level_dir = LESSONS_STUDENTS_DIR / "adult_language" / f"{language_level}_english"
-        lessons = []
-        
-        if level_dir.exists():
-            for lesson_file in level_dir.glob("*.txt"):
-                with open(lesson_file, 'r', encoding='utf-8') as f:
-                    first_line = f.readline().strip('# ').strip()
-                    title = first_line if first_line else lesson_file.stem.replace('_', ' ').title()
-                
-                lessons.append({
-                    'id': f"adult_{language_level}_{lesson_file.stem}",
-                    'title': title,
-                    'level': language_level,
-                    'file_path': str(lesson_file.relative_to(LESSONS_DIR)),
-                    'type': 'adult_language'
-                })
-        
-        # Сортируем по номеру урока
-        lessons.sort(key=lambda x: x['title'])
-        
-        return jsonify({
-            "success": True,
-            "study_mode": "language",
-            "language_level": language_level,
-            "lessons": lessons,
-            "total_lessons": len(lessons)
-        })
-        
-    except Exception as e:
-        debug_log(f"❌ Ошибка получения уроков для взрослых: {e}")
-        return jsonify({"success": False, "error": str(e)})
-
-# =============================================================================
-# 🔥 API ДЛЯ СОЗДАНИЯ СВОБОДНОЙ КОМНАТЫ ВЗРОСЛОГО
-# =============================================================================
-
-@app.route('/api/adult/free-room', methods=['POST'])
-@student_required
-def create_adult_free_room():
-    """Создает комнату для взрослого в режиме 'изучать что угодно'"""
-    try:
-        user_data = student_manager.load_user_data(session['user_id'])
-        if not user_data or not user_data.get('student_data'):
-            return jsonify({"success": False, "error": "Данные ученика не найдены"})
-        
-        student_data = user_data['student_data']
-        
-        # Создаем комнату в режиме 'изучать что угодно'
-        result = create_adult_student_room(student_data, 'anything')
-        
-        if result['success']:
-            return jsonify({
-                "success": True,
-                "room_id": result['room_id'],
-                "conference_url": result['conference_url'],
-                "message": "Комната для свободного диалога создана",
-                "study_mode": "anything"
-            })
-        else:
-            return jsonify({"success": False, "error": result.get('error', 'Ошибка создания комнаты')})
-            
-    except Exception as e:
-        debug_log(f"❌ Ошибка создания свободной комнаты взрослого: {e}")
-        return jsonify({"success": False, "error": str(e)})
-
-# =============================================================================
 # ЗАПУСК СЕРВЕРА
 # =============================================================================
 
@@ -5157,14 +4953,11 @@ if __name__ == '__main__':
     debug_log(f"🔥 УСТРАНЕНА БЛОКИРОВКА: DialogueManager создается только при активации AI-учителя")
     debug_log(f"🔥 Поддержка управления аватарами: {'ВКЛЮЧЕНА' if AVATAR_MANAGER_ENABLED else 'ВЫКЛЮЧЕНА'}")
     debug_log(f"🔥 Добавлен модуль lesson_manager для управления уроками")
-    debug_log(f"🔥 ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ СТУДЕНТОВ - ИСПРАВЛЕННАЯ ВЕРСИЯ")
+    debug_log(f"🔥 ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ СТУДЕНТОВ")
     debug_log(f"🔥 ДОБАВЛЕНА ПОДДЕРЖКА ЯЗЫКОВЫХ УРОВНЕЙ CEFR (A1-C2)")
     debug_log(f"🔥 РЕЖИМЫ ДЛЯ ВЗРОСЛЫХ: 'изучать что угодно' и 'английский язык'")
     debug_log(f"🔥 СТРУКТУРА ПАПОК: lessons/students/adult_language/[A1-C2]_english/")
     debug_log(f"🔥 ДОБАВЛЕН МЕНЕДЖЕР РЕЧИ (SpeechManager) - все функции TTS вынесены в отдельный модуль")
-    debug_log(f"🔥 ИСПРАВЛЕНА ОШИБКА: 'StudentManagement' object has no attribute 'create_adult_language_lessons'")
-    debug_log(f"🔥 ДОБАВЛЕНЫ НОВЫЕ API: /api/adult/lessons/available, /api/adult/free-room")
-    debug_log(f"🔥 ИСПРАВЛЕНА ЛОГИКА ЛИЧНОГО КАБИНЕТА ВЗРОСЛЫХ")
     
     setup_llm_manager()
     
@@ -5182,9 +4975,6 @@ if __name__ == '__main__':
     debug_log(f"✅ ДОБАВЛЕН новый API /api/adult/levels для получения уровней CEFR")
     debug_log(f"✅ ДОБАВЛЕН новый API /api/student/adult/lessons для взрослых студентов")
     debug_log(f"✅ ДОБАВЛЕН новый API /api/student/create-adult-room для создания комнат взрослых")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/adult/lessons/available для получения уроков взрослых")
-    debug_log(f"✅ ДОБАВЛЕН новый API /api/adult/free-room для создания свободной комнаты")
-    debug_log(f"✅ ИСПРАВЛЕН ЭНДПОИНТ /api/student/progress/dashboard для поддержки взрослых")
     debug_log(f"✅ ВСЕ НОВЫЕ API защищены декораторами @student_required/@teacher_required")
     debug_log(f"✅ МЕНЕДЖЕР РЕЧИ ИНИЦИАЛИЗИРОВАН И ГОТОВ К РАБОТЕ")
     debug_log(f"✅ СИСТЕМА ГОТОВА К РАБОТЕ! 🚀")
