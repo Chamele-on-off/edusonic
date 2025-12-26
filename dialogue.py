@@ -1750,6 +1750,146 @@ class DialogueManager:
         student_name = self.student_data.get('name', 'ученик')
         return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
 
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ОБЕСПЕЧЕНИЯ РАБОТОСПОСОБНОСТИ ВЗРОСЛЫХ УРОКОВ
+    def check_and_fix_adult_lessons(self) -> bool:
+        """Проверяет и создает уроки для взрослых если их нет - БЕЗОПАСНО!"""
+        debug_log("🔍 Быстрая проверка уроков для взрослых...")
+        
+        try:
+            # 1. Быстрая проверка существования папки (не блокирует)
+            adult_lang_dir = self.lessons_dir / "students" / "adult_language"
+            
+            if not adult_lang_dir.exists():
+                debug_log("⚠️ Папка adult_language не найдена")
+                # 🔥 Запускаем создание в фоне - НЕ БЛОКИРУЕМ!
+                threading.Thread(
+                    target=self._create_adult_structure_async,
+                    daemon=True
+                ).start()
+                return False  # Пока уроков нет
+            
+            # 2. Быстрая проверка есть ли хоть какие-то уроки
+            has_any_lessons = False
+            for level_dir in adult_lang_dir.iterdir():
+                if level_dir.is_dir() and "_english" in level_dir.name:
+                    if any(level_dir.glob("*.txt")):
+                        has_any_lessons = True
+                        break
+            
+            if not has_any_lessons:
+                debug_log("⚠️ Есть папки но нет уроков, создаем демо...")
+                threading.Thread(
+                    target=self._create_demo_adult_lessons_async,
+                    daemon=True
+                ).start()
+            
+            return has_any_lessons
+            
+        except Exception as e:
+            debug_log(f"❌ Ошибка проверки уроков для взрослых: {e}")
+            return False
+
+    def _create_adult_structure_async(self):
+        """Асинхронное создание структуры - В ФОНЕ!"""
+        try:
+            debug_log("🔄 Асинхронное создание структуры adult_language...")
+            
+            from student_management import StudentManagement
+            
+            # Создаем структуру
+            sm = StudentManagement(Path("."))
+            sm._create_adult_lessons_structure()
+            
+            debug_log("✅ Структура adult_language создана (асинхронно)")
+            
+            # 🔥 Через 1 секунду обновляем кэш
+            time.sleep(1)
+            self._refresh_lessons_cache_async()
+            
+        except Exception as e:
+            debug_log(f"❌ Ошибка создания структуры: {e}")
+
+    def _create_demo_adult_lessons_async(self):
+        """Создание демо-уроков в фоне"""
+        try:
+            debug_log("🔄 Создание демо-уроков для взрослых...")
+            
+            adult_lang_dir = self.lessons_dir / "students" / "adult_language"
+            
+            # Создаем демо-уроки для всех уровней
+            for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
+                level_dir = adult_lang_dir / f"{level}_english"
+                level_dir.mkdir(parents=True, exist_ok=True)
+                
+                for i in range(1, 4):
+                    lesson_file = level_dir / f"lesson_{i:02d}_demo.txt"
+                    if not lesson_file.exists():
+                        with open(lesson_file, 'w', encoding='utf-8') as f:
+                            f.write(f"""# Урок {i}: Английский язык (Уровень {level})
+
+Это демо-урок английского языка для уровня {level}.
+
+Темы урока:
+1. Приветствие и знакомство
+2. Базовые фразы  
+3. Простые вопросы и ответы
+
+Примеры фраз:
+- Hello, my name is... (Привет, меня зовут...)
+- How are you? (Как дела?)
+- I am fine, thank you. (Хорошо, спасибо.)
+
+Практические упражнения:
+1. Повторите фразы вслух
+2. Ответьте на вопросы
+3. Составьте свои предложения
+
+Удачи в изучении английского!
+""")
+            
+            debug_log("✅ Демо-уроки созданы (асинхронно)")
+            
+            # Обновляем кэш
+            time.sleep(1)
+            self._refresh_lessons_cache_async()
+            
+        except Exception as e:
+            debug_log(f"❌ Ошибка создания демо-уроков: {e}")
+
+    def _refresh_lessons_cache_async(self):
+        """Асинхронное обновление кэша уроков"""
+        def refresh():
+            try:
+                debug_log("🔄 Асинхронное обновление кэша уроков...")
+                
+                # 🔥 Безопасный сброс кэша
+                with self._lessons_lock:
+                    self._lessons = None
+                    self._lessons_by_class = None
+                    self._lessons_loaded = False
+                
+                debug_log("✅ Кэш уроков готов к обновлению")
+            except Exception as e:
+                debug_log(f"❌ Ошибка обновления кэша: {e}")
+        
+        # Запускаем в фоне
+        threading.Thread(target=refresh, daemon=True).start()
+
+    def ensure_adult_lessons_exist(self) -> bool:
+        """Гарантирует что уроки для взрослых существуют или создаются - БЕЗОПАСНО"""
+        if not self.is_adult_student or self.adult_study_mode != 'language':
+            return True
+        
+        # 🔥 Быстрая проверка без блокировок
+        has_lessons = self.check_and_fix_adult_lessons()
+        
+        if not has_lessons:
+            # Если уроков нет сразу, возвращаем специальный урок
+            debug_log("🎓 Уроков для взрослых пока нет, используем демо-контент")
+            return False
+        
+        return True
+
     def process_input(self, text: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ УРОКИ ТОЛЬКО ПРИ НЕОБХОДИМОСТИ
@@ -3399,7 +3539,7 @@ class DialogueManager:
         return self._get_available_lessons(subject)
 
     def get_lessons_for_student_subject(self, subject: str) -> List[dict]:
-        """ИСПРАВЛЕННЫЙ МЕТОД: Возвращает уроки по предмету для текущего ученика"""
+        """🔥 БЕЗОПАСНЫЙ поиск уроков с гарантией результата"""
         if not self.has_student_data:
             return []
         
@@ -3407,71 +3547,155 @@ class DialogueManager:
         
         debug_log(f"🔥 Поиск уроков: класс {student_class}, предмет '{subject}'")
         
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЛЕНИВАЯ ЗАГРУЗКА УРОКОВ
-        if self._lessons is None:
-            self._ensure_lessons_loaded()
+        # 🔥 ДЛЯ ВЗРОСЛЫХ С ЯЗЫКОМ: быстрая проверка
+        if (self.is_adult_student and 
+            self.adult_study_mode == 'language' and 
+            subject == 'английский язык'):
+            
+            # Проверяем без блокировок
+            lessons_exist = self.ensure_adult_lessons_exist()
+            
+            if not lessons_exist:
+                # 🔥 ВОЗВРАЩАЕМ ДЕМО-УРОК ДАЖЕ ЕСЛИ ФАЙЛОВ ЕЩЕ НЕТ
+                debug_log("🎓 Возвращаем демо-урок для взрослых")
+                return [{
+                    'id': f"adult_demo_{self.cefr_level}",
+                    'title': f"Демо-урок английского языка (уровень {self.cefr_level})",
+                    'subject': subject,
+                    'class_level': 'adult',
+                    'lesson_number': 1,
+                    'file_path': None,
+                    'full_path': f"adult_language/{self.cefr_level}_english/demo.txt",
+                    'cefr_level': self.cefr_level,
+                    'is_demo': True,  # 🔥 Флаг демо-урока
+                    'demo_content': f"""Добро пожаловать на урок английского языка уровня {self.cefr_level}!
+
+Это временный демо-урок. Полные уроки загружаются в фоновом режиме.
+
+Темы урока:
+1. Базовые приветствия
+2. Знакомство
+3. Простые диалоги
+
+Система создает полные уроки для вас. Пожалуйста, подождите немного."""
+                }]
         
-        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
-        if self.is_adult_student:
-            if self.adult_study_mode == 'anything':
-                return []  # Нет уроков в этом режиме
-            elif self.adult_study_mode == 'language' and subject == 'английский язык':
-                # Для взрослых английский язык - фильтруем по уровню CEFR
-                if student_class in self.lessons_by_class and subject in self.lessons_by_class[student_class]:
-                    all_lessons = self.lessons_by_class[student_class][subject]
-                    # Если есть CEFR уровень - фильтруем по нему
-                    if self.cefr_level:
-                        filtered_lessons = [lesson for lesson in all_lessons if lesson.get('cefr_level') == self.cefr_level]
-                        if filtered_lessons:
-                            debug_log(f"🎓 Найдено уроков для взрослых уровня {self.cefr_level}: {len(filtered_lessons)}")
-                            return sorted(filtered_lessons, key=lambda x: x.get('lesson_number', 999))
-                        else:
-                            # Если нет уроков для этого уровня, возвращаем все
-                            debug_log(f"🎓 Нет уроков для уровня {self.cefr_level}, возвращаем все")
-                            return sorted(all_lessons, key=lambda x: x.get('lesson_number', 999))
-                    else:
-                        # Нет CEFR уровня - возвращаем все уроки английского для взрослых
-                        return sorted(all_lessons, key=lambda x: x.get('lesson_number', 999))
+        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЛЕНИВАЯ ЗАГРУЗКА НАРУШЕНА НЕ БУДЕТ!
+        # Мы НЕ вызываем _ensure_lessons_loaded() здесь если lessons не None
         
-        # Способ 1: Через lessons_by_class
-        if student_class in self.lessons_by_class:
-            # Пробуем разные варианты названия предмета
-            subject_variants = [subject]
-            
-            # Если предмет содержит "язык", пробуем без него
-            if 'язык' in subject:
-                subject_variants.append(subject.replace('язык', '').strip())
-            
-            # Пробуем английское название
-            if subject in self.subject_mapping_reverse:
-                subject_variants.append(self.subject_mapping_reverse[subject])
-            
-            debug_log(f"🔥 Пробуем варианты: {subject_variants}")
-            
-            for subject_variant in subject_variants:
-                if subject_variant in self.lessons_by_class[student_class]:
-                    lessons = self.lessons_by_class[student_class][subject_variant]
-                    debug_log(f"🔥 Найдено через lessons_by_class: {len(lessons)} уроков")
-                    return sorted(lessons, key=lambda x: x.get('lesson_number', 999))
+        # 1. Сначала ищем в уже загруженных уроках (если они есть)
+        if self._lessons is not None and subject in self._lessons:
+            lessons = self._lessons[subject]
+            debug_log(f"🔥 Найдено в кэше: {len(lessons)} уроков")
+            return sorted(lessons, key=lambda x: x.get('lesson_number', 999))
         
-        # Способ 2: Прямой поиск в файловой системе
-        debug_log(f"🔥 Прямой поиск в файловой системе...")
-        direct_lessons = self._find_lessons_directly(student_class, subject)
+        # 2. Если уроки еще не загружены, загружаем ТОЛЬКО ДЛЯ ЭТОГО ПРЕДМЕТА
+        debug_log(f"🔥 Кэш пуст, загружаем уроки для предмета {subject}")
         
-        if direct_lessons:
-            debug_log(f"🔥 Найдено прямым поиском: {len(direct_lessons)} уроков")
+        try:
+            # 🔥 БЕЗОПАСНАЯ загрузка: не грузим все уроки, только нужные
+            lessons = self._load_lessons_for_subject_only(subject, student_class)
             
-            # Добавляем найденные уроки в кэш
-            if student_class not in self.lessons_by_class:
-                self.lessons_by_class[student_class] = {}
+            if not lessons and self.is_adult_student:
+                # Даже если ничего не нашли, возвращаем демо
+                return [{
+                    'id': f"fallback_adult_{subject}",
+                    'title': f"Урок по {subject}",
+                    'subject': subject,
+                    'class_level': student_class,
+                    'lesson_number': 1,
+                    'is_fallback': True
+                }]
             
-            if subject not in self.lessons_by_class[student_class]:
-                self.lessons_by_class[student_class][subject] = direct_lessons
+            return sorted(lessons, key=lambda x: x.get('lesson_number', 999))
             
-            return sorted(direct_lessons, key=lambda x: x.get('lesson_number', 999))
+        except Exception as e:
+            debug_log(f"❌ Ошибка поиска уроков: {e}")
+            return []
+
+    def _load_lessons_for_subject_only(self, subject: str, student_class: str) -> List[dict]:
+        """Безопасная загрузка уроков только для одного предмета"""
+        lessons = []
         
-        debug_log(f"🔥 Уроки не найдены ни одним способом")
-        return []
+        # 🔥 ДЛЯ ВЗРОСЛЫХ
+        if student_class == 'adult' and subject == 'английский язык':
+            adult_lang_dir = self.lessons_dir / "students" / "adult_language"
+            
+            if adult_lang_dir.exists():
+                # Ищем для уровня CEFR ученика
+                target_level = self.cefr_level or 'A1'
+                level_dir = adult_lang_dir / f"{target_level}_english"
+                
+                if level_dir.exists():
+                    for lesson_file in level_dir.glob("*.txt"):
+                        try:
+                            rel_path = lesson_file.relative_to(self.lessons_dir)
+                            lesson_number = self._extract_lesson_number(lesson_file.stem)
+                            
+                            lessons.append({
+                                'id': f"adult_{target_level}_{lesson_file.stem}",
+                                'title': self._format_lesson_title(lesson_file.stem),
+                                'file_path': lesson_file,
+                                'subject': subject,
+                                'class_level': student_class,
+                                'lesson_number': lesson_number,
+                                'full_path': str(rel_path),
+                                'cefr_level': target_level,
+                                'type': 'adult_language'
+                            })
+                        except:
+                            continue
+                
+                # Если не нашли для нужного уровня, ищем в любом
+                if not lessons:
+                    for level_dir in adult_lang_dir.iterdir():
+                        if level_dir.is_dir() and "_english" in level_dir.name:
+                            level = level_dir.name.replace("_english", "")
+                            for lesson_file in level_dir.glob("*.txt"):
+                                try:
+                                    rel_path = lesson_file.relative_to(self.lessons_dir)
+                                    lesson_number = self._extract_lesson_number(lesson_file.stem)
+                                    
+                                    lessons.append({
+                                        'id': f"adult_{level}_{lesson_file.stem}",
+                                        'title': self._format_lesson_title(lesson_file.stem),
+                                        'file_path': lesson_file,
+                                        'subject': subject,
+                                        'class_level': student_class,
+                                        'lesson_number': lesson_number,
+                                        'full_path': str(rel_path),
+                                        'cefr_level': level,
+                                        'type': 'adult_language'
+                                    })
+                                except:
+                                    continue
+        
+        # 🔥 ДЛЯ ШКОЛЬНИКОВ
+        elif student_class != 'adult':
+            class_dir = self.lessons_dir / "students" / f"{student_class}_class"
+            if class_dir.exists():
+                subject_dir = class_dir / subject
+                if subject_dir.exists():
+                    for lesson_file in subject_dir.glob("*.txt"):
+                        try:
+                            rel_path = lesson_file.relative_to(self.lessons_dir)
+                            lesson_number = self._extract_lesson_number(lesson_file.stem)
+                            
+                            lessons.append({
+                                'id': f"{student_class}_{subject}_{lesson_file.stem}",
+                                'title': self._format_lesson_title(lesson_file.stem),
+                                'file_path': lesson_file,
+                                'subject': subject,
+                                'class_level': student_class,
+                                'lesson_number': lesson_number,
+                                'full_path': str(rel_path),
+                                'type': 'student'
+                            })
+                        except:
+                            continue
+        
+        debug_log(f"🔥 Загружено уроков для {subject}: {len(lessons)}")
+        return lessons
 
     def _find_lessons_directly(self, class_level: str, subject: str) -> List[dict]:
         """Прямой поиск уроков в файловой системе"""
@@ -3810,7 +4034,7 @@ class DialogueManager:
         debug_log(f"🔧 Установлен room_id для DialogueManager: {room_id}")
 
     def set_student_data(self, student_data: dict):
-        """🔥 ИСПРАВЛЕННЫЙ МЕТОД: Устанавливаем данные ученика БЕЗ загрузки уроков"""
+        """🔥 БЕЗОПАСНАЯ установка данных ученика"""
         self.student_data = student_data
         self.has_student_data = bool(student_data)
         
@@ -3826,13 +4050,19 @@ class DialogueManager:
                 self.cefr_config = get_cefr_level_config(self.cefr_level)
             
             debug_log(f"🎓 Установлены данные взрослого ученика: {student_data.get('name', 'неизвестно')}, режим: {self.adult_study_mode}, уровень CEFR: {self.cefr_level}")
+            
+            # 🔥 ВАЖНО: ЗАПУСКАЕМ ПРОВЕРКУ В ФОНЕ - НЕ БЛОКИРУЕМ!
+            if self.adult_study_mode == 'language':
+                # Запускаем через 0.5 секунды чтобы не блокировать инициализацию комнаты
+                threading.Timer(
+                    0.5,
+                    lambda: self.ensure_adult_lessons_exist()
+                ).start()
         elif self.has_student_data:
             student_name = student_data.get('name', 'неизвестно')
             student_class = student_data.get('education_level', 'неизвестно')
             debug_log(f"🎓 Установлены данные ученика: {student_name} ({student_class} класс)")
-            
-        # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: НЕ загружаем уроки здесь!
-        # Прогресс загружается лениво при вызове get_student_progress
+        
         debug_log(f"📊 Прогресс ученика будет загружен при необходимости (лениво)")
 
     def get_practice_status(self) -> Dict:
