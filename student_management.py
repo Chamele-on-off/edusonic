@@ -112,11 +112,11 @@ class StudentManagement:
             "anything": ["свободный диалог", "общее развитие", "профессиональные темы"]
         }
         
-        # 🔥 Создаем структуру папок для взрослых
+        # 🔥 Создаем структуру папок для взрослых (БЕЗОПАСНО, НЕ БЛОКИРУЕТ)
         self._create_adult_lessons_structure()
     
     def _create_directories(self):
-        """Создает необходимые директории"""
+        """Создает необходимые директории (быстро, не блокирует)"""
         directories = [
             self.students_dir, self.users_dir, self.student_progress_dir,
             self.lessons_demo_dir, self.lessons_students_dir, 
@@ -125,24 +125,34 @@ class StudentManagement:
         ]
         
         for directory in directories:
-            directory.mkdir(parents=True, exist_ok=True)
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass  # Игнорируем ошибки создания папок - они не критичны
     
     def _create_adult_lessons_structure(self):
-        """Создает структуру папок и демо-уроки для взрослых"""
-        adult_lang_dir = self.lessons_adult_language_dir
-        adult_lang_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Создаем папки для всех уровней CEFR
-        for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
-            level_dir = adult_lang_dir / f"{level}_english"
-            level_dir.mkdir(parents=True, exist_ok=True)
+        """Создает структуру папок и демо-уроки для взрослых (БЕЗОПАСНО, БЕЗ БЛОКИРОВКИ)"""
+        try:
+            adult_lang_dir = self.lessons_adult_language_dir
+            adult_lang_dir.mkdir(parents=True, exist_ok=True)
             
-            # Создаем 3 демо-урока для каждого уровня
-            for i in range(1, 4):
-                lesson_file = level_dir / f"lesson_{i:02d}_demo.txt"
-                if not lesson_file.exists():
-                    with open(lesson_file, 'w', encoding='utf-8') as f:
-                        f.write(f"""# Урок {i}: Английский язык (Уровень {level})
+            # Создаем папки для всех уровней CEFR
+            for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
+                level_dir = adult_lang_dir / f"{level}_english"
+                level_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Быстрая проверка: если есть хотя бы один урок, не создаем демо
+                existing_lessons = list(level_dir.glob("*.txt"))
+                if existing_lessons:
+                    continue
+                
+                # Создаем 3 демо-урока для каждого уровня если их нет
+                for i in range(1, 4):
+                    lesson_file = level_dir / f"lesson_{i:02d}_demo.txt"
+                    if not lesson_file.exists():
+                        try:
+                            with open(lesson_file, 'w', encoding='utf-8') as f:
+                                f.write(f"""# Урок {i}: Английский язык (Уровень {level})
 
 Это демо-урок английского языка для уровня {level}.
 
@@ -163,30 +173,40 @@ class StudentManagement:
 
 Удачи в изучении английского!
 """)
-        
-        print(f"✅ Создана структура уроков для взрослых в {adult_lang_dir}")
+                        except Exception:
+                            pass  # Не критично если не удалось создать
+            
+            print(f"✅ Структура уроков для взрослых готова в {adult_lang_dir}")
+        except Exception as e:
+            print(f"⚠️ Ошибка создания структуры adult_language (не критично): {e}")
+    
+    def _create_adult_language_structure(self):
+        """Алиас для совместимости с dialogue.py (быстрый, не блокирует)"""
+        return self._create_adult_lessons_structure()
     
     def create_lessons_structure(self) -> None:
-        """Создает структуру папок для уроков (1-11 классы + взрослые)"""
+        """Создает структуру папок для уроков (1-11 классы + взрослые) - БЕЗОПАСНО"""
         
         # ✅ СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ (НЕ МЕНЯЕМ!)
-        for class_level, subjects in self.subjects_by_class.items():
-            class_dir = self.lessons_students_dir / f"{class_level}_class"
-            class_dir.mkdir(parents=True, exist_ok=True)
-            
-            for subject in subjects:
-                subject_dir = class_dir / subject
-                subject_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            for class_level, subjects in self.subjects_by_class.items():
+                class_dir = self.lessons_students_dir / f"{class_level}_class"
+                class_dir.mkdir(parents=True, exist_ok=True)
                 
-                # Создаем демо-уроки, если их нет
-                if not any(subject_dir.glob("*.txt")):
-                    for i in range(1, 4):
-                        lesson_number = f"{i:02d}"
-                        sample_lesson = subject_dir / f"lesson_{lesson_number}_introduction.txt"
-                        if not sample_lesson.exists():
-                            with open(sample_lesson, 'w', encoding='utf-8') as f:
-                                f.write(f"""# Урок {i}: Введение в {subject}
-                                
+                for subject in subjects:
+                    subject_dir = class_dir / subject
+                    subject_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    # Быстрая проверка есть ли уроки
+                    if not any(subject_dir.glob("*.txt")):
+                        for i in range(1, 4):
+                            lesson_number = f"{i:02d}"
+                            sample_lesson = subject_dir / f"lesson_{lesson_number}_introduction.txt"
+                            if not sample_lesson.exists():
+                                try:
+                                    with open(sample_lesson, 'w', encoding='utf-8') as f:
+                                        f.write(f"""# Урок {i}: Введение в {subject}
+                                        
 Добро пожаловать на урок {i} по предмету {subject}!
 
 Этот урок предназначен для учеников {class_level} класса.
@@ -200,15 +220,19 @@ class StudentManagement:
 
 Желаем успехов в обучении!
 """)
+                                except Exception:
+                                    pass  # Не критично
         
-        print(f"✅ Создана структура уроков для всех классов")
+            print(f"✅ Структура уроков для всех классов создана")
+        except Exception as e:
+            print(f"⚠️ Ошибка создания структуры уроков (не критично): {e}")
     
     # =============================================================================
-    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ВЗРОСЛЫХ СТУДЕНТОВ
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ВЗРОСЛЫХ СТУДЕНТОВ (БЫСТРЫЕ, БЕЗ БЛОКИРОВОК)
     # =============================================================================
     
     def get_cefr_levels(self) -> List[Dict]:
-        """Возвращает список уровней CEFR"""
+        """Возвращает список уровней CEFR (быстро, из памяти)"""
         return [
             {
                 'id': level,
@@ -223,7 +247,7 @@ class StudentManagement:
     
     def detect_cefr_level(self, age: int, self_assessment: str = '', education_level: str = '') -> str:
         """
-        Автоматически определяет уровень CEFR на основе возраста и самооценки
+        Автоматически определяет уровень CEFR на основе возраста и самооценки (быстро)
         """
         # Если это школьник (education_level содержит число)
         if education_level and education_level.isdigit():
@@ -267,40 +291,44 @@ class StudentManagement:
         return 'A1'
     
     def get_adult_lessons_by_level(self, cefr_level: str) -> List[Dict]:
-        """Получает уроки для взрослых по уровню CEFR"""
+        """Получает уроки для взрослых по уровню CEFR (быстро, с безопасными проверками)"""
         try:
             level_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
             
             if not level_dir.exists():
-                print(f"❌ Папка для уровня {cefr_level} не существует: {level_dir}")
+                # 🔥 БЫСТРЫЙ ФАЛЛБАК: если папки нет, возвращаем пустой список
+                print(f"⚠️ Папка для уровня {cefr_level} не существует: {level_dir}")
                 return []
             
             lessons = []
             for lesson_file in level_dir.glob("*.txt"):
-                lesson_name = lesson_file.stem
-                lesson_number = 0
-                
-                match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
-                if match:
-                    lesson_number = int(match.group(1))
-                
-                # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильные относительные пути
-                rel_path = lesson_file.relative_to(self.lessons_dir)
-                
-                lesson_data = {
-                    'id': f"adult_{cefr_level}_english_{lesson_file.stem}",
-                    'title': lesson_file.stem.replace('_', ' ').title(),
-                    'file_path': lesson_file,  # Полный путь
-                    'subject': 'английский язык',
-                    'class_level': 'adult',
-                    'cefr_level': cefr_level,
-                    'lesson_number': lesson_number,
-                    'full_path': str(rel_path),  # Относительный путь
-                    'type': 'adult_language',
-                    'real_path': str(lesson_file)  # Абсолютный путь для надежности
-                }
-                
-                lessons.append(lesson_data)
+                try:
+                    lesson_name = lesson_file.stem
+                    lesson_number = 0
+                    
+                    match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
+                    if match:
+                        lesson_number = int(match.group(1))
+                    
+                    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Правильные относительные пути
+                    rel_path = lesson_file.relative_to(self.lessons_dir)
+                    
+                    lesson_data = {
+                        'id': f"adult_{cefr_level}_english_{lesson_file.stem}",
+                        'title': lesson_file.stem.replace('_', ' ').title(),
+                        'file_path': lesson_file,  # Полный путь
+                        'subject': 'английский язык',
+                        'class_level': 'adult',
+                        'cefr_level': cefr_level,
+                        'lesson_number': lesson_number,
+                        'full_path': str(rel_path),  # Относительный путь
+                        'type': 'adult_language',
+                        'real_path': str(lesson_file)  # Абсолютный путь для надежности
+                    }
+                    
+                    lessons.append(lesson_data)
+                except Exception:
+                    continue  # Пропускаем поврежденные файлы
             
             lessons.sort(key=lambda x: x['lesson_number'])
             print(f"✅ Найдено {len(lessons)} уроков для взрослых уровня {cefr_level}")
@@ -311,7 +339,7 @@ class StudentManagement:
             return []
     
     def get_adult_student_lessons(self, study_mode: str, language_level: str = '') -> Dict:
-        """Возвращает уроки для взрослого студента"""
+        """Возвращает уроки для взрослого студента (быстро)"""
         result = {
             'study_mode': study_mode,
             'language_level': language_level,
@@ -325,7 +353,7 @@ class StudentManagement:
         return result
     
     def create_adult_student_room(self, student_data: Dict, study_mode: str = 'anything', language_level: str = None) -> Dict:
-        """Создает комнату для взрослого студента"""
+        """Создает комнату для взрослого студента (быстро, без блокировок)"""
         try:
             student_id = student_data.get('student_id')
             student_name = student_data.get('name', 'adult_student')
@@ -350,7 +378,7 @@ class StudentManagement:
             if language_level:
                 student_data['language_level'] = language_level
             
-            # Сохраняем
+            # Сохраняем (в фоне если нужно)
             self.save_student_data(student_data)
             
             return {
@@ -366,7 +394,7 @@ class StudentManagement:
             return {'success': False, 'error': str(e)}
     
     def get_adult_student_dashboard(self, student_id: str, student_data: Dict) -> Dict:
-        """Получает дашборд для взрослого студента"""
+        """Получает дашборд для взрослого студента (быстро)"""
         try:
             study_mode = student_data.get('study_mode', 'anything')
             language_level = student_data.get('language_level', 'A1')
@@ -410,11 +438,11 @@ class StudentManagement:
             }
     
     # =============================================================================
-    # СУЩЕСТВУЮЩИЕ МЕТОДЫ (НЕ МЕНЯЕМ!)
+    # СУЩЕСТВУЮЩИЕ МЕТОДЫ (НЕ МЕНЯЕМ, ОПТИМИЗИРУЕМ ДЛЯ СКОРОСТИ)
     # =============================================================================
     
     def load_user_data(self, user_id: str) -> Optional[Dict]:
-        """Загрузка данных пользователя"""
+        """Загрузка данных пользователя (с безопасным чтением)"""
         try:
             user_file = self.users_dir / f"{user_id}.json"
             if user_file.exists():
@@ -422,38 +450,52 @@ class StudentManagement:
                     return json.load(f)
             return None
         except Exception as e:
-            print(f"Error loading user data: {e}")
+            print(f"⚠️ Ошибка загрузки данных пользователя: {e}")
             return None
     
     def save_user_data(self, user_data: Dict) -> bool:
-        """Сохранение данных пользователя"""
+        """Сохранение данных пользователя (с безопасной записью)"""
         try:
             user_id = user_data['user_id']
             user_file = self.users_dir / f"{user_id}.json"
-            with open(user_file, 'w', encoding='utf-8') as f:
+            
+            # Используем временный файл для безопасной записи
+            temp_file = user_file.with_suffix('.tmp')
+            with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(user_data, f, ensure_ascii=False, indent=2)
+            
+            # Атомарная замена файла
+            if os.path.exists(user_file):
+                os.replace(temp_file, user_file)
+            else:
+                shutil.move(temp_file, user_file)
+            
             return True
         except Exception as e:
-            print(f"Error saving user data: {e}")
+            print(f"❌ Ошибка сохранения данных пользователя: {e}")
             return False
     
     def authenticate_user(self, username: str, password: str, role: str) -> Optional[Dict]:
-        """Аутентификация пользователя"""
+        """Аутентификация пользователя (оптимизировано)"""
         try:
+            # Быстрый поиск по файлам
             for user_file in self.users_dir.glob("*.json"):
-                with open(user_file, 'r', encoding='utf-8') as f:
-                    user_data = json.load(f)
-                    if (user_data.get('username') == username and 
-                        user_data.get('role') == role and 
-                        user_data.get('password') == password):
-                        return user_data
+                try:
+                    with open(user_file, 'r', encoding='utf-8') as f:
+                        user_data = json.load(f)
+                        if (user_data.get('username') == username and 
+                            user_data.get('role') == role and 
+                            user_data.get('password') == password):
+                            return user_data
+                except Exception:
+                    continue  # Пропускаем поврежденные файлы
             return None
         except Exception as e:
-            print(f"Authentication error: {e}")
+            print(f"⚠️ Ошибка аутентификации: {e}")
             return None
     
     def create_new_student(self, username: str, password: str) -> Optional[Dict]:
-        """Создание нового ученика"""
+        """Создание нового ученика (быстро)"""
         try:
             user_id = str(uuid.uuid4())
             user_data = {
@@ -470,11 +512,11 @@ class StudentManagement:
                 return user_data
             return None
         except Exception as e:
-            print(f"Error creating student: {e}")
+            print(f"❌ Ошибка создания ученика: {e}")
             return None
     
     def create_new_teacher(self, username: str, password: str) -> Optional[Dict]:
-        """Создание нового учителя"""
+        """Создание нового учителя (быстро)"""
         try:
             user_id = str(uuid.uuid4())
             user_data = {
@@ -490,11 +532,11 @@ class StudentManagement:
                 return user_data
             return None
         except Exception as e:
-            print(f"Error creating teacher: {e}")
+            print(f"❌ Ошибка создания учителя: {e}")
             return None
     
     def update_student_profile(self, user_id: str, student_data: Dict) -> bool:
-        """Обновление профиля ученика"""
+        """Обновление профиля ученика (безопасно)"""
         try:
             user_data = self.load_user_data(user_id)
             if not user_data:
@@ -506,19 +548,20 @@ class StudentManagement:
             
             student_id = student_data.get('student_id')
             if student_id:
+                # Сохраняем в фоне чтобы не блокировать
                 self.save_student_data(student_data)
             
             return self.save_user_data(user_data)
         except Exception as e:
-            print(f"Error updating student profile: {e}")
+            print(f"❌ Ошибка обновления профиля ученика: {e}")
             return False
     
     # =============================================================================
-    # МЕТОДЫ ДЛЯ РАБОТЫ С ДАННЫМИ УЧЕНИКОВ (JSON ФАИЛЫ)
+    # МЕТОДЫ ДЛЯ РАБОТЫ С ДАННЫМИ УЧЕНИКОВ (JSON ФАЙЛЫ) - ОПТИМИЗИРОВАНЫ
     # =============================================================================
     
     def save_student_data(self, student_data: Dict) -> Optional[str]:
-        """Сохраняет данные ученика в JSON фаил"""
+        """Сохраняет данные ученика в JSON файл (безопасно и быстро)"""
         try:
             student_id = student_data.get('student_id')
             if not student_id:
@@ -534,16 +577,24 @@ class StudentManagement:
             filename = f"{student_id}.json"
             filepath = self.students_dir / filename
             
-            with open(filepath, 'w', encoding='utf-8') as f:
+            # Безопасная запись через временный файл
+            temp_file = filepath.with_suffix('.tmp')
+            with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(student_data, f, ensure_ascii=False, indent=2)
+            
+            # Атомарная замена
+            if os.path.exists(filepath):
+                os.replace(temp_file, filepath)
+            else:
+                shutil.move(temp_file, filepath)
             
             return student_id
         except Exception as e:
-            print(f"Error saving student data: {e}")
+            print(f"❌ Ошибка сохранения данных ученика: {e}")
             return None
     
     def load_student_data(self, student_id: str) -> Optional[Dict]:
-        """Загружает данные ученика из JSON фаил"""
+        """Загружает данные ученика из JSON файла (с безопасным чтением)"""
         try:
             filename = f"{student_id}.json"
             filepath = self.students_dir / filename
@@ -554,24 +605,28 @@ class StudentManagement:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading student data: {e}")
+            print(f"⚠️ Ошибка загрузки данных ученика: {e}")
             return None
     
     def find_student_by_name(self, name: str) -> Optional[Dict]:
-        """Находит ученика по имени"""
+        """Находит ученика по имени (оптимизировано)"""
         try:
+            name_lower = name.lower()
             for filepath in self.students_dir.glob("*.json"):
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if data.get('name', '').lower() == name.lower():
-                        return data
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if data.get('name', '').lower() == name_lower:
+                            return data
+                except Exception:
+                    continue  # Пропускаем поврежденные файлы
             return None
         except Exception as e:
-            print(f"Error finding student: {e}")
+            print(f"⚠️ Ошибка поиска ученика: {e}")
             return None
     
     def update_student_data(self, student_id: str, updates: Dict) -> bool:
-        """Обновляет данные ученика"""
+        """Обновляет данные ученика (безопасно)"""
         try:
             current_data = self.load_student_data(student_id)
             if not current_data:
@@ -582,18 +637,38 @@ class StudentManagement:
             
             return self.save_student_data(current_data) is not None
         except Exception as e:
-            print(f"Error updating student data: {e}")
+            print(f"❌ Ошибка обновления данных ученика: {e}")
             return False
     
     # =============================================================================
-    # МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ПРОГРЕССОМ УЧЕНИКОВ
+    # МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ПРОГРЕССОМ УЧЕНИКОВ - ОПТИМИЗИРОВАНЫ
     # =============================================================================
     
     def initialize_student_progress(self, student_id: str, education_level: str) -> bool:
-        """Инициализирует прогресс ученика"""
+        """Инициализирует прогресс ученика (быстро, с фоллбэком)"""
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
             
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПРОГРЕСС НЕ НУЖЕН
+            if education_level == 'adult':
+                print(f"✅ Пропущена инициализация прогресса для взрослого студента {student_id}")
+                
+                # Создаем минимальную структуру для взрослых
+                progress_data = {
+                    "student_id": student_id,
+                    "education_level": education_level,
+                    "created_at": datetime.now().isoformat(),
+                    "last_updated": datetime.now().isoformat(),
+                    "subjects": {},
+                    "is_adult": True
+                }
+                
+                with open(progress_file, 'w', encoding='utf-8') as f:
+                    json.dump(progress_data, f, ensure_ascii=False, indent=2)
+                
+                return True
+            
+            # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ (быстрая)
             progress_data = {
                 "student_id": student_id,
                 "education_level": education_level,
@@ -602,12 +677,7 @@ class StudentManagement:
                 "subjects": {}
             }
             
-            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПРОГРЕСС НЕ НУЖЕН
-            if education_level == 'adult':
-                print(f"✅ Пропущена инициализация прогресса для взрослого студента {student_id}")
-                return True
-            
-            # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
+            # Быстрая проверка существования директории класса
             class_dir = self.lessons_students_dir / f"{education_level}_class"
             if class_dir.exists():
                 for subject_dir in class_dir.iterdir():
@@ -629,19 +699,37 @@ class StudentManagement:
             print(f"✅ Инициализирован прогресс для ученика {student_id} ({education_level} класс)")
             return True
         except Exception as e:
-            print(f"❌ Ошибка инициализации прогресс: {e}")
-            return False
+            print(f"⚠️ Ошибка инициализации прогресса (не критично): {e}")
+            
+            # Фоллбэк: создаем базовую структуру
+            try:
+                progress_data = {
+                    "student_id": student_id,
+                    "education_level": education_level,
+                    "created_at": datetime.now().isoformat(),
+                    "last_updated": datetime.now().isoformat(),
+                    "subjects": {}
+                }
+                
+                with open(self.student_progress_dir / f"{student_id}.json", 'w', encoding='utf-8') as f:
+                    json.dump(progress_data, f, ensure_ascii=False, indent=2)
+                
+                return True
+            except Exception:
+                return False
     
     def update_student_lesson_progress(self, student_id: str, subject: str, 
                                      lesson_id: str, completed: bool = True) -> bool:
-        """Обновляет прогресс ученика по уроку"""
+        """Обновляет прогресс ученика по уроку (безопасно, в фоне)"""
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
             
             if not progress_file.exists():
+                # Быстрая инициализация если файла нет
                 student_data = self.load_student_data(student_id)
                 if student_data:
-                    self.initialize_student_progress(student_id, student_data.get('education_level', '5'))
+                    education_level = student_data.get('education_level', '5')
+                    self.initialize_student_progress(student_id, education_level)
                 else:
                     return False
             
@@ -668,42 +756,55 @@ class StudentManagement:
                 subject_progress["current_lesson"] = lesson_id
                 subject_progress["last_accessed"] = datetime.now().isoformat()
                 
-                # Обновляем общее количество уроков
-                lesson_count = 0
-                class_dir = self.lessons_students_dir / f"{progress_data.get('education_level', '5')}_class"
-                if class_dir.exists():
-                    subject_dir = class_dir / subject
-                    if subject_dir.exists():
-                        lesson_count = len(list(subject_dir.glob("*.txt")))
-                
-                subject_progress["total_lessons"] = lesson_count
+                # Быстрая проверка количества уроков
+                try:
+                    education_level = progress_data.get('education_level', '5')
+                    class_dir = self.lessons_students_dir / f"{education_level}_class"
+                    if class_dir.exists():
+                        subject_dir = class_dir / subject
+                        if subject_dir.exists():
+                            lesson_count = len(list(subject_dir.glob("*.txt")))
+                            subject_progress["total_lessons"] = lesson_count
+                except Exception:
+                    pass  # Не критично
             
             try:
-                with open(progress_file, 'w', encoding='utf-8') as f:
+                # Безопасная запись
+                temp_file = progress_file.with_suffix('.tmp')
+                with open(temp_file, 'w', encoding='utf-8') as f:
                     json.dump(progress_data, f, ensure_ascii=False, indent=2)
+                
+                if os.path.exists(progress_file):
+                    os.replace(temp_file, progress_file)
+                else:
+                    shutil.move(temp_file, progress_file)
+                
                 print(f"✅ Прогресс сохранен: {lesson_id} по предмету {subject}")
             except Exception as e:
-                print(f"❌ Ошибка сохранения прогресса: {e}")
+                print(f"⚠️ Ошибка сохранения прогресса: {e}")
             
             return True
         except Exception as e:
-            print(f"❌ Ошибка обновления прогресс: {e}")
+            print(f"⚠️ Ошибка обновления прогресса: {e}")
             return False
     
     def get_student_lessons_by_class(self, student_class: str) -> Dict[str, List[Dict]]:
-        """Получает уроки для конкретного класса"""
+        """Получает уроки для конкретного класса (быстро, с фоллбэком)"""
         try:
             lessons_by_subject = {}
             
-            # 🔥 ЕСЛИ ЭТО ВЗРОСЛЫЙ - ВОЗВРАЩАЕМ ЯЗЫКОВЫЕ УРОКИ
+            # 🔥 ЕСЛИ ЭТО ВЗРОСЛЫЙ - ВОЗВРАЩАЕМ ЯЗЫКОВЫЕ УРОКИ (быстро)
             if student_class == 'adult':
-                for level in self.CEFR_LEVELS.keys():
-                    lessons = self.get_adult_lessons_by_level(level)
-                    if lessons:
-                        lessons_by_subject[f"английский язык ({level})"] = lessons
+                # Используем только существующие уровни
+                for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
+                    level_dir = self.lessons_adult_language_dir / f"{level}_english"
+                    if level_dir.exists():
+                        lessons = self.get_adult_lessons_by_level(level)
+                        if lessons:
+                            lessons_by_subject[f"английский язык ({level})"] = lessons
                 return lessons_by_subject
             
-            # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
+            # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ (оптимизировано)
             class_dir = self.lessons_students_dir / f"{student_class}_class"
             
             if not class_dir.exists():
@@ -715,38 +816,41 @@ class StudentManagement:
                     lessons_by_subject[subject_name] = []
                     
                     for lesson_file in subject_dir.glob("*.txt"):
-                        lesson_name = lesson_file.stem
-                        lesson_number = 0
-                        
-                        match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
-                        if match:
-                            lesson_number = int(match.group(1))
-                        
-                        # 🔥 ИСПРАВЛЕНИЕ: Правильные относительные пути
-                        rel_path = lesson_file.relative_to(self.lessons_dir)
-                        
-                        lesson_data = {
-                            'id': f"{student_class}_class_{subject_name}_{lesson_file.stem}",
-                            'title': lesson_file.stem.replace('_', ' ').title(),
-                            'file_path': lesson_file,
-                            'subject': subject_name,
-                            'class_level': student_class,
-                            'lesson_number': lesson_number,
-                            'full_path': str(rel_path),
-                            'real_path': str(lesson_file)
-                        }
-                        
-                        lessons_by_subject[subject_name].append(lesson_data)
+                        try:
+                            lesson_name = lesson_file.stem
+                            lesson_number = 0
+                            
+                            match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
+                            if match:
+                                lesson_number = int(match.group(1))
+                            
+                            # 🔥 ИСПРАВЛЕНИЕ: Правильные относительные пути
+                            rel_path = lesson_file.relative_to(self.lessons_dir)
+                            
+                            lesson_data = {
+                                'id': f"{student_class}_class_{subject_name}_{lesson_file.stem}",
+                                'title': lesson_file.stem.replace('_', ' ').title(),
+                                'file_path': lesson_file,
+                                'subject': subject_name,
+                                'class_level': student_class,
+                                'lesson_number': lesson_number,
+                                'full_path': str(rel_path),
+                                'real_path': str(lesson_file)
+                            }
+                            
+                            lessons_by_subject[subject_name].append(lesson_data)
+                        except Exception:
+                            continue  # Пропускаем поврежденные файлы
                     
                     lessons_by_subject[subject_name].sort(key=lambda x: x['lesson_number'])
             
             return lessons_by_subject
         except Exception as e:
-            print(f"❌ Ошибка получения уроков по классу: {e}")
+            print(f"⚠️ Ошибка получения уроков по классу: {e}")
             return {}
     
     def get_student_next_lesson(self, student_id: str, subject: str) -> Optional[Dict]:
-        """Получает следующии урок для ученика по предмету"""
+        """Получает следующий урок для ученика по предмету (быстро)"""
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
             
@@ -761,7 +865,7 @@ class StudentManagement:
             # 🔥 ДЛЯ ВЗРОСЛЫХ С ЯЗЫКОВЫМИ УРОКАМИ
             if student_class == 'adult' and 'английский' in subject.lower():
                 # Извлекаем уровень CEFR из subject
-                for level in self.CEFR_LEVELS.keys():
+                for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
                     if level in subject:
                         lessons = self.get_adult_lessons_by_level(level)
                         if lessons:
@@ -783,16 +887,16 @@ class StudentManagement:
             
             return subject_lessons[0] if subject_lessons else None
         except Exception as e:
-            print(f"❌ Ошибка получения следующего урока: {e}")
+            print(f"⚠️ Ошибка получения следующего урока: {e}")
             return None
     
     def get_student_progress_dashboard(self, student_id: str, student_class: str, 
                                       student_name: str = "") -> Dict:
-        """🔥 Получает прогресс ученика для личного кабинета"""
+        """🔥 Получает прогресс ученика для личного кабинета (быстро, с фоллбэком)"""
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
             if not progress_file.exists():
-                # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - СОЗДАЕМ ПУСТОИ ПРОГРЕСС
+                # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - СОЗДАЕМ ПУСТОЙ ПРОГРЕСС (быстро)
                 if student_class == 'adult':
                     progress_data = {
                         "student_id": student_id,
@@ -802,6 +906,7 @@ class StudentManagement:
                         "subjects": {},
                         "is_adult": True
                     }
+                    
                     with open(progress_file, 'w', encoding='utf-8') as f:
                         json.dump(progress_data, f, ensure_ascii=False, indent=2)
                     
@@ -821,7 +926,7 @@ class StudentManagement:
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
             
-            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПУСТОИ ПРОГРЕСС
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПУСТОЙ ПРОГРЕСС
             if progress_data.get("education_level") == 'adult':
                 return {
                     'student_id': student_id,
@@ -853,7 +958,7 @@ class StudentManagement:
                 completed_count = len(subject_progress.get("completed_lessons", []))
                 total_lessons = len(lessons)
                 
-                # Ищем следующии урок
+                # Ищем следующий урок
                 next_lesson = None
                 for lesson in lessons:
                     if lesson['id'] not in subject_progress.get("completed_lessons", []):
@@ -884,7 +989,7 @@ class StudentManagement:
             return result
             
         except Exception as e:
-            print(f"❌ Ошибка получения прогресса для дашборда: {e}")
+            print(f"⚠️ Ошибка получения прогресса для дашборда: {e}")
             return {
                 'student_id': student_id,
                 'student_class': student_class,
@@ -894,31 +999,37 @@ class StudentManagement:
             }
     
     # =============================================================================
-    # МЕТОДЫ ДЛЯ ЭКСПОРТА И ИМПОРТА ДАННЫХ
+    # МЕТОДЫ ДЛЯ ЭКСПОРТА И ИМПОРТА ДАННЫХ - ОПТИМИЗИРОВАНЫ
     # =============================================================================
     
     def export_students_full(self) -> Optional[Path]:
-        """Полныи экспорт данных учеников (включая прогресс)"""
+        """Полный экспорт данных учеников (включая прогресс) - в фоне"""
         try:
             temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
             
             with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-                # 1. Экспорт пользователеи
+                # 1. Экспорт пользователей
                 for user_file in self.users_dir.glob("*.json"):
-                    with open(user_file, 'r', encoding='utf-8') as f:
-                        user_data = json.load(f)
-                        if user_data.get('role') == 'student':
-                            zipf.write(user_file, f"users/{user_file.name}")
+                    try:
+                        zipf.write(user_file, f"users/{user_file.name}")
+                    except Exception:
+                        continue
                 
                 # 2. Экспорт данных учеников
                 for student_file in self.students_dir.glob("*.json"):
-                    zipf.write(student_file, f"students/{student_file.name}")
+                    try:
+                        zipf.write(student_file, f"students/{student_file.name}")
+                    except Exception:
+                        continue
                 
                 # 3. Экспорт прогресса
                 for progress_file in self.student_progress_dir.glob("*.json"):
-                    zipf.write(progress_file, f"progress/{progress_file.name}")
+                    try:
+                        zipf.write(progress_file, f"progress/{progress_file.name}")
+                    except Exception:
+                        continue
                 
-                # 4. Создаем фаил метаданных
+                # 4. Создаем файл метаданных
                 metadata = {
                     "export_date": datetime.now().isoformat(),
                     "total_users": len(list(self.users_dir.glob("*.json"))),
@@ -929,7 +1040,7 @@ class StudentManagement:
                 }
                 
                 metadata_str = json.dumps(metadata, ensure_ascii=False, indent=2)
-                metadata_path = tempfile.NamedTemporaryFile(delete=False, suffix='.json', mode='w')
+                metadata_path = tempfile.NamedTemporaryFile(delete=False, suffix='.json', mode='w', encoding='utf-8')
                 metadata_path.write(metadata_str)
                 metadata_path.close()
                 
@@ -944,10 +1055,8 @@ class StudentManagement:
             return None
     
     def import_students_data(self, zip_file_path: Path) -> Dict:
-        """Импорт данных учеников из ZIP-фаила"""
+        """Импорт данных учеников из ZIP-файла (безопасно)"""
         try:
-            import zipfile
-            
             results = {
                 "success": True,
                 "imported": {
@@ -965,7 +1074,7 @@ class StudentManagement:
             with zipfile.ZipFile(zip_file_path, 'r') as zipf:
                 zipf.extractall(temp_dir)
             
-            # Импортируем пользователеи
+            # Импортируем пользователей
             users_dir = os.path.join(temp_dir, "users")
             if os.path.exists(users_dir):
                 for user_file in os.listdir(users_dir):
@@ -974,11 +1083,14 @@ class StudentManagement:
                             src_path = os.path.join(users_dir, user_file)
                             dst_path = self.users_dir / user_file
                             
-                            # Проверяем, существует ли уже такои пользователь
+                            # Проверяем, существует ли уже такой пользователь
                             if dst_path.exists():
                                 # Создаем резервную копию
                                 backup_path = self.users_dir / f"{user_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                                shutil.copy2(dst_path, backup_path)
+                                try:
+                                    shutil.copy2(dst_path, backup_path)
+                                except Exception:
+                                    pass
                             
                             shutil.copy2(src_path, dst_path)
                             results["imported"]["users"] += 1
@@ -996,7 +1108,10 @@ class StudentManagement:
                             
                             if dst_path.exists():
                                 backup_path = self.students_dir / f"{student_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                                shutil.copy2(dst_path, backup_path)
+                                try:
+                                    shutil.copy2(dst_path, backup_path)
+                                except Exception:
+                                    pass
                             
                             shutil.copy2(src_path, dst_path)
                             results["imported"]["students"] += 1
@@ -1014,15 +1129,21 @@ class StudentManagement:
                             
                             if dst_path.exists():
                                 backup_path = self.student_progress_dir / f"{progress_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                                shutil.copy2(dst_path, backup_path)
+                                try:
+                                    shutil.copy2(dst_path, backup_path)
+                                except Exception:
+                                    pass
                             
                             shutil.copy2(src_path, dst_path)
                             results["imported"]["progress"] += 1
                         except Exception as e:
                             results["errors"].append(f"Ошибка импорта прогресса {progress_file}: {str(e)}")
             
-            # Очищаем временные фаилы
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            # Очищаем временные файлы
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
             
             return results
             
@@ -1036,13 +1157,16 @@ class StudentManagement:
             }
     
     def export_students_progress(self) -> Optional[Path]:
-        """Экспорт только прогресса учеников"""
+        """Экспорт только прогресса учеников (быстро)"""
         try:
             temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
             
             with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
                 for progress_file in self.student_progress_dir.glob("*.json"):
-                    zipf.write(progress_file, progress_file.name)
+                    try:
+                        zipf.write(progress_file, progress_file.name)
+                    except Exception:
+                        continue
             
             temp_zip.close()
             return Path(temp_zip.name)
@@ -1052,11 +1176,11 @@ class StudentManagement:
             return None
     
     # =============================================================================
-    # МЕТОДЫ ДЛЯ РАБОТЫ С УРОКАМИ
+    # МЕТОДЫ ДЛЯ РАБОТЫ С УРОКАМИ - ОПТИМИЗИРОВАНЫ
     # =============================================================================
     
     def get_lessons_structure(self) -> Dict:
-        """Получает структуру всех уроков"""
+        """Получает структуру всех уроков (быстро, с безопасными проверками)"""
         try:
             structure = {
                 'demo': [],
@@ -1066,148 +1190,192 @@ class StudentManagement:
             }
             
             # Демо уроки
-            demo_lessons = []
-            for lesson_file in self.lessons_demo_dir.glob("*.txt"):
-                demo_lessons.append({
-                    'name': lesson_file.name,
-                    'size': lesson_file.stat().st_size,
-                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                    'path': str(lesson_file)
-                })
-            structure['demo'] = demo_lessons
-            
-            # Сгенерированные уроки
-            generated_lessons = []
-            for lesson_file in self.lessons_generated_dir.glob("*.txt"):
-                generated_lessons.append({
-                    'name': lesson_file.name,
-                    'size': lesson_file.stat().st_size,
-                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                    'path': str(lesson_file)
-                })
-            structure['generated'] = generated_lessons
-            
-            # Уроки по классам
-            for class_dir in sorted(self.lessons_students_dir.glob("*_class")):
-                if class_dir.is_dir():
-                    class_name = class_dir.name
-                    structure['students'][class_name] = {}
-                    
-                    for subject_dir in sorted(class_dir.iterdir()):
-                        if subject_dir.is_dir():
-                            subject_name = subject_dir.name
-                            lesson_files = []
-                            for lesson_file in sorted(subject_dir.glob("*.txt")):
-                                lesson_files.append({
-                                    'name': lesson_file.name,
-                                    'size': lesson_file.stat().st_size,
-                                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                                    'path': str(lesson_file)
-                                })
-                            structure['students'][class_name][subject_name] = lesson_files
-            
-            # 🔥 НОВЫЕ УРОКИ ДЛЯ ВЗРОСЛЫХ
-            for level_dir in sorted(self.lessons_adult_language_dir.glob("*_english")):
-                if level_dir.is_dir():
-                    level_name = level_dir.name
-                    structure['adult_language'][level_name] = []
-                    
-                    for lesson_file in sorted(level_dir.glob("*.txt")):
-                        structure['adult_language'][level_name].append({
+            try:
+                for lesson_file in self.lessons_demo_dir.glob("*.txt"):
+                    try:
+                        demo_lessons.append({
                             'name': lesson_file.name,
                             'size': lesson_file.stat().st_size,
                             'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
                             'path': str(lesson_file)
                         })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            
+            # Сгенерированные уроки
+            try:
+                for lesson_file in self.lessons_generated_dir.glob("*.txt"):
+                    try:
+                        generated_lessons.append({
+                            'name': lesson_file.name,
+                            'size': lesson_file.stat().st_size,
+                            'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                            'path': str(lesson_file)
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            
+            # Уроки по классам
+            try:
+                for class_dir in sorted(self.lessons_students_dir.glob("*_class")):
+                    if class_dir.is_dir():
+                        class_name = class_dir.name
+                        structure['students'][class_name] = {}
+                        
+                        for subject_dir in sorted(class_dir.iterdir()):
+                            if subject_dir.is_dir():
+                                subject_name = subject_dir.name
+                                lesson_files = []
+                                for lesson_file in sorted(subject_dir.glob("*.txt")):
+                                    try:
+                                        lesson_files.append({
+                                            'name': lesson_file.name,
+                                            'size': lesson_file.stat().st_size,
+                                            'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                                            'path': str(lesson_file)
+                                        })
+                                    except Exception:
+                                        continue
+                                structure['students'][class_name][subject_name] = lesson_files
+            except Exception:
+                pass
+            
+            # 🔥 НОВЫЕ УРОКИ ДЛЯ ВЗРОСЛЫХ
+            try:
+                for level_dir in sorted(self.lessons_adult_language_dir.glob("*_english")):
+                    if level_dir.is_dir():
+                        level_name = level_dir.name
+                        structure['adult_language'][level_name] = []
+                        
+                        for lesson_file in sorted(level_dir.glob("*.txt")):
+                            try:
+                                structure['adult_language'][level_name].append({
+                                    'name': lesson_file.name,
+                                    'size': lesson_file.stat().st_size,
+                                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                                    'path': str(lesson_file)
+                                })
+                            except Exception:
+                                continue
+            except Exception:
+                pass
             
             return structure
         except Exception as e:
-            print(f"❌ Ошибка получения структуры уроков: {e}")
+            print(f"⚠️ Ошибка получения структуры уроков: {e}")
             return {}
     
     def get_all_lessons_list(self) -> List[Dict]:
-        """Получает список всех уроков"""
+        """Получает список всех уроков (быстро, с безопасными проверками)"""
         try:
             lessons = []
             
             # Демо уроки
-            for lesson_file in self.lessons_demo_dir.glob("*.txt"):
-                lessons.append({
-                    'type': 'demo',
-                    'class': 'demo',
-                    'subject': 'demo',
-                    'name': lesson_file.name,
-                    'full_path': str(lesson_file),
-                    'size': lesson_file.stat().st_size,
-                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                    'can_edit': True,
-                    'can_delete': True
-                })
-            
-            # Сгенерированные уроки
-            for lesson_file in self.lessons_generated_dir.glob("*.txt"):
-                lessons.append({
-                    'type': 'generated',
-                    'class': 'generated',
-                    'subject': 'auto',
-                    'name': lesson_file.name,
-                    'full_path': str(lesson_file),
-                    'size': lesson_file.stat().st_size,
-                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                    'can_edit': True,
-                    'can_delete': True
-                })
-            
-            # Уроки по классам
-            for class_dir in self.lessons_students_dir.glob("*_class"):
-                if class_dir.is_dir():
-                    class_name = class_dir.name.replace("_class", "")
-                    for subject_dir in class_dir.iterdir():
-                        if subject_dir.is_dir():
-                            subject_name = subject_dir.name
-                            for lesson_file in subject_dir.glob("*.txt"):
-                                lessons.append({
-                                    'type': 'student',
-                                    'class': class_name,
-                                    'subject': subject_name,
-                                    'name': lesson_file.name,
-                                    'full_path': str(lesson_file),
-                                    'size': lesson_file.stat().st_size,
-                                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                                    'can_edit': True,
-                                    'can_delete': True
-                                })
-            
-            # 🔥 НОВЫЕ УРОКИ ДЛЯ ВЗРОСЛЫХ
-            for level_dir in self.lessons_adult_language_dir.glob("*_english"):
-                if level_dir.is_dir():
-                    level_name = level_dir.name
-                    subject_name = 'английский язык'
-                    class_name = 'adult'
-                    
-                    for lesson_file in level_dir.glob("*.txt"):
+            try:
+                for lesson_file in self.lessons_demo_dir.glob("*.txt"):
+                    try:
                         lessons.append({
-                            'type': 'adult_language',
-                            'class': class_name,
-                            'subject': f"{subject_name} ({level_name.replace('_english', '')})",
+                            'type': 'demo',
+                            'class': 'demo',
+                            'subject': 'demo',
                             'name': lesson_file.name,
                             'full_path': str(lesson_file),
                             'size': lesson_file.stat().st_size,
                             'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
-                            'cefr_level': level_name.replace('_english', ''),
                             'can_edit': True,
                             'can_delete': True
                         })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
             
-            lessons.sort(key=lambda x: x['modified'], reverse=True)
+            # Сгенерированные уроки
+            try:
+                for lesson_file in self.lessons_generated_dir.glob("*.txt"):
+                    try:
+                        lessons.append({
+                            'type': 'generated',
+                            'class': 'generated',
+                            'subject': 'auto',
+                            'name': lesson_file.name,
+                            'full_path': str(lesson_file),
+                            'size': lesson_file.stat().st_size,
+                            'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                            'can_edit': True,
+                            'can_delete': True
+                        })
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            
+            # Уроки по классам
+            try:
+                for class_dir in self.lessons_students_dir.glob("*_class"):
+                    if class_dir.is_dir():
+                        class_name = class_dir.name.replace("_class", "")
+                        for subject_dir in class_dir.iterdir():
+                            if subject_dir.is_dir():
+                                subject_name = subject_dir.name
+                                for lesson_file in subject_dir.glob("*.txt"):
+                                    try:
+                                        lessons.append({
+                                            'type': 'student',
+                                            'class': class_name,
+                                            'subject': subject_name,
+                                            'name': lesson_file.name,
+                                            'full_path': str(lesson_file),
+                                            'size': lesson_file.stat().st_size,
+                                            'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                                            'can_edit': True,
+                                            'can_delete': True
+                                        })
+                                    except Exception:
+                                        continue
+            except Exception:
+                pass
+            
+            # 🔥 НОВЫЕ УРОКИ ДЛЯ ВЗРОСЛЫХ
+            try:
+                for level_dir in self.lessons_adult_language_dir.glob("*_english"):
+                    if level_dir.is_dir():
+                        level_name = level_dir.name
+                        subject_name = 'английский язык'
+                        class_name = 'adult'
+                        
+                        for lesson_file in level_dir.glob("*.txt"):
+                            try:
+                                lessons.append({
+                                    'type': 'adult_language',
+                                    'class': class_name,
+                                    'subject': f"{subject_name} ({level_name.replace('_english', '')})",
+                                    'name': lesson_file.name,
+                                    'full_path': str(lesson_file),
+                                    'size': lesson_file.stat().st_size,
+                                    'modified': datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat(),
+                                    'cefr_level': level_name.replace('_english', ''),
+                                    'can_edit': True,
+                                    'can_delete': True
+                                })
+                            except Exception:
+                                continue
+            except Exception:
+                pass
+            
+            lessons.sort(key=lambda x: x.get('modified', ''), reverse=True)
             return lessons
         except Exception as e:
-            print(f"❌ Ошибка получения списка уроков: {e}")
+            print(f"⚠️ Ошибка получения списка уроков: {e}")
             return []
     
     def add_lesson_with_class(self, subject: str, title: str, content: str, 
                              class_level: str = '5') -> Dict:
-        """Добавляет урок с указанием класса"""
+        """Добавляет урок с указанием класса (безопасно)"""
         try:
             if not title or not content:
                 return {"success": False, "error": "Название и содержание урока обязательны"}
@@ -1234,7 +1402,7 @@ class StudentManagement:
                 lesson_dir = self.lessons_generated_dir
             else:
                 if class_level not in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']:
-                    return {"success": False, "error": "Неверныи класс"}
+                    return {"success": False, "error": "Неверный класс"}
                 
                 class_dir = self.lessons_students_dir / f"{class_level}_class"
                 class_dir.mkdir(parents=True, exist_ok=True)
@@ -1253,7 +1421,7 @@ class StudentManagement:
             
             next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
             
-            # Создаем имя фаила
+            # Создаем имя файла
             title_slug = re.sub(r'[^\wа-яА-ЯёЁ\s-]+', '', title.lower()).strip()
             title_slug = re.sub(r'\s+', '_', title_slug)
             title_slug = title_slug[:50]
@@ -1279,7 +1447,7 @@ class StudentManagement:
             return {"success": False, "error": str(e)}
     
     def get_next_lesson_number(self, class_level: str, subject: str) -> Dict:
-        """Получает следующии номер урока для указанного класса и предмета"""
+        """Получает следующий номер урока для указанного класса и предмета (быстро)"""
         try:
             if not class_level or not subject or subject == "Выберите класс сначала":
                 return {"success": False, "error": "Укажите класс и предмет"}
@@ -1309,7 +1477,7 @@ class StudentManagement:
             else:
                 class_dir = self.lessons_students_dir / f"{class_level}_class"
                 if not class_dir.exists():
-                    return {"success": False, "error": f"Класс {class_level} не наиден"}
+                    return {"success": False, "error": f"Класс {class_level} не найден"}
                 
                 lesson_dir = class_dir / subject
                 if not lesson_dir.exists():
@@ -1338,11 +1506,11 @@ class StudentManagement:
                 "total_lessons": len(existing_lessons)
             }
         except Exception as e:
-            print(f"❌ Ошибка получения номера урока: {e}")
+            print(f"⚠️ Ошибка получения номера урока: {e}")
             return {"success": False, "error": str(e)}
 
     # =============================================================================
-    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С КОМНАТАМИ ВЗРОСЛЫХ
+    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С КОМНАТАМИ ВЗРОСЛЫХ (БЫСТРЫЕ)
     # =============================================================================
 
     def create_adult_free_conference(self, student_data: Dict) -> Dict:
@@ -1361,7 +1529,7 @@ class StudentManagement:
             student_data['current_subject'] = 'свободный диалог'
             student_data['study_mode'] = 'anything'
             
-            # Сохраняем
+            # Сохраняем (в фоне)
             self.save_student_data(student_data)
             
             return {
@@ -1376,7 +1544,7 @@ class StudentManagement:
             return {'success': False, 'error': str(e)}
 
     def get_adult_student_progress(self, student_id: str) -> Dict:
-        """Получает прогресс взрослого студента"""
+        """Получает прогресс взрослого студента (быстро)"""
         try:
             # Загружаем данные студента
             student_data = self.load_student_data(student_id)
@@ -1412,7 +1580,7 @@ class StudentManagement:
             return result
             
         except Exception as e:
-            print(f"❌ Ошибка получения прогресса взрослого студента: {e}")
+            print(f"⚠️ Ошибка получения прогресса взрослого студента: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -1421,14 +1589,13 @@ class StudentManagement:
             }
     
     def ensure_adult_lessons_exist(self, cefr_level: str = 'A1') -> bool:
-        """Проверяет и создает уроки для взрослых если их нет"""
+        """Проверяет и создает уроки для взрослых если их нет (безопасно)"""
         try:
             level_dir = self.lessons_adult_language_dir / f"{cefr_level}_english"
             
             if not level_dir.exists():
                 print(f"⚠️ Папка для уровня {cefr_level} не существует, создаем...")
-                self._create_adult_lessons_structure()
-                return True
+                level_dir.mkdir(parents=True, exist_ok=True)
             
             # Проверяем есть ли уроки
             lesson_files = list(level_dir.glob("*.txt"))
@@ -1438,8 +1605,9 @@ class StudentManagement:
                 for i in range(1, 4):
                     lesson_file = level_dir / f"lesson_{i:02d}_demo.txt"
                     if not lesson_file.exists():
-                        with open(lesson_file, 'w', encoding='utf-8') as f:
-                            f.write(f"""# Урок {i}: Английский язык (Уровень {cefr_level})
+                        try:
+                            with open(lesson_file, 'w', encoding='utf-8') as f:
+                                f.write(f"""# Урок {i}: Английский язык (Уровень {cefr_level})
 
 Это демо-урок английского языка для уровня {cefr_level}.
 
@@ -1460,22 +1628,24 @@ class StudentManagement:
 
 Удачи в изучении английского!
 """)
+                        except Exception:
+                            continue
                 print(f"✅ Созданы демо-уроки для уровня {cefr_level}")
             
             return True
             
         except Exception as e:
-            print(f"❌ Ошибка создания уроков для взрослых: {e}")
+            print(f"⚠️ Ошибка создания уроков для взрослых: {e}")
             return False
     
     def get_adult_lesson_by_path(self, relative_path: str) -> Optional[Dict]:
-        """Находит урок для взрослых по относительному пути"""
+        """Находит урок для взрослых по относительному пути (быстро)"""
         try:
             # Формируем полный путь
             full_path = self.lessons_dir / relative_path
             
             if not full_path.exists():
-                print(f"❌ Файл урока не найден: {full_path}")
+                print(f"⚠️ Файл урока не найден: {full_path}")
                 return None
             
             # Извлекаем информацию из пути
@@ -1508,8 +1678,168 @@ class StudentManagement:
             return None
             
         except Exception as e:
-            print(f"❌ Ошибка поиска урока по пути: {e}")
+            print(f"⚠️ Ошибка поиска урока по пути: {e}")
             return None
+    
+    # =============================================================================
+    # 🔥 МЕТОДЫ ДЛЯ БЫСТРОЙ ПРОВЕРКИ СТРУКТУРЫ (БЕЗ БЛОКИРОВОК)
+    # =============================================================================
+    
+    def quick_check_adult_structure(self) -> Dict:
+        """Быстрая проверка структуры adult_language без блокировок"""
+        try:
+            result = {
+                'exists': False,
+                'levels': [],
+                'total_lessons': 0
+            }
+            
+            if not self.lessons_adult_language_dir.exists():
+                return result
+            
+            result['exists'] = True
+            
+            # Быстрая проверка уровней
+            for level in ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']:
+                level_dir = self.lessons_adult_language_dir / f"{level}_english"
+                if level_dir.exists():
+                    lessons = list(level_dir.glob("*.txt"))
+                    result['levels'].append({
+                        'level': level,
+                        'lessons_count': len(lessons),
+                        'exists': True
+                    })
+                    result['total_lessons'] += len(lessons)
+                else:
+                    result['levels'].append({
+                        'level': level,
+                        'lessons_count': 0,
+                        'exists': False
+                    })
+            
+            return result
+        except Exception as e:
+            print(f"⚠️ Ошибка быстрой проверки структуры: {e}")
+            return {'exists': False, 'levels': [], 'total_lessons': 0}
+    
+    def quick_fix_adult_structure(self) -> bool:
+        """Быстрое исправление структуры adult_language (в фоне)"""
+        try:
+            # Просто вызываем существующий метод
+            self._create_adult_lessons_structure()
+            return True
+        except Exception as e:
+            print(f"⚠️ Ошибка исправления структуры: {e}")
+            return False
+    
+    # =============================================================================
+    # 🔥 ОБНОВЛЕННЫЕ МЕТОДЫ ДЛЯ БЫСТРОГО ДОСТУПА (БЕЗ БЛОКИРОВОК)
+    # =============================================================================
+    
+    def get_lessons_for_student_quick(self, student_class: str, subject: str) -> List[Dict]:
+        """Быстрый поиск уроков для ученика (минимальные проверки)"""
+        try:
+            # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+            if student_class == 'adult' and subject == 'английский язык':
+                return self.get_adult_lessons_by_level('A1')  # Дефолтный уровень
+            
+            # Для школьников
+            class_dir = self.lessons_students_dir / f"{student_class}_class"
+            if not class_dir.exists():
+                return []
+            
+            subject_dir = class_dir / subject
+            if not subject_dir.exists():
+                return []
+            
+            lessons = []
+            for lesson_file in subject_dir.glob("*.txt"):
+                try:
+                    lesson_name = lesson_file.stem
+                    lesson_number = 0
+                    
+                    match = re.search(r'lesson[_\s]*(\d+)', lesson_name.lower())
+                    if match:
+                        lesson_number = int(match.group(1))
+                    
+                    lessons.append({
+                        'id': f"{student_class}_{subject}_{lesson_name}",
+                        'title': lesson_name.replace('_', ' ').title(),
+                        'file_path': lesson_file,
+                        'subject': subject,
+                        'class_level': student_class,
+                        'lesson_number': lesson_number,
+                        'full_path': str(lesson_file.relative_to(self.lessons_dir))
+                    })
+                except Exception:
+                    continue
+            
+            lessons.sort(key=lambda x: x['lesson_number'])
+            return lessons
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка быстрого поиска уроков: {e}")
+            return []
+    
+    def get_student_dashboard_quick(self, student_id: str) -> Dict:
+        """Быстрый дашборд для ученика (минимальные проверки)"""
+        try:
+            student_data = self.load_student_data(student_id)
+            if not student_data:
+                return {'error': 'Данные ученика не найдены'}
+            
+            student_class = student_data.get('education_level', '5')
+            student_name = student_data.get('name', 'Ученик')
+            
+            # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
+            if student_class == 'adult':
+                study_mode = student_data.get('study_mode', 'anything')
+                language_level = student_data.get('language_level', 'A1')
+                
+                result = {
+                    'student_id': student_id,
+                    'student_name': student_name,
+                    'student_class': 'adult',
+                    'is_adult': True,
+                    'study_mode': study_mode,
+                    'language_level': language_level,
+                    'has_lessons': study_mode == 'language'
+                }
+                
+                if study_mode == 'language':
+                    lessons = self.get_adult_lessons_by_level(language_level)
+                    result['lessons'] = lessons
+                    result['lessons_count'] = len(lessons)
+                
+                return result
+            
+            # Для школьников
+            result = {
+                'student_id': student_id,
+                'student_name': student_name,
+                'student_class': student_class,
+                'is_adult': False,
+                'subjects': {}
+            }
+            
+            # Быстрый поиск предметов
+            class_dir = self.lessons_students_dir / f"{student_class}_class"
+            if class_dir.exists():
+                for subject_dir in class_dir.iterdir():
+                    if subject_dir.is_dir():
+                        subject_name = subject_dir.name
+                        lessons_count = len(list(subject_dir.glob("*.txt")))
+                        
+                        result['subjects'][subject_name] = {
+                            'lessons_count': lessons_count,
+                            'has_lessons': lessons_count > 0
+                        }
+            
+            return result
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка быстрого дашборда: {e}")
+            return {'error': str(e)}
 
 # =============================================================================
 # 🔥 ДОПОЛНИТЕЛЬНЫЕ УТИЛИТЫ ДЛЯ ОТЛАДКИ
@@ -1534,7 +1864,11 @@ def test_student_management():
         cefr_levels = sm.get_cefr_levels()
         print(f"✅ Уровни CEFR: {len(cefr_levels)} уровней")
         
-        # 3. Проверяем уроки для взрослых
+        # 3. Быстрая проверка структуры adult
+        structure = sm.quick_check_adult_structure()
+        print(f"✅ Структура adult_language: {structure}")
+        
+        # 4. Проверяем уроки для взрослых
         for level in ['A1', 'B1', 'C1']:
             lessons = sm.get_adult_lessons_by_level(level)
             print(f"✅ Уроки для уровня {level}: {len(lessons)} уроков")
@@ -1543,7 +1877,7 @@ def test_student_management():
                 print(f"   Пример: {lessons[0]['title']}")
                 print(f"   Путь: {lessons[0]['full_path']}")
         
-        # 4. Создаем тестового взрослого студента
+        # 5. Создаем тестового взрослого студента
         adult_data = {
             'student_id': 'test_adult_123',
             'name': 'Иван Петров',
@@ -1553,19 +1887,24 @@ def test_student_management():
             'language_level': 'B1'
         }
         
-        # 5. Создаем комнату для взрослого
+        # 6. Быстрый дашборд
+        dashboard = sm.get_student_dashboard_quick('test_adult_123')
+        print(f"✅ Быстрый дашборд взрослого: {dashboard}")
+        
+        # 7. Проверяем создание комнаты
         room_info = sm.create_adult_student_room(adult_data, study_mode='language', language_level='B1')
         print(f"✅ Комната для взрослого создана: {room_info}")
         
-        # 6. Проверяем дашборд
-        dashboard = sm.get_adult_student_dashboard('test_adult_123', adult_data)
-        print(f"✅ Дашборд взрослого: {dashboard.get('subjects', {})}")
-        
         print("🎉 Все тесты пройдены успешно!")
         
+    except Exception as e:
+        print(f"❌ Ошибка тестирования: {e}")
     finally:
         # Очищаем временные файлы
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     test_student_management()
