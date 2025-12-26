@@ -671,51 +671,21 @@
             text-decoration: underline;
         }
         
-        /* Стили для вкладки уроков взрослых */
-        .lessons-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #e1e1e1;
-        }
-        
-        .lessons-title {
-            font-size: 1.2rem;
+        /* Кнопка конференции */
+        .conference-link {
+            display: inline-block;
+            background: var(--gradient);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
             font-weight: 600;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .cefr-level-selector {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-        
-        .cefr-level-btn {
-            padding: 0.5rem 1rem;
-            background: white;
-            border: 1px solid #e1e1e1;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9rem;
             transition: all 0.3s ease;
         }
         
-        .cefr-level-btn:hover {
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-        
-        .cefr-level-btn.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
+        .conference-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(126, 118, 249, 0.3);
         }
     </style>
 </head>
@@ -803,7 +773,6 @@
         let currentStudentData = null;
         let availableAvatars = [];
         let currentLessonsData = null;
-        let currentCEFRLevel = 'A1';
         
         // Иконки для предметов
         const subjectIcons = {
@@ -1037,6 +1006,10 @@
         
         // Отображение режима свободной конференции
         function renderFreeConversationMode() {
+            const timestamp = Date.now();
+            const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+            const roomName = `free_conversation_${studentName}_${timestamp}`;
+            
             return `
                 <div class="subject-card adult-mode-card">
                     <div class="subject-header">
@@ -1055,10 +1028,16 @@
                             Задавайте вопросы по науке, искусству, технологиям, бизнесу и другим темам.
                         </p>
                         
-                        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                            <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="flex: 1;">
+                        <div style="text-align: center;">
+                            <a href="/conference?room=${roomName}&student=true&subject=общее&adult=true&study_mode=anything" 
+                               target="_blank" 
+                               class="btn free-conversation-btn" 
+                               style="width: 100%;">
                                 <i class="fas fa-comment-alt"></i> Начать свободную конференцию
-                            </button>
+                            </a>
+                            <p style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem;">
+                                Комната: ${roomName}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -1068,8 +1047,6 @@
         // Загрузка уроков английского для взрослых
         async function loadAdultEnglishLessons(cefrLevel) {
             try {
-                currentCEFRLevel = cefrLevel;
-                
                 // Получаем уроки для выбранного уровня
                 const response = await fetch(`/api/student/adult-lessons/${cefrLevel}`);
                 const data = await response.json();
@@ -1081,35 +1058,7 @@
                     container.innerHTML = renderAdultEnglishLessons(data.lessons, cefrLevel);
                 } else {
                     // Нет уроков для этого уровня
-                    container.innerHTML = `
-                        <div class="subject-card adult-mode-card">
-                            <div class="subject-header">
-                                <div class="subject-icon">
-                                    <i class="fas fa-flag-usa"></i>
-                                </div>
-                                <div class="subject-title">
-                                    <h4>Английский язык <span class="cefr-badge">${cefrLevel}</span></h4>
-                                    <p>${cefrDescriptions[cefrLevel] || 'Уроки английского языка'}</p>
-                                </div>
-                            </div>
-                            
-                            <div style="margin: 1.5rem 0; text-align: center;">
-                                <p style="color: var(--text-light); margin-bottom: 1rem;">
-                                    Для уровня ${cefrLevel} уроки пока не загружены. 
-                                    Вы можете использовать свободную конференцию для практики английского языка.
-                                </p>
-                                
-                                <div style="display: flex; gap: 1rem;">
-                                    <button class="btn" onclick="startAdultLanguageRoom('${cefrLevel}')" style="flex: 1;">
-                                        <i class="fas fa-plus-circle"></i> Создать комнату для английского языка
-                                    </button>
-                                    <button class="btn btn-secondary" onclick="startFreeConversation()" style="flex: 1;">
-                                        <i class="fas fa-comment-alt"></i> Свободная конференция
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    container.innerHTML = renderAdultEnglishNoLessons(cefrLevel);
                 }
             } catch (error) {
                 console.error('Error loading adult English lessons:', error);
@@ -1123,7 +1072,49 @@
             }
         }
         
-        // Отображение уроков английского для взрослых
+        // Отображение уроков английского для взрослых (нет уроков)
+        function renderAdultEnglishNoLessons(cefrLevel) {
+            const timestamp = Date.now();
+            const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+            const roomName = `adult_english_${cefrLevel}_${studentName}_${timestamp}`;
+            const conferenceUrl = `/conference?room=${roomName}&student=true&subject=английский язык&adult=true&study_mode=language&language_level=${cefrLevel}`;
+            
+            return `
+                <div class="subject-card adult-mode-card">
+                    <div class="subject-header">
+                        <div class="subject-icon">
+                            <i class="fas fa-flag-usa"></i>
+                        </div>
+                        <div class="subject-title">
+                            <h4>Английский язык <span class="cefr-badge">${cefrLevel}</span></h4>
+                            <p>${cefrDescriptions[cefrLevel] || 'Уроки английского языка'}</p>
+                        </div>
+                    </div>
+                    
+                    <div style="margin: 1.5rem 0; text-align: center;">
+                        <p style="color: var(--text-light); margin-bottom: 1rem;">
+                            Для уровня ${cefrLevel} уроки пока не загружены. 
+                            Вы можете использовать свободную конференцию для практики английского языка.
+                        </p>
+                        
+                        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                            <a href="${conferenceUrl}" 
+                               target="_blank" 
+                               class="btn" 
+                               style="flex: 1;">
+                                <i class="fas fa-plus-circle"></i> Создать комнату для английского языка
+                            </a>
+                            ${renderFreeConversationLink()}
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem;">
+                            Комната: ${roomName}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Отображение уроков английского для взрослых (есть уроки)
         function renderAdultEnglishLessons(lessons, cefrLevel) {
             // Сортируем уроки по номеру
             const sortedLessons = [...lessons].sort((a, b) => {
@@ -1131,6 +1122,11 @@
                 const bNum = extractLessonNumber(b.title) || 999;
                 return aNum - bNum;
             });
+            
+            const timestamp = Date.now();
+            const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+            const roomName = `adult_english_${cefrLevel}_${studentName}_${timestamp}`;
+            const generalConferenceUrl = `/conference?room=${roomName}&student=true&subject=английский язык&adult=true&study_mode=language&language_level=${cefrLevel}`;
             
             return `
                 <div class="subject-card adult-mode-card">
@@ -1157,6 +1153,9 @@
                             
                             ${sortedLessons.map((lesson, index) => {
                                 const lessonNum = extractLessonNumber(lesson.title) || index + 1;
+                                const lessonRoomName = `adult_english_${cefrLevel}_lesson${lessonNum}_${studentName}_${timestamp}`;
+                                const lessonConferenceUrl = `/conference?room=${lessonRoomName}&student=true&subject=английский язык&adult=true&study_mode=language&language_level=${cefrLevel}&lesson_id=${lesson.id}`;
+                                
                                 return `
                                     <div class="lesson-item">
                                         <div class="lesson-status pending">
@@ -1172,9 +1171,11 @@
                                             </p>
                                         </div>
                                         <div>
-                                            <button class="btn btn-small lesson-link" onclick="startAdultSpecificLesson('${lesson.id}', '${cefrLevel}')">
+                                            <a href="${lessonConferenceUrl}" 
+                                               target="_blank" 
+                                               class="btn btn-small lesson-link">
                                                 <i class="fas fa-play"></i> Начать
-                                            </button>
+                                            </a>
                                         </div>
                                     </div>
                                 `;
@@ -1182,15 +1183,36 @@
                         </div>
                         
                         <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                            <button class="btn" onclick="startAdultLanguageRoom('${cefrLevel}')" style="flex: 1;">
+                            <a href="${generalConferenceUrl}" 
+                               target="_blank" 
+                               class="btn" 
+                               style="flex: 1;">
                                 <i class="fas fa-plus-circle"></i> Создать комнату для английского языка
-                            </button>
-                            <button class="btn btn-secondary" onclick="startFreeConversation()" style="flex: 1;">
-                                <i class="fas fa-comment-alt"></i> Свободная конференция
-                            </button>
+                            </a>
+                            ${renderFreeConversationLink()}
                         </div>
+                        <p style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem; text-align: center;">
+                            Имя общей комнаты: ${roomName}
+                        </p>
                     </div>
                 </div>
+            `;
+        }
+        
+        // Ссылка на свободную конференцию
+        function renderFreeConversationLink() {
+            const timestamp = Date.now();
+            const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+            const roomName = `free_conversation_${studentName}_${timestamp}`;
+            const conferenceUrl = `/conference?room=${roomName}&student=true&subject=общее&adult=true&study_mode=anything`;
+            
+            return `
+                <a href="${conferenceUrl}" 
+                   target="_blank" 
+                   class="btn btn-secondary" 
+                   style="flex: 1;">
+                    <i class="fas fa-comment-alt"></i> Свободная конференция
+                </a>
             `;
         }
         
@@ -1240,6 +1262,12 @@
                 const completedLessons = lessons.filter(l => l.completed).length;
                 const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
                 
+                // Генерируем имя комнаты для предмета
+                const timestamp = Date.now();
+                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                const roomName = `student_${subjectName.replace(/\s+/g, '_')}_${studentName}_${timestamp}`;
+                const conferenceUrl = `/conference?room=${roomName}&student=true&subject=${encodeURIComponent(subjectName)}`;
+                
                 html += `
                     <div class="subject-card">
                         <div class="subject-header">
@@ -1264,190 +1292,28 @@
                         ` : ''}
                         
                         <div class="subject-actions">
+                            <a href="${conferenceUrl}" 
+                               target="_blank" 
+                               class="btn btn-small">
+                                <i class="fas fa-play"></i> Начать урок
+                            </a>
+                            
                             ${totalLessons > 0 ? `
-                                <button class="btn btn-small" onclick="startSchoolSubjectLesson('${subjectName}')">
-                                    <i class="fas fa-play"></i> Начать урок
-                                </button>
                                 <button class="btn btn-small btn-secondary" onclick="viewSchoolSubjectLessons('${subjectName}')">
                                     <i class="fas fa-list"></i> Все уроки
                                 </button>
-                            ` : `
-                                <button class="btn btn-small" onclick="startSchoolSubjectLesson('${subjectName}')">
-                                    <i class="fas fa-plus-circle"></i> Создать комнату
-                                </button>
-                            `}
+                            ` : ''}
                         </div>
+                        
+                        <p style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem; text-align: center;">
+                            Комната: ${roomName}
+                        </p>
                     </div>
                 `;
             }
             
             html += '</div>';
             return html;
-        }
-        
-        // ==============================
-        // ФУНКЦИИ ДЛЯ ЗАПУСКА КОНФЕРЕНЦИЙ
-        // ==============================
-        
-        // Начать свободную конференцию (для взрослых/студентов)
-        async function startFreeConversation() {
-            try {
-                console.log('🚀 Начинаем свободную конференцию');
-                
-                let apiEndpoint, requestBody;
-                
-                if (currentStudentData?.is_adult) {
-                    // Для взрослых/студентов
-                    apiEndpoint = '/api/adult/free-room';
-                    requestBody = {};
-                } else {
-                    // Для школьников
-                    apiEndpoint = '/api/student/create-conference';
-                    requestBody = { subject: 'общее' };
-                }
-                
-                const response = await fetch(apiEndpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                });
-                
-                const data = await response.json();
-                
-                if (data.success && data.room_id) {
-                    console.log(`✅ Свободная конференция создана: ${data.room_id}`);
-                    openConference(data.room_id, 'общее', null, true, 'anything');
-                } else {
-                    throw new Error(data.error || 'Ошибка создания свободной конференции');
-                }
-            } catch (error) {
-                console.error('❌ Ошибка создания свободной конференции:', error);
-                
-                // Fallback: создаем комнату вручную
-                const timestamp = Date.now();
-                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
-                const roomName = `free_conversation_${studentName}_${timestamp}`;
-                
-                alert(`Создана свободная конференция: ${roomName}`);
-                openConference(roomName, 'общее', null, true);
-            }
-        }
-        
-        // Создать комнату для английского языка (взрослые)
-        async function startAdultLanguageRoom(cefrLevel) {
-            try {
-                console.log(`🚀 Создаем комнату для английского языка уровня ${cefrLevel}`);
-                
-                const response = await fetch('/api/student/create-adult-room', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        study_mode: 'language',
-                        language_level: cefrLevel
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success && data.room_id) {
-                    console.log(`✅ Комната создана: ${data.room_id}`);
-                    openConference(data.room_id, 'английский язык', null, true, 'language', cefrLevel);
-                } else {
-                    throw new Error(data.error || 'Ошибка создания комнаты');
-                }
-            } catch (error) {
-                console.error('❌ Ошибка создания комнаты для английского:', error);
-                alert(`Ошибка: ${error.message}`);
-            }
-        }
-        
-        // Начать конкретный урок английского (взрослые)
-        async function startAdultSpecificLesson(lessonId, cefrLevel) {
-            try {
-                console.log(`🚀 Начинаем урок английского ${lessonId} уровня ${cefrLevel}`);
-                
-                // 1. Создаем комнату
-                const roomResponse = await fetch('/api/student/create-adult-room', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        study_mode: 'language',
-                        language_level: cefrLevel
-                    })
-                });
-                
-                const roomData = await roomResponse.json();
-                
-                if (!roomData.success || !roomData.room_id) {
-                    throw new Error(roomData.error || 'Ошибка создания комнаты');
-                }
-                
-                const roomName = roomData.room_id;
-                console.log(`✅ Комната создана: ${roomName}`);
-                
-                // 2. Регистрируем комнату с уроком
-                try {
-                    await fetch('/api/room/register-student', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            room_id: roomName,
-                            student_data: currentStudentData,
-                            lesson_id: lessonId,
-                            subject: 'английский язык',
-                            is_adult: true,
-                            study_mode: 'language',
-                            language_level: cefrLevel
-                        })
-                    });
-                } catch (regError) {
-                    console.warn('⚠️ Предупреждение при регистрации комнаты:', regError);
-                }
-                
-                // 3. Открываем конференцию
-                openConference(roomName, 'английский язык', lessonId, true, 'language', cefrLevel);
-                
-            } catch (error) {
-                console.error('❌ Ошибка запуска урока английского:', error);
-                alert(`Ошибка: ${error.message}`);
-            }
-        }
-        
-        // Начать урок по предмету (школьники)
-        async function startSchoolSubjectLesson(subjectName) {
-            try {
-                console.log(`🚀 Начинаем урок по предмету: ${subjectName}`);
-                
-                // Получаем комнату для предмета
-                const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
-                const data = await response.json();
-                
-                if (data.success && data.room) {
-                    const roomName = data.room.room_name;
-                    console.log(`✅ Комната получена: ${roomName}`);
-                    openConference(roomName, subjectName);
-                } else {
-                    throw new Error('Комната не найдена');
-                }
-            } catch (error) {
-                console.error('❌ Ошибка запуска урока:', error);
-                
-                // Fallback: создаем комнату вручную
-                const timestamp = Date.now();
-                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
-                const roomName = `student_${subjectName}_${studentName}_${timestamp}`;
-                
-                alert(`Создана комната: ${roomName}`);
-                openConference(roomName, subjectName);
-            }
         }
         
         // Просмотреть все уроки по предмету (школьники)
@@ -1476,6 +1342,12 @@
                 return (a.lesson_number || 999) - (b.lesson_number || 999);
             });
             
+            // Генерируем базовое имя комнаты
+            const timestamp = Date.now();
+            const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+            const baseRoomName = `student_${subjectName.replace(/\s+/g, '_')}_${studentName}_${timestamp}`;
+            const generalConferenceUrl = `/conference?room=${baseRoomName}&student=true&subject=${encodeURIComponent(subjectName)}`;
+            
             return `
                 <div class="subject-card">
                     <div class="subject-header">
@@ -1492,6 +1364,10 @@
                         <div class="lessons-container">
                             ${sortedLessons.map((lesson, index) => {
                                 const isCompleted = lesson.completed || false;
+                                const lessonNum = lesson.lesson_number || index + 1;
+                                const lessonRoomName = `student_${subjectName.replace(/\s+/g, '_')}_lesson${lessonNum}_${studentName}_${timestamp}`;
+                                const lessonConferenceUrl = `/conference?room=${lessonRoomName}&student=true&subject=${encodeURIComponent(subjectName)}&lesson_id=${lesson.id}`;
+                                
                                 return `
                                     <div class="lesson-item">
                                         <div class="lesson-status ${isCompleted ? 'completed' : 'pending'}">
@@ -1499,7 +1375,7 @@
                                         </div>
                                         <div class="lesson-info">
                                             <h5>
-                                                <span class="lesson-number">Урок ${lesson.lesson_number || index + 1}:</span>
+                                                <span class="lesson-number">Урок ${lessonNum}:</span>
                                                 ${lesson.title}
                                             </h5>
                                             <p>
@@ -1508,10 +1384,12 @@
                                             </p>
                                         </div>
                                         <div>
-                                            <button class="btn btn-small lesson-link" onclick="startSchoolSpecificLesson('${lesson.id}', '${subjectName}')">
+                                            <a href="${lessonConferenceUrl}" 
+                                               target="_blank" 
+                                               class="btn btn-small lesson-link">
                                                 <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
                                                 ${isCompleted ? 'Повторить' : 'Начать'}
-                                            </button>
+                                            </a>
                                         </div>
                                     </div>
                                 `;
@@ -1519,52 +1397,19 @@
                         </div>
                         
                         <div style="margin-top: 1.5rem;">
-                            <button class="btn" onclick="startSchoolSubjectLesson('${subjectName}')" style="width: 100%;">
+                            <a href="${generalConferenceUrl}" 
+                               target="_blank" 
+                               class="btn" 
+                               style="width: 100%;">
                                 <i class="fas fa-plus-circle"></i> Создать комнату для ${subjectName}
-                            </button>
+                            </a>
                         </div>
+                        <p style="font-size: 0.8rem; color: var(--text-light); margin-top: 0.5rem; text-align: center;">
+                            Имя общей комнаты: ${baseRoomName}
+                        </p>
                     </div>
                 </div>
             `;
-        }
-        
-        // Начать конкретный урок (школьники)
-        async function startSchoolSpecificLesson(lessonId, subjectName) {
-            try {
-                // Создаем комнату
-                await startSchoolSubjectLesson(subjectName);
-                
-                // TODO: Реализовать запуск конкретного урока
-                // Пока просто открываем комнату, урок будет выбран автоматически при входе
-                console.log(`Урок ${lessonId} будет выбран при входе в комнату`);
-            } catch (error) {
-                console.error('Ошибка запуска урока:', error);
-            }
-        }
-        
-        // Открытие конференции
-        function openConference(roomName, subjectName, lessonId = null, isAdult = false, studyMode = null, languageLevel = null) {
-            console.log(`🌐 Открываем конференцию: ${roomName}, предмет: ${subjectName}, урок: ${lessonId || 'нет'}`);
-            
-            // Формируем URL с параметрами
-            let url = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
-            
-            if (lessonId && lessonId !== 'next') {
-                url += `&lesson_id=${encodeURIComponent(lessonId)}`;
-            }
-            
-            // Добавляем информацию о взрослых/студентах
-            if (isAdult) {
-                url += `&adult=true&study_mode=${studyMode || 'anything'}`;
-                if (studyMode === 'language' && languageLevel) {
-                    url += `&language_level=${languageLevel}`;
-                }
-            }
-            
-            console.log(`🔗 Переход по ссылке: ${url}`);
-            
-            // Открываем в НОВОЙ вкладке
-            window.open(url, '_blank');
         }
         
         // ==============================
