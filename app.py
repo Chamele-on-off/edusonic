@@ -710,51 +710,6 @@ def create_adult_student_room(student_data: dict, study_mode: str = 'anything', 
     except Exception as e:
         debug_log(f"❌ Ошибка создания комнаты для взрослого: {e}")
         return {'success': False, 'error': str(e)}
-        
-        
-# 🔥 НОВЫЙ API ДЛЯ ПОЛУЧЕНИЯ УРОКОВ ПО УРОВНЮ (ДЛЯ СОВМЕСТИМОСТИ)
-@app.route('/api/student/adult-lessons/<language_level>')
-@student_required
-def get_adult_lessons_by_level(language_level):
-    """Получает уроки для взрослого студента по указанному уровню CEFR"""
-    try:
-        # ВАЖНО: Проверяем уровень
-        if language_level not in CEFR_LEVELS:
-            return jsonify({"success": False, "error": f"Неверный уровень языка: {language_level}"})
-        
-        # Находим директорию с уроками
-        level_dir = LESSONS_STUDENTS_DIR / "adult_language" / f"{language_level}_english"
-        lessons = []
-        
-        if level_dir.exists():
-            for lesson_file in level_dir.glob("*.txt"):
-                with open(lesson_file, 'r', encoding='utf-8') as f:
-                    first_line = f.readline().strip('# ').strip()
-                    title = first_line if first_line else lesson_file.stem.replace('_', ' ').title()
-                
-                lessons.append({
-                    'id': f"adult_{language_level}_{lesson_file.stem}",
-                    'title': title,
-                    'level': language_level,
-                    'file_path': str(lesson_file.relative_to(LESSONS_DIR)),
-                    'type': 'adult_language',
-                    'cefr_level': language_level
-                })
-        
-        # Сортируем по названию (номерам)
-        lessons.sort(key=lambda x: x['title'])
-        
-        return jsonify({
-            "success": True,
-            "language_level": language_level,
-            "lessons": lessons,
-            "total_lessons": len(lessons),
-            "description": CEFR_LEVELS.get(language_level, {}).get('description', '')
-        })
-        
-    except Exception as e:
-        debug_log(f"❌ Ошибка получения уроков по уровню {language_level}: {e}")
-        return jsonify({"success": False, "error": str(e)})
 
 # 🔥 НОВЫЙ API ДЛЯ СОЗДАНИЯ КОМНАТЫ ВЗРОСЛОГО
 @app.route('/api/student/create-adult-room', methods=['POST'])
