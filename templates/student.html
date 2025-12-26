@@ -1351,16 +1351,36 @@
         async function loadAdultLanguageLessons() {
             try {
                 const languageLevel = currentStudentData.language_level || 'A1';
-                const response = await fetch(`/api/student/lessons-by-language-level?level=${languageLevel}`);
+                
+                // Используем тот же endpoint, что и для школьников
+                const response = await fetch('/api/student/lessons-by-class');
                 const data = await response.json();
                 
                 if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
                     subjectsData = data.lessons;
                     
-                    // Для взрослых/студентов показываем только английский язык
+                    // Фильтруем уроки английского языка по уровню
                     const englishLessons = data.lessons['английский язык'];
                     if (englishLessons && englishLessons.lessons && englishLessons.lessons.length > 0) {
-                        renderLessonsList('английский язык', englishLessons.lessons);
+                        // Фильтруем уроки по уровню языка
+                        const filteredLessons = englishLessons.lessons.filter(lesson => {
+                            // Проверяем, подходит ли урок по уровню
+                            // Предполагаем, что уроки имеют поле language_level или можно определить по названию/описанию
+                            const lessonLevel = lesson.language_level || 
+                                               (lesson.title && lesson.title.includes(languageLevel) ? languageLevel : null) ||
+                                               (lesson.description && lesson.description.includes(languageLevel) ? languageLevel : null);
+                            
+                            // Если у урока нет явного уровня, показываем все уроки английского
+                            // (или можно настроить другую логику фильтрации)
+                            return !lessonLevel || lessonLevel === languageLevel;
+                        });
+                        
+                        if (filteredLessons.length > 0) {
+                            renderLessonsList('английский язык', filteredLessons);
+                        } else {
+                            // Если нет отфильтрованных уроков, показываем все уроки английского
+                            renderLessonsList('английский язык', englishLessons.lessons);
+                        }
                     } else {
                         document.getElementById('lessonsList').innerHTML = `
                             <div class="info-message">
