@@ -486,7 +486,7 @@ def complete_profile():
             
             # 🔥 Создаем демо-уроки для взрослых если нужно
             if is_adult and study_mode == 'language':
-                student_manager._create_adult_language_structure()
+                student_manager._create_adult_lessons_structure()
             
             return jsonify({
                 "success": True,
