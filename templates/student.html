@@ -679,6 +679,11 @@
             background: rgba(126, 118, 249, 0.1);
             text-decoration: underline;
         }
+        
+        /* Скрытие элементов */
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -701,19 +706,20 @@
         </div>
         
         <!-- Вкладки -->
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('progress')">
+        <div class="tabs" id="tabsContainer">
+            <!-- Вкладки будут настроены через JavaScript в зависимости от типа пользователя -->
+            <button class="tab-btn active" onclick="switchTab('progress')" id="progressTabBtn">
                 <i class="fas fa-chart-line"></i> Прогресс
             </button>
-            <button class="tab-btn" onclick="switchTab('lessons')">
+            <button class="tab-btn" onclick="switchTab('lessons')" id="lessonsTabBtn">
                 <i class="fas fa-book"></i> Все уроки
             </button>
-            <button class="tab-btn" onclick="switchTab('avatar')">
+            <button class="tab-btn" onclick="switchTab('avatar')" id="avatarTabBtn">
                 <i class="fas fa-user-circle"></i> Аватар
             </button>
         </div>
         
-        <!-- Вкладка 1: Прогресс по предметам -->
+        <!-- Вкладка 1: Прогресс по предметам (только для школьников) -->
         <div id="progressTab" class="tab-content active">
             <div class="info-message" id="progressMessage">
                 <i class="fas fa-info-circle"></i>
@@ -737,8 +743,20 @@
                 <span id="lessonsMessageText">Выберите предмет для просмотра всех доступных уроков</span>
             </div>
             
+            <!-- Контейнер для выбора предмета (только для школьников) -->
             <div id="lessonsSubjectSelect" style="margin-bottom: 1.5rem;">
                 <!-- Выбор предмета будет загружен через JavaScript -->
+            </div>
+            
+            <!-- Заголовок уроков для взрослых/студентов -->
+            <div id="adultLessonsHeader" class="hidden" style="margin-bottom: 1.5rem;">
+                <h3 style="color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-language"></i>
+                    <span id="adultLessonsTitle">Уроки английского языка</span>
+                </h3>
+                <p style="color: var(--text-light); margin-top: 0.5rem;" id="adultLessonsDescription">
+                    <!-- Описание будет заполнено через JavaScript -->
+                </p>
             </div>
             
             <div id="lessonsList">
@@ -902,11 +920,29 @@
                     currentStudentData = data.student_data;
                     currentStudentData.user_id = data.user_id;
                     
+                    // Определяем, является ли пользователь взрослым/студентом
+                    const isAdult = currentStudentData.education_level === 'student' || 
+                                   currentStudentData.education_level === 'adult' ||
+                                   currentStudentData.level === 'student' || 
+                                   currentStudentData.level === 'adult';
+                    
+                    currentStudentData.is_adult = isAdult;
+                    
+                    // Настраиваем интерфейс в зависимости от типа пользователя
+                    setupInterfaceForUserType(isAdult);
+                    
                     // Обновить отображение данных ученика
                     updateStudentInfoDisplay();
                     
-                    // Загрузить прогресс
-                    loadProgressData();
+                    // Загрузить прогресс (только для школьников)
+                    if (!isAdult) {
+                        loadProgressData();
+                    } else {
+                        // Для взрослых/студентов сразу переключаемся на вкладку уроков
+                        setTimeout(() => {
+                            switchTab('lessons');
+                        }, 100);
+                    }
                     
                     // Загрузить аватары
                     loadAvatars();
@@ -916,6 +952,27 @@
             } catch (error) {
                 console.error('Error loading student data:', error);
                 window.location.href = '/student_profile';
+            }
+        }
+        
+        // Настройка интерфейса в зависимости от типа пользователя
+        function setupInterfaceForUserType(isAdult) {
+            const tabsContainer = document.getElementById('tabsContainer');
+            const progressTabBtn = document.getElementById('progressTabBtn');
+            const progressTab = document.getElementById('progressTab');
+            
+            if (isAdult) {
+                // Для взрослых/студентов скрываем вкладку "Прогресс"
+                progressTabBtn.classList.add('hidden');
+                
+                // Если вкладка прогресса активна, переключаемся на вкладку уроков
+                if (progressTab.classList.contains('active')) {
+                    progressTab.classList.remove('active');
+                    document.getElementById('lessonsTab').classList.add('active');
+                    
+                    progressTabBtn.classList.remove('active');
+                    document.getElementById('lessonsTabBtn').classList.add('active');
+                }
             }
         }
         
@@ -983,7 +1040,7 @@
         }
         
         // ==============================
-        // ВКЛАДКА ПРОГРЕССА
+        // ВКЛАДКА ПРОГРЕССА (только для школьников)
         // ==============================
         
         // Загрузка данных о прогрессе
@@ -991,15 +1048,9 @@
             try {
                 showLoading('progress');
                 
-                // Обновляем текст сообщения в зависимости от типа пользователя
+                // Обновляем текст сообщения
                 const progressMessage = document.getElementById('progressMessageText');
-                if (currentStudentData?.is_adult) {
-                    if (currentStudentData.study_mode === 'anything') {
-                        progressMessage.textContent = 'Вы в режиме свободного диалога. Уроки не предусмотрены.';
-                    } else if (currentStudentData.study_mode === 'language') {
-                        progressMessage.textContent = `Вы изучаете английский язык (уровень ${currentStudentData.language_level || 'A1'})`;
-                    }
-                }
+                progressMessage.textContent = 'Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение';
                 
                 // Используем новый исправленный API
                 const response = await fetch('/api/student/progress/dashboard');
@@ -1026,42 +1077,13 @@
         function renderProgressSubjects(subjects) {
             const container = document.getElementById('progressContainer');
             
-            // Если это взрослый/студент в режиме "изучать что угодно"
-            if (currentStudentData?.is_adult && currentStudentData.study_mode === 'anything') {
-                container.innerHTML = `
-                    <div class="subject-card adult-mode-card">
-                        <div class="subject-header">
-                            <div class="subject-icon">
-                                <i class="fas fa-comments"></i>
-                            </div>
-                            <div class="subject-title">
-                                <h4>Свободный диалог</h4>
-                                <p>Режим "изучать что угодно" без структурированных уроков</p>
-                            </div>
-                        </div>
-                        
-                        <div style="margin: 1.5rem 0; text-align: center;">
-                            <p style="color: var(--text-light); margin-bottom: 1rem;">
-                                Вы можете общаться с AI-учителем на любые темы без ограничений по программе
-                            </p>
-                            <button class="btn free-conversation-btn" onclick="startFreeConversation()">
-                                <i class="fas fa-comment-alt"></i> Начать свободную конференцию
-                            </button>
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-            
             // Если нет предметов
             if (!subjects || Object.keys(subjects).length === 0) {
                 container.innerHTML = `
                     <div class="info-message">
                         <i class="fas fa-info-circle"></i>
                         <span id="noSubjectsMessage">
-                            ${currentStudentData?.is_adult 
-                                ? 'Для вашего уровня английского пока нет уроков' 
-                                : 'У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.'}
+                            У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.
                         </span>
                     </div>
                 `;
@@ -1077,27 +1099,17 @@
                 const nextLesson = subjectData.next_lesson;
                 const hasLessons = subjectData.has_lessons || totalLessons > 0;
                 
-                // Определяем класс для карточки
-                const cardClass = currentStudentData?.is_adult ? 'subject-card adult-mode-card' : 'subject-card';
-                
                 // Определяем описание
                 let description = subjectDescriptions[subjectName] || 'Изучение предмета';
-                if (currentStudentData?.is_adult && subjectName === 'английский язык') {
-                    description = `Уровень ${currentStudentData.language_level || 'A1'}`;
-                }
                 
                 html += `
-                    <div class="${cardClass}">
+                    <div class="subject-card">
                         <div class="subject-header">
                             <div class="subject-icon">
                                 <i class="${subjectIcons[subjectName] || subjectIcons.default}"></i>
                             </div>
                             <div class="subject-title">
-                                <h4>${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}
-                                ${currentStudentData?.is_adult && subjectName === 'английский язык' 
-                                    ? `<span class="cefr-badge">${currentStudentData.language_level || 'A1'}</span>` 
-                                    : ''}
-                                </h4>
+                                <h4>${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)}</h4>
                                 <p>${description}</p>
                             </div>
                         </div>
@@ -1139,34 +1151,11 @@
                 `;
             }
             
-            // Для взрослых/студентов добавляем возможность свободной конференции
-            if (currentStudentData?.is_adult) {
-                html += `
-                    <div class="subject-card adult-mode-card">
-                        <div class="subject-header">
-                            <div class="subject-icon">
-                                <i class="fas fa-comments"></i>
-                            </div>
-                            <div class="subject-title">
-                                <h4>Свободная конференция</h4>
-                                <p>Обсудить любую тему вне уроков</p>
-                            </div>
-                        </div>
-                        
-                        <div style="margin: 1.5rem 0; text-align: center;">
-                            <button class="btn free-conversation-btn" onclick="startFreeConversation()">
-                                <i class="fas fa-comment-alt"></i> Начать свободный диалог
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }
-            
             html += '</div>';
             container.innerHTML = html;
         }
         
-        // Начать свободную конференцию (для взрослых/студентов)
+        // Начать свободную конференцию
         async function startFreeConversation() {
             try {
                 console.log('🚀 Начинаем свободную конференцию');
@@ -1299,10 +1288,16 @@
                 
                 // Обновляем текст сообщения
                 const lessonsMessage = document.getElementById('lessonsMessageText');
+                const adultLessonsHeader = document.getElementById('adultLessonsHeader');
+                const adultLessonsTitle = document.getElementById('adultLessonsTitle');
+                const adultLessonsDescription = document.getElementById('adultLessonsDescription');
+                const subjectSelectContainer = document.getElementById('lessonsSubjectSelect');
+                
                 if (currentStudentData?.is_adult) {
+                    // Для взрослых/студентов
                     if (currentStudentData.study_mode === 'anything') {
                         lessonsMessage.textContent = 'В режиме "изучать что угодно" уроки не предусмотрены. Используйте свободную конференцию.';
-                        document.getElementById('lessonsSubjectSelect').innerHTML = '';
+                        subjectSelectContainer.innerHTML = '';
                         document.getElementById('lessonsList').innerHTML = `
                             <div class="info-message">
                                 <i class="fas fa-comments"></i>
@@ -1318,9 +1313,94 @@
                         return;
                     } else if (currentStudentData.study_mode === 'language') {
                         lessonsMessage.textContent = `Уроки английского языка (уровень ${currentStudentData.language_level || 'A1'})`;
+                        
+                        // Показываем специальный заголовок для взрослых/студентов
+                        adultLessonsHeader.classList.remove('hidden');
+                        adultLessonsTitle.textContent = `Английский язык (уровень ${currentStudentData.language_level || 'A1'})`;
+                        adultLessonsDescription.textContent = `Уроки английского языка для уровня ${currentStudentData.language_level || 'A1'}`;
+                        
+                        // Скрываем выбор предмета для взрослых/студентов
+                        subjectSelectContainer.classList.add('hidden');
                     }
+                } else {
+                    // Для школьников
+                    lessonsMessage.textContent = 'Выберите предмет для просмотра всех доступных уроков';
+                    adultLessonsHeader.classList.add('hidden');
+                    subjectSelectContainer.classList.remove('hidden');
                 }
                 
+                // Загружаем уроки в зависимости от типа пользователя
+                if (currentStudentData?.is_adult && currentStudentData.study_mode === 'language') {
+                    // Для взрослых/студентов изучающих язык
+                    await loadAdultLanguageLessons();
+                } else if (!currentStudentData?.is_adult) {
+                    // Для школьников
+                    await loadSchoolLessons();
+                }
+                
+                hideLoading('lessons');
+            } catch (error) {
+                console.error('Error loading lessons:', error);
+                document.getElementById('lessonsMessage').className = 'error-message';
+                document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки уроков';
+                hideLoading('lessons');
+            }
+        }
+        
+        // Загрузка уроков для взрослых/студентов (языковые уроки)
+        async function loadAdultLanguageLessons() {
+            try {
+                const languageLevel = currentStudentData.language_level || 'A1';
+                const response = await fetch(`/api/student/lessons-by-language-level?level=${languageLevel}`);
+                const data = await response.json();
+                
+                if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
+                    subjectsData = data.lessons;
+                    
+                    // Для взрослых/студентов показываем только английский язык
+                    const englishLessons = data.lessons['английский язык'];
+                    if (englishLessons && englishLessons.lessons && englishLessons.lessons.length > 0) {
+                        renderLessonsList('английский язык', englishLessons.lessons);
+                    } else {
+                        document.getElementById('lessonsList').innerHTML = `
+                            <div class="info-message">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Для английского языка уровня ${languageLevel} уроки пока не загружены</span>
+                            </div>
+                            <div style="text-align: center; margin-top: 1.5rem;">
+                                <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
+                                    <i class="fas fa-comment-alt"></i> Начать свободную конференцию
+                                </button>
+                            </div>
+                        `;
+                    }
+                } else {
+                    document.getElementById('lessonsList').innerHTML = `
+                        <div class="info-message">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Для английского языка уровня ${languageLevel} уроки пока не загружены</span>
+                        </div>
+                        <div style="text-align: center; margin-top: 1.5rem;">
+                            <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
+                                <i class="fas fa-comment-alt"></i> Начать свободную конференцию
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading adult language lessons:', error);
+                document.getElementById('lessonsList').innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка загрузки уроков английского языка
+                    </div>
+                `;
+            }
+        }
+        
+        // Загрузка уроков для школьников
+        async function loadSchoolLessons() {
+            try {
                 const response = await fetch('/api/student/lessons-by-class');
                 const data = await response.json();
                 
@@ -1333,26 +1413,22 @@
                     loadLessonsForSubject(firstSubject);
                 } else {
                     // Нет уроков
-                    if (currentStudentData?.is_adult && currentStudentData.study_mode === 'language') {
-                        document.getElementById('lessonsMessage').className = 'info-message';
-                        document.getElementById('lessonsMessageText').textContent = 
-                            `Для английского языка уровня ${currentStudentData.language_level || 'A1'} уроки пока не загружены`;
-                    } else {
-                        document.getElementById('lessonsMessage').className = 'info-message';
-                        document.getElementById('lessonsMessageText').textContent = 
-                            'Уроки для вашего класса пока не загружены';
-                    }
-                    hideLoading('lessons');
+                    document.getElementById('lessonsMessage').className = 'info-message';
+                    document.getElementById('lessonsMessageText').textContent = 
+                        'Уроки для вашего класса пока не загружены';
                 }
             } catch (error) {
-                console.error('Error loading lessons:', error);
-                document.getElementById('lessonsMessage').className = 'error-message';
-                document.getElementById('lessonsMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки уроков';
-                hideLoading('lessons');
+                console.error('Error loading school lessons:', error);
+                document.getElementById('lessonsList').innerHTML = `
+                    <div class="error-message">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Ошибка загрузки уроков
+                    </div>
+                `;
             }
         }
         
-        // Отображение выбора предмета
+        // Отображение выбора предмета (только для школьников)
         function renderSubjectSelect(subjects) {
             const container = document.getElementById('lessonsSubjectSelect');
             
@@ -1365,11 +1441,6 @@
             for (const [subjectName, subjectData] of Object.entries(subjects)) {
                 const lessonCount = subjectData.lessons ? subjectData.lessons.length : 0;
                 let displayName = `${subjectName.charAt(0).toUpperCase() + subjectName.slice(1)} (${lessonCount} уроков)`;
-                
-                // Для взрослых добавляем уровень
-                if (currentStudentData?.is_adult && subjectName === 'английский язык') {
-                    displayName = `Английский язык ${currentStudentData.language_level || 'A1'} (${lessonCount} уроков)`;
-                }
                 
                 html += `<option value="${subjectName}">${displayName}</option>`;
             }
@@ -1385,7 +1456,7 @@
             container.innerHTML = html;
         }
         
-        // Загрузка уроков для конкретного предмета
+        // Загрузка уроков для конкретного предмета (только для школьников)
         async function loadLessonsForSubject(subjectName) {
             try {
                 showLoading('lessons');
@@ -1512,7 +1583,7 @@
             container.innerHTML = html;
         }
         
-        // Начать конкретный урок - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        // Начать конкретный урок
         async function startSpecificLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
@@ -1677,7 +1748,7 @@
             }
         }
         
-        // Открытие конференции - ТОЛЬКО ПО ССЫЛКЕ
+        // Открытие конференции
         function openConference(roomName, subjectName, lessonId = null) {
             console.log(`🌐 Открываем конференцию: ${roomName}, предмет: ${subjectName}, урок: ${lessonId || 'нет'}`);
             
