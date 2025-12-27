@@ -3,6 +3,7 @@
 # ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG) И РЕЗЕРВНОГО КОПИРОВАНИЯ
 # ВЕРСИЯ С ПОДДЕРЖКОЙ ДОБАВЛЕНИЯ НОВЫХ АВАТАРОВ ЧЕРЕЗ TEACHER.HTML
 # 🔥 ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ СТУДЕНТОВ И ЯЗЫКОВЫХ УРОВНЕЙ (A1-C2)
+# 🔥 ИНТЕГРАЦИЯ С КАСТОМНЫМ TTS СЕРВИСОМ (tts.zindaki-edu.ru)
 
 from flask import Flask, render_template, send_from_directory, jsonify, request, send_file, session, redirect, url_for
 import os
@@ -973,11 +974,11 @@ def reset_speaking_state(room_id, is_teacher=False):
     socketio.emit('speaking_state', {'speaking': False}, room=room_id)
 
 # =============================================================================
-# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ ЯЗЫКОВ И ТЕХНИЧЕСКИХ ПРЕДМЕТОВ
+# 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ КАСТОМНОГО TTS СЕРВИСА
 # =============================================================================
 
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
-    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкой технических предметов"""
+    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкой кастомного TTS сервиса"""
     if not text.strip():
         return
         
@@ -1001,10 +1002,13 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    # 🔥 ИСПОЛЬЗУЕМ МЕНЕДЖЕР РЕЧИ ДЛЯ ГЕНЕРАЦИИ АУДИО
-    audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang)
+    # 🔥 ИСПОЛЬЗУЕМ МЕНЕДЖЕР РЕЧИ ДЛЯ ГЕНЕРАЦИИ АУДИО С ПОДДЕРЖКОЙ ZINDAKI TTS
+    audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang, voice_type)
     
     if audio_data:
+        # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О TTS СЕРВИСЕ В ОТВЕТ
+        tts_service = 'zindaki' if speech_manager.tts_client and speech_manager.tts_client.available else 'gtts'
+        
         emit('speech_audio', {
             'audio': audio_data,
             'text': cleaned_text,
@@ -1012,6 +1016,7 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             'voice_type': voice_type,
             'is_teacher': is_teacher,
             'subject': subject if subject else 'general',
+            'tts_service': tts_service,
             'optimized': True,
             'technical_support': TECHNICAL_SUPPORT_ENABLED
         }, room=room_id)
@@ -1023,13 +1028,16 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 'type': 'generated',
                 'voice_type': voice_type,
                 'is_teacher': is_teacher,
-                'subject': subject if subject else 'general'
+                'subject': subject if subject else 'general',
+                'tts_service': tts_service
             })
             if len(room_speech_data[room_id]) > 50:
                 room_speech_data[room_id].pop(0)
+    else:
+        debug_log("❌ Не удалось сгенерировать аудио")
     
     # 🔥 Более точная длительность речи
-    speech_duration = max(1.5, len(cleaned_text) * 0.08)  # Уменьшили коэффициент
+    speech_duration = max(1.5, len(cleaned_text) * 0.08)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
 def create_student_conference(student_data, subject=None):
@@ -2467,6 +2475,183 @@ def validate_avatar_archive():
         
     except Exception as e:
         debug_log(f"❌ Ошибка валидации архива аватара: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
+# =============================================================================
+# 🔥 НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ TTS СЕРВИСОМ
+# =============================================================================
+
+@app.route('/api/tts/status', methods=['GET'])
+@teacher_required
+def get_tts_service_status():
+    """Получение статуса TTS сервиса"""
+    try:
+        status = speech_manager.get_tts_service_status()
+        stats = speech_manager.get_stats()
+        
+        return jsonify({
+            "success": True,
+            "tts_service": status,
+            "stats": stats,
+            "config": speech_manager.config
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/voices', methods=['GET'])
+@teacher_required
+def get_tts_available_voices():
+    """Получение списка доступных голосов TTS"""
+    try:
+        voices = speech_manager.get_available_voices()
+        
+        return jsonify({
+            "success": True,
+            "voices": voices,
+            "config": speech_manager.config.get('zindaki', {}).get('speaker_mapping', {})
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/config', methods=['GET'])
+@teacher_required
+def get_tts_config():
+    """Получение конфигурации TTS"""
+    try:
+        return jsonify({
+            "success": True,
+            "config": speech_manager.config
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/config', methods=['POST'])
+@teacher_required
+def update_tts_config():
+    """Обновление конфигурации TTS"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"})
+        
+        # Обновляем конфигурацию
+        if 'enabled' in data:
+            speech_manager.config['enabled'] = bool(data['enabled'])
+        
+        if 'primary' in data and data['primary'] in ['zindaki', 'gtts']:
+            speech_manager.config['primary'] = data['primary']
+        
+        if 'zindaki' in data and isinstance(data['zindaki'], dict):
+            # Обновляем только существующие ключи
+            for key in ['base_url', 'timeout', 'retries']:
+                if key in data['zindaki']:
+                    speech_manager.config['zindaki'][key] = data['zindaki'][key]
+        
+        return jsonify({
+            "success": True,
+            "message": "TTS configuration updated",
+            "config": speech_manager.config
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/clear-cache', methods=['POST'])
+@teacher_required
+def clear_tts_cache():
+    """Очистка кэша TTS сервиса"""
+    try:
+        data = request.json or {}
+        days_old = data.get('days_old')
+        
+        success = speech_manager.clear_tts_cache(days_old)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"TTS cache cleared{' for days older than ' + str(days_old) if days_old else ''}"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to clear TTS cache"
+            })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/test', methods=['POST'])
+@teacher_required
+def test_tts_service():
+    """Тестирование TTS сервиса"""
+    try:
+        data = request.json
+        text = data.get('text', 'Тестовое сообщение для проверки TTS сервиса.')
+        language = data.get('language', 'ru')
+        speaker = data.get('speaker', 'baya')
+        
+        # Используем SpeechManager для теста
+        audio_data = speech_manager.generate_optimized_speech(text, language, 'female')
+        
+        if audio_data:
+            return jsonify({
+                "success": True,
+                "message": "TTS service is working",
+                "audio_available": True,
+                "audio_size": len(base64.b64decode(audio_data)),
+                "tts_service": 'zindaki' if speech_manager.tts_client and speech_manager.tts_client.available else 'gtts'
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to generate audio",
+                "tts_service": 'zindaki' if speech_manager.tts_client and speech_manager.tts_client.available else 'gtts'
+            })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/stats', methods=['GET'])
+@teacher_required
+def get_tts_stats():
+    """Получение статистики использования TTS"""
+    try:
+        stats = speech_manager.get_stats()
+        
+        # Рассчитываем проценты
+        total = stats['total_requests']
+        if total > 0:
+            stats['zindaki_success_rate'] = (stats['zindaki_success'] / total) * 100
+            stats['zindaki_failure_rate'] = (stats['zindaki_failed'] / total) * 100
+            stats['gtts_fallback_rate'] = (stats['gtts_fallback'] / total) * 100
+        else:
+            stats['zindaki_success_rate'] = 0
+            stats['zindaki_failure_rate'] = 0
+            stats['gtts_fallback_rate'] = 0
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/api/tts/reset-stats', methods=['POST'])
+@teacher_required
+def reset_tts_stats():
+    """Сброс статистики TTS"""
+    try:
+        speech_manager.stats = {
+            'total_requests': 0,
+            'zindaki_success': 0,
+            'zindaki_failed': 0,
+            'gtts_fallback': 0,
+            'cache_hits': 0,
+            'cache_misses': 0
+        }
+        
+        return jsonify({
+            "success": True,
+            "message": "TTS statistics reset"
+        })
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
 # =============================================================================
@@ -4958,6 +5143,9 @@ if __name__ == '__main__':
     debug_log(f"🔥 РЕЖИМЫ ДЛЯ ВЗРОСЛЫХ: 'изучать что угодно' и 'английский язык'")
     debug_log(f"🔥 СТРУКТУРА ПАПОК: lessons/students/adult_language/[A1-C2]_english/")
     debug_log(f"🔥 ДОБАВЛЕН МЕНЕДЖЕР РЕЧИ (SpeechManager) - все функции TTS вынесены в отдельный модуль")
+    debug_log(f"🔥 ИНТЕГРАЦИЯ С КАСТОМНЫМ TTS СЕРВИСОМ ZINDAKI: tts.zindaki-edu.ru")
+    debug_log(f"🔥 TTS СЕРВИС ДОСТУПЕН: {speech_manager.tts_client.available if speech_manager.tts_client else False}")
+    debug_log(f"🔥 НОВЫЕ API ДЛЯ УПРАВЛЕНИЯ TTS: /api/tts/status, /api/tts/voices, /api/tts/config, /api/tts/test")
     
     setup_llm_manager()
     
@@ -4977,6 +5165,7 @@ if __name__ == '__main__':
     debug_log(f"✅ ДОБАВЛЕН новый API /api/student/create-adult-room для создания комнат взрослых")
     debug_log(f"✅ ВСЕ НОВЫЕ API защищены декораторами @student_required/@teacher_required")
     debug_log(f"✅ МЕНЕДЖЕР РЕЧИ ИНИЦИАЛИЗИРОВАН И ГОТОВ К РАБОТЕ")
+    debug_log(f"✅ TTS СЕРВИС ИНТЕГРИРОВАН И АКТИВЕН")
     debug_log(f"✅ СИСТЕМА ГОТОВА К РАБОТЕ! 🚀")
     
     socketio.run(
