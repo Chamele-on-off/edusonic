@@ -1077,7 +1077,7 @@ _speech_manager_instance = None
 def get_speech_manager(socketio=None, config: Optional[Dict] = None) -> SpeechManager:
     """Получение или создание экземпляра SpeechManager"""
     global _speech_manager_instance
-    if _spepeech_manager_instance is None:
+    if _speech_manager_instance is None:
         _speech_manager_instance = SpeechManager(socketio, config)
         debug_log("✅ SpeechManager инициализирован с поддержкой Zindaki TTS")
     return _speech_manager_instance
