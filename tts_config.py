@@ -7,7 +7,7 @@ TTS_CONFIG = {
     'enabled': True,
     'primary': 'zindaki',  # zindaki или gtts
     'zindaki': {
-        'base_url': os.environ.get('TTS_SERVICE_URL', 'http://tts.zindaki-edu.ru'),
+        'base_url': os.environ.get('TTS_SERVICE_URL', 'https://tts.zindaki-edu.ru'),
         'timeout': 30,
         'retries': 2,
         'language_mapping': {
