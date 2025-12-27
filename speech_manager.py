@@ -350,8 +350,7 @@ class ZindakiTTSClient:
                 response = self.session.post(
                     self.api_url,
                     json=payload,
-                    timeout=self.timeout,
-                    stream=True
+                    timeout=self.timeout
                 )
                 
                 request_time = time.time() - request_start
