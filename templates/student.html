@@ -1347,7 +1347,7 @@
             }
         }
         
-        // Загрузка уроков для взрослых/студентов (языковые уроки)
+        // Загрузка уроков для взрослых/студентов (языковые уроки) - ПРАВИЛЬНАЯ ФИЛЬТРАЦИЯ ПО ПУТИ
         async function loadAdultLanguageLessons() {
             try {
                 const languageLevel = currentStudentData.language_level || 'A1';
@@ -1359,27 +1359,50 @@
                 if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
                     subjectsData = data.lessons;
                     
-                    // Фильтруем уроки английского языка по уровню
+                    // Ищем уроки английского языка
                     const englishLessons = data.lessons['английский язык'];
                     if (englishLessons && englishLessons.lessons && englishLessons.lessons.length > 0) {
-                        // Фильтруем уроки по уровню языка
+                        // Фильтруем уроки по пути (lessons/students/adult_language/A1_english/ и т.д.)
                         const filteredLessons = englishLessons.lessons.filter(lesson => {
-                            // Проверяем, подходит ли урок по уровню
-                            // Предполагаем, что уроки имеют поле language_level или можно определить по названию/описанию
-                            const lessonLevel = lesson.language_level || 
-                                               (lesson.title && lesson.title.includes(languageLevel) ? languageLevel : null) ||
-                                               (lesson.description && lesson.description.includes(languageLevel) ? languageLevel : null);
+                            // Проверяем путь к файлу урока
+                            if (lesson.file_path) {
+                                // Путь содержит ли уровень языка (например: .../A1_english/...)
+                                const levelFolder = `${languageLevel}_english`;
+                                return lesson.file_path.includes(`adult_language/${levelFolder}/`);
+                            }
                             
-                            // Если у урока нет явного уровня, показываем все уроки английского
-                            // (или можно настроить другую логику фильтрации)
-                            return !lessonLevel || lessonLevel === languageLevel;
+                            // Если нет пути, проверяем другие поля
+                            if (lesson.language_level) {
+                                return lesson.language_level === languageLevel;
+                            }
+                            
+                            if (lesson.title && lesson.title.toLowerCase().includes(languageLevel.toLowerCase())) {
+                                return true;
+                            }
+                            
+                            if (lesson.description && lesson.description.toLowerCase().includes(languageLevel.toLowerCase())) {
+                                return true;
+                            }
+                            
+                            // Если ничего не подошло, не показываем урок
+                            return false;
                         });
                         
                         if (filteredLessons.length > 0) {
                             renderLessonsList('английский язык', filteredLessons);
                         } else {
-                            // Если нет отфильтрованных уроков, показываем все уроки английского
-                            renderLessonsList('английский язык', englishLessons.lessons);
+                            // Если нет отфильтрованных уроков, показываем сообщение
+                            document.getElementById('lessonsList').innerHTML = `
+                                <div class="info-message">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>Для английского языка уровня ${languageLevel} уроки пока не загружены. Уроки должны находиться в папке lessons/students/adult_language/${languageLevel}_english/</span>
+                                </div>
+                                <div style="text-align: center; margin-top: 1.5rem;">
+                                    <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
+                                        <i class="fas fa-comment-alt"></i> Начать свободную конференцию
+                                    </button>
+                                </div>
+                            `;
                         }
                     } else {
                         document.getElementById('lessonsList').innerHTML = `
@@ -1554,6 +1577,11 @@
                 const isCompleted = lesson.completed || false;
                 const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
                 
+                // Для взрослых показываем путь к файлу в описании
+                const lessonDescription = currentStudentData?.is_adult && lesson.file_path 
+                    ? `<div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.2rem;">${lesson.file_path}</div>`
+                    : '';
+                
                 html += `
                     <div class="lesson-item">
                         <div class="lesson-status ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}">
@@ -1574,6 +1602,7 @@
                                  isCurrent ? '• <span style="color: #3b82f6;">Текущий</span>' : 
                                  '• <span style="color: var(--text-light);">Ожидает</span>'}
                             </p>
+                            ${lessonDescription}
                         </div>
                         <div>
                             <a class="btn btn-small lesson-link" href="#" onclick="startSpecificLesson('${lesson.id}', '${subjectName}', event)">
