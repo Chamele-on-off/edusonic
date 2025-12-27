@@ -27,7 +27,6 @@ try:
         create_bilingual_lesson_prompt_cefr,
         get_adult_study_modes,
         get_available_cefr_levels,
-        should_use_cefr_prompt
     )
     LANGUAGE_SUPPORT_ENABLED = True
 except ImportError:
