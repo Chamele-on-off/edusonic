@@ -1347,14 +1347,36 @@
             }
         }
         
-        // Загрузка уроков для взрослых/студентов (языковые уроки) - ПРАВИЛЬНАЯ ФИЛЬТРАЦИЯ ПО ПУТИ
+        // Загрузка уроков для взрослых/студентов (языковые уроки) - УЛУЧШЕННАЯ ВЕРСИЯ
         async function loadAdultLanguageLessons() {
             try {
                 const languageLevel = currentStudentData.language_level || 'A1';
                 
-                // Используем тот же endpoint, что и для школьников
-                const response = await fetch('/api/student/lessons-by-class');
-                const data = await response.json();
+                // ПРОБУЕМ РАЗНЫЕ ВАРИАНТЫ:
+                // 1. Сначала пробуем специальный endpoint для взрослых
+                // 2. Если нет, пробуем обычный endpoint и фильтруем
+                
+                let response;
+                let data;
+                
+                // Вариант 1: Пробуем endpoint для взрослых
+                try {
+                    response = await fetch(`/api/student/adult-lessons?level=${languageLevel}`);
+                    data = await response.json();
+                    
+                    if (data.success && data.lessons) {
+                        // Успешно получили уроки для взрослых
+                        subjectsData = { 'английский язык': { lessons: data.lessons } };
+                        renderLessonsList('английский язык', data.lessons);
+                        return;
+                    }
+                } catch (error) {
+                    console.log('Endpoint для взрослых не найден, пробуем вариант 2');
+                }
+                
+                // Вариант 2: Используем общий endpoint и фильтруем на клиенте
+                response = await fetch('/api/student/lessons-by-class');
+                data = await response.json();
                 
                 if (data.success && data.lessons && Object.keys(data.lessons).length > 0) {
                     subjectsData = data.lessons;
@@ -1362,20 +1384,29 @@
                     // Ищем уроки английского языка
                     const englishLessons = data.lessons['английский язык'];
                     if (englishLessons && englishLessons.lessons && englishLessons.lessons.length > 0) {
-                        // Фильтруем уроки по пути (lessons/students/adult_language/A1_english/ и т.д.)
+                        // ФИЛЬТРАЦИЯ ПО ПУТИ: проверяем, содержит ли путь нужную папку
                         const filteredLessons = englishLessons.lessons.filter(lesson => {
-                            // Проверяем путь к файлу урока
-                            if (lesson.file_path) {
-                                // Путь содержит ли уровень языка (например: .../A1_english/...)
-                                const levelFolder = `${languageLevel}_english`;
-                                return lesson.file_path.includes(`adult_language/${levelFolder}/`);
+                            // Проверяем разные возможные поля
+                            const filePath = lesson.file_path || lesson.path || lesson.filename || '';
+                            
+                            // Ищем папку с уровнем языка (A1_english, A2_english и т.д.)
+                            const searchPattern = `${languageLevel}_english`;
+                            
+                            // Ищем в разных возможных местах
+                            if (filePath.includes(searchPattern)) {
+                                return true;
                             }
                             
-                            // Если нет пути, проверяем другие поля
-                            if (lesson.language_level) {
-                                return lesson.language_level === languageLevel;
+                            // Также проверяем другие поля
+                            if (lesson.language_level === languageLevel) {
+                                return true;
                             }
                             
+                            if (lesson.level === languageLevel) {
+                                return true;
+                            }
+                            
+                            // Проверяем название и описание
                             if (lesson.title && lesson.title.toLowerCase().includes(languageLevel.toLowerCase())) {
                                 return true;
                             }
@@ -1384,31 +1415,39 @@
                                 return true;
                             }
                             
-                            // Если ничего не подошло, не показываем урок
+                            // Если ничего не нашли, не показываем урок
                             return false;
                         });
                         
                         if (filteredLessons.length > 0) {
                             renderLessonsList('английский язык', filteredLessons);
                         } else {
-                            // Если нет отфильтрованных уроков, показываем сообщение
+                            // Если нет отфильтрованных уроков, пробуем показать ВСЕ уроки английского
+                            // но с предупреждением
                             document.getElementById('lessonsList').innerHTML = `
                                 <div class="info-message">
                                     <i class="fas fa-info-circle"></i>
-                                    <span>Для английского языка уровня ${languageLevel} уроки пока не загружены. Уроки должны находиться в папке lessons/students/adult_language/${languageLevel}_english/</span>
+                                    <span>Для английского языка уровня ${languageLevel} уроки пока не найдены в системе. 
+                                    Проверьте, что уроки находятся в папке lessons/students/adult_language/${languageLevel}_english/</span>
                                 </div>
-                                <div style="text-align: center; margin-top: 1.5rem;">
-                                    <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
-                                        <i class="fas fa-comment-alt"></i> Начать свободную конференцию
-                                    </button>
+                                <div style="margin-top: 1.5rem;">
+                                    <div class="info-message">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <span>Показываю все доступные уроки английского (без фильтрации по уровню):</span>
+                                    </div>
                                 </div>
                             `;
+                            
+                            // Показываем все уроки английского для отладки
+                            setTimeout(() => {
+                                renderLessonsList('английский язык', englishLessons.lessons);
+                            }, 100);
                         }
                     } else {
                         document.getElementById('lessonsList').innerHTML = `
                             <div class="info-message">
                                 <i class="fas fa-info-circle"></i>
-                                <span>Для английского языка уровня ${languageLevel} уроки пока не загружены</span>
+                                <span>Уроки английского языка не найдены в системе.</span>
                             </div>
                             <div style="text-align: center; margin-top: 1.5rem;">
                                 <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
@@ -1421,12 +1460,7 @@
                     document.getElementById('lessonsList').innerHTML = `
                         <div class="info-message">
                             <i class="fas fa-info-circle"></i>
-                            <span>Для английского языка уровня ${languageLevel} уроки пока не загружены</span>
-                        </div>
-                        <div style="text-align: center; margin-top: 1.5rem;">
-                            <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
-                                <i class="fas fa-comment-alt"></i> Начать свободную конференцию
-                            </button>
+                            <span>Уроки не загружены. Обратитесь к администратору.</span>
                         </div>
                     `;
                 }
@@ -1435,7 +1469,12 @@
                 document.getElementById('lessonsList').innerHTML = `
                     <div class="error-message">
                         <i class="fas fa-exclamation-triangle"></i>
-                        Ошибка загрузки уроков английского языка
+                        Ошибка загрузки уроков: ${error.message}
+                    </div>
+                    <div style="text-align: center; margin-top: 1.5rem;">
+                        <button class="btn free-conversation-btn" onclick="startFreeConversation()" style="width: 100%;">
+                            <i class="fas fa-comment-alt"></i> Начать свободную конференцию
+                        </button>
                     </div>
                 `;
             }
@@ -1577,10 +1616,9 @@
                 const isCompleted = lesson.completed || false;
                 const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
                 
-                // Для взрослых показываем путь к файлу в описании
-                const lessonDescription = currentStudentData?.is_adult && lesson.file_path 
-                    ? `<div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.2rem;">${lesson.file_path}</div>`
-                    : '';
+                // Для отладки показываем путь к файлу
+                const filePath = lesson.file_path || lesson.path || '';
+                const pathInfo = filePath ? `<div style="font-size: 0.7rem; color: #999; margin-top: 0.2rem;">${filePath}</div>` : '';
                 
                 html += `
                     <div class="lesson-item">
@@ -1602,7 +1640,7 @@
                                  isCurrent ? '• <span style="color: #3b82f6;">Текущий</span>' : 
                                  '• <span style="color: var(--text-light);">Ожидает</span>'}
                             </p>
-                            ${lessonDescription}
+                            ${pathInfo}
                         </div>
                         <div>
                             <a class="btn btn-small lesson-link" href="#" onclick="startSpecificLesson('${lesson.id}', '${subjectName}', event)">
