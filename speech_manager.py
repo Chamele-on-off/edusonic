@@ -26,7 +26,7 @@ TTS_CONFIG = {
     'enabled': True,
     'primary': 'zindaki',  # 'zindaki' или 'gtts'
     'zindaki': {
-        'base_url': 'http://tts.zindaki-edu.ru',
+        'base_url': 'http://109.172.101.94',
         'api_endpoint': '/api/tts',
         'health_endpoint': '/api/health',
         'voices_endpoint': '/api/voices',
