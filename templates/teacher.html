@@ -1198,6 +1198,158 @@
             background: #c82333;
         }
         
+        /* 🔥 НОВЫЕ СТИЛИ ДЛЯ TTS УПРАВЛЕНИЯ */
+        .tts-status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+        }
+        
+        .tts-status-indicator {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .tts-status-indicator.online {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .tts-status-indicator.offline {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .tts-status-indicator.checking {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .tts-status-details {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 10px;
+        }
+        
+        .tts-config-section, .tts-actions-section, .tts-stats-section, .tts-voices-section {
+            margin-top: 25px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .tts-button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        
+        .tts-voices-list {
+            margin-top: 15px;
+        }
+        
+        .tts-voices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .tts-voice-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        
+        .tts-voice-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .tts-voice-item h5 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .tts-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .tts-stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        
+        .tts-stat-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .tts-stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #3498db;
+            display: block;
+            line-height: 1;
+        }
+        
+        .tts-stat-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .tts-test-panel {
+            background: #e8f4f8;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #cce7f1;
+        }
+        
+        .tts-test-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .tts-test-audio {
+            margin-top: 15px;
+            text-align: center;
+        }
+        
+        .tts-audio-player {
+            width: 100%;
+            max-width: 400px;
+            margin: 10px auto;
+        }
+        
         @media (max-width: 768px) {
             #avatar {
                 width: 300px;
@@ -1326,6 +1478,23 @@
                 align-self: stretch;
                 justify-content: flex-end;
             }
+            
+            /* 🔥 Адаптивные стили для TTS */
+            .tts-voices-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tts-button-group {
+                flex-direction: column;
+            }
+            
+            .tts-stat-card {
+                padding: 12px;
+            }
+            
+            .tts-stat-number {
+                font-size: 1.5rem;
+            }
         }
         
         @media (max-width: 480px) {
@@ -1392,6 +1561,20 @@
             .avatar-actions {
                 align-self: stretch;
                 justify-content: flex-end;
+            }
+            
+            /* 🔥 Адаптивные стили для TTS */
+            .tts-status-indicator {
+                font-size: 0.9em;
+                padding: 8px;
+            }
+            
+            .tts-config-section, .tts-actions-section, .tts-stats-section, .tts-voices-section {
+                padding: 15px;
+            }
+            
+            .tts-voice-item {
+                padding: 12px;
             }
         }
     </style>
@@ -1600,6 +1783,7 @@
                 <div class="tab" data-tab="lessons-management">Управление уроками</div>
                 <div class="tab" data-tab="slides-management">Слайды уроков</div>
                 <div class="tab" data-tab="avatars-management">Управление аватарами</div>
+                <div class="tab" data-tab="tts-management">🎵 Управление TTS</div>
                 <div class="tab" data-tab="data-backup">Резервное копирование</div>
             </div>
             
@@ -2081,7 +2265,7 @@
                 </div>
             </div>
 
-            <!-- НОВАЯ ВКЛАДКА: Управление аватарами -->
+            <!-- Вкладка для управления аватарами -->
             <div class="tab-content" id="avatars-management-tab">
                 <div class="management-panel">
                     <h3><i class="fas fa-user-circle"></i> Управление аватарами</h3>
@@ -2176,6 +2360,151 @@
                     </div>
                     
                     <div id="avatars-management-status" class="success-message" style="margin-top: 20px;"></div>
+                </div>
+            </div>
+            
+            <!-- 🔥 НОВАЯ ВКЛАДКА: Управление TTS сервисом -->
+            <div class="tab-content" id="tts-management-tab">
+                <div class="management-panel">
+                    <h2><i class="fas fa-microphone-alt"></i> Управление TTS сервисом (озвучка AI-учителя)</h2>
+                    
+                    <!-- Статус TTS сервиса -->
+                    <div class="tts-status">
+                        <div class="tts-status-indicator checking" id="ttsStatusIndicator">
+                            <i class="fas fa-spinner fa-spin"></i> Проверка статуса TTS сервиса...
+                        </div>
+                        <div class="tts-status-details" id="ttsStatusDetails">
+                            <div id="ttsStatusText">Подключение к TTS сервису...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Конфигурация TTS -->
+                    <div class="tts-config-section">
+                        <h3><i class="fas fa-cog"></i> Конфигурация TTS</h3>
+                        
+                        <div class="form-group">
+                            <label for="ttsEnabled" style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" id="ttsEnabled" checked>
+                                <span style="font-weight: bold;">Включить озвучку речи AI-учителя</span>
+                            </label>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="ttsPrimary">Основной TTS сервис:</label>
+                            <select id="ttsPrimary" class="subject-select">
+                                <option value="zindaki" selected>Zindaki TTS (tts.zindaki-edu.ru) - приоритет</option>
+                                <option value="gtts">Google TTS (gTTS) - fallback</option>
+                            </select>
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                Zindaki TTS используется в первую очередь, при недоступности - автоматически переключается на gTTS
+                            </small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="ttsBaseUrl">URL TTS сервиса:</label>
+                            <input type="text" id="ttsBaseUrl" placeholder="http://tts.zindaki-edu.ru" 
+                                   style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                Сервис TTS должен быть запущен на отдельном VDS (tts.zindaki-edu.ru)
+                            </small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="ttsVoiceType">Голос AI-учителя:</label>
+                            <select id="ttsVoiceType" class="subject-select">
+                                <option value="teacher" selected>Учитель (рекомендуется)</option>
+                                <option value="female">Женский</option>
+                                <option value="male">Мужской</option>
+                                <option value="default">По умолчанию</option>
+                            </select>
+                        </div>
+                        
+                        <button id="updateTTSConfigBtn" class="btn" style="background: #3498db; width: 100%; margin-top: 15px;">
+                            <i class="fas fa-save"></i> 💾 Сохранить конфигурацию TTS
+                        </button>
+                        
+                        <div id="ttsConfigStatus" class="success-message" style="margin-top: 15px;"></div>
+                    </div>
+                    
+                    <!-- Действия с TTS -->
+                    <div class="tts-actions-section">
+                        <h3><i class="fas fa-play-circle"></i> Действия с TTS</h3>
+                        
+                        <div class="tts-button-group">
+                            <button id="testTTSServiceBtn" class="btn" style="background: #17a2b8;">
+                                <i class="fas fa-vial"></i> Тест TTS сервиса
+                            </button>
+                            <button id="clearTTSCacheBtn" class="btn" style="background: #ffc107; color: #212529;">
+                                <i class="fas fa-trash-alt"></i> Очистить кэш TTS
+                            </button>
+                            <button id="refreshTTSStatusBtn" class="btn" style="background: #6c757d;">
+                                <i class="fas fa-sync-alt"></i> Обновить статус
+                            </button>
+                            <button id="resetTTSStatsBtn" class="btn" style="background: #28a745;">
+                                <i class="fas fa-redo"></i> Сбросить статистику
+                            </button>
+                        </div>
+                        
+                        <!-- Тестовая панель -->
+                        <div class="tts-test-panel">
+                            <h4><i class="fas fa-comment-dots"></i> Тестовая озвучка</h4>
+                            <p>Проверьте работу TTS сервиса:</p>
+                            
+                            <textarea id="ttsTestText" class="tts-test-input" rows="3" 
+                                      placeholder="Введите текст для тестовой озвучки...">Привет! Это тестовое сообщение для проверки работы TTS сервиса AI-учителя.</textarea>
+                            
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <select id="ttsTestLanguage" class="subject-select" style="flex: 1;">
+                                    <option value="ru" selected>Русский</option>
+                                    <option value="en">Английский</option>
+                                    <option value="auto">Автоопределение</option>
+                                </select>
+                                <button id="testTTSAudioBtn" class="btn" style="background: #6f42c1;">
+                                    <i class="fas fa-play"></i> Озвучить текст
+                                </button>
+                            </div>
+                            
+                            <div id="ttsTestAudio" class="tts-test-audio" style="display: none;">
+                                <h5>🎧 Тестовое аудио:</h5>
+                                <audio id="ttsAudioPlayer" class="tts-audio-player" controls></audio>
+                                <div id="ttsTestResult" style="margin-top: 10px; font-size: 0.9em;"></div>
+                            </div>
+                        </div>
+                        
+                        <div id="ttsActionsStatus" class="success-message" style="margin-top: 15px;"></div>
+                    </div>
+                    
+                    <!-- Статистика использования TTS -->
+                    <div class="tts-stats-section">
+                        <h3><i class="fas fa-chart-bar"></i> Статистика использования TTS</h3>
+                        
+                        <div id="ttsStatsInfo">
+                            <p>Загрузка статистики...</p>
+                        </div>
+                        
+                        <div id="ttsStatsGrid" class="tts-stats-grid" style="display: none;">
+                            <!-- Статистика будет загружена динамически -->
+                        </div>
+                        
+                        <button id="refreshTTSStatsBtn" class="btn" style="background: #17a2b8; margin-top: 15px;">
+                            <i class="fas fa-sync-alt"></i> Обновить статистику
+                        </button>
+                    </div>
+                    
+                    <!-- Доступные голоса -->
+                    <div class="tts-voices-section">
+                        <h3><i class="fas fa-users"></i> Доступные голоса TTS</h3>
+                        
+                        <div id="ttsVoicesInfo">
+                            <p>Загрузка списка голосов...</p>
+                        </div>
+                        
+                        <div id="ttsVoicesList" class="tts-voices-list" style="display: none;">
+                            <!-- Список голосов будет загружен динамически -->
+                        </div>
+                    </div>
+                    
+                    <div id="ttsOverallStatus" class="success-message" style="margin-top: 20px;"></div>
                 </div>
             </div>
             
@@ -2413,6 +2742,34 @@
         const refreshAvatarsBtn = document.getElementById('refresh-avatars-btn');
         const avatarsManagementStatus = document.getElementById('avatars-management-status');
         
+        // 🔥 НОВЫЕ ЭЛЕМЕНТЫ ДЛЯ УПРАВЛЕНИЯ TTS
+        const ttsStatusIndicator = document.getElementById('ttsStatusIndicator');
+        const ttsStatusDetails = document.getElementById('ttsStatusDetails');
+        const ttsStatusText = document.getElementById('ttsStatusText');
+        const ttsEnabled = document.getElementById('ttsEnabled');
+        const ttsPrimary = document.getElementById('ttsPrimary');
+        const ttsBaseUrl = document.getElementById('ttsBaseUrl');
+        const ttsVoiceType = document.getElementById('ttsVoiceType');
+        const updateTTSConfigBtn = document.getElementById('updateTTSConfigBtn');
+        const ttsConfigStatus = document.getElementById('ttsConfigStatus');
+        const testTTSServiceBtn = document.getElementById('testTTSServiceBtn');
+        const clearTTSCacheBtn = document.getElementById('clearTTSCacheBtn');
+        const refreshTTSStatusBtn = document.getElementById('refreshTTSStatusBtn');
+        const resetTTSStatsBtn = document.getElementById('resetTTSStatsBtn');
+        const ttsActionsStatus = document.getElementById('ttsActionsStatus');
+        const ttsTestText = document.getElementById('ttsTestText');
+        const ttsTestLanguage = document.getElementById('ttsTestLanguage');
+        const testTTSAudioBtn = document.getElementById('testTTSAudioBtn');
+        const ttsTestAudio = document.getElementById('ttsTestAudio');
+        const ttsAudioPlayer = document.getElementById('ttsAudioPlayer');
+        const ttsTestResult = document.getElementById('ttsTestResult');
+        const ttsStatsInfo = document.getElementById('ttsStatsInfo');
+        const ttsStatsGrid = document.getElementById('ttsStatsGrid');
+        const refreshTTSStatsBtn = document.getElementById('refreshTTSStatsBtn');
+        const ttsVoicesInfo = document.getElementById('ttsVoicesInfo');
+        const ttsVoicesList = document.getElementById('ttsVoicesList');
+        const ttsOverallStatus = document.getElementById('ttsOverallStatus');
+        
         // Элементы для резервного копирования
         const dataStatsInfo = document.getElementById('data-stats-info');
         const refreshDataStatsBtn = document.getElementById('refresh-data-stats-btn');
@@ -2467,7 +2824,467 @@
         };
 
         // =============================================================================
-        // 🎯 ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АВАТАРАМИ
+        // 🔥 НОВЫЕ ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ TTS СЕРВИСОМ
+        // =============================================================================
+
+        // Загрузка статуса TTS сервиса
+        async function loadTTSStatus() {
+            try {
+                ttsStatusIndicator.className = 'tts-status-indicator checking';
+                ttsStatusIndicator.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Проверка статуса TTS сервиса...';
+                ttsStatusText.textContent = 'Подключение к TTS сервису...';
+                
+                const response = await fetch('/api/tts/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const ttsService = data.tts_service;
+                    const stats = data.stats;
+                    const config = data.config;
+                    
+                    // Обновляем статус
+                    if (ttsService.available) {
+                        ttsStatusIndicator.className = 'tts-status-indicator online';
+                        ttsStatusIndicator.innerHTML = '✅ TTS сервис доступен и работает';
+                        
+                        let detailsHtml = `
+                            <div><strong>URL:</strong> ${ttsService.base_url || 'tts.zindaki-edu.ru'}</div>
+                            <div><strong>Статус:</strong> ${ttsService.status || 'healthy'}</div>
+                            <div><strong>Используется:</strong> ${config.primary === 'zindaki' ? 'Zindaki TTS' : 'Google TTS (fallback)'}</div>
+                        `;
+                        
+                        if (ttsService.models_loaded && ttsService.models_loaded.length > 0) {
+                            detailsHtml += `<div><strong>Загружено моделей:</strong> ${ttsService.models_loaded.length}</div>`;
+                        }
+                        
+                        ttsStatusDetails.innerHTML = detailsHtml;
+                        ttsStatusText.textContent = `TTS сервис доступен. Основной сервис: ${config.primary}`;
+                        
+                    } else {
+                        ttsStatusIndicator.className = 'tts-status-indicator offline';
+                        ttsStatusIndicator.innerHTML = '❌ TTS сервис недоступен';
+                        
+                        ttsStatusDetails.innerHTML = `
+                            <div><strong>Используется:</strong> Google TTS (fallback)</div>
+                            <div><strong>Причина:</strong> ${ttsService.message || 'Сервис не отвечает'}</div>
+                        `;
+                        ttsStatusText.textContent = 'Используется Google TTS (fallback)';
+                    }
+                    
+                    // Обновляем форму конфигурации
+                    ttsEnabled.checked = config.enabled;
+                    ttsPrimary.value = config.primary;
+                    ttsBaseUrl.value = config.zindaki?.base_url || 'http://tts.zindaki-edu.ru';
+                    ttsVoiceType.value = config.zindaki?.speaker_mapping?.teacher || 'teacher';
+                    
+                } else {
+                    ttsStatusIndicator.className = 'tts-status-indicator offline';
+                    ttsStatusIndicator.innerHTML = '❌ Ошибка загрузки статуса';
+                    ttsStatusDetails.innerHTML = `<div>Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
+                    ttsStatusText.textContent = 'Ошибка загрузки статуса TTS';
+                }
+            } catch (error) {
+                console.error('Error loading TTS status:', error);
+                ttsStatusIndicator.className = 'tts-status-indicator offline';
+                ttsStatusIndicator.innerHTML = '❌ Ошибка подключения';
+                ttsStatusDetails.innerHTML = `<div>Ошибка сети: ${error.message}</div>`;
+                ttsStatusText.textContent = 'Ошибка подключения к серверу';
+            }
+        }
+
+        // Обновление конфигурации TTS
+        async function updateTTSConfig() {
+            try {
+                const config = {
+                    enabled: ttsEnabled.checked,
+                    primary: ttsPrimary.value,
+                    zindaki: {
+                        base_url: ttsBaseUrl.value.trim(),
+                        speaker_mapping: {
+                            teacher: ttsVoiceType.value
+                        }
+                    }
+                };
+                
+                showStatus(ttsConfigStatus, '💾 Сохранение конфигурации TTS...', true);
+                
+                const response = await fetch('/api/tts/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(ttsConfigStatus, '✅ Конфигурация TTS успешно обновлена!', true);
+                    
+                    // Перезагружаем статус
+                    setTimeout(() => {
+                        loadTTSStatus();
+                        loadTTSStats();
+                    }, 1000);
+                } else {
+                    showStatus(ttsConfigStatus, `❌ Ошибка обновления: ${data.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error updating TTS config:', error);
+                showStatus(ttsConfigStatus, `❌ Ошибка сети: ${error.message}`, false);
+            }
+        }
+
+        // Тест TTS сервиса
+        async function testTTSService() {
+            try {
+                showStatus(ttsActionsStatus, '🧪 Тестирование TTS сервиса...', true);
+                
+                const response = await fetch('/api/tts/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: 'Тестовое сообщение для проверки работы TTS сервиса AI-учителя.',
+                        language: 'ru',
+                        speaker: ttsVoiceType.value
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    let message = `✅ TTS сервис работает!<br>`;
+                    message += `<strong>Использован:</strong> ${data.tts_service === 'zindaki' ? 'Zindaki TTS' : 'Google TTS'}<br>`;
+                    
+                    if (data.audio_available) {
+                        message += `<strong>Аудио сгенерировано:</strong> ${data.audio_size} байт`;
+                    } else {
+                        message += `<strong>Аудио:</strong> не сгенерировано`;
+                    }
+                    
+                    showStatus(ttsActionsStatus, message, true);
+                } else {
+                    showStatus(ttsActionsStatus, `❌ Ошибка теста: ${data.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error testing TTS service:', error);
+                showStatus(ttsActionsStatus, `❌ Ошибка сети: ${error.message}`, false);
+            }
+        }
+
+        // Очистка кэша TTS
+        async function clearTTSCache() {
+            if (!confirm('Вы уверены, что хотите очистить кэш TTS сервиса?\n\nЭто может замедлить работу на время перегенерации часто используемых фраз.')) {
+                return;
+            }
+            
+            try {
+                const daysOld = prompt('Удалить записи старше (дней). Оставьте пустым для полной очистки:', '7');
+                
+                const payload = {};
+                if (daysOld && !isNaN(daysOld) && parseInt(daysOld) > 0) {
+                    payload.days_old = parseInt(daysOld);
+                }
+                
+                showStatus(ttsActionsStatus, '🗑️ Очистка кэша TTS...', true);
+                
+                const response = await fetch('/api/tts/clear-cache', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(ttsActionsStatus, `✅ ${data.message}`, true);
+                } else {
+                    showStatus(ttsActionsStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error clearing TTS cache:', error);
+                showStatus(ttsActionsStatus, `❌ Ошибка сети: ${error.message}`, false);
+            }
+        }
+
+        // Загрузка статистики TTS
+        async function loadTTSStats() {
+            try {
+                ttsStatsInfo.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Загрузка статистики...</p>';
+                
+                const response = await fetch('/api/tts/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.stats;
+                    
+                    let statsHtml = '';
+                    
+                    if (stats.total_requests > 0) {
+                        statsHtml = `
+                            <div class="tts-stat-card">
+                                <span class="tts-stat-number">${stats.total_requests}</span>
+                                <div class="tts-stat-label">Всего запросов</div>
+                            </div>
+                            <div class="tts-stat-card">
+                                <span class="tts-stat-number">${stats.zindaki_success}</span>
+                                <div class="tts-stat-label">Успешно через Zindaki</div>
+                            </div>
+                            <div class="tts-stat-card">
+                                <span class="tts-stat-number">${stats.zindaki_failed}</span>
+                                <div class="tts-stat-label">Ошибок Zindaki</div>
+                            </div>
+                            <div class="tts-stat-card">
+                                <span class="tts-stat-number">${stats.gtts_fallback}</span>
+                                <div class="tts-stat-label">Fallback на gTTS</div>
+                            </div>
+                        `;
+                        
+                        // Проценты
+                        if (stats.zindaki_success_rate !== undefined) {
+                            statsHtml += `
+                                <div class="tts-stat-card">
+                                    <span class="tts-stat-number">${stats.zindaki_success_rate.toFixed(1)}%</span>
+                                    <div class="tts-stat-label">Успешность Zindaki</div>
+                                </div>
+                                <div class="tts-stat-card">
+                                    <span class="tts-stat-number">${stats.gtts_fallback_rate?.toFixed(1) || 0}%</span>
+                                    <div class="tts-stat-label">Fallback rate</div>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        statsHtml = '<p style="text-align: center; color: #6c757d; padding: 20px;">Статистика отсутствует. Сделайте первые запросы к TTS.</p>';
+                    }
+                    
+                    ttsStatsGrid.innerHTML = statsHtml;
+                    ttsStatsGrid.style.display = 'grid';
+                    ttsStatsInfo.style.display = 'none';
+                    
+                } else {
+                    ttsStatsInfo.innerHTML = `<p>❌ Ошибка загрузки статистики: ${data.error}</p>`;
+                }
+            } catch (error) {
+                console.error('Error loading TTS stats:', error);
+                ttsStatsInfo.innerHTML = `<p>❌ Ошибка сети: ${error.message}</p>`;
+            }
+        }
+
+        // Сброс статистики TTS
+        async function resetTTSStats() {
+            if (!confirm('Сбросить статистику использования TTS?\n\nЭто действие нельзя отменить.')) {
+                return;
+            }
+            
+            try {
+                showStatus(ttsActionsStatus, '🔄 Сброс статистики TTS...', true);
+                
+                const response = await fetch('/api/tts/reset-stats', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(ttsActionsStatus, '✅ Статистика TTS сброшена', true);
+                    
+                    // Обновляем статистику
+                    setTimeout(() => {
+                        loadTTSStats();
+                    }, 500);
+                } else {
+                    showStatus(ttsActionsStatus, `❌ Ошибка: ${data.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error resetting TTS stats:', error);
+                showStatus(ttsActionsStatus, `❌ Ошибка сети: ${error.message}`, false);
+            }
+        }
+
+        // Тестовая озвучка текста
+        async function testTTSAudio() {
+            const text = ttsTestText.value.trim();
+            const language = ttsTestLanguage.value;
+            
+            if (!text) {
+                alert('Введите текст для тестовой озвучки');
+                return;
+            }
+            
+            try {
+                testTTSAudioBtn.disabled = true;
+                testTTSAudioBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерация...';
+                ttsTestResult.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерация аудио...';
+                
+                const response = await fetch('/api/tts/test-audio', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        text: text,
+                        language: language,
+                        voice_type: ttsVoiceType.value
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.audio) {
+                    // Создаем аудио элемент
+                    const audioBlob = base64ToBlob(data.audio, 'audio/mpeg');
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    ttsAudioPlayer.src = audioUrl;
+                    ttsTestAudio.style.display = 'block';
+                    
+                    ttsTestResult.innerHTML = `
+                        ✅ Аудио сгенерировано успешно!<br>
+                        <strong>Сервис:</strong> ${data.tts_service === 'zindaki' ? 'Zindaki TTS' : 'Google TTS'}<br>
+                        <strong>Размер:</strong> ${data.audio_size || 'неизвестно'} байт<br>
+                        <strong>Язык:</strong> ${language === 'auto' ? 'Автоопределение' : (language === 'ru' ? 'Русский' : 'Английский')}
+                    `;
+                    
+                    // Освобождаем URL после загрузки
+                    ttsAudioPlayer.onloadeddata = function() {
+                        setTimeout(() => URL.revokeObjectURL(audioUrl), 1000);
+                    };
+                    
+                } else {
+                    ttsTestResult.innerHTML = `❌ Ошибка генерации: ${data.error || 'Неизвестная ошибка'}`;
+                    ttsTestAudio.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error testing TTS audio:', error);
+                ttsTestResult.innerHTML = `❌ Ошибка сети: ${error.message}`;
+                ttsTestAudio.style.display = 'none';
+            } finally {
+                testTTSAudioBtn.disabled = false;
+                testTTSAudioBtn.innerHTML = '<i class="fas fa-play"></i> Озвучить текст';
+            }
+        }
+
+        // Загрузка доступных голосов TTS
+        async function loadTTSVoices() {
+            try {
+                ttsVoicesInfo.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Загрузка списка голосов...</p>';
+                
+                const response = await fetch('/api/tts/voices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const voices = data.voices;
+                    const config = data.config || {};
+                    
+                    let voicesHtml = '<div class="tts-voices-grid">';
+                    
+                    if (voices.all_voices && Object.keys(voices.all_voices).length > 0) {
+                        for (const [lang, langVoices] of Object.entries(voices.all_voices)) {
+                            if (langVoices && langVoices.length > 0) {
+                                voicesHtml += `
+                                    <div class="tts-voice-item">
+                                        <h5>${lang.toUpperCase()} (${langVoices.length})</h5>
+                                        <ul style="margin: 0; padding-left: 15px; font-size: 0.9em;">
+                                `;
+                                
+                                langVoices.slice(0, 5).forEach(voice => {
+                                    voicesHtml += `<li>${voice.name} (${voice.id})</li>`;
+                                });
+                                
+                                if (langVoices.length > 5) {
+                                    voicesHtml += `<li>... и еще ${langVoices.length - 5} голосов</li>`;
+                                }
+                                
+                                voicesHtml += `</ul></div>`;
+                            }
+                        }
+                    } else {
+                        voicesHtml += `
+                            <div class="tts-voice-item" style="grid-column: 1 / -1;">
+                                <h5>Доступные голоса в конфигурации</h5>
+                                <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                        `;
+                        
+                        for (const [voiceType, voiceId] of Object.entries(config)) {
+                            voicesHtml += `
+                                <span style="background: #e3f2fd; color: #1976d2; padding: 5px 10px; border-radius: 15px; font-size: 0.85em;">
+                                    ${voiceType}: ${voiceId}
+                                </span>
+                            `;
+                        }
+                        
+                        voicesHtml += `</div></div>`;
+                    }
+                    
+                    voicesHtml += '</div>';
+                    ttsVoicesList.innerHTML = voicesHtml;
+                    ttsVoicesList.style.display = 'block';
+                    ttsVoicesInfo.style.display = 'none';
+                    
+                } else {
+                    ttsVoicesInfo.innerHTML = `<p>❌ Ошибка загрузки голосов: ${data.error}</p>`;
+                }
+            } catch (error) {
+                console.error('Error loading TTS voices:', error);
+                ttsVoicesInfo.innerHTML = `<p>❌ Ошибка сети: ${error.message}</p>`;
+            }
+        }
+
+        // Вспомогательная функция для преобразования base64 в Blob
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteArrays = [];
+            
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+            }
+            
+            return new Blob(byteArrays, { type: mimeType });
+        }
+
+        // Инициализация TTS функций
+        function initTTSFunctions() {
+            // Загружаем данные TTS при открытии вкладки
+            document.querySelector('.tab[data-tab="tts-management"]').addEventListener('click', function() {
+                if (!this.classList.contains('active')) {
+                    setTimeout(() => {
+                        loadTTSStatus();
+                        loadTTSStats();
+                        loadTTSVoices();
+                    }, 100);
+                }
+            });
+            
+            // Обработчики кнопок
+            updateTTSConfigBtn.addEventListener('click', updateTTSConfig);
+            testTTSServiceBtn.addEventListener('click', testTTSService);
+            clearTTSCacheBtn.addEventListener('click', clearTTSCache);
+            refreshTTSStatusBtn.addEventListener('click', loadTTSStatus);
+            resetTTSStatsBtn.addEventListener('click', resetTTSStats);
+            refreshTTSStatsBtn.addEventListener('click', loadTTSStats);
+            testTTSAudioBtn.addEventListener('click', testTTSAudio);
+            
+            // Автообновление статуса каждые 60 секунд
+            setInterval(loadTTSStatus, 60000);
+        }
+
+        // =============================================================================
+        // 🎭 ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АВАТАРАМИ
         // =============================================================================
 
         // Функции для управления пользователями
@@ -3054,6 +3871,7 @@
             
             studentsList.innerHTML = studentsHTML;
             
+            // Добавляем обработчики для кнопок
             document.querySelectorAll('.student-btn.details').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const studentId = this.dataset.studentId;
@@ -5190,6 +6008,9 @@
             // Загрузка списка аватаров
             loadAvatars();
             
+            // 🔥 Инициализация TTS функций
+            initTTSFunctions();
+            
             // Обработчики для управления пользователями
             createUserBtn.addEventListener('click', function() {
                 createUser(newUsernameInput.value, newPasswordInput.value, newUserRoleSelect.value);
@@ -5421,6 +6242,10 @@
                     } else if (this.dataset.tab === 'avatars-management') {
                         loadAvatarsStats();
                         loadAvatarsList();
+                    } else if (this.dataset.tab === 'tts-management') {
+                        loadTTSStatus();
+                        loadTTSStats();
+                        loadTTSVoices();
                     }
                 });
             });
@@ -5471,6 +6296,11 @@
                             // При переходе на вкладку управления аватарами
                             loadAvatarsStats();
                             loadAvatarsList();
+                        } else if (tabId === 'tts-management-tab') {
+                            // При переходе на вкладку управления TTS
+                            loadTTSStatus();
+                            loadTTSStats();
+                            loadTTSVoices();
                         }
                     }
                 });
@@ -5549,7 +6379,7 @@
                 }
             });
             
-            // Скачивание всех уроков
+            // Скачивание всех урокй
             downloadAllLessonsBtn.addEventListener('click', function() {
                 downloadAllLessons();
             });
