@@ -26,7 +26,7 @@ TTS_CONFIG = {
     'enabled': True,
     'primary': 'zindaki',  # 'zindaki' или 'gtts'
     'zindaki': {
-        'base_url': 'https://109.172.101.94:5000',
+        'base_url': 'http://109.172.101.94:5000',
         'api_endpoint': '/api/tts',
         'health_endpoint': '/api/health',
         'voices_endpoint': '/api/voices',
