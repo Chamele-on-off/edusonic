@@ -822,8 +822,7 @@ class SpeechManager:
         use_zindaki = (
             self.config['primary'] == 'zindaki' and 
             self.tts_client and 
-            self.tts_client.available and
-            self.config['zindaki']['fallback']
+            self.tts_client.available
         )
         
         cleaned_text = text  # Используем оригинальный текст для TTS
