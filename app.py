@@ -3837,6 +3837,66 @@ def get_lessons_by_class():
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+        
+        
+@app.route('/api/student/start-selected-lesson', methods=['POST'])
+@student_required
+def start_selected_lesson():
+    """Специальный эндпоинт для запуска выбранного урока школьником"""
+    try:
+        data = request.json
+        lesson_id = data.get('lesson_id')
+        subject = data.get('subject')
+        
+        if not lesson_id or not subject:
+            return jsonify({"success": False, "error": "Не указан ID урока или предмет"})
+        
+        user_data = student_manager.load_user_data(session['user_id'])
+        student_data = user_data.get('student_data', {})
+        
+        # Определяем класс ученика
+        student_class = student_data.get('education_level', '5')
+        
+        # Проверяем, что урок существует
+        lessons_by_subject = student_manager.get_student_lessons_by_class(student_class)
+        if subject not in lessons_by_subject:
+            return jsonify({"success": False, "error": "Предмет не найден"})
+        
+        # Находим урок
+        selected_lesson = None
+        for lesson in lessons_by_subject[subject]:
+            if lesson['id'] == lesson_id:
+                selected_lesson = lesson
+                break
+        
+        if not selected_lesson:
+            return jsonify({"success": False, "error": "Урок не найден"})
+        
+        # Создаем комнату для урока
+        conference_id = str(int(time.time() * 1000))
+        student_name = student_data.get('name', 'ученик').replace(' ', '_').lower()
+        room_id = f"student_{subject}_{student_name}_{conference_id}"
+        
+        room_student_data[room_id] = {
+            **student_data,
+            'subject': subject,
+            'conference_id': conference_id,
+            'lesson_id': lesson_id
+        }
+        
+        # Быстрая инициализация комнаты
+        _fast_room_initialization(room_id)
+        
+        return jsonify({
+            "success": True,
+            "room_id": room_id,
+            "conference_url": f"/conference?room={room_id}&student=true&subject={subject}&lesson_id={lesson_id}",
+            "lesson_title": selected_lesson['title']
+        })
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка запуска выбранного урока: {e}")
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/lesson/start-specific', methods=['POST'])
 @student_required
