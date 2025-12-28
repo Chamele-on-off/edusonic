@@ -4579,6 +4579,17 @@ def update_student_conference_ids():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+
+@app.route('/api/fix-progress-structure', methods=['POST'])
+@teacher_required
+def fix_progress_structure():
+    """Исправляет структуру файлов прогресса"""
+    try:
+        result = student_manager.fix_progress_files_structure()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
 @app.route('/api/room/initialize', methods=['POST'])
 def force_room_initialization():
     try:
