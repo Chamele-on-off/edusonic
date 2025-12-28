@@ -1043,7 +1043,7 @@
         // ВКЛАДКА ПРОГРЕССА (только для школьников)
         // ==============================
         
-        // Загрузка данных о прогрессе - ИСПРАВЛЕННАЯ ВЕРСИЯ
+        // Загрузка данных о прогрессе - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ВЕРСИЯ
         async function loadProgressData() {
             try {
                 showLoading('progress');
@@ -1052,34 +1052,41 @@
                 const progressMessage = document.getElementById('progressMessageText');
                 progressMessage.textContent = 'Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение';
                 
+                console.log('🚀 Загрузка данных прогресса...');
+                
                 // Используем исправленный API
                 const response = await fetch('/api/student/progress/dashboard');
                 const data = await response.json();
                 
+                console.log('📊 Ответ сервера:', data);
+                
                 // ИСПРАВЛЕНИЕ: Правильно обрабатываем структуру ответа
                 if (data.success && data.progress) {
-                    subjectsData = data.progress.subjects || {};
-                    renderProgressSubjects(subjectsData);
+                    console.log('✅ Прогресс получен успешно');
+                    renderProgressDashboard(data.progress);
                 } else {
+                    console.log('⚠️ Нет данных о прогрессе');
                     // Если нет предметов, показываем соответствующий интерфейс
-                    renderProgressSubjects({});
+                    renderNoProgressMessage();
                 }
                 
                 hideLoading('progress');
             } catch (error) {
-                console.error('Error loading progress:', error);
+                console.error('❌ Ошибка загрузки прогресса:', error);
                 document.getElementById('progressMessage').className = 'error-message';
                 document.getElementById('progressMessage').innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка загрузки данных о прогрессе';
                 hideLoading('progress');
             }
         }
         
-        // Отображение предметов с прогрессом
-        function renderProgressSubjects(subjects) {
+        // Новая функция для отображения прогресса
+        function renderProgressDashboard(progress) {
             const container = document.getElementById('progressContainer');
             
+            console.log('🎯 Рендерим прогресс:', progress);
+            
             // Если нет предметов
-            if (!subjects || Object.keys(subjects).length === 0) {
+            if (!progress.subjects || Object.keys(progress.subjects).length === 0) {
                 container.innerHTML = `
                     <div class="info-message">
                         <i class="fas fa-info-circle"></i>
@@ -1087,21 +1094,43 @@
                             У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.
                         </span>
                     </div>
+                    <div style="text-align: center; margin-top: 2rem;">
+                        <button class="btn" onclick="switchTab('lessons')">
+                            <i class="fas fa-book"></i> Перейти к урокам
+                        </button>
+                    </div>
                 `;
                 return;
             }
             
             let html = '<div class="subjects-progress">';
             
-            for (const [subjectName, subjectData] of Object.entries(subjects)) {
+            for (const [subjectName, subjectData] of Object.entries(progress.subjects)) {
                 const progressPercent = subjectData.progress_percent || 0;
                 const totalLessons = subjectData.total_lessons || 0;
                 const completedLessons = subjectData.completed_lessons || 0;
                 const nextLesson = subjectData.next_lesson;
-                const hasLessons = subjectData.has_lessons || totalLessons > 0;
+                const hasLessons = subjectData.total_lessons > 0;
+                
+                console.log(`📚 Предмет ${subjectName}:`, subjectData);
                 
                 // Определяем описание
                 let description = subjectDescriptions[subjectName] || 'Изучение предмета';
+                
+                // Определяем следующий урок
+                let nextLessonText = 'Все уроки завершены';
+                let nextLessonNumber = '';
+                
+                if (nextLesson) {
+                    if (typeof nextLesson === 'object' && nextLesson.lesson_number) {
+                        nextLessonNumber = nextLesson.lesson_number;
+                        nextLessonText = `Следующий: Урок ${nextLessonNumber}`;
+                    } else if (typeof nextLesson === 'string') {
+                        nextLessonText = `Следующий урок доступен`;
+                    }
+                } else if (hasLessons) {
+                    nextLessonText = 'Начать первый урок';
+                }
                 
                 html += `
                     <div class="subject-card">
@@ -1126,27 +1155,63 @@
                         
                         <div class="progress-info">
                             <span class="progress-text">${completedLessons}/${totalLessons} уроков завершено</span>
-                            <span class="progress-text">
-                                ${nextLesson ? `Следующий: Урок ${nextLesson.lesson_number || ''}` : 'Все уроки завершены'}
-                            </span>
+                            <span class="progress-text">${nextLessonText}</span>
                         </div>
                         
                         <div class="subject-actions">
-                            ${nextLesson && hasLessons ? `
-                                <a class="btn btn-small" href="#" onclick="continueNextLesson('${subjectName}', event)">
-                                    <i class="fas fa-play"></i> Продолжить
-                                </a>
-                            ` : hasLessons ? `
-                                <a class="btn btn-small" href="#" onclick="startFirstLesson('${subjectName}', event)">
-                                    <i class="fas fa-play"></i> Начать первый урок
+                            ${hasLessons ? `
+                                <a class="btn btn-small" href="#" onclick="startSubjectLesson('${subjectName}', event)">
+                                    <i class="fas fa-play"></i> ${nextLesson ? 'Продолжить' : 'Начать'}
                                 </a>
                             ` : ''}
                             
-                            ${hasLessons ? `
-                                <a class="btn btn-small btn-secondary" href="#" onclick="selectSubjectLessons('${subjectName}', event)">
-                                    <i class="fas fa-list"></i> Все уроки
-                                </a>
-                            ` : ''}
+                            <a class="btn btn-small btn-secondary" href="#" onclick="selectSubjectLessons('${subjectName}', event)">
+                                <i class="fas fa-list"></i> Все уроки
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Общая статистика
+            if (progress.overall) {
+                const overallPercent = progress.overall.progress_percent || 0;
+                const totalLessons = progress.overall.total_lessons || 0;
+                const completedLessons = progress.overall.completed_lessons || 0;
+                
+                html += `
+                    <div class="subject-card" style="grid-column: 1 / -1; background: linear-gradient(135deg, #667eea, #764ba2); color: white;">
+                        <div class="subject-header">
+                            <div class="subject-icon" style="background: rgba(255,255,255,0.2);">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="subject-title">
+                                <h4>Общая статистика</h4>
+                                <p>Ваш прогресс по всем предметам</p>
+                            </div>
+                        </div>
+                        
+                        <div class="progress-info">
+                            <span class="progress-text">Всего уроков</span>
+                            <span class="progress-percent">${totalLessons}</span>
+                        </div>
+                        
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${overallPercent}%; background: white;"></div>
+                        </div>
+                        
+                        <div class="progress-info">
+                            <span class="progress-text">Завершено уроков</span>
+                            <span class="progress-percent">${completedLessons}</span>
+                        </div>
+                        
+                        <div class="progress-info">
+                            <span class="progress-text">Общий прогресс</span>
+                            <span class="progress-percent">${overallPercent}%</span>
+                        </div>
+                        
+                        <div style="margin-top: 1rem; text-align: center;">
+                            <small>Изучено ${progress.overall.subjects_count || 0} предметов</small>
                         </div>
                     </div>
                 `;
@@ -1154,6 +1219,51 @@
             
             html += '</div>';
             container.innerHTML = html;
+            
+            console.log('✅ Прогресс отрендерен');
+        }
+        
+        function renderNoProgressMessage() {
+            const container = document.getElementById('progressContainer');
+            container.innerHTML = `
+                <div class="info-message">
+                    <i class="fas fa-info-circle"></i>
+                    <span>
+                        У вас пока нет уроков. Создайте комнату для предмета, чтобы начать обучение.
+                    </span>
+                </div>
+                <div style="text-align: center; margin-top: 2rem;">
+                    <button class="btn" onclick="switchTab('lessons')">
+                        <i class="fas fa-book"></i> Перейти к урокам
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Новая функция для начала урока по предмету
+        async function startSubjectLesson(subjectName, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            console.log(`🚀 Начинаем урок по предмету: ${subjectName}`);
+            
+            try {
+                // Получаем следующую комнату для этого предмета
+                const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
+                const data = await response.json();
+                
+                if (data.success && data.room) {
+                    console.log(`✅ Комната найдена: ${data.room.room_name}`);
+                    openConference(data.room.room_name, subjectName);
+                } else {
+                    console.log(`⚠️ Комната не найдена, создаем новую`);
+                    // Создаем новую комнату
+                    createAndOpenConference(subjectName);
+                }
+            } catch (error) {
+                console.error('❌ Ошибка получения комнаты:', error);
+                createAndOpenConference(subjectName);
+            }
         }
         
         // Начать свободную конференцию
@@ -1213,57 +1323,12 @@
             }
         }
         
-        // Продолжить следующий урок
-        async function continueNextLesson(subjectName, event) {
-            event.preventDefault();
-            event.stopPropagation();
-            
-            try {
-                // Получаем следующую комнату для этого предмета
-                const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
-                const data = await response.json();
-                
-                if (data.success && data.room) {
-                    openConference(data.room.room_name, subjectName);
-                } else {
-                    // Создаем новую комнату
-                    createAndOpenConference(subjectName);
-                }
-            } catch (error) {
-                console.error('Error getting room:', error);
-                createAndOpenConference(subjectName);
-            }
-        }
-        
-        // Начать первый урок
-        async function startFirstLesson(subjectName, event) {
-            event.preventDefault();
-            event.stopPropagation();
-            
-            try {
-                // Получаем уроки по предмету
-                if (!subjectsData || !subjectsData[subjectName] || !subjectsData[subjectName].lessons) {
-                    await loadLessonsData();
-                }
-                
-                const lessons = subjectsData[subjectName].lessons;
-                if (lessons && lessons.length > 0) {
-                    // Берем первый урок
-                    const firstLesson = lessons[0];
-                    await startSpecificLesson(firstLesson.id, subjectName);
-                } else {
-                    createAndOpenConference(subjectName);
-                }
-            } catch (error) {
-                console.error('Error starting first lesson:', error);
-                createAndOpenConference(subjectName);
-            }
-        }
-        
         // Выбрать предмет для просмотра уроков
         function selectSubjectLessons(subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
+            
+            console.log(`📖 Выбран предмет для просмотра уроков: ${subjectName}`);
             
             // Переключаемся на вкладку уроков
             switchTab('lessons');
@@ -2011,6 +2076,14 @@
             
             if (loadingElement) loadingElement.style.display = 'block';
             if (containerElement) containerElement.style.display = 'none';
+            
+            // Для вкладки уроков скрываем другие элементы
+            if (tab === 'lessons') {
+                const subjectSelect = document.getElementById('lessonsSubjectSelect');
+                const lessonsList = document.getElementById('lessonsList');
+                if (subjectSelect) subjectSelect.style.display = 'none';
+                if (lessonsList) lessonsList.style.display = 'none';
+            }
         }
         
         // Скрыть индикатор загрузки
@@ -2020,6 +2093,14 @@
             
             if (loadingElement) loadingElement.style.display = 'none';
             if (containerElement) containerElement.style.display = 'block';
+            
+            // Для вкладки уроков показываем другие элементы
+            if (tab === 'lessons') {
+                const subjectSelect = document.getElementById('lessonsSubjectSelect');
+                const lessonsList = document.getElementById('lessonsList');
+                if (subjectSelect) subjectSelect.style.display = 'block';
+                if (lessonsList) lessonsList.style.display = 'block';
+            }
         }
         
         // Инициализация Socket.io
