@@ -3649,7 +3649,7 @@ class DialogueManager:
             }
         
         # НОВОЕ: Загружаем прогресс из файла
-        progress_file = student_progress_dir / f"{student_id}.json"
+        progress_file = student_namager.student_progress_dir / f"{student_id}.json"
         try:
             if progress_file.exists():
                 with open(progress_file, 'r', encoding='utf-8') as f:
@@ -3704,7 +3704,7 @@ class DialogueManager:
         if not student_id:
             return
         
-        progress_file = student_progress_dir / f"{student_id}.json"
+        progress_file = student_manager.student_progress_dir / f"{student_id}.json"
         
         # Создаем папку если не существует
         progress_file.parent.mkdir(parents=True, exist_ok=True)
