@@ -98,7 +98,7 @@ class StudentManagement:
             "9": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
                   "литература", "английский", "французский", "история", "обществознание",
                   "информатика", "химия"],
-            "10": ["алгебра", "geометрия", "физика", "география", "биология", "русский язык",
+            "10": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
                    "литература", "английский", "французский", "история", "обществознание",
                    "информатика", "химия"],
             "11": ["алгебра", "геометрия", "физика", "география", "биология", "русский язык",
@@ -469,7 +469,7 @@ class StudentManagement:
             return False
     
     # =============================================================================
-    # МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ПРОГРЕССОМ УЧЕНИКОВ
+    # МЕТОДЫ ДЛЯ УПРАВЛЕНИЯ ПРОГРЕССОМ УЧЕНИКОВ (ИСПРАВЛЕННЫЕ!)
     # =============================================================================
     
     def initialize_student_progress(self, student_id: str, education_level: str) -> bool:
@@ -535,14 +535,33 @@ class StudentManagement:
             if progress_data.get("education_level") == 'adult':
                 return True
             
+            # 🔥 ИСПРАВЛЕНИЕ: Всегда используем структуру subjects
+            if "subjects" not in progress_data:
+                progress_data["subjects"] = {}
+            
             if subject not in progress_data["subjects"]:
-                progress_data["subjects"][subject] = {
-                    "completed_lessons": [],
-                    "current_lesson": lesson_id,
-                    "total_lessons": 0,
-                    "last_accessed": datetime.now().isoformat(),
-                    "progress_percent": 0
-                }
+                # 🔥 ИСПРАВЛЕНИЕ: Удаляем дублирующую структуру на верхнем уровне, если она есть
+                if subject in progress_data:
+                    # Переносим данные из старой структуры в новую
+                    if isinstance(progress_data[subject], dict):
+                        progress_data["subjects"][subject] = progress_data[subject]
+                        del progress_data[subject]
+                    else:
+                        progress_data["subjects"][subject] = {
+                            "completed_lessons": [],
+                            "current_lesson": lesson_id,
+                            "total_lessons": 0,
+                            "last_accessed": datetime.now().isoformat(),
+                            "progress_percent": 0
+                        }
+                else:
+                    progress_data["subjects"][subject] = {
+                        "completed_lessons": [],
+                        "current_lesson": lesson_id,
+                        "total_lessons": 0,
+                        "last_accessed": datetime.now().isoformat(),
+                        "progress_percent": 0
+                    }
             
             subject_progress = progress_data["subjects"][subject]
             
@@ -560,6 +579,27 @@ class StudentManagement:
                         lesson_count = len(list(subject_dir.glob("*.txt")))
                 
                 subject_progress["total_lessons"] = lesson_count
+                
+                # Обновляем процент прогресса
+                if lesson_count > 0:
+                    completed_count = len(subject_progress["completed_lessons"])
+                    subject_progress["progress_percent"] = int((completed_count / lesson_count) * 100)
+            
+            # 🔥 ИСПРАВЛЕНИЕ: Удаляем дублирующие записи на верхнем уровне
+            keys_to_remove = []
+            for key in progress_data.keys():
+                if key not in ['student_id', 'education_level', 'created_at', 'last_updated', 'subjects', 'is_adult']:
+                    if key in self.subjects_by_class.get(progress_data.get('education_level', '5'), []):
+                        keys_to_remove.append(key)
+            
+            for key in keys_to_remove:
+                if key in progress_data:
+                    # Переносим данные, если они есть
+                    if key not in progress_data["subjects"] and isinstance(progress_data[key], dict):
+                        progress_data["subjects"][key] = progress_data[key]
+                    del progress_data[key]
+            
+            progress_data["last_updated"] = datetime.now().isoformat()
             
             try:
                 with open(progress_file, 'w', encoding='utf-8') as f:
@@ -700,6 +740,18 @@ class StudentManagement:
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
             
+            # 🔥 ИСПРАВЛЕНИЕ: Проверяем и исправляем структуру данных
+            if "subjects" not in progress_data:
+                progress_data["subjects"] = {}
+            
+            # Переносим старые данные в новую структуру
+            for key in list(progress_data.keys()):
+                if key not in ['student_id', 'education_level', 'created_at', 'last_updated', 'subjects', 'is_adult']:
+                    if isinstance(progress_data[key], dict) and 'completed_lessons' in progress_data[key]:
+                        if key not in progress_data["subjects"]:
+                            progress_data["subjects"][key] = progress_data[key]
+                        del progress_data[key]
+            
             # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПУСТОИ ПРОГРЕСС
             if progress_data.get("education_level") == 'adult':
                 return {
@@ -720,7 +772,9 @@ class StudentManagement:
                 'subjects': {}
             }
             
+            # Сначала добавляем все предметы, которые есть в уроках
             for subject_name, lessons in lessons_by_subject.items():
+                # Используем данные из прогресса или создаем пустые
                 subject_progress = progress_data.get("subjects", {}).get(subject_name, {
                     "completed_lessons": [],
                     "current_lesson": None,
@@ -732,7 +786,7 @@ class StudentManagement:
                 completed_count = len(subject_progress.get("completed_lessons", []))
                 total_lessons = len(lessons)
                 
-                # Ищем следующии урок
+                # Ищем следующий урок
                 next_lesson = None
                 for lesson in lessons:
                     if lesson['id'] not in subject_progress.get("completed_lessons", []):
@@ -770,6 +824,69 @@ class StudentManagement:
                 'student_name': student_name,
                 'subjects': {},
                 'overall': {'total_lessons': 0, 'completed_lessons': 0, 'progress_percent': 0, 'subjects_count': 0}
+            }
+    
+    # =============================================================================
+    # 🔥 НОВЫЙ МЕТОД ДЛЯ ИСПРАВЛЕНИЯ СТРУКТУРЫ ФАЙЛОВ ПРОГРЕССА
+    # =============================================================================
+    
+    def fix_progress_files_structure(self) -> Dict:
+        """Исправляет структуру всех файлов прогресса"""
+        try:
+            fixed_count = 0
+            errors = []
+            
+            for progress_file in self.student_progress_dir.glob("*.json"):
+                try:
+                    with open(progress_file, 'r', encoding='utf-8') as f:
+                        progress_data = json.load(f)
+                    
+                    needs_fix = False
+                    
+                    # Проверяем, есть ли предметы на верхнем уровне
+                    for key in list(progress_data.keys()):
+                        if key not in ['student_id', 'education_level', 'created_at', 'last_updated', 'subjects', 'is_adult']:
+                            if isinstance(progress_data[key], dict) and 'completed_lessons' in progress_data[key]:
+                                needs_fix = True
+                                break
+                    
+                    if needs_fix:
+                        # Создаем правильную структуру
+                        if "subjects" not in progress_data:
+                            progress_data["subjects"] = {}
+                        
+                        # Переносим данные
+                        for key in list(progress_data.keys()):
+                            if key not in ['student_id', 'education_level', 'created_at', 'last_updated', 'subjects', 'is_adult']:
+                                if isinstance(progress_data[key], dict) and 'completed_lessons' in progress_data[key]:
+                                    if key not in progress_data["subjects"]:
+                                        progress_data["subjects"][key] = progress_data[key]
+                                    del progress_data[key]
+                        
+                        # Сохраняем исправленный файл
+                        with open(progress_file, 'w', encoding='utf-8') as f:
+                            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+                        
+                        fixed_count += 1
+                        print(f"✅ Исправлен файл прогресса: {progress_file.name}")
+                    
+                except Exception as e:
+                    errors.append(f"{progress_file.name}: {str(e)}")
+                    print(f"❌ Ошибка исправления файла {progress_file.name}: {e}")
+            
+            return {
+                "success": True,
+                "fixed_count": fixed_count,
+                "errors": errors,
+                "message": f"Исправлено {fixed_count} файлов прогресса"
+            }
+        except Exception as e:
+            print(f"❌ Ошибка исправления структуры файлов прогресса: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "fixed_count": 0,
+                "errors": [str(e)]
             }
     
     # =============================================================================
