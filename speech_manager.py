@@ -24,9 +24,9 @@ DEBUG_SPEECH = True
 # Настройки TTS
 TTS_CONFIG = {
     'enabled': True,
-    'primary': 'zindaki',  # 'zindaki' или 'gtts'
+    'primary': 'gtts',  # 'zindaki' или 'gtts'
     'zindaki': {
-        'base_url': 'https://',
+        'base_url': 'https://tts.zindake-edu.ru',
         'api_endpoint': '/api/tts',
         'health_endpoint': '/api/health',
         'voices_endpoint': '/api/voices',
