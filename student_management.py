@@ -175,7 +175,25 @@ class StudentManagement:
             for i in range(1, 4):
                 lesson_file = level_dir / f"lesson_{i:02d}_introduction.txt"
                 if not lesson_file.exists():
-                    pass
+                    with open(lesson_file, 'w', encoding='utf-8') as f:
+                        f.write(f"""# Урок {i}: Английский язык - уровень {level}
+
+Welcome to English lesson {i} for level {level}!
+
+This lesson is designed for adult learners at {level} ({config['description']}) level.
+
+What you will learn in this lesson:
+1. Basic vocabulary and phrases
+2. Grammar structures for level {level}
+3. Conversation practice
+4. Listening and comprehension exercises
+
+Language ratio: {config['language_ratio_russian']}% Russian / {config['language_ratio_english']}% English
+
+This is an automatically generated lesson for demonstration purposes.
+
+Good luck with your learning!
+""")
     
     # =============================================================================
     # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ ВЗРОСЛЫХ СТУДЕНТОВ
@@ -261,7 +279,7 @@ class StudentManagement:
                     'id': f"adult_{cefr_level}_english_{lesson_file.stem}",
                     'title': lesson_file.stem.replace('_', ' ').title(),
                     'file_path': str(lesson_file.relative_to(self.lessons_dir)),
-                    'subject': 'англиискии язык',
+                    'subject': 'английский язык',
                     'class_level': 'adult',
                     'cefr_level': cefr_level,
                     'lesson_number': lesson_number,
@@ -583,7 +601,7 @@ class StudentManagement:
                 for level in self.CEFR_LEVELS.keys():
                     lessons = self.get_adult_lessons_by_level(level)
                     if lessons:
-                        lessons_by_subject[f"англиискии_язык_{level}"] = lessons
+                        lessons_by_subject[f"английский язык"] = lessons
                 return lessons_by_subject
             
             # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
@@ -625,7 +643,7 @@ class StudentManagement:
             return {}
     
     def get_student_next_lesson(self, student_id: str, subject: str) -> Optional[Dict]:
-        """Получает следующии урок для ученика по предмету"""
+        """Получает следующий урок для ученика по предмету"""
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
             
@@ -667,74 +685,74 @@ class StudentManagement:
     
     def get_student_progress_dashboard(self, student_id: str, student_class: str, 
                                       student_name: str = "") -> Dict:
-        """🔥 Получает прогресс ученика для личного кабинета"""
+        """🔥 ИСПРАВЛЕННЫЙ: Получает прогресс ученика для личного кабинета"""
         try:
             progress_file = self.student_progress_dir / f"{student_id}.json"
-            if not progress_file.exists():
-                # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - СОЗДАЕМ ПУСТОИ ПРОГРЕСС
-                if student_class == 'adult':
-                    progress_data = {
-                        "student_id": student_id,
-                        "education_level": student_class,
-                        "created_at": datetime.now().isoformat(),
-                        "last_updated": datetime.now().isoformat(),
-                        "subjects": {},
-                        "is_adult": True
-                    }
-                    with open(progress_file, 'w', encoding='utf-8') as f:
-                        json.dump(progress_data, f, ensure_ascii=False, indent=2)
-                    
-                    return {
-                        'student_id': student_id,
-                        'student_class': student_class,
-                        'student_name': student_name,
-                        'subjects': {},
-                        'overall': {'total_lessons': 0, 'completed_lessons': 0, 'progress_percent': 0, 'subjects_count': 0},
-                        'is_adult': True
-                    }
-                else:
-                    # СУЩЕСТВУЮЩАЯ ЛОГИКА ДЛЯ ШКОЛЬНИКОВ
-                    self.initialize_student_progress(student_id, student_class)
-                    return self.get_student_progress_dashboard(student_id, student_class, student_name)
             
+            # Если файла прогресса нет, создаем его
+            if not progress_file.exists():
+                print(f"🔄 Файл прогресса не найден, создаем новый для {student_id}")
+                self.initialize_student_progress(student_id, student_class)
+            
+            # Загружаем прогресс
             with open(progress_file, 'r', encoding='utf-8') as f:
                 progress_data = json.load(f)
             
-            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПУСТОИ ПРОГРЕСС
+            # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - ПУСТОЙ ПРОГРЕСС
             if progress_data.get("education_level") == 'adult':
                 return {
                     'student_id': student_id,
                     'student_class': student_class,
                     'student_name': student_name,
                     'subjects': {},
-                    'overall': {'total_lessons': 0, 'completed_lessons': 0, 'progress_percent': 0, 'subjects_count': 0},
+                    'overall': {
+                        'total_lessons': 0,
+                        'completed_lessons': 0, 
+                        'progress_percent': 0,
+                        'subjects_count': 0
+                    },
                     'is_adult': True
                 }
             
-            lessons_by_subject = self.get_student_lessons_by_class(student_class)
-            
+            # 🔥 ИСПРАВЛЕНИЕ: Правильно заполняем структуру ответа
             result = {
                 'student_id': student_id,
                 'student_class': student_class,
                 'student_name': student_name,
-                'subjects': {}
+                'subjects': {},
+                'overall': {
+                    'total_lessons': 0,
+                    'completed_lessons': 0,
+                    'progress_percent': 0,
+                    'subjects_count': 0
+                }
             }
             
-            for subject_name, lessons in lessons_by_subject.items():
+            # Получаем уроки для класса
+            lessons_by_subject = self.get_student_lessons_by_class(student_class)
+            
+            # 🔥 ИСПРАВЛЕНИЕ: Правильно заполняем subjects
+            for subject_name, lessons_list in lessons_by_subject.items():
                 subject_progress = progress_data.get("subjects", {}).get(subject_name, {
                     "completed_lessons": [],
                     "current_lesson": None,
-                    "total_lessons": len(lessons),
+                    "total_lessons": 0,
                     "last_accessed": None,
                     "progress_percent": 0
                 })
                 
+                total_lessons = len(lessons_list)
                 completed_count = len(subject_progress.get("completed_lessons", []))
-                total_lessons = len(lessons)
                 
-                # Ищем следующии урок
+                # Обновляем total_lessons в прогрессе
+                if total_lessons > 0:
+                    progress_percent = int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0
+                else:
+                    progress_percent = 0
+                
+                # 🔥 ИСПРАВЛЕНИЕ: Правильно определяем следующий урок
                 next_lesson = None
-                for lesson in lessons:
+                for lesson in lessons_list:
                     if lesson['id'] not in subject_progress.get("completed_lessons", []):
                         next_lesson = lesson
                         break
@@ -742,47 +760,95 @@ class StudentManagement:
                 result['subjects'][subject_name] = {
                     'total_lessons': total_lessons,
                     'completed_lessons': completed_count,
-                    'progress_percent': int((completed_count / total_lessons) * 100) if total_lessons > 0 else 0,
+                    'progress_percent': progress_percent,
                     'last_updated': subject_progress.get("last_accessed"),
                     'current_lesson': subject_progress.get("current_lesson"),
                     'next_lesson': next_lesson,
-                    'has_lessons': total_lessons > 0
+                    'has_lessons': total_lessons > 0,
+                    'lessons': lessons_list  # 🔥 ДОБАВЛЯЕМ ССЫЛКУ НА УРОКИ
                 }
             
-            # Общая статистика
+            # Вычисляем общую статистику
             total_completed = sum(subj['completed_lessons'] for subj in result['subjects'].values())
             total_lessons = sum(subj['total_lessons'] for subj in result['subjects'].values())
+            
+            if total_lessons > 0:
+                overall_progress = int((total_completed / total_lessons) * 100)
+            else:
+                overall_progress = 0
             
             result['overall'] = {
                 'total_lessons': total_lessons,
                 'completed_lessons': total_completed,
-                'progress_percent': int((total_completed / total_lessons) * 100) if total_lessons > 0 else 0,
+                'progress_percent': overall_progress,
                 'subjects_count': len(result['subjects'])
             }
             
+            print(f"✅ Прогресс загружен для {student_name}: {total_completed}/{total_lessons} уроков ({overall_progress}%)")
             return result
             
         except Exception as e:
             print(f"❌ Ошибка получения прогресса для дашборда: {e}")
+            # 🔥 ИСПРАВЛЕНИЕ: Возвращаем минимальную структуру при ошибке
             return {
                 'student_id': student_id,
                 'student_class': student_class,
                 'student_name': student_name,
                 'subjects': {},
-                'overall': {'total_lessons': 0, 'completed_lessons': 0, 'progress_percent': 0, 'subjects_count': 0}
+                'overall': {
+                    'total_lessons': 0,
+                    'completed_lessons': 0,
+                    'progress_percent': 0,
+                    'subjects_count': 0
+                }
             }
+    
+    # 🔥 НОВАЯ ФУНКЦИЯ: Получает следующий урок для предмета
+    def get_next_lesson_for_subject(self, student_id: str, subject: str) -> Optional[Dict]:
+        """Получает следующий урок для ученика по предмету"""
+        try:
+            progress_file = self.student_progress_dir / f"{student_id}.json"
+            
+            if not progress_file.exists():
+                return None
+            
+            with open(progress_file, 'r', encoding='utf-8') as f:
+                progress_data = json.load(f)
+            
+            student_class = progress_data.get("education_level", "5")
+            subject_progress = progress_data.get("subjects", {}).get(subject, {})
+            completed_lessons = subject_progress.get("completed_lessons", [])
+            
+            # Получаем уроки для предмета
+            lessons_by_subject = self.get_student_lessons_by_class(student_class)
+            subject_lessons = lessons_by_subject.get(subject, [])
+            
+            if not subject_lessons:
+                return None
+            
+            # Ищем первый незавершенный урок
+            for lesson in subject_lessons:
+                if lesson['id'] not in completed_lessons:
+                    return lesson
+            
+            # Если все уроки завершены, возвращаем первый
+            return subject_lessons[0] if subject_lessons else None
+            
+        except Exception as e:
+            print(f"❌ Ошибка получения следующего урока: {e}")
+            return None
     
     # =============================================================================
     # МЕТОДЫ ДЛЯ ЭКСПОРТА И ИМПОРТА ДАННЫХ
     # =============================================================================
     
     def export_students_full(self) -> Optional[Path]:
-        """Полныи экспорт данных учеников (включая прогресс)"""
+        """Полный экспорт данных учеников (включая прогресс)"""
         try:
             temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
             
             with zipfile.ZipFile(temp_zip.name, 'w') as zipf:
-                # 1. Экспорт пользователеи
+                # 1. Экспорт пользователей
                 for user_file in self.users_dir.glob("*.json"):
                     with open(user_file, 'r', encoding='utf-8') as f:
                         user_data = json.load(f)
@@ -797,7 +863,7 @@ class StudentManagement:
                 for progress_file in self.student_progress_dir.glob("*.json"):
                     zipf.write(progress_file, f"progress/{progress_file.name}")
                 
-                # 4. Создаем фаил метаданных
+                # 4. Создаем файл метаданных
                 metadata = {
                     "export_date": datetime.now().isoformat(),
                     "total_users": len(list(self.users_dir.glob("*.json"))),
@@ -823,7 +889,7 @@ class StudentManagement:
             return None
     
     def import_students_data(self, zip_file_path: Path) -> Dict:
-        """Импорт данных учеников из ZIP-фаила"""
+        """Импорт данных учеников из ZIP-файла"""
         try:
             import zipfile
             
@@ -844,7 +910,7 @@ class StudentManagement:
             with zipfile.ZipFile(zip_file_path, 'r') as zipf:
                 zipf.extractall(temp_dir)
             
-            # Импортируем пользователеи
+            # Импортируем пользователей
             users_dir = os.path.join(temp_dir, "users")
             if os.path.exists(users_dir):
                 for user_file in os.listdir(users_dir):
@@ -853,7 +919,7 @@ class StudentManagement:
                             src_path = os.path.join(users_dir, user_file)
                             dst_path = self.users_dir / user_file
                             
-                            # Проверяем, существует ли уже такои пользователь
+                            # Проверяем, существует ли уже такой пользователь
                             if dst_path.exists():
                                 # Создаем резервную копию
                                 backup_path = self.users_dir / f"{user_file}.backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -900,7 +966,7 @@ class StudentManagement:
                         except Exception as e:
                             results["errors"].append(f"Ошибка импорта прогресса {progress_file}: {str(e)}")
             
-            # Очищаем временные фаилы
+            # Очищаем временные файлы
             shutil.rmtree(temp_dir, ignore_errors=True)
             
             return results
@@ -1061,7 +1127,7 @@ class StudentManagement:
             for level_dir in self.lessons_adult_language_dir.glob("*_english"):
                 if level_dir.is_dir():
                     level_name = level_dir.name
-                    subject_name = 'англиискии язык'
+                    subject_name = 'английский язык'
                     class_name = 'adult'
                     
                     for lesson_file in level_dir.glob("*.txt"):
@@ -1095,7 +1161,7 @@ class StudentManagement:
                 return {"success": False, "error": "Выберите предмет"}
             
             # 🔥 ОБРАБОТКА ВЗРОСЛЫХ ЯЗЫКОВЫХ УРОКОВ
-            if class_level == 'adult' and 'англиискии' in subject.lower():
+            if class_level == 'adult' and 'английский' in subject.lower():
                 # Извлекаем уровень CEFR из subject
                 cefr_level = 'A1'
                 for level in self.CEFR_LEVELS.keys():
@@ -1113,7 +1179,7 @@ class StudentManagement:
                 lesson_dir = self.lessons_generated_dir
             else:
                 if class_level not in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']:
-                    return {"success": False, "error": "Неверныи класс"}
+                    return {"success": False, "error": "Неверный класс"}
                 
                 class_dir = self.lessons_students_dir / f"{class_level}_class"
                 class_dir.mkdir(parents=True, exist_ok=True)
@@ -1132,8 +1198,8 @@ class StudentManagement:
             
             next_number = max(lesson_numbers) + 1 if lesson_numbers else 1
             
-            # Создаем имя фаила
-            title_slug = re.sub(r'[^\wа-яе\s-]+', '', title.lower()).strip()
+            # Создаем имя файла
+            title_slug = re.sub(r'[^\wа-яА-ЯёЁ\s-]+', '', title.lower()).strip()
             title_slug = re.sub(r'\s+', '_', title_slug)
             title_slug = title_slug[:50]
             
@@ -1158,13 +1224,13 @@ class StudentManagement:
             return {"success": False, "error": str(e)}
     
     def get_next_lesson_number(self, class_level: str, subject: str) -> Dict:
-        """Получает следующии номер урока для указанного класса и предмета"""
+        """Получает следующий номер урока для указанного класса и предмета"""
         try:
             if not class_level or not subject or subject == "Выберите класс сначала":
                 return {"success": False, "error": "Укажите класс и предмет"}
             
             # 🔥 ОБРАБОТКА ВЗРОСЛЫХ ЯЗЫКОВЫХ УРОКОВ
-            if class_level == 'adult' and 'англиискии' in subject.lower():
+            if class_level == 'adult' and 'английский' in subject.lower():
                 cefr_level = 'A1'
                 for level in self.CEFR_LEVELS.keys():
                     if level in subject.upper():
@@ -1188,7 +1254,7 @@ class StudentManagement:
             else:
                 class_dir = self.lessons_students_dir / f"{class_level}_class"
                 if not class_dir.exists():
-                    return {"success": False, "error": f"Класс {class_level} не наиден"}
+                    return {"success": False, "error": f"Класс {class_level} не найден"}
                 
                 lesson_dir = class_dir / subject
                 if not lesson_dir.exists():
@@ -1219,3 +1285,209 @@ class StudentManagement:
         except Exception as e:
             print(f"❌ Ошибка получения номера урока: {e}")
             return {"success": False, "error": str(e)}
+    
+    def delete_lesson(self, lesson_path: str) -> Dict:
+        """Удаляет урок"""
+        try:
+            lesson_file = Path(lesson_path)
+            if not lesson_file.exists():
+                return {"success": False, "error": "Файл урока не найден"}
+            
+            # Перемещаем в корзину
+            trash_file = self.lessons_trash_dir / lesson_file.name
+            counter = 1
+            while trash_file.exists():
+                trash_file = self.lessons_trash_dir / f"{lesson_file.stem}_{counter}{lesson_file.suffix}"
+                counter += 1
+            
+            lesson_file.rename(trash_file)
+            
+            return {"success": True, "message": "Урок перемещен в корзину"}
+        except Exception as e:
+            print(f"❌ Ошибка удаления урока: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def restore_lesson(self, trash_filename: str) -> Dict:
+        """Восстанавливает урок из корзины"""
+        try:
+            trash_file = self.lessons_trash_dir / trash_filename
+            if not trash_file.exists():
+                return {"success": False, "error": "Файл в корзине не найден"}
+            
+            # Определяем оригинальный путь
+            # Пока просто перемещаем обратно в lessons_dir
+            restored_file = self.lessons_dir / trash_filename
+            counter = 1
+            while restored_file.exists():
+                restored_file = self.lessons_dir / f"{trash_file.stem}_{counter}{trash_file.suffix}"
+                counter += 1
+            
+            trash_file.rename(restored_file)
+            
+            return {"success": True, "message": "Урок восстановлен", "path": str(restored_file)}
+        except Exception as e:
+            print(f"❌ Ошибка восстановления урока: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def empty_trash(self) -> Dict:
+        """Очищает корзину"""
+        try:
+            deleted_count = 0
+            for trash_file in self.lessons_trash_dir.glob("*"):
+                if trash_file.is_file():
+                    trash_file.unlink()
+                    deleted_count += 1
+            
+            return {"success": True, "deleted_count": deleted_count, "message": "Корзина очищена"}
+        except Exception as e:
+            print(f"❌ Ошибка очистки корзины: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def get_trash_contents(self) -> List[Dict]:
+        """Получает содержимое корзины"""
+        try:
+            trash_contents = []
+            for trash_file in self.lessons_trash_dir.glob("*"):
+                if trash_file.is_file():
+                    trash_contents.append({
+                        'name': trash_file.name,
+                        'size': trash_file.stat().st_size,
+                        'modified': datetime.fromtimestamp(trash_file.stat().st_mtime).isoformat(),
+                        'path': str(trash_file)
+                    })
+            
+            return trash_contents
+        except Exception as e:
+            print(f"❌ Ошибка получения содержимого корзины: {e}")
+            return []
+    
+    def get_lesson_content(self, lesson_path: str) -> Dict:
+        """Получает содержание урока"""
+        try:
+            lesson_file = Path(lesson_path)
+            if not lesson_file.exists():
+                return {"success": False, "error": "Файл урока не найден"}
+            
+            with open(lesson_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            return {
+                "success": True,
+                "content": content,
+                "filename": lesson_file.name,
+                "path": str(lesson_file),
+                "size": lesson_file.stat().st_size,
+                "modified": datetime.fromtimestamp(lesson_file.stat().st_mtime).isoformat()
+            }
+        except Exception as e:
+            print(f"❌ Ошибка получения содержания урока: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def update_lesson_content(self, lesson_path: str, content: str) -> Dict:
+        """Обновляет содержание урока"""
+        try:
+            lesson_file = Path(lesson_path)
+            if not lesson_file.exists():
+                return {"success": False, "error": "Файл урока не найден"}
+            
+            # Создаем резервную копию
+            backup_file = lesson_file.with_suffix(f".backup.{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+            shutil.copy2(lesson_file, backup_file)
+            
+            # Обновляем файл
+            with open(lesson_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            return {
+                "success": True,
+                "message": "Урок обновлен",
+                "backup": str(backup_file)
+            }
+        except Exception as e:
+            print(f"❌ Ошибка обновления урока: {e}")
+            return {"success": False, "error": str(e)}
+    
+    # 🔥 НОВЫЙ МЕТОД: Поиск урока по ID
+    def find_lesson_by_id(self, lesson_id: str) -> Optional[Dict]:
+        """Находит урок по его ID"""
+        try:
+            # Парсим ID урока
+            parts = lesson_id.split('_')
+            
+            if len(parts) >= 4:
+                class_level = parts[0]
+                subject = parts[2]
+                lesson_name = '_'.join(parts[3:])
+                
+                # Для взрослых уроков
+                if class_level == 'adult':
+                    for level in self.CEFR_LEVELS.keys():
+                        if level in lesson_id:
+                            level_dir = self.lessons_adult_language_dir / f"{level}_english"
+                            if level_dir.exists():
+                                for lesson_file in level_dir.glob("*.txt"):
+                                    if lesson_file.stem == lesson_name:
+                                        return {
+                                            'id': lesson_id,
+                                            'title': lesson_file.stem.replace('_', ' ').title(),
+                                            'file_path': str(lesson_file.relative_to(self.lessons_dir)),
+                                            'subject': 'английский язык',
+                                            'class_level': 'adult',
+                                            'cefr_level': level,
+                                            'full_path': str(lesson_file)
+                                        }
+                
+                # Для школьных уроков
+                else:
+                    class_dir = self.lessons_students_dir / f"{class_level}_class"
+                    if class_dir.exists():
+                        subject_dir = class_dir / subject
+                        if subject_dir.exists():
+                            for lesson_file in subject_dir.glob("*.txt"):
+                                if lesson_file.stem == lesson_name:
+                                    return {
+                                        'id': lesson_id,
+                                        'title': lesson_file.stem.replace('_', ' ').title(),
+                                        'file_path': str(lesson_file.relative_to(self.lessons_dir)),
+                                        'subject': subject,
+                                        'class_level': class_level,
+                                        'full_path': str(lesson_file)
+                                    }
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Ошибка поиска урока по ID: {e}")
+            return None
+    
+    # 🔥 НОВЫЙ МЕТОД: Получение статистики
+    def get_system_statistics(self) -> Dict:
+        """Получает статистику системы"""
+        try:
+            return {
+                "users": {
+                    "total": len(list(self.users_dir.glob("*.json"))),
+                    "students": len([f for f in self.users_dir.glob("*.json") 
+                                   if json.load(open(f, 'r', encoding='utf-8')).get('role') == 'student']),
+                    "teachers": len([f for f in self.users_dir.glob("*.json") 
+                                   if json.load(open(f, 'r', encoding='utf-8')).get('role') == 'teacher'])
+                },
+                "students": {
+                    "total": len(list(self.students_dir.glob("*.json"))),
+                    "with_progress": len(list(self.student_progress_dir.glob("*.json")))
+                },
+                "lessons": {
+                    "demo": len(list(self.lessons_demo_dir.glob("*.txt"))),
+                    "generated": len(list(self.lessons_generated_dir.glob("*.txt"))),
+                    "students": sum(len(list(subject_dir.glob("*.txt"))) 
+                                   for class_dir in self.lessons_students_dir.glob("*_class") 
+                                   for subject_dir in class_dir.iterdir() if subject_dir.is_dir()),
+                    "adult_language": sum(len(list(level_dir.glob("*.txt"))) 
+                                         for level_dir in self.lessons_adult_language_dir.glob("*_english")),
+                    "trash": len(list(self.lessons_trash_dir.glob("*")))
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            print(f"❌ Ошибка получения статистики: {e}")
+            return {"error": str(e)}
