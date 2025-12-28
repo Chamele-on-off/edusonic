@@ -4038,6 +4038,7 @@ def get_student_progress_api():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+# 🔥 ИСПРАВЛЕННЫЙ ЭНДПОИНТ ДЛЯ ЛИЧНОГО КАБИНЕТА
 @app.route('/api/student/progress/dashboard')
 @student_required
 def get_student_progress_dashboard():
@@ -4054,16 +4055,11 @@ def get_student_progress_dashboard():
         if not student_id:
             return jsonify({"success": False, "error": "Student ID not found"})
         
-        # 🔥 ИСПРАВЛЕНИЕ: Правильный вызов метода
         progress_data = student_manager.get_student_progress_dashboard(
             student_id, student_class, student_name
         )
         
-        # 🔥 ИСПРАВЛЕНИЕ: Правильная структура ответа
-        return jsonify({
-            "success": True, 
-            "progress": progress_data  # 🔥 Важно: оборачиваем в progress
-        })
+        return jsonify({"success": True, "progress": progress_data})
     except Exception as e:
         debug_log(f"❌ Ошибка получения прогресса для дашборда: {e}")
         return jsonify({"success": False, "error": str(e)})
