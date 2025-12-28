@@ -1043,7 +1043,7 @@
         // ВКЛАДКА ПРОГРЕССА (только для школьников)
         // ==============================
         
-        // Загрузка данных о прогрессе
+        // Загрузка данных о прогрессе - ИСПРАВЛЕННАЯ ВЕРСИЯ
         async function loadProgressData() {
             try {
                 showLoading('progress');
@@ -1052,13 +1052,14 @@
                 const progressMessage = document.getElementById('progressMessageText');
                 progressMessage.textContent = 'Здесь вы можете видеть ваш прогресс по каждому предмету и продолжить обучение';
                 
-                // Используем новый исправленный API
+                // Используем исправленный API
                 const response = await fetch('/api/student/progress/dashboard');
                 const data = await response.json();
                 
-                if (data.success && data.progress && data.progress.subjects) {
-                    subjectsData = data.progress.subjects;
-                    renderProgressSubjects(data.progress.subjects);
+                // ИСПРАВЛЕНИЕ: Правильно обрабатываем структуру ответа
+                if (data.success && data.progress) {
+                    subjectsData = data.progress.subjects || {};
+                    renderProgressSubjects(subjectsData);
                 } else {
                     // Если нет предметов, показываем соответствующий интерфейс
                     renderProgressSubjects({});
@@ -1532,6 +1533,11 @@
                 const isCompleted = lesson.completed || false;
                 const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
                 
+                // ИСПРАВЛЕНИЕ: Для школьников используем специальную функцию, для взрослых - старую
+                const startFunction = currentStudentData?.is_adult ? 
+                    `startSpecificLesson('${lesson.id}', '${subjectName}', event)` :
+                    `startSelectedLesson('${lesson.id}', '${subjectName}', event)`;
+                
                 html += `
                     <div class="lesson-item">
                         <div class="lesson-status ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}">
@@ -1554,7 +1560,7 @@
                             </p>
                         </div>
                         <div>
-                            <a class="btn btn-small lesson-link" href="#" onclick="startSpecificLesson('${lesson.id}', '${subjectName}', event)">
+                            <a class="btn btn-small lesson-link" href="#" onclick="${startFunction}">
                                 <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
                                 ${isCompleted ? 'Повторить' : 'Начать'}
                             </a>
@@ -1581,7 +1587,48 @@
             container.innerHTML = html;
         }
         
-        // Начать конкретный урок
+        // ==============================
+        // НОВЫЕ ФУНКЦИИ ДЛЯ ВЫБОРА УРОКОВ ШКОЛЬНИКАМИ
+        // ==============================
+        
+        // НОВАЯ ФУНКЦИЯ: Запуск выбранного урока школьником
+        async function startSelectedLesson(lessonId, subjectName, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            try {
+                console.log(`🚀 Школьник начинает урок ${lessonId} по предмету ${subjectName}`);
+                
+                const response = await fetch('/api/student/start-selected-lesson', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        lesson_id: lessonId,
+                        subject: subjectName
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log(`✅ Комната создана: ${data.room_id}`);
+                    window.open(data.conference_url, '_blank');
+                } else {
+                    throw new Error(data.error || 'Ошибка запуска урока');
+                }
+                
+            } catch (error) {
+                console.error('❌ Ошибка запуска выбранного урока:', error);
+                
+                // Fallback: используем старую функцию для совместимости
+                alert(`Ошибка: ${error.message}\nИспользую стандартный метод...`);
+                startSpecificLesson(lessonId, subjectName, event);
+            }
+        }
+        
+        // Старая функция для взрослых (сохраняем для совместимости)
         async function startSpecificLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
