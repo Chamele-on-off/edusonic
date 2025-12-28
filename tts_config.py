@@ -5,7 +5,7 @@ from pathlib import Path
 # Настройки TTS сервиса
 TTS_CONFIG = {
     'enabled': True,
-    'primary': 'zindaki',  # zindaki или gtts
+    'primary': 'gtts',  # zindaki или gtts
     'zindaki': {
         'base_url': os.environ.get('TTS_SERVICE_URL', 'https://tts.zindaki-edu.ru'),
         'timeout': 30,
