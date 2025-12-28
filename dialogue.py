@@ -1,5 +1,5 @@
 # dialogue.py
-# ИСПРАВЛЕННАЯ ВЕРСИЯ с поддержкой выбора уроков школьниками и правильным отображением прогресса
+# ИСПРАВЛЕННАЯ ВЕРСИЯ с полной ленивой инициализацией
 # + ДОБАВЛЕНА ПОДДЕРЖКА СЛАЙДОВ ИЗОБРАЖЕНИЙ ДЛЯ УРОКОВ
 # + ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ И УРОВНЕЙ CEFR
 
@@ -2473,9 +2473,8 @@ class DialogueManager:
             self.save_student_progress(
                 next_lesson['id'],
                 next_lesson['subject'],
-                completed=False  # 🔥 ИСПРАВЛЕНИЕ: Устанавливаем False, т.к. урок только начат
+                completed=False
             )
-            debug_log(f"📊 Прогресс сохранен (урок начат): {next_lesson['id']}")
         
         # 9. Возвращаем первый абзац
         first_paragraph = self._get_next_paragraph()
@@ -2486,11 +2485,6 @@ class DialogueManager:
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
         self.current_subject = subject
-        
-        # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: СОХРАНЯЕМ ПРЕДМЕТ В ДАННЫХ УЧЕНИКА
-        if self.has_student_data:
-            self.student_data['current_subject'] = subject
-            debug_log(f"🔥 Сохранен текущий предмет для ученика: {subject}")
         
         debug_log(f"🎯 Выбор предмета: {subject}, данные ученика: {self.has_student_data}")
         
@@ -2949,10 +2943,7 @@ class DialogueManager:
                 }
                 
                 # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
-                if self.cefr_level:
-                    lesson_completed_data['cefr_level'] = self.cefr_level
                 
-                self.socketio.emit('lesson_completed', lesson_completed_data, room=self.room_id)
             
             # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
@@ -4347,219 +4338,6 @@ class DialogueManager:
             info['bilingual_ratio'] = self.cefr_config.get('bilingual_ratio', 0.5)
         
         return info
-
-    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ РЕШЕНИЯ ПРОБЛЕМ
-    def find_lesson_by_id_for_student(self, lesson_id: str) -> Optional[Dict]:
-        """🔥 НОВЫЙ МЕТОД: Находит урок по ID для текущего ученика"""
-        try:
-            if not self.has_student_data:
-                return None
-            
-            student_class = self.student_data.get('education_level', '5')
-            
-            # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
-            if self.is_adult_student:
-                if self.adult_study_mode == 'anything':
-                    return None  # Нет уроков в этом режиме
-                
-                # Для взрослых ищем в lessons_by_class['adult']
-                student_class = 'adult'
-            
-            # Ищем урок в lessons_by_class
-            if student_class in self.lessons_by_class:
-                for subject, lessons in self.lessons_by_class[student_class].items():
-                    for lesson in lessons:
-                        if lesson['id'] == lesson_id:
-                            debug_log(f"✅ Найден урок по ID для ученика: {lesson_id} -> {lesson['title']}")
-                            return lesson
-            
-            # Если не нашли в lessons_by_class, ищем в общих уроках
-            for subject, lessons in self.lessons.items():
-                for lesson in lessons:
-                    if lesson['id'] == lesson_id:
-                        debug_log(f"✅ Найден урок по ID в общих уроках: {lesson_id} -> {lesson['title']}")
-                        return lesson
-            
-            debug_log(f"❌ Урок с ID {lesson_id} не найден")
-            return None
-            
-        except Exception as e:
-            debug_log(f"❌ Ошибка поиска урока по ID: {e}")
-            return None
-
-    def start_specific_lesson_for_student(self, lesson_data: Dict) -> str:
-        """🔥 НОВЫЙ МЕТОД: Запускает конкретный выбранный урок для ученика"""
-        try:
-            debug_log(f"🚀 ЗАПУСК КОНКРЕТНОГО УРОКА ДЛЯ УЧЕНИКА: {lesson_data['title']}")
-            
-            self.selected_lesson = lesson_data
-            self.current_subject = lesson_data.get('subject', 'общее')
-            self.lesson_started = True
-            self.current_state = "lesson_reading"
-            self.current_paragraph = 0
-            
-            # Определяем тип предмета
-            self._determine_subject_type()
-            
-            # Определяем CEFR для взрослых если есть
-            if self.is_adult_student and lesson_data.get('cefr_level'):
-                self.cefr_level = lesson_data.get('cefr_level')
-                if LANGUAGE_SUPPORT_ENABLED:
-                    self.cefr_config = get_cefr_level_config(self.cefr_level)
-                debug_log(f"🎓 Установлен CEFR уровень из урока: {self.cefr_level}")
-            
-            # Загружаем содержание урока
-            debug_log(f"📖 Загрузка содержания урока из: {lesson_data['file_path']}")
-            self.lesson_content = self._load_lesson_content(lesson_data['file_path'])
-            
-            if not self.lesson_content:
-                debug_log("❌ Не удалось загрузить содержание урока")
-                return "Ошибка загрузки урока"
-            
-            debug_log(f"✅ Урок загружен, количество абзацев: {len(self.lesson_content)}")
-            
-            # 🔥 НОВОЕ: Поиск слайдов для урока
-            self.lesson_slides = self._find_lesson_slides(lesson_data['file_path'])
-            debug_log(f"✅ Найдено слайдов для урока: {len(self.lesson_slides)}")
-            
-            # Инициализируем базу знаний
-            if self.current_subject:
-                from knowledge.knowledge_base import KnowledgeBase
-                self.knowledge_base = KnowledgeBase(self.current_subject)
-            
-            # Очищаем историю диалога
-            self.conversation_history = []
-            self.conversation_context = []
-            
-            # КРИТИЧЕСКИ ВАЖНО: Уведомляем клиент о начале урока
-            if self.room_id and self.socketio:
-                lesson_start_data = {
-                    'lesson_id': lesson_data['id'],
-                    'title': lesson_data['title'],
-                    'subject': self.current_subject,
-                    'class_level': lesson_data.get('class_level', 'general'),
-                    'lesson_number': lesson_data.get('lesson_number'),
-                    'is_student_lesson': True,
-                    'is_technical': self.is_technical_subject,
-                    'subject_type': self.subject_type,
-                    'slides_count': len(self.lesson_slides)
-                }
-                
-                # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
-                if self.cefr_level:
-                    lesson_start_data['cefr_level'] = self.cefr_level
-                    lesson_start_data['is_adult'] = self.is_adult_student
-                
-                self.socketio.emit('lesson_started', lesson_start_data, room=self.room_id)
-                debug_log(f"📢 Уведомление о начале урока отправлено в комнату {self.room_id}")
-            
-            # Получаем первый абзац
-            first_paragraph = self._get_next_paragraph()
-            
-            # ПЕРСОНАЛИЗИРОВАННОЕ НАЧАЛО
-            if self.has_student_data:
-                student_name = self.student_data.get('name', 'ученик')
-                name_prefix = f"{student_name}, " if student_name else ""
-                
-                # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
-                if self.is_adult_student and self.cefr_level:
-                    return f"{name_prefix}Начинаем урок английского языка уровня {self.cefr_level}. {first_paragraph}"
-                else:
-                    return f"{name_prefix}Начинаем урок по {self.current_subject}. {first_paragraph}"
-            else:
-                return f"Начинаем урок по {self.current_subject}. {first_paragraph}"
-                
-        except Exception as e:
-            debug_log(f"❌ Ошибка запуска конкретного урока: {e}")
-            self.lesson_started = False
-            return f"Ошибка запуска урока: {str(e)}"
-
-    def get_student_progress_dashboard(self) -> Dict:
-        """🔥 НОВЫЙ МЕТОД: Возвращает прогресс ученика для дашборда"""
-        try:
-            if not self.has_student_data:
-                return {"success": False, "error": "Нет данных ученика"}
-            
-            student_id = self.student_data.get('student_id')
-            student_class = self.student_data.get('education_level', '5')
-            student_name = self.student_data.get('name', 'ученик')
-            
-            # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ ВЗРОСЛЫХ
-            if self.is_adult_student and self.adult_study_mode == 'anything':
-                return {
-                    "success": True,
-                    "progress": {
-                        "student_id": student_id,
-                        "student_class": student_class,
-                        "student_name": student_name,
-                        "subjects": {},
-                        "overall": {
-                            "total_lessons": 0,
-                            "completed_lessons": 0,
-                            "progress_percent": 0,
-                            "subjects_count": 0
-                        },
-                        "is_adult": True
-                    }
-                }
-            
-            # Получаем все предметы для класса
-            subjects_data = {}
-            
-            if student_class in self.lessons_by_class:
-                for subject, lessons in self.lessons_by_class[student_class].items():
-                    # Получаем прогресс по предмету
-                    progress = self.get_student_progress(subject)
-                    completed_lessons = progress.get("completed_lessons", [])
-                    
-                    # Находим следующий урок
-                    next_lesson = None
-                    sorted_lessons = sorted(lessons, key=lambda x: x.get('lesson_number', 999))
-                    
-                    for lesson in sorted_lessons:
-                        if lesson['id'] not in completed_lessons:
-                            next_lesson = lesson
-                            break
-                    
-                    # Подготавливаем данные предмета
-                    subjects_data[subject] = {
-                        "total_lessons": len(lessons),
-                        "completed_lessons": len(completed_lessons),
-                        "progress_percent": int((len(completed_lessons) / len(lessons) * 100)) if lessons else 0,
-                        "last_updated": progress.get("last_updated", 0),
-                        "current_lesson": progress.get("current_lesson"),
-                        "next_lesson": next_lesson,
-                        "has_lessons": len(lessons) > 0
-                    }
-            
-            # Вычисляем общую статистику
-            total_completed = sum(subj['completed_lessons'] for subj in subjects_data.values())
-            total_lessons = sum(subj['total_lessons'] for subj in subjects_data.values())
-            
-            overall_progress = {
-                "total_lessons": total_lessons,
-                "completed_lessons": total_completed,
-                "progress_percent": int((total_completed / total_lessons * 100)) if total_lessons > 0 else 0,
-                "subjects_count": len(subjects_data)
-            }
-            
-            # Формируем результат
-            result = {
-                "student_id": student_id,
-                "student_class": student_class,
-                "student_name": student_name,
-                "subjects": subjects_data,
-                "overall": overall_progress,
-                "is_adult": self.is_adult_student
-            }
-            
-            debug_log(f"📊 Прогресс для дашборда: {total_completed}/{total_lessons} уроков ({overall_progress['progress_percent']}%)")
-            
-            return {"success": True, "progress": result}
-            
-        except Exception as e:
-            debug_log(f"❌ Ошибка получения прогресса для дашборда: {e}")
-            return {"success": False, "error": str(e)}
 
 # Тестирование
 if __name__ == "__main__":
