@@ -3659,6 +3659,52 @@
             // Индикатор скроется когда учитель начнет отвечать
         }
 
+        // Функции для воспроизведения аудио с автоопределением формата
+        function detectAudioFormat(base64Audio) {
+            try {
+                const header = atob(base64Audio.substring(0, 12));
+                // WAV: начинается с 'RIFF'
+                if (header.startsWith('RIFF')) {
+                    return 'wav';
+                }
+                // MP3: начинается с 'ID3' или битовый шаблон 0xFF 0xFB
+                if (header.startsWith('ID3') || 
+                    (header.charCodeAt(0) === 0xFF && (header.charCodeAt(1) & 0xE0) === 0xE0)) {
+                    return 'mp3';
+                }
+            } catch (e) {
+                console.warn('Не удалось определить формат аудио:', e);
+            }
+            // Fallback на MP3 (gTTS всегда даёт MP3)
+            return 'mp3';
+        }
+
+        function playAudio(base64Audio) {
+            try {
+                const format = detectAudioFormat(base64Audio);
+                const mimeType = format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+                const audio = new Audio(`data:${mimeType};base64,${base64Audio}`);
+                audio.preload = 'auto';
+                audioQueue.push(audio);
+                playNextAudio();
+            } catch (error) {
+                console.error('Ошибка воспроизведения аудио:', error);
+            }
+        }
+
+        function playAudioForIOS(base64Audio) {
+            const format = detectAudioFormat(base64Audio);
+            const mimeType = format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+            audioFix.src = `data:${mimeType};base64,${base64Audio}`;
+            const playPromise = audioFix.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.error('iOS audio play failed:', error);
+                    showTeacherSpeech("(Аудио сообщение)");
+                });
+            }
+        }
+
         // iOS Audio Fix
         function playNextAudio() {
             if (isPlayingAudio || audioQueue.length === 0) return;
@@ -3679,22 +3725,6 @@
                         console.error('Ошибка автовоспроизведения:', error);
                         isPlayingAudio = false;
                         setTimeout(playNextAudio, 100);
-                    });
-            }
-        }
-        
-        function playAudioForIOS(base64Audio) {
-            audioFix.src = `data:audio/mp3;base64,${base64Audio}`;
-            
-            const playPromise = audioFix.play();
-            if (playPromise !== undefined) {
-                playPromise
-                    .then(() => {
-                        // Audio started successfully
-                    })
-                    .catch(error => {
-                        console.error('iOS audio play failed:', error);
-                        showTeacherSpeech("(Аудио сообщение)");
                     });
             }
         }
@@ -4012,23 +4042,7 @@
             stopAnimation();
         }
 
-        function playAudio(base64Audio) {
-            try {
-                if (isIOS) {
-                    playAudioForIOS(base64Audio);
-                } else {
-                    const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
-                    audio.preload = 'auto';
-                    
-                    audioQueue.push(audio);
-                    playNextAudio();
-                }
-            } catch (error) {
-                console.error('Ошибка воспроизведения аудио:', error);
-            }
-        }
-
-        // Функции инициализации
+        // Инициализация рисования
         function initDrawingCanvas() {
             const resizeCanvas = () => {
                 drawingCanvas.width = drawingCanvas.offsetWidth;
