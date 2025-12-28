@@ -15,7 +15,6 @@ from config import get_llm_mode, get_dialogue_settings
 import time
 import threading
 from practice_manager import PracticeManager
-from app import STUDENT_PROGRESS_DIR
 
 # 🔥 ИМПОРТ ДЛЯ ЯЗЫКОВОЙ ИНТЕГРАЦИИ
 try:
