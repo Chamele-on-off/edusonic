@@ -475,7 +475,7 @@ class StudentManagement:
     def initialize_student_progress(self, student_id: str, education_level: str) -> bool:
         """Инициализирует прогресс ученика"""
         try:
-            progress_file = self.student_progress_dir / f"{student_id}.json"
+            progress_file = Path("students_progress") / f"{student_id}.json"
             
             progress_data = {
                 "student_id": student_id,
@@ -519,7 +519,7 @@ class StudentManagement:
                                      lesson_id: str, completed: bool = True) -> bool:
         """Обновляет прогресс ученика по уроку"""
         try:
-            progress_file = self.student_progress_dir / f"{student_id}.json"
+            progress_file = Path("students_progress") / f"{student_id}.json"
             
             if not progress_file.exists():
                 student_data = self.load_student_data(student_id)
@@ -627,7 +627,7 @@ class StudentManagement:
     def get_student_next_lesson(self, student_id: str, subject: str) -> Optional[Dict]:
         """Получает следующии урок для ученика по предмету"""
         try:
-            progress_file = self.student_progress_dir / f"{student_id}.json"
+            progress_file = Path("students_progress") / f"{student_id}.json"
             
             if not progress_file.exists():
                 return None
@@ -669,7 +669,7 @@ class StudentManagement:
                                       student_name: str = "") -> Dict:
         """🔥 Получает прогресс ученика для личного кабинета"""
         try:
-            progress_file = self.student_progress_dir / f"{student_id}.json"
+            progress_file = Path("students_progress") / f"{student_id}.json"
             if not progress_file.exists():
                 # 🔥 ДЛЯ ВЗРОСЛЫХ С "ИЗУЧАТЬ ЧТО УГОДНО" - СОЗДАЕМ ПУСТОИ ПРОГРЕСС
                 if student_class == 'adult':
