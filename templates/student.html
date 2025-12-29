@@ -1598,10 +1598,8 @@
                 const isCompleted = lesson.completed || false;
                 const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
                 
-                // Для школьников используем новую функцию, для взрослых - старую
-                const startFunction = currentStudentData?.is_adult ? 
-                    `startSpecificLesson('${lesson.id}', '${subjectName}', event)` :
-                    `startSelectedLesson('${lesson.id}', '${subjectName}', event)`;
+                // ИСПРАВЛЕНИЕ: Используем единую функцию для всех
+                const startFunction = `startSelectedLesson('${lesson.id}', '${subjectName}', event)`;
                 
                 html += `
                     <div class="lesson-item">
@@ -1656,31 +1654,50 @@
         // ФУНКЦИИ ЗАПУСКА УРОКОВ (ИСПРАВЛЕННЫЕ)
         // ==============================
         
-        // ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока школьником
+        // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока для всех пользователей
         async function startSelectedLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
             
             try {
-                console.log(`🚀 Школьник начинает урок ${lessonId} по предмету ${subjectName}`);
+                console.log(`🚀 Начинаем урок ${lessonId} по предмету ${subjectName}`);
                 
-                // 1. Получаем данные пользователя
-                const userResponse = await fetch('/api/student/profile');
-                const userData = await userResponse.json();
+                // 1. ПОЛУЧАЕМ СУЩЕСТВУЮЩУЮ КОМНАТУ ДЛЯ ПРЕДМЕТА (единая логика для всех)
+                const roomResponse = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
+                const roomData = await roomResponse.json();
                 
-                if (!userData.success || !userData.student_data) {
-                    throw new Error('Не удалось получить данные ученика');
+                let roomId;
+                
+                if (roomData.success && roomData.room) {
+                    // Используем существующую комнату
+                    roomId = roomData.room.room_name;
+                    console.log(`✅ Используем существующую комнату: ${roomId}`);
+                } else {
+                    // Если комнаты нет - создаем новую
+                    console.log(`⚠️ Комната не найдена, создаем новую`);
+                    
+                    // 2. Создаем комнату через API (единый подход)
+                    const createResponse = await fetch('/api/student/create-conference', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ subject: subjectName })
+                    });
+                    
+                    const createData = await createResponse.json();
+                    
+                    if (createData.success && createData.conference) {
+                        roomId = createData.conference.room_id || createData.conference.room_name;
+                        console.log(`✅ Создана новая комната: ${roomId}`);
+                    } else {
+                        // Fallback: создаем вручную
+                        const timestamp = Date.now();
+                        const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                        roomId = `student_${subjectName}_${studentName}_${timestamp}`;
+                        console.log(`⚠️ Используем fallback комнату: ${roomId}`);
+                    }
                 }
-                
-                const studentData = userData.student_data;
-                const studentName = studentData.name || 'ученик';
-                
-                // 2. Создаем уникальную комнату для урока
-                const timestamp = Date.now();
-                const studentNameSlug = studentName.replace(/\s+/g, '_').toLowerCase();
-                const roomId = `student_${subjectName}_${studentNameSlug}_${timestamp}_${lessonId}`;
-                
-                console.log(`✅ Создана комната: ${roomId}`);
                 
                 // 3. Регистрируем комнату с учеником и уроком
                 const registerResponse = await fetch('/api/room/register-student', {
@@ -1690,7 +1707,7 @@
                     },
                     body: JSON.stringify({
                         room_id: roomId,
-                        student_data: studentData,
+                        student_data: currentStudentData,
                         lesson_id: lessonId,
                         subject: subjectName
                     })
@@ -1719,7 +1736,7 @@
                     console.warn('⚠️ Предупреждение при инициализации комнаты:', initResult.error);
                 }
                 
-                // 5. Запускаем конкретный урок
+                // 5. Запускаем конкретный урок (ВАЖНО: используем тот же endpoint что и для взрослых)
                 const startResponse = await fetch('/api/lesson/start-specific', {
                     method: 'POST',
                     headers: {
@@ -1747,96 +1764,25 @@
                 
                 // Fallback: используем старую функцию для совместимости
                 alert(`Ошибка: ${error.message}\nИспользую стандартный метод...`);
-                startSpecificLesson(lessonId, subjectName, event);
+                
+                // Создаем простую комнату без привязки к уроку
+                const timestamp = Date.now();
+                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                const roomId = `student_${subjectName}_${studentName}_${timestamp}`;
+                
+                window.location.href = `/conference?room=${encodeURIComponent(roomId)}&student=true&subject=${encodeURIComponent(subjectName)}`;
             }
         }
         
-        // Функция для взрослых (без изменений)
+        // Функция для взрослых (сохранена для совместимости, но теперь использует ту же логику)
         async function startSpecificLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
             
-            try {
-                console.log(`🚀 Начинаем урок ${lessonId} по предмету ${subjectName}`);
-                
-                // 1. Создаем или получаем комнату для предмета
-                const roomResponse = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
-                const roomData = await roomResponse.json();
-                
-                if (!roomData.success) {
-                    throw new Error('Ошибка получения комнаты: ' + (roomData.error || 'неизвестная ошибка'));
-                }
-                
-                const roomName = roomData.room.room_name;
-                console.log(`✅ Получена комната: ${roomName}`);
-                
-                // 2. Регистрируем комнату с уроком
-                const registerResponse = await fetch('/api/room/register-student', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        room_id: roomName,
-                        student_data: currentStudentData,
-                        lesson_id: lessonId,
-                        subject: subjectName
-                    })
-                });
-                
-                const registerResult = await registerResponse.json();
-                
-                if (!registerResult.success) {
-                    console.warn('⚠️ Предупреждение при регистрации комнаты:', registerResult.error);
-                }
-                
-                // 3. Инициализируем комнату
-                const initResponse = await fetch('/api/room/initialize', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        room_id: roomName
-                    })
-                });
-                
-                const initResult = await initResponse.json();
-                
-                if (!initResult.success) {
-                    console.warn('⚠️ Предупреждение при инициализации комнаты:', initResult.error);
-                }
-                
-                // 4. Запускаем конкретный урок
-                const startResponse = await fetch('/api/lesson/start-specific', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        room_id: roomName,
-                        lesson_id: lessonId
-                    })
-                });
-                
-                const startResult = await startResponse.json();
-                
-                if (!startResult.success) {
-                    console.warn('⚠️ Предупреждение при запуске урока:', startResult.error);
-                }
-                
-                console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
-                
-                // 5. Открываем конференцию (переход на новую страницу)
-                window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}&lesson_id=${encodeURIComponent(lessonId)}`;
-                
-            } catch (error) {
-                console.error('❌ Ошибка запуска урока:', error);
-                
-                // Fallback: просто создаем комнату без привязки к уроку
-                alert(`Ошибка: ${error.message}\nСоздаю комнату без привязки к конкретному уроку.`);
-                createAndOpenConference(subjectName);
-            }
+            console.log(`🚀 Взрослый начинает урок ${lessonId} по предмету ${subjectName}`);
+            
+            // Используем ту же функцию что и для школьников
+            await startSelectedLesson(lessonId, subjectName, event);
         }
         
         // Создание и открытие конференции (исправленная - переход на новой странице)
