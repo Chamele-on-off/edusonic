@@ -1306,7 +1306,7 @@
                     console.log(`✅ Свободная конференция создана: ${roomName}`);
                     
                     // Открываем конференцию
-                    window.open(`/conference?room=${roomName}&student=true&free_conversation=true`, '_blank');
+                    window.location.href = `/conference?room=${roomName}&student=true&free_conversation=true`;
                 } else {
                     throw new Error(data.error || 'Ошибка создания свободной конференции');
                 }
@@ -1319,7 +1319,7 @@
                 const roomName = `free_conversation_${studentName}_${timestamp}`;
                 
                 alert(`Создана свободная конференция: ${roomName}`);
-                window.open(`/conference?room=${roomName}&student=true&free_conversation=true`, '_blank');
+                window.location.href = `/conference?room=${roomName}&student=true&free_conversation=true`;
             }
         }
         
@@ -1467,7 +1467,7 @@
                     subjectsData = data.lessons;
                     renderSubjectSelect(data.lessons);
                     
-                    // Загрузить уроки для первого предмета
+                    // Загрузить уроки для первый предмет
                     const firstSubject = Object.keys(data.lessons)[0];
                     loadLessonsForSubject(firstSubject);
                 } else {
@@ -1598,7 +1598,7 @@
                 const isCompleted = lesson.completed || false;
                 const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
                 
-                // ИСПРАВЛЕНИЕ: Для школьников используем специальную функцию, для взрослых - старую
+                // Для школьников используем новую функцию, для взрослых - старую
                 const startFunction = currentStudentData?.is_adult ? 
                     `startSpecificLesson('${lesson.id}', '${subjectName}', event)` :
                     `startSelectedLesson('${lesson.id}', '${subjectName}', event)`;
@@ -1653,10 +1653,10 @@
         }
         
         // ==============================
-        // НОВЫЕ ФУНКЦИИ ДЛЯ ВЫБОРА УРОКОВ ШКОЛЬНИКАМИ
+        // ФУНКЦИИ ЗАПУСКА УРОКОВ (ИСПРАВЛЕННЫЕ)
         // ==============================
         
-        // НОВАЯ ФУНКЦИЯ: Запуск выбранного урока школьником
+        // ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока школьником
         async function startSelectedLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
@@ -1664,25 +1664,83 @@
             try {
                 console.log(`🚀 Школьник начинает урок ${lessonId} по предмету ${subjectName}`);
                 
-                const response = await fetch('/api/student/start-selected-lesson', {
+                // 1. Получаем данные пользователя
+                const userResponse = await fetch('/api/student/profile');
+                const userData = await userResponse.json();
+                
+                if (!userData.success || !userData.student_data) {
+                    throw new Error('Не удалось получить данные ученика');
+                }
+                
+                const studentData = userData.student_data;
+                const studentName = studentData.name || 'ученик';
+                
+                // 2. Создаем уникальную комнату для урока
+                const timestamp = Date.now();
+                const studentNameSlug = studentName.replace(/\s+/g, '_').toLowerCase();
+                const roomId = `student_${subjectName}_${studentNameSlug}_${timestamp}_${lessonId}`;
+                
+                console.log(`✅ Создана комната: ${roomId}`);
+                
+                // 3. Регистрируем комнату с учеником и уроком
+                const registerResponse = await fetch('/api/room/register-student', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
+                        room_id: roomId,
+                        student_data: studentData,
                         lesson_id: lessonId,
                         subject: subjectName
                     })
                 });
                 
-                const data = await response.json();
+                const registerResult = await registerResponse.json();
                 
-                if (data.success) {
-                    console.log(`✅ Комната создана: ${data.room_id}`);
-                    window.open(data.conference_url, '_blank');
-                } else {
-                    throw new Error(data.error || 'Ошибка запуска урока');
+                if (!registerResult.success) {
+                    console.warn('⚠️ Предупреждение при регистрации комнаты:', registerResult.error);
                 }
+                
+                // 4. Инициализируем комнату
+                const initResponse = await fetch('/api/room/initialize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomId
+                    })
+                });
+                
+                const initResult = await initResponse.json();
+                
+                if (!initResult.success) {
+                    console.warn('⚠️ Предупреждение при инициализации комнаты:', initResult.error);
+                }
+                
+                // 5. Запускаем конкретный урок
+                const startResponse = await fetch('/api/lesson/start-specific', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomId,
+                        lesson_id: lessonId
+                    })
+                });
+                
+                const startResult = await startResponse.json();
+                
+                if (!startResult.success) {
+                    console.warn('⚠️ Предупреждение при запуске урока:', startResult.error);
+                }
+                
+                console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
+                
+                // 6. Открываем конференцию (переход на новую страницу)
+                window.location.href = `/conference?room=${encodeURIComponent(roomId)}&student=true&subject=${encodeURIComponent(subjectName)}&lesson_id=${encodeURIComponent(lessonId)}`;
                 
             } catch (error) {
                 console.error('❌ Ошибка запуска выбранного урока:', error);
@@ -1693,7 +1751,7 @@
             }
         }
         
-        // Старая функция для взрослых (сохраняем для совместимости)
+        // Функция для взрослых (без изменений)
         async function startSpecificLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
@@ -1730,7 +1788,6 @@
                 
                 if (!registerResult.success) {
                     console.warn('⚠️ Предупреждение при регистрации комнаты:', registerResult.error);
-                    // Продолжаем - комната все равно создана
                 }
                 
                 // 3. Инициализируем комнату
@@ -1766,13 +1823,12 @@
                 
                 if (!startResult.success) {
                     console.warn('⚠️ Предупреждение при запуске урока:', startResult.error);
-                    // Продолжаем - урок может быть запущен автоматически при входе в комнату
                 }
                 
                 console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
                 
-                // 5. Открываем конференцию по ссылке
-                openConference(roomName, subjectName, lessonId);
+                // 5. Открываем конференцию (переход на новую страницу)
+                window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}&lesson_id=${encodeURIComponent(lessonId)}`;
                 
             } catch (error) {
                 console.error('❌ Ошибка запуска урока:', error);
@@ -1783,7 +1839,7 @@
             }
         }
         
-        // Создание и открытие конференции
+        // Создание и открытие конференции (исправленная - переход на новой странице)
         async function createAndOpenConference(subjectName, event = null) {
             if (event) {
                 event.preventDefault();
@@ -1822,8 +1878,8 @@
                     const roomName = data.conference?.room_id || data.room_id;
                     console.log(`✅ Комната создана: ${roomName}`);
                     
-                    // Открываем конференцию
-                    openConference(roomName, subjectName);
+                    // Открываем конференцию (переход на новой странице)
+                    window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
                 } else {
                     throw new Error(data.error || 'Ошибка создания комнаты');
                 }
@@ -1854,11 +1910,12 @@
                     console.warn('Не удалось зарегистрировать комнату:', regError);
                 }
                 
-                openConference(roomName, subjectName);
+                // Открываем конференцию (переход на новой странице)
+                window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
             }
         }
         
-        // Открытие конференции
+        // Упрощенная функция открытия конференции (только для совместимости)
         function openConference(roomName, subjectName, lessonId = null) {
             console.log(`🌐 Открываем конференцию: ${roomName}, предмет: ${subjectName}, урок: ${lessonId || 'нет'}`);
             
