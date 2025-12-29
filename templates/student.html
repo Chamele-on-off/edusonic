@@ -1651,18 +1651,20 @@
         }
         
         // ==============================
-        // ФУНКЦИИ ЗАПУСКА УРОКОВ (ИСПРАВЛЕННЫЕ)
+        // ФУНКЦИИ ЗАПУСКА УРОКОВ (КОМПЛЕТНО ИСПРАВЛЕННЫЕ)
         // ==============================
         
-        // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока для всех пользователей
+        // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока для ВСЕХ пользователей
         async function startSelectedLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
             
             try {
-                console.log(`🚀 Начинаем урок ${lessonId} по предмету ${subjectName}`);
+                console.log(`🚀 НАЧИНАЕМ УРОК ${lessonId} по предмету ${subjectName}`);
+                console.log(`📌 Текущий пользователь:`, currentStudentData?.is_adult ? 'Взрослый/Студент' : 'Школьник');
                 
-                // 1. ПОЛУЧАЕМ СУЩЕСТВУЮЩУЮ КОМНАТУ ДЛЯ ПРЕДМЕТА (единая логика для всех)
+                // 1. Получаем существующую комнату для предмета через API (как у взрослых)
+                console.log(`📡 Запрашиваем комнату для предмета: ${subjectName}`);
                 const roomResponse = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
                 const roomData = await roomResponse.json();
                 
@@ -1671,12 +1673,12 @@
                 if (roomData.success && roomData.room) {
                     // Используем существующую комнату
                     roomId = roomData.room.room_name;
-                    console.log(`✅ Используем существующую комнату: ${roomId}`);
+                    console.log(`✅ Найдена существующая комната: ${roomId}`);
                 } else {
                     // Если комнаты нет - создаем новую
                     console.log(`⚠️ Комната не найдена, создаем новую`);
                     
-                    // 2. Создаем комнату через API (единый подход)
+                    // 2. Создаем комнату через API
                     const createResponse = await fetch('/api/student/create-conference', {
                         method: 'POST',
                         headers: {
@@ -1694,12 +1696,14 @@
                         // Fallback: создаем вручную
                         const timestamp = Date.now();
                         const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
-                        roomId = `student_${subjectName}_${studentName}_${timestamp}`;
+                        roomId = `student_${subjectName}_${studentName}_${timestamp}_${lessonId}`;
                         console.log(`⚠️ Используем fallback комнату: ${roomId}`);
                     }
                 }
                 
-                // 3. Регистрируем комнату с учеником и уроком
+                console.log(`🎯 Используем комнату: ${roomId} для урока: ${lessonId}`);
+                
+                // 3. Регистрируем комнату с учеником и УРОКОМ
                 const registerResponse = await fetch('/api/room/register-student', {
                     method: 'POST',
                     headers: {
@@ -1708,7 +1712,7 @@
                     body: JSON.stringify({
                         room_id: roomId,
                         student_data: currentStudentData,
-                        lesson_id: lessonId,
+                        lesson_id: lessonId,  // ВАЖНО: передаем lesson_id
                         subject: subjectName
                     })
                 });
@@ -1736,7 +1740,8 @@
                     console.warn('⚠️ Предупреждение при инициализации комнаты:', initResult.error);
                 }
                 
-                // 5. Запускаем конкретный урок (ВАЖНО: используем тот же endpoint что и для взрослых)
+                // 5. ЗАПУСКАЕМ КОНКРЕТНЫЙ УРОК через API (ВАЖНО!)
+                console.log(`🚀 Запускаем конкретный урок ${lessonId} через API`);
                 const startResponse = await fetch('/api/lesson/start-specific', {
                     method: 'POST',
                     headers: {
@@ -1752,40 +1757,94 @@
                 
                 if (!startResult.success) {
                     console.warn('⚠️ Предупреждение при запуске урока:', startResult.error);
+                } else {
+                    console.log(`✅ Урок ${lessonId} успешно запущен через API`);
                 }
                 
                 console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
                 
-                // 6. Открываем конференцию (переход на новую страницу)
+                // 6. Открываем конференцию с параметром lesson_id
                 window.location.href = `/conference?room=${encodeURIComponent(roomId)}&student=true&subject=${encodeURIComponent(subjectName)}&lesson_id=${encodeURIComponent(lessonId)}`;
                 
             } catch (error) {
-                console.error('❌ Ошибка запуска выбранного урока:', error);
+                console.error('❌ КРИТИЧЕСКАЯ ОШИБКА запуска выбранного урока:', error);
                 
-                // Fallback: используем старую функцию для совместимости
-                alert(`Ошибка: ${error.message}\nИспользую стандартный метод...`);
+                // Fallback: используем альтернативный метод
+                alert(`Ошибка: ${error.message}\nПопробую альтернативный метод...`);
                 
-                // Создаем простую комнату без привязки к уроку
-                const timestamp = Date.now();
-                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
-                const roomId = `student_${subjectName}_${studentName}_${timestamp}`;
-                
-                window.location.href = `/conference?room=${encodeURIComponent(roomId)}&student=true&subject=${encodeURIComponent(subjectName)}`;
+                // Попробуем через startSpecificLesson (для совместимости)
+                try {
+                    await startSpecificLesson(lessonId, subjectName, event);
+                } catch (fallbackError) {
+                    console.error('❌ Fallback также не сработал:', fallbackError);
+                    
+                    // Создаем простую комнату
+                    const timestamp = Date.now();
+                    const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                    const roomId = `student_${subjectName}_${studentName}_${timestamp}`;
+                    
+                    window.location.href = `/conference?room=${encodeURIComponent(roomId)}&student=true&subject=${encodeURIComponent(subjectName)}`;
+                }
             }
         }
         
-        // Функция для взрослых (сохранена для совместимости, но теперь использует ту же логику)
+        // Функция для взрослых (использует ту же логику, что и школьники)
         async function startSpecificLesson(lessonId, subjectName, event) {
             event.preventDefault();
             event.stopPropagation();
             
-            console.log(`🚀 Взрослый начинает урок ${lessonId} по предмету ${subjectName}`);
+            console.log(`🚀 Взрослый/студент начинает урок ${lessonId} по предмету ${subjectName}`);
             
-            // Используем ту же функцию что и для школьников
-            await startSelectedLesson(lessonId, subjectName, event);
+            try {
+                // Используем тот же алгоритм что и для школьников
+                const response = await fetch(`/api/student/get-room/${encodeURIComponent(subjectName)}`);
+                const roomData = await response.json();
+                
+                if (!roomData.success) {
+                    throw new Error('Ошибка получения комнаты: ' + (roomData.error || 'неизвестная ошибка'));
+                }
+                
+                const roomName = roomData.room.room_name;
+                console.log(`✅ Получена комната: ${roomName}`);
+                
+                // Регистрируем комнату с уроком
+                await fetch('/api/room/register-student', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomName,
+                        student_data: currentStudentData,
+                        lesson_id: lessonId,
+                        subject: subjectName
+                    })
+                });
+                
+                // Запускаем конкретный урок
+                await fetch('/api/lesson/start-specific', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        room_id: roomName,
+                        lesson_id: lessonId
+                    })
+                });
+                
+                console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
+                
+                window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}&lesson_id=${encodeURIComponent(lessonId)}`;
+                
+            } catch (error) {
+                console.error('❌ Ошибка запуска урока:', error);
+                alert(`Ошибка: ${error.message}\nСоздаю комнату без привязки к конкретному уроку.`);
+                createAndOpenConference(subjectName);
+            }
         }
         
-        // Создание и открытие конференции (исправленная - переход на новой странице)
+        // Создание и открытие конференции
         async function createAndOpenConference(subjectName, event = null) {
             if (event) {
                 event.preventDefault();
@@ -1795,7 +1854,6 @@
             try {
                 console.log(`🚀 Создаем комнату для предмета: ${subjectName}`);
                 
-                // Для взрослых/студентов используем другой API
                 let apiEndpoint, requestBody;
                 
                 if (currentStudentData?.is_adult && subjectName === 'английский язык') {
@@ -1809,7 +1867,6 @@
                     requestBody = { subject: subjectName };
                 }
                 
-                // Создаем новую комнату через API
                 const response = await fetch(apiEndpoint, {
                     method: 'POST',
                     headers: {
@@ -1824,7 +1881,6 @@
                     const roomName = data.conference?.room_id || data.room_id;
                     console.log(`✅ Комната создана: ${roomName}`);
                     
-                    // Открываем конференцию (переход на новой странице)
                     window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
                 } else {
                     throw new Error(data.error || 'Ошибка создания комнаты');
@@ -1832,14 +1888,12 @@
             } catch (error) {
                 console.error('❌ Ошибка создания конференции:', error);
                 
-                // Fallback: генерируем имя комнаты вручную
                 const timestamp = Date.now();
                 const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
                 const roomName = `student_${subjectName}_${studentName}_${timestamp}`;
                 
                 console.log(`⚠️ Используем fallback комнату: ${roomName}`);
                 
-                // Регистрируем комнату
                 try {
                     await fetch('/api/room/register-student', {
                         method: 'POST',
@@ -1856,23 +1910,20 @@
                     console.warn('Не удалось зарегистрировать комнату:', regError);
                 }
                 
-                // Открываем конференцию (переход на новой странице)
                 window.location.href = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
             }
         }
         
-        // Упрощенная функция открытия конференции (только для совместимости)
+        // Упрощенная функция открытия конференции
         function openConference(roomName, subjectName, lessonId = null) {
             console.log(`🌐 Открываем конференцию: ${roomName}, предмет: ${subjectName}, урок: ${lessonId || 'нет'}`);
             
-            // Формируем URL с параметрами
             let url = `/conference?room=${encodeURIComponent(roomName)}&student=true&subject=${encodeURIComponent(subjectName)}`;
             
             if (lessonId && lessonId !== 'next') {
                 url += `&lesson_id=${encodeURIComponent(lessonId)}`;
             }
             
-            // Добавляем информацию о взрослых/студентах
             if (currentStudentData?.is_adult) {
                 url += `&is_adult=true&study_mode=${currentStudentData.study_mode}`;
                 if (currentStudentData.study_mode === 'language') {
@@ -1882,7 +1933,6 @@
             
             console.log(`🔗 Переход по ссылке: ${url}`);
             
-            // Открываем в ТЕКУЩЕЙ вкладке
             window.location.href = url;
         }
         
@@ -1908,14 +1958,12 @@
                         avatarSelect.appendChild(option);
                     });
                     
-                    // Автоматически выбираем аватар "woman" если он есть
                     const womanAvatar = data.avatars.find(avatar => avatar.toLowerCase().includes('woman'));
                     if (womanAvatar) {
                         avatarSelect.value = womanAvatar;
                         updateAvatarPreview(womanAvatar);
                     }
                     
-                    // Слушатель изменения выбора
                     avatarSelect.addEventListener('change', function() {
                         updateAvatarPreview(this.value);
                     });
@@ -1967,7 +2015,6 @@
             showAvatarStatus(`Устанавливаем аватар "${selectedAvatar}" для всех комнат...`, true);
             
             try {
-                // Проверяем, что аватар существует
                 const framesResponse = await fetch(`/api/frames/${selectedAvatar}`);
                 const framesData = await framesResponse.json();
                 
@@ -1975,7 +2022,6 @@
                     throw new Error(framesData.error);
                 }
                 
-                // Получаем все комнаты ученика
                 const rooms = await getStudentRooms();
                 
                 if (!rooms || rooms.length === 0) {
@@ -1985,7 +2031,6 @@
                 
                 let successCount = 0;
                 
-                // Устанавливаем аватар для каждой комнаты
                 for (const room of rooms) {
                     try {
                         socket.emit('avatar_changed', {
@@ -2001,7 +2046,6 @@
                         console.log(`✅ Avatar set for room: ${room.room_name}`);
                         successCount++;
                         
-                        // Небольшая задержка между запросами
                         await new Promise(resolve => setTimeout(resolve, 50));
                         
                     } catch (error) {
@@ -2009,7 +2053,6 @@
                     }
                 }
                 
-                // Сохраняем предпочтение аватара
                 try {
                     const response = await fetch('/api/student/set-avatar', {
                         method: 'POST',
@@ -2080,7 +2123,6 @@
             if (loadingElement) loadingElement.style.display = 'block';
             if (containerElement) containerElement.style.display = 'none';
             
-            // Для вкладки уроков скрываем другие элементы
             if (tab === 'lessons') {
                 const subjectSelect = document.getElementById('lessonsSubjectSelect');
                 const lessonsList = document.getElementById('lessonsList');
@@ -2097,7 +2139,6 @@
             if (loadingElement) loadingElement.style.display = 'none';
             if (containerElement) containerElement.style.display = 'block';
             
-            // Для вкладки уроков показываем другие элементы
             if (tab === 'lessons') {
                 const subjectSelect = document.getElementById('lessonsSubjectSelect');
                 const lessonsList = document.getElementById('lessonsList');
