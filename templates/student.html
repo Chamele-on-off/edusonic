@@ -684,6 +684,36 @@
         .hidden {
             display: none !important;
         }
+        
+        /* Стиль для голосовой подсказки */
+        .voice-hint {
+            background: linear-gradient(135deg, rgba(255, 123, 156, 0.1), rgba(255, 193, 7, 0.1));
+            border: 2px solid var(--accent);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+        
+        .voice-hint h4 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .voice-command {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 0.5rem 0;
+            font-size: 1.1rem;
+        }
     </style>
 </head>
 <body>
@@ -1617,7 +1647,16 @@
                 const isCompleted = lesson.completed || false;
                 const isCurrent = !isCompleted && (index === 0 || sortedLessons[index - 1].completed);
                 
-                // 🔥 ИСПОЛЬЗУЕМ ИСПРАВЛЕННУЮ ФУНКЦИЮ ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+                // Извлекаем номер урока из ID или используем lesson_number
+                let lessonNumber = lesson.lesson_number || index + 1;
+                if (lesson.id && lesson.id.includes('_')) {
+                    const parts = lesson.id.split('_');
+                    const num = parseInt(parts[parts.length - 1]);
+                    if (!isNaN(num)) {
+                        lessonNumber = num;
+                    }
+                }
+                
                 html += `
                     <div class="lesson-item">
                         <div class="lesson-status ${isCompleted ? 'completed' : isCurrent ? 'current' : 'pending'}">
@@ -1627,7 +1666,7 @@
                         </div>
                         <div class="lesson-info">
                             <h5>
-                                <span class="lesson-number">Урок ${lesson.lesson_number || index + 1}:</span>
+                                <span class="lesson-number">Урок ${lessonNumber}:</span>
                                 ${lesson.title}
                             </h5>
                             <p>
@@ -1640,7 +1679,7 @@
                             </p>
                         </div>
                         <div>
-                            <a class="btn btn-small lesson-link" href="#" onclick="startSelectedLesson('${lesson.id}', '${subjectName}', event)">
+                            <a class="btn btn-small lesson-link" href="#" onclick="startSelectedLesson('${lesson.id}', '${subjectName}', ${lessonNumber}, event)">
                                 <i class="fas ${isCompleted ? 'fa-redo' : 'fa-play'}"></i>
                                 ${isCompleted ? 'Повторить' : 'Начать'}
                             </a>
@@ -1668,49 +1707,129 @@
         }
         
         // ==============================
-        // 🔥 ОСНОВНОЕ ИСПРАВЛЕНИЕ: ФУНКЦИИ ЗАПУСКА УРОКОВ
+        // 🔥 ИСПРАВЛЕННЫЕ ФУНКЦИИ: ЗАПУСК УРОКОВ
         // ==============================
         
-        // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока для ВСЕХ пользователей
-        async function startSelectedLesson(lessonId, subjectName, event) {
+        // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Запуск выбранного урока
+        async function startSelectedLesson(lessonId, subjectName, lessonNumber, event) {
             event.preventDefault();
             event.stopPropagation();
             
-            console.log(`🚀 НАЧИНАЕМ УРОК ${lessonId} по предмету ${subjectName}`);
-            console.log(`📌 Текущий пользователь:`, currentStudentData?.is_adult ? 'Взрослый/Студент' : 'Школьник');
+            console.log(`🚀 НАЧИНАЕМ УРОК ${lessonId} (№${lessonNumber}) по предмету ${subjectName}`);
+            console.log(`📌 Тип пользователя:`, currentStudentData?.is_adult ? 'Взрослый/Студент' : 'Школьник');
             
-            // ВАЖНО: Сохраняем данные перед отправкой
-            currentSubject = subjectName;
+            // 🔥 КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: Разная логика для школьников и взрослых
+            const isSchoolStudent = !currentStudentData?.is_adult;
             
-            // 1. Получаем урок для проверки
-            if (!subjectsData || !subjectsData[subjectName]) {
-                await loadLessonsData();
+            if (isSchoolStudent) {
+                // 🔥 ДЛЯ ШКОЛЬНИКОВ: Создаем комнату по предмету, урок активируется голосовой командой
+                console.log(`🎯 ШКОЛЬНИК: создаем комнату по предмету ${subjectName}, нужно сказать "Урок ${lessonNumber}"`);
+                await createRoomForSchoolStudent(lessonId, subjectName, lessonNumber);
+            } else {
+                // 🔥 ДЛЯ ВЗРОСЛЫХ: Запускаем урок сразу
+                console.log(`🎓 ВЗРОСЛЫЙ: запускаем урок ${lessonId} сразу`);
+                await startLessonForAdult(lessonId, subjectName, lessonNumber);
             }
-            
-            // Находим урок в данных
-            let foundLesson = null;
-            if (subjectsData && subjectsData[subjectName]) {
-                const subjectLessons = subjectsData[subjectName].lessons || [];
-                foundLesson = subjectLessons.find(lesson => lesson.id === lessonId);
-            }
-            
-            if (!foundLesson) {
-                console.warn(`⚠️ Урок ${lessonId} не найден в локальных данных`);
-                // Создаем минимальный объект урока
-                foundLesson = { 
-                    id: lessonId, 
-                    title: `Урок ${lessonId}`,
-                    subject: subjectName
-                };
-            }
-            
-            selectedLesson = foundLesson;
-            
-            // 2. 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Сначала создаем комнату с явным указанием урока
-            console.log(`📡 Запрашиваем комнату для предмета: ${subjectName} с уроком ${lessonId}`);
-            
+        }
+        
+        // 🔥 Функция для школьников: создаем комнату без автостарта урока
+        async function createRoomForSchoolStudent(lessonId, subjectName, lessonNumber) {
             try {
-                // 2.1. Создаем новую комнату СРАЗУ с привязкой к уроку
+                // 1. Создаем комнату по предмету БЕЗ указания урока
+                const createResponse = await fetch('/api/student/create-conference', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        subject: subjectName,
+                        // 🔥 ВАЖНО: НЕ передаем lesson_id для школьников!
+                        force_subject_only: true
+                    })
+                });
+                
+                const createData = await createResponse.json();
+                let roomId;
+                
+                if (createData.success && createData.conference) {
+                    roomId = createData.conference.room_id || createData.conference.room_name;
+                    console.log(`✅ Создана комната: ${roomId} для предмета ${subjectName}`);
+                } else {
+                    // Fallback
+                    const timestamp = Date.now();
+                    const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                    roomId = `student_${subjectName}_${studentName}_${timestamp}`;
+                    console.log(`⚠️ Используем fallback комнату: ${roomId}`);
+                }
+                
+                // 2. Регистрируем комнату с данными ученика (но БЕЗ урока)
+                console.log(`📝 Регистрируем комнату ${roomId} для предмета ${subjectName}`);
+                try {
+                    const registerResponse = await fetch('/api/room/register-student', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            room_id: roomId,
+                            student_data: currentStudentData,
+                            subject: subjectName,
+                            // 🔥 ВАЖНО: не передаем lesson_id - урок будет активирован голосовой командой
+                            selected_subject_only: true,
+                            pending_lesson_id: lessonId,
+                            pending_lesson_number: lessonNumber
+                        })
+                    });
+                    
+                    const registerResult = await registerResponse.json();
+                    
+                    if (registerResult.success) {
+                        console.log(`✅ Комната зарегистрирована для предмета ${subjectName}`);
+                    } else {
+                        console.warn('⚠️ Предупреждение при регистрации комнаты:', registerResult.error);
+                    }
+                } catch (regError) {
+                    console.error('❌ Ошибка регистрации комнаты:', regError);
+                }
+                
+                // 3. Сохраняем информацию о нужном уроке для подсказки
+                console.log(`🎯 Ученику нужно будет сказать: "Урок ${lessonNumber}"`);
+                
+                // 4. Открываем комнату с параметром для голосовой подсказки
+                let conferenceUrl = `/conference?room=${encodeURIComponent(roomId)}`;
+                conferenceUrl += `&student=true`;
+                conferenceUrl += `&subject=${encodeURIComponent(subjectName)}`;
+                conferenceUrl += `&is_school_student=true`;
+                conferenceUrl += `&need_lesson_voice_command=true`;
+                conferenceUrl += `&pending_lesson_id=${encodeURIComponent(lessonId)}`;
+                conferenceUrl += `&pending_lesson_number=${lessonNumber}`;
+                
+                console.log(`🔗 Переход по ссылке: ${conferenceUrl}`);
+                window.location.href = conferenceUrl;
+                
+            } catch (error) {
+                console.error('❌ Ошибка создания комнаты для школьника:', error);
+                
+                // Fallback
+                const timestamp = Date.now();
+                const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
+                const roomId = `student_${subjectName}_${studentName}_${timestamp}`;
+                
+                let fallbackUrl = `/conference?room=${encodeURIComponent(roomId)}`;
+                fallbackUrl += `&student=true`;
+                fallbackUrl += `&subject=${encodeURIComponent(subjectName)}`;
+                fallbackUrl += `&is_school_student=true`;
+                fallbackUrl += `&need_lesson_voice_command=true`;
+                fallbackUrl += `&pending_lesson_number=${lessonNumber}`;
+                
+                window.location.href = fallbackUrl;
+            }
+        }
+        
+        // 🔥 Функция для взрослых: запускаем урок сразу
+        async function startLessonForAdult(lessonId, subjectName, lessonNumber) {
+            try {
+                // 1. Создаем комнату с привязкой к уроку
                 const createResponse = await fetch('/api/student/create-conference', {
                     method: 'POST',
                     headers: {
@@ -1730,16 +1849,14 @@
                     roomId = createData.conference.room_id || createData.conference.room_name;
                     console.log(`✅ Создана новая комната: ${roomId} для урока ${lessonId}`);
                 } else {
-                    // Fallback: создаем комнату вручную
+                    // Fallback
                     const timestamp = Date.now();
                     const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
                     roomId = `student_${subjectName}_${studentName}_${timestamp}_${lessonId}`;
                     console.log(`⚠️ Используем fallback комнату: ${roomId}`);
                 }
                 
-                console.log(`🎯 Используем комнату: ${roomId} для урока: ${lessonId}`);
-                
-                // 2.2. КРИТИЧЕСКИЙ ЭТАП: Регистрируем комнату с учеником и УРОКОМ
+                // 2. Регистрируем комнату с учеником и УРОКОМ
                 console.log(`📝 Регистрируем комнату ${roomId} с уроком ${lessonId}`);
                 try {
                     const registerResponse = await fetch('/api/room/register-student', {
@@ -1750,9 +1867,9 @@
                         body: JSON.stringify({
                             room_id: roomId,
                             student_data: currentStudentData,
-                            lesson_id: lessonId,  // ВАЖНО: передаем lesson_id
+                            lesson_id: lessonId,
                             subject: subjectName,
-                            force_lesson: true  // Важно: форсируем установку урока
+                            force_lesson: true
                         })
                     });
                     
@@ -1767,50 +1884,7 @@
                     console.error('❌ Ошибка регистрации комнаты:', regError);
                 }
                 
-                // 2.3. ЗАПУСКАЕМ КОНКРЕТНЫЙ УРОК через API
-                console.log(`🚀 Запускаем конкретный урок ${lessonId} через API`);
-                try {
-                    const startResponse = await fetch('/api/lesson/start-specific', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            room_id: roomId,
-                            lesson_id: lessonId,
-                            subject: subjectName,
-                            force_start: true
-                        })
-                    });
-                    
-                    const startResult = await startResponse.json();
-                    
-                    if (startResult.success) {
-                        console.log(`✅ Урок ${lessonId} успешно запущен через API`);
-                    } else {
-                        console.warn('⚠️ Предупреждение при запуске урока:', startResult.error);
-                    }
-                } catch (startError) {
-                    console.error('❌ Ошибка запуска урока:', startError);
-                }
-                
-                // 2.4. Устанавливаем предмет в комнату через WebSocket
-                console.log(`🔧 Устанавливаем предмет ${subjectName} для комнаты ${roomId}`);
-                try {
-                    socketio.emit('set_subject_for_room', {
-                        room_id: roomId,
-                        subject: subjectName,
-                        lesson_id: lessonId
-                    });
-                    
-                    console.log(`✅ WebSocket: предмет ${subjectName} установлен для комнаты ${roomId}`);
-                } catch (wsError) {
-                    console.error('❌ WebSocket ошибка:', wsError);
-                }
-                
-                // 3. 🔥 ОТКРЫВАЕМ КОНФЕРЕНЦИЮ С ВСЕМИ ПАРАМЕТРАМИ
-                console.log(`✅ Урок ${lessonId} подготовлен, открываем комнату...`);
-                
+                // 3. Открываем конференцию
                 let conferenceUrl = `/conference?room=${encodeURIComponent(roomId)}`;
                 conferenceUrl += `&student=true`;
                 conferenceUrl += `&subject=${encodeURIComponent(subjectName)}`;
@@ -1823,22 +1897,14 @@
                     if (currentStudentData.study_mode === 'language') {
                         conferenceUrl += `&language_level=${currentStudentData.language_level || 'A1'}`;
                     }
-                } else {
-                    // 🔥 ОСОБЫЙ ПАРАМЕТР ДЛЯ ШКОЛЬНИКОВ
-                    conferenceUrl += `&is_school_student=true`;
                 }
                 
                 console.log(`🔗 Переход по ссылке: ${conferenceUrl}`);
-                
-                // Дополнительная задержка для гарантии
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
                 window.location.href = conferenceUrl;
                 
             } catch (error) {
-                console.error('❌ КРИТИЧЕСКАЯ ОШИБКА запуска выбранного урока:', error);
+                console.error('❌ Ошибка создания комнаты для взрослого:', error);
                 
-                // Fallback: простейший метод
                 const timestamp = Date.now();
                 const studentName = currentStudentData?.name?.replace(/\s+/g, '_').toLowerCase() || 'student';
                 const roomId = `student_${subjectName}_${studentName}_${timestamp}_${lessonId}`;
@@ -1849,7 +1915,6 @@
                 fallbackUrl += `&lesson_id=${encodeURIComponent(lessonId)}`;
                 fallbackUrl += `&force_lesson=true`;
                 
-                console.log(`⚠️ Используем fallback: ${fallbackUrl}`);
                 window.location.href = fallbackUrl;
             }
         }
