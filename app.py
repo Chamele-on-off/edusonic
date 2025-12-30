@@ -3743,12 +3743,15 @@ def add_student_lesson(student_id):
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+# В функции create_student_conference_route() в app.py
 @app.route('/api/student/create-conference', methods=['POST'])
 @student_required  
 def create_student_conference_route():
     try:
         data = request.json
         subject = data.get('subject')
+        lesson_id = data.get('lesson_id')
+        force_lesson = data.get('force_lesson', False)
         
         if not subject:
             return jsonify({"success": False, "error": "Не указан предмет"})
@@ -3756,16 +3759,85 @@ def create_student_conference_route():
         user_data = student_manager.load_user_data(session['user_id'])
         student_data = user_data.get('student_data', {})
         
-        conference = create_student_conference(student_data, subject)
-        
-        if conference:
+        # 🔥 ОСОБЫЙ СЛУЧАЙ: если есть lesson_id, создаем комнату с привязкой к уроку
+        if lesson_id:
+            conference_id = str(int(time.time() * 1000))
+            student_name = student_data.get('name', '').replace(' ', '_').lower()
+            room_id = f"student_{subject}_{student_name}_{conference_id}_{lesson_id}"
+            
+            room_student_data[room_id] = {
+                **student_data,
+                'subject': subject,
+                'conference_id': conference_id,
+                'lesson_id': lesson_id,
+                'force_lesson': force_lesson
+            }
+            
+            # 🔥 Быстрая инициализация с принудительной установкой урока
+            _fast_room_initialization(room_id)
+            
+            # 🔥 Сразу запускаем конкретный урок через DialogueManager
+            if not ensure_dialogue_manager_for_room(room_id):
+                return jsonify({"success": False, "error": "Не удалось создать DialogueManager"})
+            
+            dialogue = room_dialogue[room_id]
+            dialogue.set_student_data(student_data)
+            
+            # Находим и устанавливаем урок
+            student_class = student_data.get('education_level', '5')
+            lessons_by_subject = student_manager.get_student_lessons_by_class(student_class)
+            
+            selected_lesson = None
+            if subject in lessons_by_subject:
+                for lesson in lessons_by_subject[subject]:
+                    if lesson.get('id') == lesson_id:
+                        selected_lesson = lesson
+                        break
+            
+            if selected_lesson:
+                dialogue.selected_lesson = selected_lesson
+                dialogue.current_subject = subject
+                dialogue.lesson_started = True
+                dialogue.current_state = "lesson_reading"
+                
+                # Загружаем контент урока
+                lesson_content = dialogue._load_lesson_content(selected_lesson.get('file_path'))
+                dialogue.lesson_content = lesson_content
+                dialogue.current_paragraph = 0
+                
+                # Обновляем прогресс ученика
+                student_id = student_data.get('student_id')
+                if student_id:
+                    student_manager.update_student_lesson_progress(
+                        student_id, 
+                        subject, 
+                        lesson_id, 
+                        completed=False
+                    )
+            
             return jsonify({
                 "success": True,
-                "conference": conference,
+                "conference": {
+                    'room_id': room_id,
+                    'conference_url': f'/conference?room={room_id}&student=true&subject={subject}&lesson_id={lesson_id}&force_lesson=true',
+                    'subject': subject,
+                    'lesson_id': lesson_id,
+                    'has_lesson': selected_lesson is not None
+                },
                 "message": f"Создана комната для урока по {subject}"
             })
         else:
-            return jsonify({"success": False, "error": "Ошибка создания конференции"})
+            # Существующая логика для создания комнаты без урока
+            conference = create_student_conference(student_data, subject)
+            
+            if conference:
+                return jsonify({
+                    "success": True,
+                    "conference": conference,
+                    "message": f"Создана комната для урока по {subject}"
+                })
+            else:
+                return jsonify({"success": False, "error": "Ошибка создания конференции"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
