@@ -4404,6 +4404,7 @@ def register_student_room():
         student_data = data.get('student_data')
         lesson_id = data.get('lesson_id')
         subject = data.get('subject')
+        selected_subject_only = data.get('selected_subject_only', False)
         
         if not room_id or not student_data:
             return jsonify({"success": False, "error": "Не указаны данные"})
@@ -4412,8 +4413,21 @@ def register_student_room():
         
         _fast_room_initialization(room_id)
         
+        # 🔥 НОВАЯ ЛОГИКА: Если это только выбор предмета (без урока)
+        if selected_subject_only:
+            room_student_data[room_id]['selected_subject_only'] = True
+            room_student_data[room_id]['subject'] = subject
+            debug_log(f"🔥 Комната {room_id} зарегистрирована только с предметом {subject}")
+            
+            return jsonify({
+                "success": True,
+                "message": "Комната зарегистрирована с предметом",
+                "room_id": room_id,
+                "need_lesson_voice_command": True
+            })
+        
+        # Старая логика с уроком
         if lesson_id and lesson_id != 'next':
-            # Создаем DialogueManager если нужно
             if not ensure_dialogue_manager_for_room(room_id):
                 return jsonify({"success": False, "error": "Не удалось создать DialogueManager"})
                 
