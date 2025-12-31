@@ -1,3 +1,4 @@
+
 # app.py - AI Teacher System с поддержкой технических и естественнонаучных предметов
 # ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ ТЕХНИЧЕСКИХ ПРЕДМЕТОВ И УЛУЧШЕННОЙ ПРОИЗВОДИТЕЛЬНОСТЬЮ
 # ВЕРСИЯ С ПОДДЕРЖКОЙ СЛАЙДОВ ДЛЯ УРОКОВ (JPG/PNG) И РЕЗЕРВНОГО КОПИРОВАНИЯ
@@ -976,38 +977,198 @@ def reset_speaking_state(room_id, is_teacher=False):
 # =============================================================================
 # 🔥 УЛУЧШЕННОЕ ОЗВУЧИВАНИЕ С ПОДДЕРЖКОЙ КАСТОМНОГО TTS СЕРВИСА
 # =============================================================================
+def is_bilingual_english_lesson(text: str) -> bool:
+    """
+    Определяет, является ли текст билингвальным уроком английского
+    """
+    if not text:
+        return False
+    
+    # Проверяем наличие английских фраз, характерных для уроков
+    english_lesson_patterns = [
+        r'[a-zA-Z][^.!?]*\s*\([а-яА-Я]+\)',  # Hello (Привет)
+        r'[а-яА-Я][^.!?]*\s*\([a-zA-Z]+\)',  # Привет (Hello)
+        r'[A-Z][a-z]+!\s*[А-Я][а-я]+!',      # Hello! Привет!
+        r'английск\w+\s*язык',               # английский язык
+        r'[a-zA-Z]{3,}\s*—\s*[а-яА-Я]+',     # Hello — Привет
+        r'[а-яА-Я]+\s*—\s*[a-zA-Z]+',        # Привет — Hello
+    ]
+    
+    for pattern in english_lesson_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    
+    # Подсчет русских и английских слов
+    russian_words = re.findall(r'[а-яА-ЯёЁ]{2,}', text[:500])
+    english_words = re.findall(r'\b[a-zA-Z]{3,}\b', text[:500])
+    
+    # Игнорируем общепринятые короткие слова
+    common_short_words = {'and', 'the', 'you', 'are', 'is', 'am', 'my', 'in', 'on', 'at', 'to', 'for', 'of'}
+    english_words = [w for w in english_words if w.lower() not in common_short_words]
+    
+    # Если есть и русские, и английские слова в значительном количестве
+    if len(russian_words) > 5 and len(english_words) > 5:
+        return True
+    
+    return False
 
+
+def generate_bilingual_speech(text: str, voice_type: str = 'female') -> Optional[str]:
+    """
+    Генерирует аудио для билингвальных уроков (русский + английский)
+    """
+    try:
+        # Разделяем текст на предложения
+        sentences = re.split(r'([.!?]+\s*)', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        audio_chunks = []
+        
+        for sentence in sentences:
+            if not sentence:
+                continue
+            
+            # Определяем язык предложения
+            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', sentence))
+            has_latin = bool(re.search(r'[a-zA-Z]', sentence))
+            
+            # Если есть оба языка в одном предложении - пробуем разделить
+            if has_cyrillic and has_latin:
+                # Пробуем разделить по дефисам, двоеточиям, скобкам
+                parts = re.split(r'[—:()]', sentence)
+                for part in parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    
+                    part_has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', part))
+                    part_has_latin = bool(re.search(r'[a-zA-Z]', part))
+                    
+                    if part_has_cyrillic and not part_has_latin:
+                        lang = 'ru'
+                    elif part_has_latin and not part_has_cyrillic:
+                        lang = 'en'
+                    else:
+                        lang = 'ru'  # по умолчанию русский
+                    
+                    # Генерируем аудио для части
+                    audio_base64 = text_to_speech_gtts(part, lang)
+                    if audio_base64:
+                        audio_data = base64.b64decode(audio_base64)
+                        audio_chunks.append(audio_data)
+                        audio_chunks.append(bytes([0] * 400))  # короткая пауза
+            else:
+                # Чистое предложение
+                lang = 'ru' if has_cyrillic else 'en'
+                audio_base64 = text_to_speech_gtts(sentence, lang)
+                if audio_base64:
+                    audio_data = base64.b64decode(audio_base64)
+                    audio_chunks.append(audio_data)
+                    audio_chunks.append(bytes([0] * 800))  # пауза между предложениями
+        
+        if audio_chunks:
+            # Убираем последнюю паузу
+            if audio_chunks[-1] in [bytes([0] * 400), bytes([0] * 800)]:
+                audio_chunks.pop()
+            
+            combined_audio = b''.join(audio_chunks)
+            return base64.b64encode(combined_audio).decode('utf-8')
+        
+        return None
+        
+    except Exception as e:
+        debug_log(f"❌ Ошибка генерации билингвальной речи: {e}")
+        return None
+        
+        
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
-    """🔥 ОПТИМИЗИРОВАННАЯ: Озвучивает текст с поддержкой кастомного TTS сервиса"""
+    """🔥 ИСПРАВЛЕННАЯ: Озвучивает текст с правильной обработкой английских уроков"""
     if not text.strip():
         return
         
-    # 🔥 ОПРЕДЕЛЯЕМ ПРЕДМЕТ ДЛЯ УМНОЙ ОЧИСТКИ
+    # 🔥 ОПРЕДЕЛЯЕМ ПРЕДМЕТ И ТИП УРОКА
     subject = None
-    if room_id in room_student_data and room_student_data[room_id]:
-        subject = room_student_data[room_id].get('subject')
-    elif room_id in room_dialogue and room_dialogue[room_id]:
-        subject = room_dialogue[room_id].current_subject
+    is_english_subject = False
+    is_cefr_lesson = False
     
-    # 🔥 ИСПОЛЬЗУЕМ МЕНЕДЖЕР РЕЧИ ДЛЯ ОЧИСТКИ
+    if room_id in room_student_data and room_student_data[room_id]:
+        student_data = room_student_data[room_id]
+        subject = student_data.get('subject')
+        
+        # Проверяем, это урок английского?
+        if subject and ('английский' in subject.lower() or 'english' in subject.lower()):
+            is_english_subject = True
+        
+        # Проверяем, это CEFR урок?
+        if student_data.get('is_adult', False) and student_data.get('study_mode') == 'language':
+            is_cefr_lesson = True
+    
+    # 🔥 ОЧИЩАЕМ ТЕКСТ
     cleaned_text = speech_manager.clean_text(text, subject)
     
     if not cleaned_text.strip():
         debug_log("⚠️ Текст пуст после очистки, пропускаем озвучивание")
         return
         
+    # 🔥 УСТАНАВЛИВАЕМ СОСТОЯНИЕ ГОВОРЕНИЯ
     if is_teacher:
         room_teacher_speaking[room_id] = True
         
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    # 🔥 ИСПОЛЬЗУЕМ МЕНЕДЖЕР РЕЧИ ДЛЯ ГЕНЕРАЦИИ АУДИО С ПОДДЕРЖКОЙ ZINDAKI TTS
-    audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang, voice_type)
+    # 🔥 КРИТИЧЕСКИЙ БЛОК: Определяем как озвучивать
+    audio_data = None
+    tts_service = 'gtts'
+    is_bilingual = False
     
+    # Случай 1: Явно указан язык (приоритет)
+    if force_lang and force_lang != 'auto':
+        debug_log(f"🔥 Принудительная озвучка на языке: {force_lang}")
+        audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang, voice_type)
+    
+    # Случай 2: Урок английского языка
+    elif is_english_subject:
+        debug_log(f"🔥 Обнаружен урок английского языка: {subject}")
+        
+        # Проверяем, билингвальный ли это урок
+        if is_bilingual_english_lesson(cleaned_text):
+            debug_log("🔥 Текст билингвальный - используем специальную обработку")
+            
+            # Пробуем использовать билингвальную генерацию
+            audio_data = generate_bilingual_speech(cleaned_text, voice_type)
+            tts_service = 'gtts_bilingual'
+            is_bilingual = True
+            
+            if not audio_data:
+                # Если не удалось, используем умную смешанную озвучку
+                debug_log("🔄 Билингвальная генерация не удалась, используем умную озвучку")
+                audio_data = speech_manager.generate_optimized_speech(cleaned_text, None, voice_type)
+        else:
+            # Обычный английский текст
+            debug_log("🔥 Обычный английский текст")
+            audio_data = speech_manager.generate_optimized_speech(cleaned_text, 'en', voice_type)
+    
+    # Случай 3: CEFR урок
+    elif is_cefr_lesson:
+        debug_log(f"🔥 Обнаружен CEFR урок")
+        cefr_level = student_data.get('language_level', 'A1')
+        
+        # Для CEFR используем смешанную озвучку
+        audio_data = speech_manager.generate_optimized_speech(cleaned_text, None, voice_type)
+        tts_service = 'gtts_cefr'
+        is_bilingual = True
+    
+    # Случай 4: Все остальное (по умолчанию)
+    else:
+        debug_log("🔥 Стандартная озвучка")
+        audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang, voice_type)
+    
+    # 🔥 ОТПРАВЛЯЕМ АУДИО КЛИЕНТАМ
     if audio_data:
-        # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О TTS СЕРВИСЕ В ОТВЕТ
-        tts_service = 'zindaki' if speech_manager.tts_client and speech_manager.tts_client.available else 'gtts'
+        # Определяем сервис TTS
+        if speech_manager.tts_client and speech_manager.tts_client.available:
+            tts_service = 'zindaki'
         
         emit('speech_audio', {
             'audio': audio_data,
@@ -1018,7 +1179,10 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             'subject': subject if subject else 'general',
             'tts_service': tts_service,
             'optimized': True,
-            'technical_support': TECHNICAL_SUPPORT_ENABLED
+            'technical_support': TECHNICAL_SUPPORT_ENABLED,
+            'bilingual': is_bilingual,
+            'is_english_lesson': is_english_subject,
+            'is_cefr_lesson': is_cefr_lesson
         }, room=room_id)
         
         if not skip_history:
@@ -1029,14 +1193,13 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 'voice_type': voice_type,
                 'is_teacher': is_teacher,
                 'subject': subject if subject else 'general',
-                'tts_service': tts_service
+                'tts_service': tts_service,
+                'bilingual': is_bilingual
             })
-            if len(room_speech_data[room_id]) > 50:
-                room_speech_data[room_id].pop(0)
     else:
         debug_log("❌ Не удалось сгенерировать аудио")
     
-    # 🔥 Более точная длительность речи
+    # 🔥 СБРАСЫВАЕМ СОСТОЯНИЕ ПОСЛЕ ОЗВУЧКИ
     speech_duration = max(1.5, len(cleaned_text) * 0.08)
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
 
