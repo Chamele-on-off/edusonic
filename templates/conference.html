@@ -34,6 +34,32 @@
             -webkit-tap-highlight-color: transparent;
         }
         
+        /* Запрет выделения для всех элементов кроме текста урока */
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+        
+        /* Разрешаем выделение только для текста урока */
+        #lesson-text, 
+        #lesson-text *,
+        #message-text {
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+        }
+        
+        /* Разрешаем выделение для полей ввода */
+        input, textarea {
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: linear-gradient(135deg, #f0f4ff, #e6f0ff, #f5f0ff);
@@ -89,6 +115,11 @@
             align-items: center;
             gap: 10px;
             color: var(--primary);
+        }
+        
+        /* Убираем наименование комнаты сверху */
+        #meeting-id {
+            display: none;
         }
         
         #main {
@@ -172,6 +203,28 @@
             height: 60%;
             overflow: hidden;
             z-index: 7;
+            display: none;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px var(--board-border);
+            -webkit-overflow-scrolling: touch;
+            color: var(--board-text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            resize: both;
+            min-width: 400px;
+            min-height: 300px;
+        }
+        
+        /* Окно сообщений */
+        #message-window {
+            position: absolute;
+            top: 15%;
+            left: 10%;
+            background: var(--board-bg);
+            padding: 0;
+            border-radius: 16px;
+            width: 70%;
+            height: 60%;
+            overflow: hidden;
+            z-index: 8;
             display: none;
             box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px var(--board-border);
             -webkit-overflow-scrolling: touch;
@@ -294,6 +347,65 @@
             align-items: center;
             justify-content: center;
             gap: 20px;
+        }
+        
+        /* Стили для окна сообщений */
+        #message-content {
+            flex: 1;
+            height: calc(100% - 56px);
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            background: var(--board-bg);
+        }
+        
+        #message-text {
+            flex: 1;
+            padding: 20px;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: inherit;
+            font-size: 16px;
+            line-height: 1.6;
+            background: white;
+            border-bottom: 1px solid var(--board-border);
+            overflow-y: auto;
+        }
+        
+        .message-toolbar {
+            padding: 15px 20px;
+            background: white;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .message-btn {
+            padding: 10px 24px;
+            border-radius: 8px;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .message-cancel {
+            background: var(--light);
+            color: var(--gray);
+        }
+        
+        .message-cancel:hover {
+            background: #e9ecef;
+        }
+        
+        .message-send {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .message-send:hover {
+            background: var(--secondary);
         }
         
         .visualization-tabs {
@@ -551,60 +663,6 @@
             51%, 100% { opacity: 0; }
         }
         
-        #answer-input-container {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            z-index: 20;
-            display: none;
-            width: 80%;
-            max-width: 500px;
-        }
-        
-        #answer-input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid var(--board-border);
-            border-radius: 8px;
-            font-size: 16px;
-            margin-bottom: 10px;
-            font-family: inherit;
-        }
-        
-        #submit-answer {
-            padding: 10px 20px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        .color-picker {
-            display: flex;
-            gap: 5px;
-            align-items: center;
-            margin-left: 10px;
-        }
-        
-        .color-option {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            cursor: pointer;
-            border: 2px solid transparent;
-        }
-        
-        .color-option.active {
-            border-color: var(--dark);
-        }
-        
         #teacher-video-container {
             position: absolute;
             bottom: 100px;
@@ -695,6 +753,7 @@
             animation: speechAppear 0.3s ease-out;
         }
         
+        /* Убираем отладочное окошко для всех комнат кроме "default" */
         #status-container {
             position: absolute;
             top: 20px;
@@ -706,11 +765,16 @@
             z-index: 10;
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
-            display: flex;
+            display: none; /* Скрыто по умолчанию */
             flex-direction: column;
             gap: 5px;
             max-width: 80%;
             border: 1px solid rgba(126, 118, 249, 0.1);
+        }
+        
+        /* Показываем только в комнате "default" */
+        body.show-debug #status-container {
+            display: flex;
         }
         
         #participants {
@@ -1149,13 +1213,6 @@
             color: white;
         }
 
-        /* Auto-continue status */
-        #auto-continue-status {
-            font-size: 12px;
-            margin-top: 3px;
-            color: var(--gray);
-        }
-
         /* Анимации */
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -1332,7 +1389,7 @@
                 font-size: 1.1rem;
             }
             
-            #lesson-content, #drawing-window, #visualization-window {
+            #lesson-content, #drawing-window, #visualization-window, #message-window {
                 width: 90%;
                 height: 60%;
             }
@@ -1408,16 +1465,6 @@
                 font-size: 16px;
             }
             
-            #answer-input-container {
-                width: 90%;
-                padding: 12px;
-            }
-            
-            #answer-input {
-                padding: 10px;
-                font-size: 14px;
-            }
-            
             #visualization-content {
                 padding: 15px;
             }
@@ -1463,7 +1510,7 @@
         }
         
         @media (max-width: 480px) {
-            #lesson-content, #drawing-window, #visualization-window {
+            #lesson-content, #drawing-window, #visualization-window, #message-window {
                 width: 95%;
                 height: 55%;
             }
@@ -1787,8 +1834,8 @@
                     <button class="toolbar-btn" id="draw-tool" title="Рисование">
                         <i class="fas fa-pen"></i>
                     </button>
-                    <button class="toolbar-btn" id="answer-tool" title="Ответить">
-                        <i class="fas fa-comment-dots"></i>
+                    <button class="toolbar-btn" id="message-tool" title="Сообщение">
+                        <i class="fas fa-comment-alt"></i>
                     </button>
                     <button class="toolbar-btn" id="visualization-tool" title="Визуализация">
                         <i class="fas fa-chart-bar"></i>
@@ -1819,11 +1866,6 @@
                     <button class="zoom-btn" id="zoom-in" title="Увеличить">
                         <i class="fas fa-plus"></i>
                     </button>
-                </div>
-                
-                <div id="answer-input-container">
-                    <input type="text" id="answer-input" placeholder="Введите ваш ответ...">
-                    <button id="submit-answer">Отправить</button>
                 </div>
                 
                 <!-- Ручки для изменения размера -->
@@ -1931,6 +1973,28 @@
                 <div class="resize-handle resize-handle-se"></div>
             </div>
             
+            <!-- Окно сообщений -->
+            <div id="message-window">
+                <div class="window-header">
+                    <div class="window-title">Сообщение учителю</div>
+                    <button class="window-close" id="close-message">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="message-content">
+                    <textarea id="message-text" placeholder="Введите ваш вопрос или сообщение учителю..."></textarea>
+                    <div class="message-toolbar">
+                        <button class="message-btn message-cancel" id="cancel-message">Отмена</button>
+                        <button class="message-btn message-send" id="send-message">Отправить</button>
+                    </div>
+                </div>
+                
+                <!-- Ручки для изменения размера -->
+                <div class="resize-handle resize-handle-e"></div>
+                <div class="resize-handle resize-handle-s"></div>
+                <div class="resize-handle resize-handle-se"></div>
+            </div>
+            
             <div id="teacher-video-container" class="fade-in">
                 <img id="teacher-video" src="" alt="Аватар учителя">
                 <div id="teacher-speech"></div>
@@ -1941,6 +2005,7 @@
                 <div id="student-speech"></div>
             </div>
             
+            <!-- Отладочное окошко - видно только в комнате "default" -->
             <div id="status-container" class="fade-in">
                 <div id="status">Подключение к конференции...</div>
                 <div id="participants">
@@ -2556,6 +2621,11 @@
         const isEmbedded = window.location.search.includes('embed=true');
         document.getElementById('room-name').textContent = roomId;
         
+        // Показываем отладочное окошко только в комнате "default"
+        if (roomId === 'default') {
+            document.body.classList.add('show-debug');
+        }
+        
         // PeerJS переменные
         let peer = null;
         let peerId = null;
@@ -2579,7 +2649,9 @@
         const lessonContent = document.getElementById('lesson-content');
         const drawingWindow = document.getElementById('drawing-window');
         const visualizationWindow = document.getElementById('visualization-window');
+        const messageWindow = document.getElementById('message-window');
         const lessonText = document.getElementById('lesson-text');
+        const messageText = document.getElementById('message-text');
         const lessonCanvas = document.getElementById('lesson-canvas');
         const backgroundAnimation = document.getElementById('particles-background');
         const cameraPermission = document.getElementById('camera-permission');
@@ -2589,18 +2661,18 @@
         const drawingCanvas = document.getElementById('drawing-canvas');
         const textToolBtn = document.getElementById('text-tool');
         const drawToolBtn = document.getElementById('draw-tool');
-        const answerToolBtn = document.getElementById('answer-tool');
+        const messageToolBtn = document.getElementById('message-tool');
         const visualizationToolBtn = document.getElementById('visualization-tool');
         const clearDrawingBtn = document.getElementById('clear-drawing');
         const clearTextBtn = document.getElementById('clear-text');
-        const answerInputContainer = document.getElementById('answer-input-container');
-        const answerInput = document.getElementById('answer-input');
-        const submitAnswerBtn = document.getElementById('submit-answer');
         const colorOptions = document.querySelectorAll('.color-option');
         const closeLessonBtn = document.getElementById('close-lesson');
         const closeDrawingBtn = document.getElementById('close-drawing');
         const closeVisualizationBtn = document.getElementById('close-visualization');
+        const closeMessageBtn = document.getElementById('close-message');
         const closeTextWidgetBtn = document.getElementById('close-text-widget');
+        const cancelMessageBtn = document.getElementById('cancel-message');
+        const sendMessageBtn = document.getElementById('send-message');
         const avatarLoading = document.getElementById('avatar-loading');
         const animationStatus = document.getElementById('animation-status');
         const speechStatus = document.getElementById('speech-status');
@@ -2663,6 +2735,9 @@
         let isVisualizationWindowOpen = false;
         let visualizationQueue = [];
         let isProcessingVisualization = false;
+        
+        // Переменные для окна сообщений
+        let isMessageWindowOpen = false;
         
         // Переменные для перетаскивания окон
         let isDraggingWindow = false;
@@ -3023,7 +3098,7 @@
         }
 
         function initWindowFocus() {
-            const windows = [lessonContent, drawingWindow, visualizationWindow];
+            const windows = [lessonContent, drawingWindow, visualizationWindow, messageWindow];
             let maxZIndex = 10;
             
             windows.forEach(window => {
@@ -3038,7 +3113,7 @@
         }
 
         function bringWindowToFront(windowElement) {
-            const windows = [lessonContent, drawingWindow, visualizationWindow];
+            const windows = [lessonContent, drawingWindow, visualizationWindow, messageWindow];
             let maxZIndex = 5;
             
             windows.forEach(win => {
@@ -3140,6 +3215,7 @@
             initResizeForWindow(lessonContent);
             initResizeForWindow(drawingWindow);
             initResizeForWindow(visualizationWindow);
+            initResizeForWindow(messageWindow);
         }
 
         // Функции визуализации
@@ -4266,6 +4342,7 @@
             initDragForWindow(lessonContent);
             initDragForWindow(drawingWindow);
             initDragForWindow(visualizationWindow);
+            initDragForWindow(messageWindow);
         }
 
         // Исправленная функция setTool
@@ -4275,7 +4352,7 @@
             // Сбрасываем активность всех кнопок
             textToolBtn.classList.remove('active');
             drawToolBtn.classList.remove('active');
-            answerToolBtn.classList.remove('active');
+            messageToolBtn.classList.remove('active');
             visualizationToolBtn.classList.remove('active');
             
             if (tool === 'text') {
@@ -4297,13 +4374,13 @@
                 }, 50);
                 console.log('🎨 Активировано окно рисования');
             } 
-            else if (tool === 'answer') {
-                answerToolBtn.classList.add('active');
-                lessonContent.style.display = 'block';
-                answerInputContainer.style.display = 'block';
-                answerInput.focus();
-                bringWindowToFront(lessonContent);
-                console.log('💬 Активирован ввод ответа');
+            else if (tool === 'message') {
+                messageToolBtn.classList.add('active');
+                messageWindow.style.display = 'block';
+                isMessageWindowOpen = true;
+                bringWindowToFront(messageWindow);
+                messageText.focus();
+                console.log('💬 Активировано окно сообщений');
             } 
             else if (tool === 'visualization') {
                 visualizationToolBtn.classList.add('active');
@@ -4328,23 +4405,28 @@
             setTool(tool);
         }
 
-        function submitAnswer() {
-            const answer = answerInput.value.trim();
-            if (answer) {
-                // При отправке ответа приостанавливаем автопродолжение
+        function sendMessage() {
+            const message = messageText.value.trim();
+            if (message) {
+                // При отправке сообщения приостанавливаем автопродолжение
                 autoContinuePaused = true;
                 setAutoContinueEnabled(false);
                 
                 if (socket) {
                     socket.emit('student_message', {
                         room_id: roomId,
-                        message: answer
+                        message: message
                     });
                 }
-                answerInput.value = '';
+                messageText.value = '';
                 setTool('text');
-                showStudentSpeech(answer, 'me');
+                showStudentSpeech(message, 'me');
             }
+        }
+
+        function cancelMessage() {
+            messageText.value = '';
+            setTool('text');
         }
 
         function initZoom() {
@@ -4890,7 +4972,6 @@
                 console.log('Практика начата');
                 isPracticeActive = true;
                 setAutoContinueEnabled(false);
-                setTool('answer');
             });
 
             socket.on('practice_ended', () => {
@@ -5261,7 +5342,7 @@
             // ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ КНОПОК
             textToolBtn.addEventListener('click', () => safeToolActivation('text'));
             drawToolBtn.addEventListener('click', () => safeToolActivation('draw'));
-            answerToolBtn.addEventListener('click', () => safeToolActivation('answer'));
+            messageToolBtn.addEventListener('click', () => safeToolActivation('message'));
             visualizationToolBtn.addEventListener('click', () => safeToolActivation('visualization'));
             
             document.getElementById('drawing-pen').addEventListener('click', () => setDrawingTool('pen'));
@@ -5282,16 +5363,18 @@
                 });
             });
             
-            submitAnswerBtn.addEventListener('click', submitAnswer);
-            answerInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') submitAnswer();
+            sendMessageBtn.addEventListener('click', sendMessage);
+            cancelMessageBtn.addEventListener('click', cancelMessage);
+            messageText.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    sendMessage();
+                }
             });
             
             closeLessonBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 lessonContent.style.display = 'none';
                 textToolBtn.classList.remove('active');
-                answerToolBtn.classList.remove('active');
             });
             
             closeDrawingBtn.addEventListener('click', (e) => {
@@ -5306,6 +5389,13 @@
                 visualizationWindow.style.display = 'none';
                 isVisualizationWindowOpen = false;
                 visualizationToolBtn.classList.remove('active');
+            });
+            
+            closeMessageBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                messageWindow.style.display = 'none';
+                isMessageWindowOpen = false;
+                messageToolBtn.classList.remove('active');
             });
             
             closeTextWidgetBtn.addEventListener('click', () => {
