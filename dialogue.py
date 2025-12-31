@@ -2,7 +2,6 @@
 # ИСПРАВЛЕННАЯ ВЕРСИЯ с полной ленивой инициализацией
 # + ДОБАВЛЕНА ПОДДЕРЖКА СЛАЙДОВ ИЗОБРАЖЕНИЙ ДЛЯ УРОКОВ
 # + ДОБАВЛЕНА ПОДДЕРЖКА ВЗРОСЛЫХ И УРОВНЕЙ CEFR
-# 🔥 ИСПРАВЛЕНИЕ ДЛЯ ШКОЛЬНИКОВ: Уроки запускаются голосовой командой "Урок X"
 
 import json
 from pathlib import Path
@@ -246,11 +245,6 @@ class DialogueManager:
         self.subject_type = "general"  # "technical", "natural_science", "language", "humanitarian"
         self.technical_symbols_preserved = False
         
-        # 🔥 НОВОЕ: Флаг для школьников, которым нужно активировать урок голосовой командой
-        self.need_lesson_voice_command = False
-        self.pending_lesson_id = None
-        self.pending_lesson_number = None
-        
         # Локальные шаблоны (маленькие, можно оставить в памяти)
         self.local_patterns = {
             "привет": ["Привет! Рад вас видеть. Как ваше настроение?", "Здравствуйте! Готовы к интересному уроку?"],
@@ -476,7 +470,7 @@ class DialogueManager:
             debug_log(f"⚠️ Папка для взрослых не существует: {adult_lang_dir}")
             return
         
-        # Проходим по всех уровнях CEFR
+        # Проходим по всем уровням CEFR
         for level_dir in adult_lang_dir.iterdir():
             if level_dir.is_dir() and "_english" in level_dir.name:
                 level = level_dir.name.replace("_english", "")
@@ -1285,7 +1279,7 @@ class DialogueManager:
 - ВСТАВЬ 1-2 проверочных вопроса естественным образом в середине урока
 - Вопросы должны проверять понимание ключевых понятий
 - Вопросы должны быть частьи текста, а не выделены специально
-- Используй естественные формулировки: "Как вы думаете...", "Попробуйте ответить...", "Как называется этот процесс..."
+- Используй естественные формулировки: "Как вы думаете...", "Попробуйте ответить...", "Как называется процесс..."
 
 Примеры естественных вопросов:
 - "Как вы думаете, почему это происходит?"
@@ -1754,91 +1748,11 @@ class DialogueManager:
         return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
 
     def process_input(self, text: str) -> Optional[str]:
-        """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА И ГОЛОСОВЫХ КОМАНД"""
+        """🔥 ИСПРАВЛЕННАЯ ОБРАБОТКА ВХОДЯЩЕГО ТЕКСТА С УЧЕТОМ ДАННЫХ УЧЕНИКА"""
         # 🔥 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ УРОКИ ТОЛЬКО ПРИ НЕОБХОДИМОСТИ
         # self._ensure_lessons_loaded() - НЕ ЗАГРУЖАЕМ ЗДЕСЬ!
         
         text_lower = text.lower().strip()
-        
-        # 🔥 НОВАЯ ЛОГИКА: Проверка голосовой команды для старта урока (для школьников)
-        if (self.has_student_data and 
-            not self.is_adult_student and  # Только для школьников
-            self.current_subject and 
-            not self.lesson_started and
-            not self.selected_lesson):
-            
-            # 🔥 ПРОВЕРЯЕМ ГОЛОСОВЫЕ КОМАНДЫ ТИПА "УРОК 1", "УРОК ПЕРВЫЙ", "НАЧНИ УРОК 3"
-            lesson_patterns = [
-                r'урок\s*(\d+)',
-                r'(\d+)\s*урок',
-                r'начни\s*урок\s*(\d+)',
-                r'начать\s*урок\s*(\d+)',
-                r'первый',
-                r'второй',
-                r'третий',
-                r'четвертый',
-                r'пятый',
-                r'шестой',
-                r'седьмой',
-                r'восьмой',
-                r'девятый',
-                r'десятый'
-            ]
-            
-            for pattern in lesson_patterns:
-                match = re.search(pattern, text_lower)
-                if match:
-                    try:
-                        # Преобразуем текст в номер
-                        lesson_number = 0
-                        if pattern in ['первый', 'второй', 'третий', 'четвертый', 'пятый', 'шестой', 'седьмой', 'восьмой', 'девятый', 'десятый']:
-                            lesson_mapping = {
-                                'первый': 1, 'второй': 2, 'третий': 3, 'четвертый': 4, 'пятый': 5,
-                                'шестой': 6, 'седьмой': 7, 'восьмой': 8, 'девятый': 9, 'десятый': 10
-                            }
-                            lesson_number = lesson_mapping.get(pattern, 0)
-                        else:
-                            lesson_number = int(match.group(1))
-                        
-                        if lesson_number > 0:
-                            # Ищем урок с этим номером
-                            lessons = self.get_lessons_for_student_subject(self.current_subject)
-                            for lesson in lessons:
-                                if lesson.get('lesson_number') == lesson_number:
-                                    self.selected_lesson = lesson
-                                    debug_log(f"🎯 Урок найден по голосовой команде: {lesson['title']}")
-                                    
-                                    # Запускаем урок
-                                    self.lesson_started = True
-                                    self.current_state = "lesson_reading"
-                                    self.current_paragraph = 0
-                                    
-                                    # Загружаем содержание
-                                    self.lesson_content = self._load_lesson_content(lesson['file_path'])
-                                    
-                                    if self.lesson_content:
-                                        first_paragraph = self._get_next_paragraph()
-                                        student_name = self.student_data.get('name', 'ученик')
-                                        
-                                        # Отправляем уведомление о начале урока
-                                        if self.room_id and self.socketio:
-                                            self.socketio.emit('lesson_started', {
-                                                'lesson_id': lesson['id'],
-                                                'title': lesson['title'],
-                                                'subject': self.current_subject,
-                                                'is_student_lesson': True,
-                                                'voice_activated': True,
-                                                'lesson_number': lesson_number
-                                            }, room=self.room_id)
-                                        
-                                        return f"Отлично, {student_name}! Начинаем урок {lesson_number} по {self.current_subject}. {first_paragraph}"
-                                    break
-                            
-                            if not self.selected_lesson:
-                                student_name = self.student_data.get('name', 'ученик')
-                                return f"{student_name}, урок {lesson_number} по {self.current_subject} не найден. Попробуйте другой номер."
-                    except Exception as e:
-                        debug_log(f"❌ Ошибка обработки голосовой команды: {e}")
         
         # 🔥 ПРИОРИТЕТ: Обработка взрослых в режиме "изучать что угодно"
         if self.is_adult_student and self.adult_study_mode == 'anything':
@@ -2311,14 +2225,8 @@ class DialogueManager:
         
         # Формируем простое и понятное сообщение КАК В ДЕМО-КОМНАТАХ
         response = f"{student_name}, привет! Я твой виртуальный учитель по {subject}. "
-        
-        # 🔥 НОВОЕ: Для школьников просим назвать номер урока
-        if not self.is_adult_student:
-            response += f"Твой следующий урок: '{next_lesson['title']}' (Урок {next_lesson.get('lesson_number', 1)}). "
-            response += f"Скажи 'Урок {next_lesson.get('lesson_number', 1)}', чтобы начать!"
-        else:
-            response += f"Твой следующий урок: '{next_lesson['title']}'. "
-            response += "Скажи 'начать урок' или 'готов начать', чтобы начать!"
+        response += f"Твой следующий урок: '{next_lesson['title']}'. "
+        response += "Скажи 'начать урок' или 'готов начать', чтобы начать!"
         
         return response
 
@@ -2368,14 +2276,8 @@ class DialogueManager:
         
         # ПЕРСОНАЛИЗИРОВАННЫЙ ОТВЕТ
         student_name = self.student_data.get('name', 'ученик')
-        
-        # 🔥 РАЗНЫЕ ОТВЕТЫ ДЛЯ ШКОЛЬНИКОВ И ВЗРОСЛЫХ
-        if self.is_adult_student:
-            return f"Отлично, {student_name}! Выбран урок: '{selected_lesson['title']}'. " \
-                   f"Скажи 'начать урок', чтобы начать."
-        else:
-            return f"Отлично, {student_name}! Выбран урок: '{selected_lesson['title']}' (Урок {selected_lesson.get('lesson_number', 1)}). " \
-                   f"Скажи 'Урок {selected_lesson.get('lesson_number', 1)}', чтобы начать."
+        return f"Отлично, {student_name}! Выбран урок: '{selected_lesson['title']}'. " \
+               f"Скажи 'начать урок', чтобы начать."
 
     def _suggest_next_or_select_lesson(self) -> str:
         """Предлагает следующий урок или выбор урока"""
@@ -2419,12 +2321,7 @@ class DialogueManager:
             
             response = f"{student_name}, отлично! "
             response += f"Твой прогресс по {self.current_subject}: {completed_count}/{total_lessons} уроков. "
-            
-            # 🔥 РАЗНЫЕ ОТВЕТЫ ДЛЯ ШКОЛЬНИКОВ И ВЗРОСЛЫХ
-            if self.is_adult_student:
-                response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
-            else:
-                response += f"Следующий урок: '{next_lesson['title']}' (Урок {next_lesson.get('lesson_number', 1)}). Скажи 'Урок {next_lesson.get('lesson_number', 1)}', чтобы начать!"
+            response += f"Следующий урок: '{next_lesson['title']}'. Хочешь начать его?"
             
             # КРИТИЧЕСКО ВАЖНО: Сохраняем следующий урок как выбранный
             self.selected_lesson = next_lesson
@@ -2448,21 +2345,12 @@ class DialogueManager:
             elif self.adult_study_mode == 'language':
                 return f"{student_name}, хотите продолжить изучение английского языка уровня {self.cefr_level}?"
         
-        # 🔥 РАЗНЫЕ ПРЕДЛОЖЕНИЯ ДЛЯ ШКОЛЬНИКОВ И ВЗРОСЛЫХ
-        if not self.is_adult_student:
-            # Для школьников
-            options = [
-                f"Хочешь начать урок по {self.current_subject}? Скажи 'Урок X', где X - номер урока.",
-                f"Или выбрать конкретный урок по {self.current_subject}? Назови номер урока.",
-                f"Может быть, повторить пройденный материал по {self.current_subject}?"
-            ]
-        else:
-            # Для взрослых
-            options = [
-                f"Хочешь начать следующий урок по {self.current_subject}?",
-                f"Или выбрать конкретный урок по {self.current_subject}?",
-                f"Может быть, повторить пройденный материал по {self.current_subject}?"
-            ]
+        # ПРЕДЛАГАЕМ ВЫБОР:
+        options = [
+            f"Хочешь начать следующий урок по {self.current_subject}?",
+            f"Или выбрать конкретный урок по {self.current_subject}?",
+            f"Может быть, повторить пройденный материал по {self.current_subject}?"
+        ]
         
         return f"{student_name}, {random.choice(options)}"
 
@@ -2592,12 +2480,7 @@ class DialogueManager:
         first_paragraph = self._get_next_paragraph()
         
         student_name = self.student_data.get('name', 'ученик')
-        
-        # 🔥 РАЗНЫЕ ОТВЕТЫ ДЛЯ ШКОЛЬНИКОВ И ВЗРОСЛЫХ
-        if self.is_adult_student:
-            return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
-        else:
-            return f"{student_name}, начинаем урок {next_lesson.get('lesson_number', 1)} по {self.current_subject}. {first_paragraph}"
+        return f"{student_name}, начинаем урок по {self.current_subject}. {first_paragraph}"
 
     def _handle_subject_selection_direct(self, subject: str) -> Optional[str]:
         """🔥 ИСПРАВЛЕННАЯ ЛОГИКА ВЫБОРА ПРЕДМЕТА ДЛЯ ВСЕХ КОМНАТ"""
@@ -2700,7 +2583,7 @@ class DialogueManager:
                     self.cefr_config = get_cefr_level_config(self.cefr_level)
                 debug_log(f"🎓 Установлен CEFR уровень из урока: {self.cefr_level}")
             
-            # Теперь урок готов к запуску
+            # Теперь урок готов к запуску по команде 'начать урок'
             progress = self.get_student_progress(subject)
             completed_count = len(progress.get('completed_lessons', []))
             
@@ -2713,22 +2596,14 @@ class DialogueManager:
                 # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
                 if self.is_adult_student and self.cefr_level:
                     return f"{student_name}, отлично! Ваш прогресс по английскому языку уровня {self.cefr_level}: {completed_count}/{total_lessons} уроков. Скажите 'начать урок', чтобы начать урок!"
-                elif self.is_adult_student:
-                    return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Скажи 'начать урок', чтобы начать урок!"
                 else:
-                    # 🔥 НОВЫЙ ТЕКСТ ДЛЯ ШКОЛЬНИКОВ
-                    lesson_number = next_lesson.get('lesson_number', 1)
-                    return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Следующий урок: '{next_lesson['title']}' (Урок {lesson_number}). Скажи 'Урок {lesson_number}', чтобы начать!"
+                    return f"{student_name}, отлично! Твой прогресс по {subject}: {completed_count}/{total_lessons} уроков. Скажи 'начать урок', чтобы начать урок!"
             else:
                 # 🔥 ОСОБЫЙ ТЕКСТ ДЛЯ ВЗРОСЛЫХ С CEFR
                 if self.is_adult_student and self.cefr_level:
                     return f"{student_name}, отлично! Это будет ваш первый урок английского языка уровня {self.cefr_level}. Тема: '{next_lesson['title']}'. Скажите 'начать урок', чтобы начать урок!"
-                elif self.is_adult_student:
-                    return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}'. Скажи 'начать урок', чтобы начать урок!"
                 else:
-                    # 🔥 НОВЫЙ ТЕКСТ ДЛЯ ШКОЛЬНИКОВ
-                    lesson_number = next_lesson.get('lesson_number', 1)
-                    return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}' (Урок {lesson_number}). Скажи 'Урок {lesson_number}', чтобы начать!"
+                    return f"{student_name}, отлично! Это будет твой первый урок по {subject}. Тема: '{next_lesson['title']}'. Скажи 'начать урок', чтобы начать урок!"
         
         # ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ: используем ту же логику диалога, что и в демо-комнатах
         available_lessons = self._get_available_lessons(subject)
@@ -3068,10 +2943,7 @@ class DialogueManager:
                 }
                 
                 # 🔥 ДОБАВЛЯЕМ CEFR ДЛЯ ВЗРОСЛЫХ
-                if self.cefr_level:
-                    lesson_completed_data['cefr_level'] = self.cefr_level
                 
-                self.socketio.emit('lesson_completed', lesson_completed_data, room=self.room_id)
             
             # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Запускаем практику, но НЕ сбрасываем контекст
             practice_message = self._start_practice_session()
@@ -3485,11 +3357,6 @@ class DialogueManager:
         # 🔥 НОВОЕ: Сброс слайдов
         self.lesson_slides = []
         self.slides_enabled = True
-        
-        # 🔥 НОВОЕ: Сброс флагов голосовых команд
-        self.need_lesson_voice_command = False
-        self.pending_lesson_id = None
-        self.pending_lesson_number = None
 
     def get_available_subjects(self) -> List[str]:
         """ИСПРАВЛЕННАЯ ЛОГИКА: Возвращает доступные предметы"""
@@ -4150,11 +4017,7 @@ class DialogueManager:
             # 🔥 НОВОЕ: Информация о слайдах
             "slides_enabled": self.slides_enabled,
             "lesson_slides_count": len(self.lesson_slides),
-            "current_slide_index": self.current_paragraph - 2 if self.current_paragraph >= 2 else None,
-            # 🔥 НОВОЕ: Информация о голосовых командах для школьников
-            "need_lesson_voice_command": self.need_lesson_voice_command,
-            "pending_lesson_id": self.pending_lesson_id,
-            "pending_lesson_number": self.pending_lesson_number
+            "current_slide_index": self.current_paragraph - 2 if self.current_paragraph >= 2 else None
         }
         
         # 🔥 ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ВЗРОСЛЫХ И CEFR
@@ -4226,25 +4089,6 @@ class DialogueManager:
                 "пример": "Показать примеры решения"
             }
             base_commands.update(technical_commands)
-        
-        # 🔥 НОВОЕ: КОМАНДЫ ДЛЯ ШКОЛЬНИКОВ (ГОЛОСОВЫЕ КОМАНДЫ)
-        if self.has_student_data and not self.is_adult_student:
-            school_commands = {
-                "урок 1": "Начать урок 1",
-                "урок 2": "Начать урок 2",
-                "урок 3": "Начать урок 3",
-                "урок 4": "Начать урок 4",
-                "урок 5": "Начать урок 5",
-                "урок 6": "Начать урок 6",
-                "урок 7": "Начать урок 7",
-                "урок 8": "Начать урок 8",
-                "урок 9": "Начать урок 9",
-                "урок 10": "Начать урок 10",
-                "первый урок": "Начать первый урок",
-                "второй урок": "Начать второй урок",
-                "третий урок": "Начать третий урок"
-            }
-            base_commands.update(school_commands)
         
         return base_commands
 
@@ -4495,21 +4339,12 @@ class DialogueManager:
         
         return info
 
-    # 🔥 НОВЫЕ МЕТОДЫ ДЛЯ УСТАНОВКИ ГОЛОСОВЫХ КОМАНД ДЛЯ ШКОЛЬНИКОВ
-    def set_need_lesson_voice_command(self, lesson_id: str = None, lesson_number: int = None):
-        """Устанавливает флаг, что ученику нужно назвать урок голосовой командой"""
-        self.need_lesson_voice_command = True
-        self.pending_lesson_id = lesson_id
-        self.pending_lesson_number = lesson_number
-        
-        debug_log(f"🎯 Установлен флаг голосовой команды для урока: {lesson_id}, номер: {lesson_number}")
-
 # Тестирование
 if __name__ == "__main__":
     # Тестирование базовой функциональности
     dm = DialogueManager(None)
     
-    debug_log("🧪 Тестирование DialogueManager с поддержкой взрослых, CEFR и голосовых команд для школьников...")
+    debug_log("🧪 Тестирование DialogueManager с поддержкой взрослых и CEFR...")
     
     # Проверяем что создание быстрое
     debug_log("✅ DialogueManager создан мгновенно")
@@ -4547,4 +4382,4 @@ if __name__ == "__main__":
     adult_subjects = dm.get_available_subjects()
     debug_log(f"🎓 Доступные предметы для взрослого: {adult_subjects}")
     
-    debug_log("✅ Тестирование завершено! Поддержка взрослых, CEFR и голосовых команд для школьников добавлена.")
+    debug_log("✅ Тестирование завершено! Поддержка взрослых и CEFR добавлена.")
