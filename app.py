@@ -1082,26 +1082,41 @@ def generate_bilingual_speech(text: str, voice_type: str = 'female') -> Optional
         
         
 def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_history=False, force_lang=None):
-    """🔥 ИСПРАВЛЕННАЯ: Озвучивает текст с правильной обработкой английских уроков"""
-    if not text.strip():
+    """🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Правильно озвучивает билингвальные уроки английского"""
+    if not text or not text.strip():
+        debug_log(f"⚠️ Пустой текст, пропускаем озвучивание для комнаты {room_id}")
         return
         
+    # 🔥 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ
+    debug_log("=" * 70)
+    debug_log(f"🎯 ВЫЗВАНА SPEAK_TEXT:")
+    debug_log(f"   Комната: {room_id}")
+    debug_log(f"   Текст: {text[:200]}...")
+    debug_log(f"   Тип голоса: {voice_type}")
+    debug_log(f"   Учитель: {is_teacher}")
+    debug_log(f"   Язык: {force_lang}")
+    
     # 🔥 ОПРЕДЕЛЯЕМ ПРЕДМЕТ И ТИП УРОКА
     subject = None
-    is_english_subject = False
-    is_cefr_lesson = False
+    is_english_lesson = False
+    student_data = {}
     
     if room_id in room_student_data and room_student_data[room_id]:
         student_data = room_student_data[room_id]
-        subject = student_data.get('subject')
+        subject = student_data.get('subject', '')
         
-        # Проверяем, это урок английского?
+        # 🔥 ПРОВЕРЯЕМ, ЭТО УРОК АНГЛИЙСКОГО?
         if subject and ('английский' in subject.lower() or 'english' in subject.lower()):
-            is_english_subject = True
-        
-        # Проверяем, это CEFR урок?
-        if student_data.get('is_adult', False) and student_data.get('study_mode') == 'language':
-            is_cefr_lesson = True
+            is_english_lesson = True
+            debug_log(f"🔥 Обнаружен урок английского языка: {subject}")
+    
+    # 🔥 ПРОВЕРЯЕМ ДЛЯ CEFR УРОКОВ
+    is_cefr_lesson = False
+    cefr_level = None
+    if student_data.get('is_adult', False) and student_data.get('study_mode') == 'language':
+        is_cefr_lesson = True
+        cefr_level = student_data.get('language_level', 'A1')
+        debug_log(f"🔥 Обнаружен CEFR урок уровня: {cefr_level}")
     
     # 🔥 ОЧИЩАЕМ ТЕКСТ
     cleaned_text = speech_manager.clean_text(text, subject)
@@ -1117,52 +1132,71 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
     room_speaking[room_id] = True
     socketio.emit('speaking_state', {'speaking': True}, room=room_id)
     
-    # 🔥 КРИТИЧЕСКИЙ БЛОК: Определяем как озвучивать
+    # 🔥 КРИТИЧЕСКИЙ БЛОК: ВЫБОР МЕТОДА ОЗВУЧКИ
     audio_data = None
     tts_service = 'gtts'
     is_bilingual = False
     
     # Случай 1: Явно указан язык (приоритет)
     if force_lang and force_lang != 'auto':
-        debug_log(f"🔥 Принудительная озвучка на языке: {force_lang}")
+        debug_log(f"🔥 Использую принудительный язык: {force_lang}")
         audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang, voice_type)
     
-    # Случай 2: Урок английского языка
-    elif is_english_subject:
-        debug_log(f"🔥 Обнаружен урок английского языка: {subject}")
+    # Случай 2: Урок английского языка или CEFR
+    elif is_english_lesson or is_cefr_lesson:
+        debug_log(f"🔥 Урок английского или CEFR обнаружен")
         
-        # Проверяем, билингвальный ли это урок
-        if is_bilingual_english_lesson(cleaned_text):
-            debug_log("🔥 Текст билингвальный - используем специальную обработку")
+        # 🔥 АНАЛИЗИРУЕМ ТЕКСТ
+        has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', cleaned_text))
+        has_latin = bool(re.search(r'[a-zA-Z]', cleaned_text))
+        
+        debug_log(f"   Есть кириллица: {has_cyrillic}")
+        debug_log(f"   Есть латиница: {has_latin}")
+        
+        # 🔥 ЕСЛИ ЕСТЬ ОБА АЛФАВИТА - ЭТО БИЛИНГВАЛЬНЫЙ ТЕКСТ
+        if has_cyrillic and has_latin:
+            debug_log(f"🔥 Билингвальный текст обнаружен!")
             
-            # Пробуем использовать билингвальную генерацию
-            audio_data = generate_bilingual_speech(cleaned_text, voice_type)
+            # 🔥 СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ БИЛИНГВАЛЬНЫХ УРОКОВ
+            # Пробуем умное разделение на русские и английские части
+            
+            # 1. Сначала пробуем специальную билингвальную озвучку
+            audio_data = speech_manager.generate_bilingual_speech(cleaned_text, voice_type)
             tts_service = 'gtts_bilingual'
             is_bilingual = True
             
             if not audio_data:
-                # Если не удалось, используем умную смешанную озвучку
-                debug_log("🔄 Билингвальная генерация не удалась, используем умную озвучку")
+                # 2. Если не получилось - пробуем смешанную озвучку
+                debug_log("🔄 Билингвальная озвучка не удалась, пробую смешанную")
                 audio_data = speech_manager.generate_optimized_speech(cleaned_text, None, voice_type)
+                tts_service = 'gtts_mixed'
+                is_bilingual = True
         else:
-            # Обычный английский текст
-            debug_log("🔥 Обычный английский текст")
-            audio_data = speech_manager.generate_optimized_speech(cleaned_text, 'en', voice_type)
+            # Моноязычный текст
+            if has_cyrillic:
+                debug_log("🔥 Только русский текст")
+                audio_data = speech_manager.generate_optimized_speech(cleaned_text, 'ru', voice_type)
+            elif has_latin:
+                debug_log("🔥 Только английский текст")
+                audio_data = speech_manager.generate_optimized_speech(cleaned_text, 'en', voice_type)
+            else:
+                debug_log("🔥 Нет букв, используем русский по умолчанию")
+                audio_data = speech_manager.generate_optimized_speech(cleaned_text, 'ru', voice_type)
     
-    # Случай 3: CEFR урок
-    elif is_cefr_lesson:
-        debug_log(f"🔥 Обнаружен CEFR урок")
-        cefr_level = student_data.get('language_level', 'A1')
-        
-        # Для CEFR используем смешанную озвучку
-        audio_data = speech_manager.generate_optimized_speech(cleaned_text, None, voice_type)
-        tts_service = 'gtts_cefr'
-        is_bilingual = True
-    
-    # Случай 4: Все остальное (по умолчанию)
+    # Случай 3: Все остальные уроки
     else:
-        debug_log("🔥 Стандартная озвучка")
+        debug_log(f"🔥 Обычный урок (не английский)")
         audio_data = speech_manager.generate_optimized_speech(cleaned_text, force_lang, voice_type)
+    
+    # 🔥 ОТЛАДОЧНАЯ ИНФОРМАЦИЯ О РЕЗУЛЬТАТЕ
+    if audio_data:
+        debug_log(f"✅ Аудио успешно сгенерировано, размер: {len(base64.b64decode(audio_data))} байт")
+    else:
+        debug_log(f"❌ Не удалось сгенерировать аудио!")
+        # Fallback: пробуем простую русскую озвучку
+        debug_log("🔄 Пробую fallback на русскую озвучку")
+        audio_data = text_to_speech_gtts(cleaned_text, 'ru')
+        tts_service = 'gtts_fallback'
     
     # 🔥 ОТПРАВЛЯЕМ АУДИО КЛИЕНТАМ
     if audio_data:
@@ -1170,7 +1204,8 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
         if speech_manager.tts_client and speech_manager.tts_client.available:
             tts_service = 'zindaki'
         
-        emit('speech_audio', {
+        # 🔥 ПОДГОТОВКА ДАННЫХ ДЛЯ ОТПРАВКИ
+        speech_data = {
             'audio': audio_data,
             'text': cleaned_text,
             'timestamp': time.time(),
@@ -1181,12 +1216,25 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
             'optimized': True,
             'technical_support': TECHNICAL_SUPPORT_ENABLED,
             'bilingual': is_bilingual,
-            'is_english_lesson': is_english_subject,
-            'is_cefr_lesson': is_cefr_lesson
-        }, room=room_id)
+            'is_english_lesson': is_english_lesson,
+            'is_cefr_lesson': is_cefr_lesson,
+            'room_id': room_id
+        }
         
+        # 🔥 ОТЛАДОЧНЫЙ ВЫВОД
+        debug_log(f"📤 Отправляю аудио в комнату {room_id}:")
+        debug_log(f"   Сервис TTS: {tts_service}")
+        debug_log(f"   Билингвальный: {is_bilingual}")
+        debug_log(f"   Английский урок: {is_english_lesson}")
+        debug_log(f"   CEFR урок: {is_cefr_lesson}")
+        debug_log(f"   Размер аудио: {len(base64.b64decode(audio_data))} байт")
+        
+        # Отправляем клиентам
+        emit('speech_audio', speech_data, room=room_id)
+        
+        # 🔥 СОХРАНЯЕМ В ИСТОРИЮ
         if not skip_history:
-            room_speech_data[room_id].append({
+            history_entry = {
                 'text': cleaned_text,
                 'timestamp': time.time(),
                 'type': 'generated',
@@ -1194,14 +1242,36 @@ def speak_text(room_id, text, voice_type='female', is_teacher=False, skip_histor
                 'is_teacher': is_teacher,
                 'subject': subject if subject else 'general',
                 'tts_service': tts_service,
-                'bilingual': is_bilingual
-            })
+                'bilingual': is_bilingual,
+                'original_text': text[:100] + ('...' if len(text) > 100 else '')
+            }
+            
+            room_speech_data[room_id].append(history_entry)
+            
+            # Ограничиваем размер истории
+            if len(room_speech_data[room_id]) > 50:
+                room_speech_data[room_id].pop(0)
+            
+            debug_log(f"💾 Сохранено в историю: {cleaned_text[:50]}...")
     else:
-        debug_log("❌ Не удалось сгенерировать аудио")
+        debug_log("❌❌❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось сгенерировать аудио после всех попыток!")
+        
+        # Отправляем сообщение об ошибке
+        emit('speech_error', {
+            'room_id': room_id,
+            'error': 'Не удалось сгенерировать аудио',
+            'text': cleaned_text[:100] + ('...' if len(cleaned_text) > 100 else ''),
+            'timestamp': time.time()
+        }, room=room_id)
     
     # 🔥 СБРАСЫВАЕМ СОСТОЯНИЕ ПОСЛЕ ОЗВУЧКИ
-    speech_duration = max(1.5, len(cleaned_text) * 0.08)
+    # Рассчитываем длительность речи (примерно 0.1 секунда на символ)
+    speech_duration = max(1.5, len(cleaned_text) * 0.1)
+    debug_log(f"⏱️ Установлена длительность речи: {speech_duration:.1f} секунд")
+    
     threading.Timer(speech_duration, lambda: reset_speaking_state(room_id, is_teacher)).start()
+    
+    debug_log("=" * 70)
 
 def create_student_conference(student_data, subject=None):
     """Создает комнату для ученика с ОБЯЗАТЕЛЬНЫМ предметом"""
