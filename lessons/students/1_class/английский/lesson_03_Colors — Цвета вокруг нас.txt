@@ -1,0 +1,16 @@
+Выключите микрофон и прочитайте текст. Затем ответьте на вопросы.
+
+Red is the color of apples.
+Blue is the color of the sky.
+Green is the color of grass.
+Yellow is the color of the sun.
+Black is the color of night.
+White is the color of snow.
+Colors are everywhere!
+
+Вопросы:
+
+Какой цвет у яблок?
+Какой цвет у неба?
+Какой цвет у солнца?
+Назови цвета, которые ты запомнил.
