@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <style>
         :root {
@@ -926,45 +925,6 @@
             color: var(--primary);
         }
         
-        /* Контейнер для удаленных видео */
-        #remote-videos-container {
-            position: absolute;
-            bottom: 100px;
-            right: 230px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 9;
-        }
-        
-        .remote-video-container {
-            width: 150px;
-            height: 112px;
-            border: 2px solid var(--student-color);
-            border-radius: 8px;
-            overflow: hidden;
-            background: black;
-            position: relative;
-        }
-        
-        .remote-video-container video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .remote-peer-label {
-            position: absolute;
-            bottom: -20px;
-            left: 0;
-            right: 0;
-            text-align: center;
-            font-size: 10px;
-            color: white;
-            background: rgba(0,0,0,0.7);
-            padding: 2px;
-        }
-        
         /* SVG специфичные стили */
         .svg-diagram-container {
             width: 100%;
@@ -1427,16 +1387,6 @@
                 left: 15px;
             }
             
-            #remote-videos-container {
-                bottom: 90px;
-                right: 175px;
-            }
-            
-            .remote-video-container {
-                width: 120px;
-                height: 90px;
-            }
-            
             #teacher-speech,
             #student-speech {
                 max-width: 200px;
@@ -1536,16 +1486,6 @@
                 height: 90px;
                 bottom: 80px;
                 left: 10px;
-            }
-            
-            #remote-videos-container {
-                bottom: 80px;
-                right: 140px;
-            }
-            
-            .remote-video-container {
-                width: 100px;
-                height: 75px;
             }
             
             #teacher-speech,
@@ -1807,9 +1747,6 @@
                 <p id="speech-text"></p>
             </div>
             
-            <!-- Контейнер для удаленных видео -->
-            <div id="remote-videos-container"></div>
-            
             <!-- Индикатор статуса LLM -->
             <div id="llm-status" class="llm-status-indicator">
                 <i class="fas fa-robot"></i>
@@ -2040,14 +1977,6 @@
         <button class="control-btn" id="cam-btn" title="Камера">
             <i class="fas fa-video"></i>
             <span>Вкл</span>
-        </button>
-        <button class="control-btn" id="screen-btn" title="Демонстрация экрана">
-            <i class="fas fa-desktop"></i>
-            <span>Экран</span>
-        </button>
-        <button class="control-btn" id="fullscreen-btn" title="Полный экран">
-            <i class="fas fa-expand"></i>
-            <span>Полный</span>
         </button>
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <i class="fas fa-phone-slash"></i>
@@ -2626,20 +2555,11 @@
             document.body.classList.add('show-debug');
         }
         
-        // PeerJS переменные
-        let peer = null;
-        let peerId = null;
-        let localStream = null;
-        const remoteStreams = new Map(); // peerId -> {stream, videoElement, container}
-        
         // Элементы DOM
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
-        const remoteVideosContainer = document.getElementById('remote-videos-container');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
-        const screenBtn = document.getElementById('screen-btn');
-        const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsCount = document.getElementById('participants-count');
@@ -2689,11 +2609,10 @@
         const thinkingIndicator = document.getElementById('thinking-indicator');
 
         // Глобальные переменные
-        let userStream = null;
+        let localStream = null;
         let socket = null;
         let isMicOn = false;
         let isCamOn = false;
-        let isFullscreen = false;
         let recognition = null;
         let aiTeacherActivated = false;
         let aiTeacherWasActivated = false;
@@ -2773,14 +2692,6 @@
 
         // Флаг ожидания ответа на команду продолжения
         let awaitingContinueResponse = false;
-
-        // Упрощенная система активации AI-учителя
-        let roomActivationState = {
-            peerReady: false,
-            mediaReady: false, 
-            socketReady: false,
-            roomJoined: false
-        };
 
         // Particles.js инстансы
         let particlesBackground = null;
@@ -2917,29 +2828,6 @@
             if (thinkingIndicator) {
                 thinkingIndicator.style.display = 'none';
             }
-        }
-
-        // УПРОЩЕННАЯ ПРОВЕРКА ГОТОВНОСТИ - ВСЕГДА ВОЗВРАЩАЕТ TRUE
-        function checkRoomActivationReady() {
-            // УПРОЩЕНИЕ: Сервер всегда готов, поэтому возвращаем true
-            return true;
-        }
-
-        function updateActivationButton() {
-            const button = document.getElementById('activate-ai-btn');
-            if (!button) return;
-            
-            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
-            if (aiTeacherWasActivated) {
-                button.style.display = 'none';
-                return;
-            }
-            
-            // УПРОЩЕНИЕ: Всегда показываем кнопку, так как сервер всегда готов
-            button.style.display = 'block';
-            button.disabled = false;
-            button.innerHTML = 'Activate AI-Teacher';
-            console.log('✅ Кнопка активации готова для комнаты:', roomId);
         }
 
         // Функции для отображения распознанной речи
@@ -3254,7 +3142,7 @@
                                 <i class="fas fa-atom"></i>
                                 <p>Техническая диаграмма<br>будет сгенерирована автоматически</p>
                                 <small>Формулы, схемы, графики</small>
-                            </div>
+                        </div>
                         `;
                     } else if (diagramType === 'science') {
                         placeholderHTML = `
@@ -4481,52 +4369,6 @@
             }
         }
 
-        // Демонстрация экрана
-        async function shareScreen() {
-            try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: true,
-                    audio: true
-                });
-                
-                // Заменяем локальный поток на экран
-                if (localStream) {
-                    localStream.getTracks().forEach(track => track.stop());
-                }
-                
-                localStream = screenStream;
-                selfVideo.srcObject = screenStream;
-                
-                // Обновляем поток для всех подключенных участников
-                remoteStreams.forEach((remote, peerId) => {
-                    // Здесь нужно обновить соединение с новым потоком
-                });
-                
-                screenBtn.classList.add('active');
-                screenBtn.querySelector('span').textContent = 'Остановить';
-                
-                // Обработчик завершения демонстрации экрана
-                screenStream.getVideoTracks()[0].onended = () => {
-                    stopScreenShare();
-                };
-                
-            } catch (error) {
-                console.error('Ошибка демонстрации экрана:', error);
-            }
-        }
-
-        function stopScreenShare() {
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            
-            // Возвращаем камеру
-            enableCameraAndMicrophone();
-            
-            screenBtn.classList.remove('active');
-            screenBtn.querySelector('span').textContent = 'Экран';
-        }
-
         // Обновленные функции управления медиа
         async function toggleMicrophone() {
             if (!localStream) return;
@@ -4587,44 +4429,10 @@
             }
         }
 
-        function toggleFullscreen() {
-            if (!isFullscreen) {
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
-                } else if (document.documentElement.webkitRequestFullscreen) {
-                    document.documentElement.webkitRequestFullscreen();
-                } else if (document.documentElement.msRequestFullscreen) {
-                    document.documentElement.msRequestFullscreen();
-                }
-                isFullscreen = true;
-                fullscreenBtn.querySelector('span').textContent = 'Обычный';
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
-                }
-                isFullscreen = false;
-                fullscreenBtn.querySelector('span').textContent = 'Полный';
-            }
-        }
-
         function endCall() {
             // Закрываем все медиа потоки
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
-            }
-            
-            // Закрываем все удаленные соединения
-            remoteStreams.forEach((remote, peerId) => {
-                removeRemoteVideo(peerId);
-            });
-            
-            // Закрываем Peer соединение
-            if (peer) {
-                peer.destroy();
             }
             
             if (recognition) {
@@ -4648,10 +4456,10 @@
             }
         }
 
-        // Инициализация медиа устройств
+        // Инициализация медиа устройств - только для self-view
         async function enableCameraAndMicrophone() {
             try {
-                console.log('Запрос доступа к камере и микрофону...');
+                console.log('Запрос доступа к камере и микрофону для self-view...');
                 
                 localStream = await navigator.mediaDevices.getUserMedia({ 
                     video: {
@@ -4666,7 +4474,7 @@
                     }
                 });
                 
-                console.log('Медиапоток получен успешно');
+                console.log('Медиапоток получен успешно (только для self-view)');
                 selfVideo.srcObject = localStream;
                 
                 isCamOn = true;
@@ -4678,15 +4486,18 @@
                 micBtn.classList.add('active');
                 micBtn.querySelector('span').textContent = 'Выкл';
                 
-                statusDiv.textContent = 'Камера и микрофон включены';
+                statusDiv.textContent = 'Камера и микрофон включены (self-view)';
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
-                // Инициализируем PeerJS после успешного получения медиапотока
-                initPeerJS();
-                
                 // Инициализируем распознавание речи
                 initSpeechRecognition();
+                
+                // Автоматически активируем AI-учителя после успешного подключения
+                if (socket && socket.connected) {
+                    console.log('✅ Автоматическая активация AI-учителя для комнаты:', roomId);
+                    activateAI();
+                }
                 
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
@@ -4697,6 +4508,27 @@
                 } else {
                     statusDiv.textContent = 'Ошибка доступа к устройствам';
                 }
+            }
+        }
+
+        // Упрощенная активация AI-учителя
+        function activateAI() {
+            if (socket && socket.connected) {
+                console.log('Активация AI-учителя для комнаты:', roomId);
+                
+                socket.emit('activate_ai_teacher', { 
+                    room_id: roomId,
+                    avatar_name: 'teacher' // или другой аватар по умолчанию
+                });
+                
+                // Скрываем кнопку сразу
+                activateAiBtn.style.display = 'none';
+                statusDiv.textContent = 'Активация AI-учителя...';
+                
+                console.log('Запрос активации отправлен');
+            } else {
+                console.error('Socket не подключен, откладываем активацию');
+                setTimeout(activateAI, 1000);
             }
         }
 
@@ -4715,14 +4547,12 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
-                // Ждем инициализации PeerJS перед отправкой room_id
-                if (peerId) {
-                    socket.emit('join_room', { 
-                        room_id: roomId,
-                        peer_id: peerId 
-                    });
-                }
+                // Присоединяемся к комнате без peer_id
+                socket.emit('join_room', { 
+                    room_id: roomId
+                });
                 
+                // Загружаем текущий аватар
                 setTimeout(() => {
                     if (socket) {
                         socket.emit('get_current_avatar', { room_id: roomId });
@@ -4731,25 +4561,19 @@
                 }, 500);
 
                 initLlmSystem();
+                
+                // Автоматически активируем AI-учителя после подключения
+                if (devicesEnabled) {
+                    setTimeout(() => {
+                        activateAI();
+                    }, 1000);
+                }
             });
             
             // Обработка присоединения к комнате
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 participantsCount.textContent = data.count;
-            });
-            
-            // Новый обработчик для участников
-            socket.on('participant_joined', (data) => {
-                console.log('Новый участник:', data.peer_id);
-                if (data.peer_id !== peerId) {
-                    connectToPeer(data.peer_id);
-                }
-            });
-            
-            socket.on('participant_left', (data) => {
-                console.log('Участник вышел:', data.peer_id);
-                removeRemoteVideo(data.peer_id);
             });
             
             // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
@@ -4907,12 +4731,6 @@
                 }
             });
             
-            socket.on('ai_teacher_available', () => {
-                if (devicesEnabled) {
-                    updateActivationButton();
-                }
-            });
-            
             socket.on('ai_teacher_activated', () => {
                 aiTeacherActivated = true;
                 aiTeacherWasActivated = true;
@@ -4937,11 +4755,8 @@
                 hideThinkingIndicator();
                 
                 // Показываем кнопку снова для повторной попытки
-                const button = document.getElementById('activate-ai-btn');
-                if (button) {
-                    button.style.display = 'block';
-                    button.innerHTML = 'Повторить активацию';
-                }
+                activateAiBtn.style.display = 'block';
+                activateAiBtn.innerHTML = 'Повторить активацию';
                 
                 // Сбрасываем состояние активации
                 aiTeacherActivated = false;
@@ -5236,76 +5051,19 @@
             }, 5000);
         }
 
-        // Упрощенная инициализация кнопки активации
+        // Простая инициализация кнопки активации
         function initActivateButton() {
             const button = document.getElementById('activate-ai-btn');
             
-            // Убедимся, что кнопка кликабельна
-            button.style.zIndex = '1000';
-            button.style.pointerEvents = 'auto';
-            button.style.position = 'fixed';
-            
-            // Удаляем старые обработчики
-            button.replaceWith(button.cloneNode(true));
-            const newButton = document.getElementById('activate-ai-btn');
-            
-            newButton.addEventListener('click', function(event) {
+            button.addEventListener('click', function(event) {
                 console.log('=== КЛИК ПО КНОПКЕ АКТИВАЦИИ ===');
                 console.log('Room ID:', roomId);
                 
                 event.preventDefault();
                 event.stopPropagation();
                 
-                // УПРОЩЕНИЕ: Сервер всегда готов, не проверяем сложные состояния
-                if (socket && socket.connected) {
-                    console.log('✅ Отправка запроса активации для комнаты:', roomId);
-                    socket.emit('activate_ai_teacher', { room_id: roomId });
-                    
-                    // Немедленная обратная связь
-                    newButton.style.display = 'none';
-                    statusDiv.textContent = 'Активация AI-учителя...';
-                    
-                    // Таймаут для обработки ошибок активации
-                    setTimeout(() => {
-                        if (socket && !aiTeacherActivated) {
-                            console.warn('⚠️ Активация заняла слишком много времени, пробуем резервный метод');
-                            backupActivateAI();
-                        }
-                    }, 5000);
-                    
-                } else {
-                    console.error('❌ Socket не подключен, пробуем резервный метод');
-                    backupActivateAI();
-                }
+                activateAI();
             });
-        }
-
-        // Резервный метод активации
-        function backupActivateAI() {
-            console.log('Использование резервного метода активации');
-            
-            // Помечаем как активированного
-            aiTeacherActivated = true;
-            aiTeacherWasActivated = true;
-            activateAiBtn.style.display = 'none';
-            statusDiv.textContent = 'AI-Teacher активирован (локальный режим)';
-            
-            // Загружаем аватар
-            loadAvatarFrames('teacher');
-        }
-
-        // Принудительное отображение кнопки
-        function forceShowActivateButton() {
-            console.log('Принудительное отображение кнопки активации');
-            const button = document.getElementById('activate-ai-btn');
-            
-            button.style.display = 'block';
-            button.style.zIndex = '1000';
-            button.style.pointerEvents = 'auto';
-            button.style.position = 'fixed';
-            
-            // Переинициализируем обработчики
-            initActivateButton();
         }
 
         // Инициализация при загрузке страницы
@@ -5322,10 +5080,9 @@
             // Запускаем медиа устройства
             enableCameraAndMicrophone();
             
-            // Инициализируем кнопку после небольшой задержки
+            // Инициализируем кнопку активации
             setTimeout(() => {
                 initActivateButton();
-                updateActivationButton();
                 
                 // Инициализация системы технических предметов
                 if (window.technicalProcessor) {
@@ -5404,14 +5161,6 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            screenBtn.addEventListener('click', () => {
-                if (screenBtn.classList.contains('active')) {
-                    stopScreenShare();
-                } else {
-                    shareScreen();
-                }
-            });
-            fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
             enableCameraBtn.addEventListener('click', async () => {
@@ -5438,169 +5187,18 @@
             
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
-            
-            // Принудительно показываем кнопку через 3 секунды
-            setTimeout(forceShowActivateButton, 3000);
         });
 
         document.addEventListener('fullscreenchange', () => {
-            isFullscreen = !!document.fullscreenElement;
-            fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
+            // Обработка полного экрана
         });
 
-        // Инициализация PeerJS
-        function initPeerJS() {
-            console.log('Инициализация PeerJS для комнаты:', roomId);
-            
-            // Создаем Peer с публичным сервером
-            peer = new Peer({
-                host: '62.181.53.223',
-                port: 9000,
-                path: '/',
-                secure: false,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
-            });
-
-            peer.on('open', (id) => {
-                console.log('✅ PeerJS подключен с ID:', id, 'для комнаты:', roomId);
-                peerId = id;
-                statusDiv.textContent = 'Подключение к конференции...';
-                
-                // Сообщаем серверу о нашем peerId
-                if (socket && socket.connected) {
-                    socket.emit('join_room', { 
-                        room_id: roomId,
-                        peer_id: id 
-                    });
-                } else {
-                    console.warn('WebSocket не готов для отправки join_room');
-                }
-            });
-
-            peer.on('call', (call) => {
-                console.log('Получен входящий вызов от:', call.peer);
-                
-                // Отвечаем на вызов с нашим потоком
-                call.answer(localStream);
-                
-                call.on('stream', (remoteStream) => {
-                    console.log('Получен удаленный поток от:', call.peer);
-                    addRemoteVideo(call.peer, remoteStream);
-                });
-                
-                call.on('close', () => {
-                    console.log('Вызов завершен от:', call.peer);
-                    removeRemoteVideo(call.peer);
-                });
-                
-                call.on('error', (err) => {
-                    console.error('Ошибка вызова:', err);
-                    removeRemoteVideo(call.peer);
-                });
-            });
-
-            peer.on('connection', (conn) => {
-                console.log('Получено соединение данных от:', conn.peer);
-            });
-
-            peer.on('disconnected', () => {
-                console.log('PeerJS отключен');
-                statusDiv.textContent = 'Переподключение...';
-                peer.reconnect();
-            });
-
-            peer.on('close', () => {
-                console.log('PeerJS закрыт');
-                statusDiv.textContent = 'Соединение закрыто';
-            });
-
-            peer.on('error', (err) => {
-                console.error('PeerJS ошибка:', err);
-                statusDiv.textContent = 'Ошибка соединения: ' + err.type;
-            });
-        }
-
-        // Добавление удаленного видео
-        function addRemoteVideo(peerId, stream) {
-            if (remoteStreams.has(peerId)) {
-                return; // Уже добавлено
+        window.addEventListener('message', (event) => {
+            if (event.data === 'end_conference') {
+                endCall();
             }
-
-            const videoContainer = document.createElement('div');
-            videoContainer.className = 'remote-video-container';
-            videoContainer.id = `remote-${peerId}`;
-
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            video.autoplay = true;
-            video.playsinline = true;
-
-            const peerLabel = document.createElement('div');
-            peerLabel.className = 'remote-peer-label';
-            peerLabel.textContent = `Участник ${peerId.substring(0, 6)}`;
-
-            videoContainer.appendChild(video);
-            videoContainer.appendChild(peerLabel);
-            remoteVideosContainer.appendChild(videoContainer);
-
-            remoteStreams.set(peerId, {
-                stream: stream,
-                videoElement: video,
-                container: videoContainer
-            });
-
-            updateParticipantsCount();
-        }
-
-        // Удаление удаленного видео
-        function removeRemoteVideo(peerId) {
-            const remote = remoteStreams.get(peerId);
-            if (remote) {
-                if (remote.container && remote.container.parentNode) {
-                    remote.container.parentNode.removeChild(remote.container);
-                }
-                remoteStreams.delete(peerId);
-                updateParticipantsCount();
-            }
-        }
-
-        // Обновление счетчика участников
-        function updateParticipantsCount() {
-            const totalParticipants = remoteStreams.size + 1; // +1 для текущего пользователя
-            participantsCount.textContent = totalParticipants;
-        }
-
-        // Подключение к других участников
-        function connectToPeer(remotePeerId) {
-            if (!localStream || peerId === remotePeerId) {
-                return;
-            }
-
-            console.log('Подключение к участнику:', remotePeerId);
-            
-            const call = peer.call(remotePeerId, localStream);
-            
-            call.on('stream', (remoteStream) => {
-                console.log('Получен поток от:', remotePeerId);
-                addRemoteVideo(remotePeerId, remoteStream);
-            });
-            
-            call.on('close', () => {
-                console.log('Соединение закрыто с:', remotePeerId);
-                removeRemoteVideo(remotePeerId);
-            });
-            
-            call.on('error', (err) => {
-                console.error('Ошибка соединения с', remotePeerId, ':', err);
-                removeRemoteVideo(remotePeerId);
-            });
-        }
-
+        });
+        
         // Глобальный обработчик ошибок загрузки изображений
         document.addEventListener('error', function(e) {
             if (e.target.tagName === 'IMG' && e.target.closest('#slides-viewer')) {
