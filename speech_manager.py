@@ -1,6 +1,5 @@
 # speech_manager.py - Управление озвучиванием и распознаванием речи для AI Teacher
 # С поддержкой кастомного TTS сервиса Zindaki и технических предметов
-# 🔥 ИСПРАВЛЕННАЯ ВЕРСИЯ: Правильная обработка билингвальных уроков английского
 
 import re
 import io
@@ -219,48 +218,6 @@ def is_foreign_text(text: str) -> bool:
     
     return False
 
-# 🔥 НОВАЯ ФУНКЦИЯ: Определение билингвального текста
-def is_bilingual_text(text: str) -> bool:
-    """Определяет, является ли текст билингвальным (смесь русского и английского)"""
-    if not text:
-        return False
-    
-    # Проверяем наличие обоих алфавитов
-    has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', text))
-    has_latin = bool(re.search(r'[a-zA-Z]', text))
-    
-    # Если нет одного из алфавитов - не билингвальный
-    if not has_cyrillic or not has_latin:
-        return False
-    
-    # Подсчитываем количество русских и английских слов
-    russian_words = re.findall(r'[а-яА-ЯёЁ]{2,}', text[:500])
-    english_words = re.findall(r'\b[a-zA-Z]{3,}\b', text[:500])
-    
-    # Фильтруем короткие общепринятые слова
-    common_short = {'and', 'the', 'you', 'are', 'is', 'am', 'my', 'in', 'on', 'at', 'to', 'for', 'of', 'a', 'an'}
-    english_words = [w for w in english_words if w.lower() not in common_short]
-    
-    # Если есть достаточное количество слов обоих языков - билингвальный
-    if len(russian_words) >= 3 and len(english_words) >= 3:
-        return True
-    
-    # Проверяем паттерны билингвальных уроков
-    bilingual_patterns = [
-        r'[a-zA-Z][^.!?]*\s*\([а-яА-Я]+\)',  # Hello (Привет)
-        r'[а-яА-Я][^.!?]*\s*\([a-zA-Z]+\)',  # Привет (Hello)
-        r'[a-zA-Z]+\s*—\s*[а-яА-Я]+',        # Hello — Привет
-        r'[а-яА-Я]+\s*—\s*[a-zA-Z]+',        # Привет — Hello
-        r'английск\w+\s*язык',               # английский язык
-        r'english\s*language',               # english language
-    ]
-    
-    for pattern in bilingual_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            return True
-    
-    return False
-
 # =============================================================================
 # КЛАСС КЛИЕНТА TTS СЕРВИСА
 # =============================================================================
@@ -408,7 +365,7 @@ class ZindakiTTSClient:
                         cache_hit = response.headers.get('X-Cache-Hit', 'false') == 'true'
                         gen_time = float(response.headers.get('X-Generation-Time', '0'))
                         
-                        # Обновляем статистика
+                        # Обновляем статистику
                         self.stats['successful'] += 1
                         self.stats['last_request_time'] = total_time
                         
@@ -633,7 +590,7 @@ def text_to_speech_mixed(text: str, use_zindaki: bool = True,
     """🔥 ОПТИМИЗИРОВАННАЯ ФУНКЦИЯ: Озвучивание смешанного текста"""
     try:
         # 🔥 ОПТИМИЗИРОВАННЫЙ ШАБЛОН: ищем последовательности букв одного языка
-        pattern = r'([а-яА-ЯёЁ][а-яА-ЯёЁ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
+        pattern = r'([а-яА-ЯеЕ][а-яА-ЯеЕ\s.,!?;:\'-]*|[a-zA-Z][a-zA-Z\s.,!?;:\'-]*)'
         fragments = re.findall(pattern, text)
         
         if not fragments:
@@ -650,7 +607,7 @@ def text_to_speech_mixed(text: str, use_zindaki: bool = True,
                 continue
                 
             # Определяем язык фрагмента - быстрая проверка
-            has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', fragment))
+            has_cyrillic = bool(re.search(r'[а-яА-ЯеЕ]', fragment))
             lang = 'ru' if has_cyrillic else 'en'
             
             try:
@@ -690,112 +647,12 @@ def text_to_speech_mixed(text: str, use_zindaki: bool = True,
         else:
             return text_to_speech_gtts(text, 'ru')
 
-# 🔥 НОВАЯ ФУНКЦИЯ: Умная озвучка для билингвальных уроков
-def text_to_speech_bilingual(text: str, use_zindaki: bool = True,
-                           tts_client: Optional[ZindakiTTSClient] = None) -> Optional[str]:
-    """Умная озвучка для билингвальных уроков (русский + английский)"""
-    debug_log(f"🎯 Начало билингвальной озвучки")
-    
-    # 1. Пробуем разделить по предложениям
-    sentences = re.split(r'([.!?]+)', text)
-    sentences = [s.strip() for s in sentences if s.strip()]
-    
-    if len(sentences) <= 1:
-        # Если только одно предложение - используем смешанную озвучку
-        return text_to_speech_mixed(text, use_zindaki, tts_client)
-    
-    audio_chunks = []
-    
-    for sentence in sentences:
-        if not sentence:
-            continue
-        
-        # Определяем язык предложения
-        has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', sentence))
-        has_latin = bool(re.search(r'[a-zA-Z]', sentence))
-        
-        if has_cyrillic and not has_latin:
-            # Только русский
-            lang = 'ru'
-        elif has_latin and not has_cyrillic:
-            # Только английский
-            lang = 'en'
-        else:
-            # Смешанное предложение - пробуем разделить
-            # Паттерн: русский текст (английский перевод)
-            pattern = r'([^!?.]+?)\s*\(([^)]+)\)'
-            match = re.search(pattern, sentence)
-            
-            if match:
-                # Разделяем на русскую и английскую части
-                russian_part = match.group(1).strip()
-                english_part = match.group(2).strip()
-                
-                # Озвучиваем русскую часть
-                if russian_part:
-                    if use_zindaki and tts_client:
-                        audio_base64 = text_to_speech_zindaki(russian_part, 'ru', 'female', tts_client)
-                    else:
-                        audio_base64 = text_to_speech_gtts(russian_part, 'ru')
-                    
-                    if audio_base64:
-                        audio_chunks.append(base64.b64decode(audio_base64))
-                        audio_chunks.append(bytes([0] * 400))  # короткая пауза
-                
-                # Озвучиваем английскую часть
-                if english_part:
-                    if use_zindaki and tts_client:
-                        audio_base64 = text_to_speech_zindaki(english_part, 'en', 'female', tts_client)
-                    else:
-                        audio_base64 = text_to_speech_gtts(english_part, 'en')
-                    
-                    if audio_base64:
-                        audio_chunks.append(base64.b64decode(audio_base64))
-                        audio_chunks.append(bytes([0] * 800))  # пауза между предложениями
-                
-                continue
-            else:
-                # Не удалось разделить - используем смешанную озвучку
-                lang = 'mixed'
-        
-        if lang == 'mixed':
-            # Используем смешанную озвучку для предложения
-            audio_base64 = text_to_speech_mixed(sentence, use_zindaki, tts_client)
-        else:
-            # Моноязычное предложение
-            if use_zindaki and tts_client:
-                audio_base64 = text_to_speech_zindaki(sentence, lang, 'female', tts_client)
-            else:
-                audio_base64 = text_to_speech_gtts(sentence, lang)
-        
-        if audio_base64:
-            audio_data = base64.b64decode(audio_base64)
-            audio_chunks.append(audio_data)
-            audio_chunks.append(bytes([0] * 800))  # пауза между предложениями
-    
-    if audio_chunks:
-        # Убираем последнюю паузу
-        if audio_chunks[-1] in [bytes([0] * 400), bytes([0] * 800)]:
-            audio_chunks.pop()
-        
-        combined_audio = b''.join(audio_chunks)
-        debug_log(f"✅ Билингвальная озвучка завершена, {len(audio_chunks)} фрагментов")
-        return base64.b64encode(combined_audio).decode('utf-8')
-    
-    debug_log("❌ Билингвальная озвучка не удалась")
-    return None
-
 def text_to_speech_optimized(text: str, force_lang: Optional[str] = None, 
                            voice_type: str = 'female', use_zindaki: bool = True,
                            tts_client: Optional[ZindakiTTSClient] = None) -> Optional[str]:
-    """🔥 ИСПРАВЛЕННАЯ ВЕРСИЯ: Оптимизированная версия с выбором лучшего метода"""
+    """Оптимизированная версия с выбором лучшего метода"""
     if not text.strip():
         return None
-    
-    # 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Если force_lang=None и текст билингвальный - используем специальную логику
-    if (not force_lang or force_lang == 'auto') and is_bilingual_text(text):
-        debug_log(f"🎯 Обнаружен билингвальный текст, использую специальную обработку")
-        return text_to_speech_bilingual(text, use_zindaki, tts_client)
     
     # 🔥 Если явно указан язык - используем самый быстрый путь
     if force_lang and force_lang != 'auto':
@@ -857,8 +714,7 @@ class SpeechManager:
             'cache_misses': 0,
             'technical_cleaning': 0,
             'standard_cleaning': 0,
-            'mixed_language': 0,
-            'bilingual_lessons': 0  # 🔥 НОВАЯ СТАТИСТИКА
+            'mixed_language': 0
         }
         
         # Простой кэш для часто используемых фраз
@@ -887,10 +743,6 @@ class SpeechManager:
     def detect_language(self, text: str) -> Tuple[str, bool]:
         """Определение языка текста"""
         return detect_text_language_fast(text)
-    
-    def is_bilingual_text(self, text: str) -> bool:
-        """Определяет, является ли текст билингвальным"""
-        return is_bilingual_text(text)
     
     def generate_speech(self, text: str, lang: str = 'ru', 
                        voice_type: str = 'female') -> Optional[str]:
@@ -951,13 +803,8 @@ class SpeechManager:
     
     def generate_optimized_speech(self, text: str, force_lang: Optional[str] = None,
                                 voice_type: str = 'female') -> Optional[str]:
-        """🔥 ИСПРАВЛЕННАЯ: Оптимизированная генерация речи с поддержкой билингвальных уроков"""
+        """Оптимизированная генерация речи с использованием TTS сервиса"""
         self.stats['total_requests'] += 1
-        
-        # 🔥 Проверяем, билингвальный ли это текст
-        if is_bilingual_text(text):
-            self.stats['bilingual_lessons'] += 1
-            self.log(f"🎯 Обнаружен билингвальный урок, использую специальную обработку")
         
         # Проверяем, включен ли TTS
         if not self.config['enabled']:
@@ -979,20 +826,6 @@ class SpeechManager:
         
         cleaned_text = text  # Используем оригинальный текст для TTS
         
-        # 🔥 ОСОБАЯ ЛОГИКА ДЛЯ БИЛИНГВАЛЬНЫХ УРОКОВ
-        if is_bilingual_text(text):
-            self.log(f"🔥 Использую билингвальную озвучку для текста")
-            
-            # Используем специальную билингвальную функцию
-            audio_base64 = text_to_speech_bilingual(cleaned_text, use_zindaki, self.tts_client)
-            
-            if audio_base64:
-                # Добавляем в кэш
-                self._add_to_cache(text, 'bilingual', voice_type, audio_base64)
-                return audio_base64
-            else:
-                self.log("🔄 Билингвальная озвучка не удалась, пробую смешанную")
-        
         # Пробуем использовать Zindaki TTS если доступен и это основной сервис
         if use_zindaki:
             try:
@@ -1000,9 +833,7 @@ class SpeechManager:
                 if force_lang and force_lang != 'auto':
                     tts_lang = self.config['zindaki']['language_mapping'].get(force_lang, 'ru')
                 else:
-                    # Автоопределение языка
-                    lang_detected, _ = detect_text_language_fast(cleaned_text)
-                    tts_lang = self.config['zindaki']['language_mapping'].get(lang_detected, 'ru')
+                    tts_lang = 'ru'  # по умолчанию русский
                 
                 # Определяем голос
                 speaker = self.config['zindaki']['speaker_mapping'].get(
@@ -1039,32 +870,11 @@ class SpeechManager:
         if force_lang and force_lang != 'auto':
             audio_base64 = text_to_speech_gtts(cleaned_text, force_lang)
         else:
-            # 🔥 ИСПРАВЛЕНИЕ: Если нет явного языка, используем оптимизированную функцию
             audio_base64 = text_to_speech_optimized(cleaned_text, force_lang, voice_type, False, None)
         
         if audio_base64:
             # Добавляем в кэш
             self._add_to_cache(text, lang_for_cache, voice_type, audio_base64)
-        
-        return audio_base64
-    
-    # 🔥 НОВАЯ ФУНКЦИЯ: Генерация речи для билингвальных уроков
-    def generate_bilingual_speech(self, text: str, voice_type: str = 'female') -> Optional[str]:
-        """Генерация речи для билингвальных уроков английского"""
-        self.stats['total_requests'] += 1
-        self.stats['bilingual_lessons'] += 1
-        
-        self.log(f"🎯 Генерация речи для билингвального урока")
-        
-        # Используем специальную билингвальную функцию
-        audio_base64 = text_to_speech_bilingual(text, False, None)
-        
-        if audio_base64:
-            self.log(f"✅ Билингвальная речь сгенерирована успешно")
-        else:
-            self.log(f"❌ Билингвальная генерация не удалась, использую fallback")
-            # Fallback на обычную смешанную озвучку
-            audio_base64 = text_to_speech_mixed(text, False, None)
         
         return audio_base64
     
@@ -1087,13 +897,11 @@ class SpeechManager:
             stats['zindaki_failure_rate'] = (self.stats['zindaki_failed'] / self.stats['total_requests']) * 100
             stats['gtts_fallback_rate'] = (self.stats['gtts_fallback'] / self.stats['total_requests']) * 100
             stats['cache_hit_rate'] = (self.stats['cache_hits'] / self.stats['total_requests']) * 100
-            stats['bilingual_rate'] = (self.stats['bilingual_lessons'] / self.stats['total_requests']) * 100
         else:
             stats['zindaki_success_rate'] = 0
             stats['zindaki_failure_rate'] = 0
             stats['gtts_fallback_rate'] = 0
             stats['cache_hit_rate'] = 0
-            stats['bilingual_rate'] = 0
         
         return stats
     
@@ -1246,8 +1054,7 @@ class SpeechManager:
             'cache_misses': 0,
             'technical_cleaning': 0,
             'standard_cleaning': 0,
-            'mixed_language': 0,
-            'bilingual_lessons': 0
+            'mixed_language': 0
         }
         
         self.log(f"✅ Statistics reset. Old stats: {old_stats}")
@@ -1270,7 +1077,7 @@ def get_speech_manager(socketio=None, config: Optional[Dict] = None) -> SpeechMa
     global _speech_manager_instance
     if _speech_manager_instance is None:
         _speech_manager_instance = SpeechManager(socketio, config)
-        debug_log("✅ SpeechManager инициализирован с поддержкой Zindaki TTS и билингвальных уроков")
+        debug_log("✅ SpeechManager инициализирован с поддержкой Zindaki TTS")
     return _speech_manager_instance
 
 # =============================================================================
@@ -1285,14 +1092,10 @@ def test_speech_functions():
         "Привет, my name is Иван. I am 25 years old.",
         "Уравнение: E = mc²",
         "Просто текст без английских слов",
-        "Слово ok и слово hello в русском тексте",
-        # 🔥 ТЕСТ БИЛИНГВАЛЬНЫХ УРОКОВ
-        "Привет! Hello! Как дела? How are you?",
-        "Hello (Привет), my name is Anna (меня зовут Анна).",
-        "Урок английского языка: Hello — Привет, Goodbye — До свидания"
+        "Слово ok и слово hello в русском тексте"
     ]
     
-    print("🧪 Тестирование SpeechManager с поддержкой билингвальных уроков")
+    print("🧪 Тестирование SpeechManager с Zindaki TTS поддержкой")
     
     manager = SpeechManager()
     
@@ -1300,16 +1103,17 @@ def test_speech_functions():
     print(f"Конфигурация: primary={manager.config['primary']}, enabled={manager.config['enabled']}")
     
     for i, text in enumerate(test_texts, 1):
-        print(f"\nТест {i}: {text[:50]}...")
-        print(f"  Очищенный текст: {manager.clean_text(text)[:50]}...")
-        print(f"  Иностранный текст: {manager.is_foreign(text)}")
-        print(f"  Билингвальный текст: {manager.is_bilingual_text(text)}")
+        print(f"\nТест {i}: {text}")
+        print(f"Очищенный текст: {manager.clean_text(text)}")
+        print(f"Иностранный текст: {manager.is_foreign(text)}")
+        lang, is_foreign = manager.detect_language(text)
+        print(f"Определенный язык: {lang}, Иностранный: {is_foreign}")
         
         # Генерация речи (только для короткого теста)
-        if i <= 3:  # Только первые 3 текста
-            print(f"  Генерация аудио...")
+        if i <= 2:  # Только первые 2 текста
+            print(f"Генерация аудио...")
             audio = manager.generate_optimized_speech(text)
-            print(f"  Аудио сгенерировано: {bool(audio)}")
+            print(f"Аудио сгенерировано: {bool(audio)}")
     
     # Показываем статистику
     print(f"\n📊 Статистика:")
@@ -1323,7 +1127,7 @@ def test_speech_functions():
 # =============================================================================
 
 if __name__ == "__main__":
-    print("🧪 Тестирование speech_manager.py с поддержкой билингвальных уроков")
+    print("🧪 Тестирование speech_manager.py с Zindaki TTS")
     print("=" * 60)
     
     try:
