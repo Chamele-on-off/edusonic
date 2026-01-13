@@ -925,6 +925,8 @@
             color: var(--primary);
         }
         
+        /* Контейнер для удаленных видео - УДАЛЕН */
+        
         /* SVG специфичные стили */
         .svg-diagram-container {
             width: 100%;
@@ -1944,10 +1946,10 @@
             
             <!-- Отладочное окошко - видно только в комнате "default" -->
             <div id="status-container" class="fade-in">
-                <div id="status">Подключение к конференции...</div>
+                <div id="status">Подключение к серверу...</div>
                 <div id="participants">
-                    <i class="fas fa-users"></i>
-                    <span id="participants-count">1</span> участников
+                    <i class="fas fa-user"></i>
+                    <span id="participants-count">1</span> участник
                 </div>
                 <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">😴 Режим покоя</div>
                 <div id="speech-status">🎤 Распознавание: выкл</div>
@@ -1955,12 +1957,15 @@
                 <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
                     <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
                 </div>
+                <div id="subject-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
+                    📚 Предмет: <span style="color: var(--gray);">не выбран</span>
+                </div>
             </div>
             
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
             
             <div class="camera-permission fade-in" id="camera-permission">
-                <p>Разрешите доступ к камере и микрофону для участия в конференции</p>
+                <p>Разрешите доступ к камере и микрофону для участия в уроке</p>
                 <button id="enable-camera-btn">Разрешить доступ</button>
             </div>
             
@@ -1977,6 +1982,10 @@
         <button class="control-btn" id="cam-btn" title="Камера">
             <i class="fas fa-video"></i>
             <span>Вкл</span>
+        </button>
+        <button class="control-btn" id="text-input-btn" title="Текстовый ввод">
+            <i class="fas fa-keyboard"></i>
+            <span>Текст</span>
         </button>
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <i class="fas fa-phone-slash"></i>
@@ -2560,6 +2569,7 @@
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
+        const textInputBtn = document.getElementById('text-input-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsCount = document.getElementById('participants-count');
@@ -3142,7 +3152,7 @@
                                 <i class="fas fa-atom"></i>
                                 <p>Техническая диаграмма<br>будет сгенерирована автоматически</p>
                                 <small>Формулы, схемы, графики</small>
-                        </div>
+                            </div>
                         `;
                     } else if (diagramType === 'science') {
                         placeholderHTML = `
@@ -4429,6 +4439,10 @@
             }
         }
 
+        function toggleTextInput() {
+            setTool('message');
+        }
+
         function endCall() {
             // Закрываем все медиа потоки
             if (localStream) {
@@ -4456,7 +4470,7 @@
             }
         }
 
-        // Инициализация медиа устройств - только для self-view
+        // Инициализация медиа устройств (ТОЛЬКО ДЛЯ SELF-VIEW)
         async function enableCameraAndMicrophone() {
             try {
                 console.log('Запрос доступа к камере и микрофону для self-view...');
@@ -4474,7 +4488,7 @@
                     }
                 });
                 
-                console.log('Медиапоток получен успешно (только для self-view)');
+                console.log('Медиапоток получен успешно');
                 selfVideo.srcObject = localStream;
                 
                 isCamOn = true;
@@ -4486,18 +4500,12 @@
                 micBtn.classList.add('active');
                 micBtn.querySelector('span').textContent = 'Выкл';
                 
-                statusDiv.textContent = 'Камера и микрофон включены (self-view)';
+                statusDiv.textContent = 'Камера и микрофон включены';
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
                 // Инициализируем распознавание речи
                 initSpeechRecognition();
-                
-                // Автоматически активируем AI-учителя после успешного подключения
-                if (socket && socket.connected) {
-                    console.log('✅ Автоматическая активация AI-учителя для комнаты:', roomId);
-                    activateAI();
-                }
                 
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
@@ -4508,27 +4516,6 @@
                 } else {
                     statusDiv.textContent = 'Ошибка доступа к устройствам';
                 }
-            }
-        }
-
-        // Упрощенная активация AI-учителя
-        function activateAI() {
-            if (socket && socket.connected) {
-                console.log('Активация AI-учителя для комнаты:', roomId);
-                
-                socket.emit('activate_ai_teacher', { 
-                    room_id: roomId,
-                    avatar_name: 'teacher' // или другой аватар по умолчанию
-                });
-                
-                // Скрываем кнопку сразу
-                activateAiBtn.style.display = 'none';
-                statusDiv.textContent = 'Активация AI-учителя...';
-                
-                console.log('Запрос активации отправлен');
-            } else {
-                console.error('Socket не подключен, откладываем активацию');
-                setTimeout(activateAI, 1000);
             }
         }
 
@@ -4547,27 +4534,25 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
-                // Присоединяемся к комнате без peer_id
+                // Сразу присоединяемся к комнате
                 socket.emit('join_room', { 
                     room_id: roomId
                 });
                 
-                // Загружаем текущий аватар
+                // Через секунду активируем AI-учителя
                 setTimeout(() => {
                     if (socket) {
-                        socket.emit('get_current_avatar', { room_id: roomId });
+                        socket.emit('activate_ai_teacher', { 
+                            room_id: roomId,
+                            avatar_name: 'teacher'
+                        });
+                        
+                        // Запрашиваем текущий предмет
                         socket.emit('get_current_subject', { room_id: roomId });
                     }
-                }, 500);
+                }, 1000);
 
                 initLlmSystem();
-                
-                // Автоматически активируем AI-учителя после подключения
-                if (devicesEnabled) {
-                    setTimeout(() => {
-                        activateAI();
-                    }, 1000);
-                }
             });
             
             // Обработка присоединения к комнате
@@ -4731,6 +4716,10 @@
                 }
             });
             
+            socket.on('ai_teacher_available', () => {
+                updateActivationButton();
+            });
+            
             socket.on('ai_teacher_activated', () => {
                 aiTeacherActivated = true;
                 aiTeacherWasActivated = true;
@@ -4755,8 +4744,11 @@
                 hideThinkingIndicator();
                 
                 // Показываем кнопку снова для повторной попытки
-                activateAiBtn.style.display = 'block';
-                activateAiBtn.innerHTML = 'Повторить активацию';
+                const button = document.getElementById('activate-ai-btn');
+                if (button) {
+                    button.style.display = 'block';
+                    button.innerHTML = 'Повторить активацию';
+                }
                 
                 // Сбрасываем состояние активации
                 aiTeacherActivated = false;
@@ -5051,19 +5043,68 @@
             }, 5000);
         }
 
-        // Простая инициализация кнопки активации
+        // Упрощенная инициализация кнопки активации
         function initActivateButton() {
             const button = document.getElementById('activate-ai-btn');
             
-            button.addEventListener('click', function(event) {
+            // Убедимся, что кнопка кликабельна
+            button.style.zIndex = '1000';
+            button.style.pointerEvents = 'auto';
+            button.style.position = 'fixed';
+            
+            // Удаляем старые обработчики
+            button.replaceWith(button.cloneNode(true));
+            const newButton = document.getElementById('activate-ai-btn');
+            
+            newButton.addEventListener('click', function(event) {
                 console.log('=== КЛИК ПО КНОПКЕ АКТИВАЦИИ ===');
                 console.log('Room ID:', roomId);
                 
                 event.preventDefault();
                 event.stopPropagation();
                 
-                activateAI();
+                if (socket && socket.connected) {
+                    console.log('✅ Отправка запроса активации для комнаты:', roomId);
+                    socket.emit('activate_ai_teacher', { 
+                        room_id: roomId,
+                        avatar_name: 'teacher'
+                    });
+                    
+                    // Немедленная обратная связь
+                    newButton.style.display = 'none';
+                    statusDiv.textContent = 'Активация AI-учителя...';
+                    
+                    // Таймаут для обработки ошибок активации
+                    setTimeout(() => {
+                        if (socket && !aiTeacherActivated) {
+                            console.warn('⚠️ Активация заняла слишком много времени');
+                            newButton.style.display = 'block';
+                            newButton.innerHTML = 'Повторить активацию';
+                        }
+                    }, 5000);
+                    
+                } else {
+                    console.error('❌ Socket не подключен');
+                    statusDiv.textContent = 'Ошибка: Socket не подключен';
+                }
             });
+        }
+
+        function updateActivationButton() {
+            const button = document.getElementById('activate-ai-btn');
+            if (!button) return;
+            
+            // Если AI уже был активирован, не показываем кнопку
+            if (aiTeacherWasActivated) {
+                button.style.display = 'none';
+                return;
+            }
+            
+            // Показываем кнопку для ручной активации
+            button.style.display = 'block';
+            button.disabled = false;
+            button.innerHTML = 'Activate AI-Teacher';
+            console.log('✅ Кнопка активации готова для комнаты:', roomId);
         }
 
         // Инициализация при загрузке страницы
@@ -5077,20 +5118,15 @@
             initDrawingCanvas();
             initVisualization();
             
-            // Запускаем медиа устройства
+            // Запускаем медиа устройства (только для self-view)
             enableCameraAndMicrophone();
             
-            // Инициализируем кнопку активации
+            // Инициализируем кнопку после небольшой задержки
             setTimeout(() => {
                 initActivateButton();
                 
                 // Инициализация системы технических предметов
                 if (window.technicalProcessor) {
-                    // Запрашиваем текущий предмет у сервера
-                    if (socket) {
-                        socket.emit('get_current_subject', { room_id: roomId });
-                    }
-                    
                     // Инициализируем обработку контента
                     window.technicalProcessor.updateVisualizationForSubject();
                 }
@@ -5161,6 +5197,7 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
+            textInputBtn.addEventListener('click', toggleTextInput);
             endCallBtn.addEventListener('click', endCall);
 
             enableCameraBtn.addEventListener('click', async () => {
@@ -5170,13 +5207,6 @@
             // Apply embedded mode styles if needed
             if (isEmbedded) {
                 document.body.classList.add('embedded');
-                
-                // Auto-activate AI teacher in embedded mode
-                setTimeout(() => {
-                    if (socket) {
-                        socket.emit('activate_ai_teacher', { room_id: roomId });
-                    }
-                }, 2000);
             }
 
             window.addEventListener('message', (event) => {
@@ -5189,16 +5219,6 @@
             setAutoContinueEnabled(false);
         });
 
-        document.addEventListener('fullscreenchange', () => {
-            // Обработка полного экрана
-        });
-
-        window.addEventListener('message', (event) => {
-            if (event.data === 'end_conference') {
-                endCall();
-            }
-        });
-        
         // Глобальный обработчик ошибок загрузки изображений
         document.addEventListener('error', function(e) {
             if (e.target.tagName === 'IMG' && e.target.closest('#slides-viewer')) {
