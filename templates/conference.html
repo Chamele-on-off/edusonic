@@ -5363,18 +5363,8 @@
             console.log('Инициализация PeerJS для комнаты:', roomId);
             
             // Создаем Peer с публичным сервером
-            peer = new Peer({
-                host: '0.peerjs.com',
-                port: 443,
-                path: '/',
-                secure: true,
-                config: {
-                    iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
-                    ]
-                }
-            });
+            peer = null; // Отключаем PeerJS
+            console.log("⚠️ PeerJS отключен из-за проблем с подключением");
 
             peer.on('open', (id) => {
                 console.log('✅ PeerJS подключен с ID:', id, 'для комнаты:', roomId);
