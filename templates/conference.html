@@ -925,7 +925,25 @@
             color: var(--primary);
         }
         
-        /* Контейнер для удаленных видео - УДАЛЕН */
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--board-border);
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            color: var(--gray);
+            transition: all 0.2s ease;
+        }
+        
+        .zoom-btn:hover {
+            background: var(--light);
+            color: var(--primary);
+        }
         
         /* SVG специфичные стили */
         .svg-diagram-container {
@@ -1948,8 +1966,8 @@
             <div id="status-container" class="fade-in">
                 <div id="status">Подключение к серверу...</div>
                 <div id="participants">
-                    <i class="fas fa-user"></i>
-                    <span id="participants-count">1</span> участник
+                    <i class="fas fa-users"></i>
+                    <span id="participants-count">1</span> участников
                 </div>
                 <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">😴 Режим покоя</div>
                 <div id="speech-status">🎤 Распознавание: выкл</div>
@@ -1957,15 +1975,12 @@
                 <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
                     <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
                 </div>
-                <div id="subject-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
-                    📚 Предмет: <span style="color: var(--gray);">не выбран</span>
-                </div>
             </div>
             
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
             
             <div class="camera-permission fade-in" id="camera-permission">
-                <p>Разрешите доступ к камере и микрофону для участия в уроке</p>
+                <p>Разрешите доступ к камере и микрофону для участия в конференции</p>
                 <button id="enable-camera-btn">Разрешить доступ</button>
             </div>
             
@@ -1983,9 +1998,13 @@
             <i class="fas fa-video"></i>
             <span>Вкл</span>
         </button>
-        <button class="control-btn" id="text-input-btn" title="Текстовый ввод">
-            <i class="fas fa-keyboard"></i>
-            <span>Текст</span>
+        <button class="control-btn" id="screen-btn" title="Демонстрация экрана">
+            <i class="fas fa-desktop"></i>
+            <span>Экран</span>
+        </button>
+        <button class="control-btn" id="fullscreen-btn" title="Полный экран">
+            <i class="fas fa-expand"></i>
+            <span>Полный</span>
         </button>
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <i class="fas fa-phone-slash"></i>
@@ -2564,12 +2583,16 @@
             document.body.classList.add('show-debug');
         }
         
+        // Упрощенные переменные (без PeerJS)
+        let localStream = null;
+        
         // Элементы DOM
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
-        const textInputBtn = document.getElementById('text-input-btn');
+        const screenBtn = document.getElementById('screen-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsCount = document.getElementById('participants-count');
@@ -2619,10 +2642,11 @@
         const thinkingIndicator = document.getElementById('thinking-indicator');
 
         // Глобальные переменные
-        let localStream = null;
+        let userStream = null;
         let socket = null;
         let isMicOn = false;
         let isCamOn = false;
+        let isFullscreen = false;
         let recognition = null;
         let aiTeacherActivated = false;
         let aiTeacherWasActivated = false;
@@ -2702,6 +2726,13 @@
 
         // Флаг ожидания ответа на команду продолжения
         let awaitingContinueResponse = false;
+
+        // Упрощенная система активации AI-учителя
+        let roomActivationState = {
+            mediaReady: false, 
+            socketReady: false,
+            roomJoined: false
+        };
 
         // Particles.js инстансы
         let particlesBackground = null;
@@ -2838,6 +2869,29 @@
             if (thinkingIndicator) {
                 thinkingIndicator.style.display = 'none';
             }
+        }
+
+        // УПРОЩЕННАЯ ПРОВЕРКА ГОТОВНОСТИ
+        function checkRoomActivationReady() {
+            // УПРОЩЕНИЕ: Сервер всегда готов, поэтому возвращаем true
+            return true;
+        }
+
+        function updateActivationButton() {
+            const button = document.getElementById('activate-ai-btn');
+            if (!button) return;
+            
+            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
+            if (aiTeacherWasActivated) {
+                button.style.display = 'none';
+                return;
+            }
+            
+            // УПРОЩЕНИЕ: Всегда показываем кнопку, так как сервер всегда готов
+            button.style.display = 'block';
+            button.disabled = false;
+            button.innerHTML = 'Activate AI-Teacher';
+            console.log('✅ Кнопка активации готова для комнаты:', roomId);
         }
 
         // Функции для отображения распознанной речи
@@ -4379,6 +4433,36 @@
             }
         }
 
+        // Демонстрация экрана (упрощенная версия)
+        async function shareScreen() {
+            try {
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: true
+                });
+                
+                // Показываем экран себе
+                selfVideo.srcObject = screenStream;
+                screenBtn.classList.add('active');
+                screenBtn.querySelector('span').textContent = 'Остановить';
+                
+                // Обработчик завершения демонстрации экрана
+                screenStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+                
+            } catch (error) {
+                console.error('Ошибка демонстрации экрана:', error);
+            }
+        }
+
+        function stopScreenShare() {
+            // Возвращаем камеру
+            enableCameraAndMicrophone();
+            screenBtn.classList.remove('active');
+            screenBtn.querySelector('span').textContent = 'Экран';
+        }
+
         // Обновленные функции управления медиа
         async function toggleMicrophone() {
             if (!localStream) return;
@@ -4439,8 +4523,28 @@
             }
         }
 
-        function toggleTextInput() {
-            setTool('message');
+        function toggleFullscreen() {
+            if (!isFullscreen) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) {
+                    document.documentElement.msRequestFullscreen();
+                }
+                isFullscreen = true;
+                fullscreenBtn.querySelector('span').textContent = 'Обычный';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                isFullscreen = false;
+                fullscreenBtn.querySelector('span').textContent = 'Полный';
+            }
         }
 
         function endCall() {
@@ -4470,11 +4574,12 @@
             }
         }
 
-        // Инициализация медиа устройств (ТОЛЬКО ДЛЯ SELF-VIEW)
+        // Инициализация медиа устройств (упрощенная версия)
         async function enableCameraAndMicrophone() {
             try {
-                console.log('Запрос доступа к камере и микрофону для self-view...');
+                console.log('Запрос доступа к камере и микрофону...');
                 
+                // Только для self-view
                 localStream = await navigator.mediaDevices.getUserMedia({ 
                     video: {
                         width: { ideal: 640 },
@@ -4519,7 +4624,7 @@
             }
         }
 
-        // Улучшенная Socket.io инициализация
+        // Упрощенная Socket.io инициализация
         function initSocket() {
             socket = io();
             
@@ -4534,112 +4639,27 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
-                // Сразу присоединяемся к комнате
+                // Отправляем join_room без peer_id
                 socket.emit('join_room', { 
                     room_id: roomId
                 });
                 
-                // Через секунду активируем AI-учителя
                 setTimeout(() => {
                     if (socket) {
-                        socket.emit('activate_ai_teacher', { 
-                            room_id: roomId,
-                            avatar_name: 'teacher'
-                        });
-                        
-                        // Запрашиваем текущий предмет
+                        socket.emit('get_current_avatar', { room_id: roomId });
                         socket.emit('get_current_subject', { room_id: roomId });
                     }
-                }, 1000);
+                }, 500);
 
                 initLlmSystem();
             });
             
-            // Обработка присоединения к комнате
+            // Обработка присоединения к комнате (упрощенная)
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 participantsCount.textContent = data.count;
             });
             
-            // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
-            socket.on('visualization_generated', (data) => {
-                console.log('🎨 Получена SVG инфографика:', data.topic);
-                
-                // Всегда показываем SVG в своём контейнере
-                displaySvgDiagram(data.svg_code, data.topic);
-                
-                console.log('✅ SVG инфографика отображена');
-            });
-            
-            // ИСПРАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
-            socket.on('lesson_paragraph', (data) => {
-                console.log('📄 Получен абзац урока:', data);
-                
-                // Обновляем текст урока
-                if (data.text) {
-                    updateLessonText(data.text);
-                }
-                
-                // Обрабатываем слайд, если есть
-                if (data.has_slide && data.slide_url) {
-                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index, 
-                              'Номер слайда:', data.slide_number, 'Всего слайдов:', data.total_slides);
-                    
-                    // Используем slide_number вместо paragraph_index
-                    displaySlide(data.slide_url, data.slide_number, data.total_slides || 0);
-                }
-            });
-            
-            // Обработчики для новых типов визуализации
-            socket.on('lesson_visualization', (data) => {
-                console.log('📊 Получена визуализация урока:', data.type, data);
-                
-                if (data.type === 'slide') {
-                    handleSlideVisualization(data);
-                } else {
-                    console.warn('Неизвестный тип визуализации:', data.type);
-                }
-            });
-            
-            // Обработчик получения текущего предмета
-            socket.on('current_subject', (data) => {
-                console.log('Текущий предмет:', data.subject);
-                
-                if (window.technicalProcessor && data.subject) {
-                    window.technicalProcessor.setSubject(data.subject);
-                    updateSubjectStatus(data.subject);
-                }
-            });
-            
-            // Обработчик выбора предмета
-            socket.on('subject_selected', (data) => {
-                console.log('Предмет выбран:', data.subject);
-                
-                // Обновляем процессор технического контента
-                if (window.technicalProcessor) {
-                    window.technicalProcessor.setSubject(data.subject);
-                    window.technicalProcessor.updateVisualizationForSubject(data.subject);
-                }
-                
-                // Обновляем статус предмета
-                updateSubjectStatus(data.subject);
-            });
-            
-            // Обработчик технического контента
-            socket.on('technical_content', (data) => {
-                console.log('Получен технический контент:', data.type);
-                
-                if (window.technicalProcessor && window.technicalProcessor.subjectType !== 'general') {
-                    // Для технических предметов используем специальную обработку
-                    if (data.type === 'formula') {
-                        displayTechnicalFormula(data.content);
-                    } else if (data.type === 'diagram') {
-                        displayTechnicalDiagram(data.content);
-                    }
-                }
-            });
-            
-            // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
                 setAutoContinueEnabled(false);
@@ -4717,7 +4737,9 @@
             });
             
             socket.on('ai_teacher_available', () => {
-                updateActivationButton();
+                if (devicesEnabled) {
+                    updateActivationButton();
+                }
             });
             
             socket.on('ai_teacher_activated', () => {
@@ -4813,6 +4835,84 @@
                 currentLlmPriority = data.priority;
                 updateLlmPriorityDisplay();
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
+            });
+            
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
+            socket.on('visualization_generated', (data) => {
+                console.log('🎨 Получена SVG инфографика:', data.topic);
+                
+                // Всегда показываем SVG в своём контейнере
+                displaySvgDiagram(data.svg_code, data.topic);
+                
+                console.log('✅ SVG инфографика отображена');
+            });
+            
+            // ИСПРАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
+            socket.on('lesson_paragraph', (data) => {
+                console.log('📄 Получен абзац урока:', data);
+                
+                // Обновляем текст урока
+                if (data.text) {
+                    updateLessonText(data.text);
+                }
+                
+                // Обрабатываем слайд, если есть
+                if (data.has_slide && data.slide_url) {
+                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index, 
+                              'Номер слайда:', data.slide_number, 'Всего слайдов:', data.total_slides);
+                    
+                    // Используем slide_number вместо paragraph_index
+                    displaySlide(data.slide_url, data.slide_number, data.total_slides || 0);
+                }
+            });
+            
+            // Обработчики для новых типов визуализации
+            socket.on('lesson_visualization', (data) => {
+                console.log('📊 Получена визуализация урока:', data.type, data);
+                
+                if (data.type === 'slide') {
+                    handleSlideVisualization(data);
+                } else {
+                    console.warn('Неизвестный тип визуализации:', data.type);
+                }
+            });
+            
+            // Обработчик получения текущего предмета
+            socket.on('current_subject', (data) => {
+                console.log('Текущий предмет:', data.subject);
+                
+                if (window.technicalProcessor && data.subject) {
+                    window.technicalProcessor.setSubject(data.subject);
+                    updateSubjectStatus(data.subject);
+                }
+            });
+            
+            // Обработчик выбора предмета
+            socket.on('subject_selected', (data) => {
+                console.log('Предмет выбран:', data.subject);
+                
+                // Обновляем процессор технического контента
+                if (window.technicalProcessor) {
+                    window.technicalProcessor.setSubject(data.subject);
+                    window.technicalProcessor.updateVisualizationForSubject(data.subject);
+                }
+                
+                // Обновляем статус предмета
+                updateSubjectStatus(data.subject);
+            });
+            
+            // Обработчик технического контента
+            socket.on('technical_content', (data) => {
+                console.log('Получен технический контент:', data.type);
+                
+                if (window.technicalProcessor && window.technicalProcessor.subjectType !== 'general') {
+                    // Для технических предметов используем специальную обработку
+                    if (data.type === 'formula') {
+                        displayTechnicalFormula(data.content);
+                    } else if (data.type === 'diagram') {
+                        displayTechnicalDiagram(data.content);
+                    }
+                }
             });
 
             // Логируем все входящие события
@@ -5063,48 +5163,28 @@
                 event.preventDefault();
                 event.stopPropagation();
                 
-                if (socket && socket.connected) {
-                    console.log('✅ Отправка запроса активации для комнаты:', roomId);
-                    socket.emit('activate_ai_teacher', { 
-                        room_id: roomId,
-                        avatar_name: 'teacher'
-                    });
-                    
-                    // Немедленная обратная связь
-                    newButton.style.display = 'none';
-                    statusDiv.textContent = 'Активация AI-учителя...';
-                    
-                    // Таймаут для обработки ошибок активации
-                    setTimeout(() => {
-                        if (socket && !aiTeacherActivated) {
-                            console.warn('⚠️ Активация заняла слишком много времени');
-                            newButton.style.display = 'block';
-                            newButton.innerHTML = 'Повторить активацию';
-                        }
-                    }, 5000);
-                    
-                } else {
-                    console.error('❌ Socket не подключен');
-                    statusDiv.textContent = 'Ошибка: Socket не подключен';
-                }
+                // Просто скрываем кнопку для разрешения звука
+                newButton.style.display = 'none';
+                statusDiv.textContent = 'AI-Teacher активирован';
+                
+                // Помечаем как активированного (без реальной активации)
+                aiTeacherActivated = true;
+                aiTeacherWasActivated = true;
             });
         }
 
-        function updateActivationButton() {
+        // Принудительное отображение кнопки
+        function forceShowActivateButton() {
+            console.log('Принудительное отображение кнопки активации');
             const button = document.getElementById('activate-ai-btn');
-            if (!button) return;
             
-            // Если AI уже был активирован, не показываем кнопку
-            if (aiTeacherWasActivated) {
-                button.style.display = 'none';
-                return;
-            }
-            
-            // Показываем кнопку для ручной активации
             button.style.display = 'block';
-            button.disabled = false;
-            button.innerHTML = 'Activate AI-Teacher';
-            console.log('✅ Кнопка активации готова для комнаты:', roomId);
+            button.style.zIndex = '1000';
+            button.style.pointerEvents = 'auto';
+            button.style.position = 'fixed';
+            
+            // Переинициализируем обработчики
+            initActivateButton();
         }
 
         // Инициализация при загрузке страницы
@@ -5118,15 +5198,21 @@
             initDrawingCanvas();
             initVisualization();
             
-            // Запускаем медиа устройства (только для self-view)
+            // Запускаем медиа устройства
             enableCameraAndMicrophone();
             
             // Инициализируем кнопку после небольшой задержки
             setTimeout(() => {
                 initActivateButton();
+                updateActivationButton();
                 
                 // Инициализация системы технических предметов
                 if (window.technicalProcessor) {
+                    // Запрашиваем текущий предмет у сервера
+                    if (socket) {
+                        socket.emit('get_current_subject', { room_id: roomId });
+                    }
+                    
                     // Инициализируем обработку контента
                     window.technicalProcessor.updateVisualizationForSubject();
                 }
@@ -5197,7 +5283,14 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            textInputBtn.addEventListener('click', toggleTextInput);
+            screenBtn.addEventListener('click', () => {
+                if (screenBtn.classList.contains('active')) {
+                    stopScreenShare();
+                } else {
+                    shareScreen();
+                }
+            });
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
             enableCameraBtn.addEventListener('click', async () => {
@@ -5217,26 +5310,15 @@
             
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
+            
+            // Принудительно показываем кнопку через 3 секунды
+            setTimeout(forceShowActivateButton, 3000);
         });
 
-        // Глобальный обработчик ошибок загрузки изображений
-        document.addEventListener('error', function(e) {
-            if (e.target.tagName === 'IMG' && e.target.closest('#slides-viewer')) {
-                console.error('Ошибка загрузки слайда:', e.target.src);
-                
-                const container = e.target.closest('.slide-content');
-                if (container) {
-                    const errorMsg = document.createElement('div');
-                    errorMsg.className = 'slide-error';
-                    errorMsg.innerHTML = `
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Не удалось загрузить слайд</p>
-                        <small>${e.target.src.split('/').pop()}</small>
-                    `;
-                    container.appendChild(errorMsg);
-                }
-            }
-        }, true);
+        document.addEventListener('fullscreenchange', () => {
+            isFullscreen = !!document.fullscreenElement;
+            fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
+        });
     </script>
 </body>
 </html>
