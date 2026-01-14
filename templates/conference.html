@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <!-- PeerJS удален -->
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <style>
         :root {
@@ -925,7 +926,14 @@
             color: var(--primary);
         }
         
-        /* Контейнер для удаленных видео - УДАЛЕН */
+        /* Контейнер для удаленных видео - СКРЫВАЕМ, ТАК КАК PEERJS УДАЛЕН */
+        #remote-videos-container {
+            display: none !important;
+        }
+        
+        .remote-video-container {
+            display: none !important;
+        }
         
         /* SVG специфичные стили */
         .svg-diagram-container {
@@ -1749,6 +1757,9 @@
                 <p id="speech-text"></p>
             </div>
             
+            <!-- Контейнер для удаленных видео - СКРЫТ -->
+            <div id="remote-videos-container"></div>
+            
             <!-- Индикатор статуса LLM -->
             <div id="llm-status" class="llm-status-indicator">
                 <i class="fas fa-robot"></i>
@@ -1946,10 +1957,10 @@
             
             <!-- Отладочное окошко - видно только в комнате "default" -->
             <div id="status-container" class="fade-in">
-                <div id="status">Подключение к серверу...</div>
+                <div id="status">Подключение к конференции...</div>
                 <div id="participants">
-                    <i class="fas fa-user"></i>
-                    <span id="participants-count">1</span> участник
+                    <i class="fas fa-users"></i>
+                    <span id="participants-count">1</span> участников
                 </div>
                 <div id="animation-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">😴 Режим покоя</div>
                 <div id="speech-status">🎤 Распознавание: выкл</div>
@@ -1957,16 +1968,12 @@
                 <div id="llm-priority-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
                     <i class="fas fa-brain"></i> LLM: <span id="llm-priority-text">Загрузка...</span>
                 </div>
-                <div id="subject-status" style="font-size: 12px; margin-top: 5px; color: var(--gray);">
-                    📚 Предмет: <span style="color: var(--gray);">не выбран</span>
-                </div>
             </div>
             
-            <!-- Кнопка для отправки "привет" на сервер -->
             <button id="activate-ai-btn" class="fade-in">Activate AI-Teacher</button>
             
             <div class="camera-permission fade-in" id="camera-permission">
-                <p>Разрешите доступ к камере и микрофону для участия в уроке</p>
+                <p>Разрешите доступ к камере и микрофону для участия в конференции</p>
                 <button id="enable-camera-btn">Разрешить доступ</button>
             </div>
             
@@ -1984,9 +1991,13 @@
             <i class="fas fa-video"></i>
             <span>Вкл</span>
         </button>
-        <button class="control-btn" id="text-input-btn" title="Текстовый ввод">
-            <i class="fas fa-keyboard"></i>
-            <span>Текст</span>
+        <button class="control-btn" id="screen-btn" title="Демонстрация экрана">
+            <i class="fas fa-desktop"></i>
+            <span>Экран</span>
+        </button>
+        <button class="control-btn" id="fullscreen-btn" title="Полный экран">
+            <i class="fas fa-expand"></i>
+            <span>Полный</span>
         </button>
         <button class="control-btn" id="end-call-btn" title="Выйти">
             <i class="fas fa-phone-slash"></i>
@@ -2565,12 +2576,17 @@
             document.body.classList.add('show-debug');
         }
         
+        // PeerJS УДАЛЕН - больше нет переменных для peer
+        let localStream = null;
+        
         // Элементы DOM
         const teacherVideo = document.getElementById('teacher-video');
         const selfVideo = document.getElementById('self-video');
+        const remoteVideosContainer = document.getElementById('remote-videos-container');
         const micBtn = document.getElementById('mic-btn');
         const camBtn = document.getElementById('cam-btn');
-        const textInputBtn = document.getElementById('text-input-btn');
+        const screenBtn = document.getElementById('screen-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
         const endCallBtn = document.getElementById('end-call-btn');
         const statusDiv = document.getElementById('status');
         const participantsCount = document.getElementById('participants-count');
@@ -2620,10 +2636,11 @@
         const thinkingIndicator = document.getElementById('thinking-indicator');
 
         // Глобальные переменные
-        let localStream = null;
+        let userStream = null;
         let socket = null;
         let isMicOn = false;
         let isCamOn = false;
+        let isFullscreen = false;
         let recognition = null;
         let aiTeacherActivated = false;
         let aiTeacherWasActivated = false;
@@ -2704,27 +2721,17 @@
         // Флаг ожидания ответа на команду продолжения
         let awaitingContinueResponse = false;
 
+        // Упрощенная система активации AI-учителя
+        let roomActivationState = {
+            peerReady: true, // Теперь всегда true, так как PeerJS удален
+            mediaReady: false, 
+            socketReady: false,
+            roomJoined: false
+        };
+
         // Particles.js инстансы
         let particlesBackground = null;
         let thinkingIndicatorTimeout = null;
-        
-        // ФИКС: Переменная для отслеживания инициализации аудиоконтекста
-        let audioContextInitialized = false;
-
-        // ФИКС: Функция инициализации аудиоконтекста
-        function initializeAudioContext() {
-            if (audioContextInitialized) return;
-            
-            // Создаём временный аудиоэлемент и проигрываем тишину
-            const audio = new Audio();
-            audio.volume = 0;
-            audio.play().then(() => {
-                console.log('✅ Аудиоконтекст разблокирован');
-                audioContextInitialized = true;
-            }).catch(e => {
-                console.warn('⚠️ Не удалось разблокировать аудио:', e);
-            });
-        }
 
         // Инициализация частиц фона
         function initParticlesBackground() {
@@ -2857,6 +2864,29 @@
             if (thinkingIndicator) {
                 thinkingIndicator.style.display = 'none';
             }
+        }
+
+        // УПРОЩЕННАЯ ПРОВЕРКА ГОТОВНОСТИ - ВСЕГДА ВОЗВРАЩАЕТ TRUE
+        function checkRoomActivationReady() {
+            // УПРОЩЕНИЕ: Сервер всегда готов, поэтому возвращаем true
+            return true;
+        }
+
+        function updateActivationButton() {
+            const button = document.getElementById('activate-ai-btn');
+            if (!button) return;
+            
+            // ВАЖНОЕ ИЗМЕНЕНИЕ: если AI уже был активирован, не показываем кнопку
+            if (aiTeacherWasActivated) {
+                button.style.display = 'none';
+                return;
+            }
+            
+            // УПРОЩЕНИЕ: Всегда показываем кнопку, так как сервер всегда готов
+            button.style.display = 'block';
+            button.disabled = false;
+            button.innerHTML = 'Activate AI-Teacher';
+            console.log('✅ Кнопка активации готова для комнаты:', roomId);
         }
 
         // Функции для отображения распознанной речи
@@ -3171,6 +3201,7 @@
                                 <i class="fas fa-atom"></i>
                                 <p>Техническая диаграмма<br>будет сгенерирована автоматически</p>
                                 <small>Формулы, схемы, графики</small>
+                        </div>
                         `;
                     } else if (diagramType === 'science') {
                         placeholderHTML = `
@@ -4004,41 +4035,555 @@
             stopAnimation();
         }
 
-        // ФИКС: Улучшенная функция воспроизведения аудио
         function playAudio(base64Audio) {
             try {
-                // Всегда вызываем инициализацию аудиоконтекста перед воспроизведением
-                if (!audioContextInitialized) {
-                    console.log('⚠️ Аудиоконтекст не инициализирован, пытаемся разблокировать...');
-                    initializeAudioContext();
-                }
-                
-                const format = base64Audio.startsWith('UklGR') ? 'wav' : 'mp3';
-                const mimeType = format === 'wav' ? 'audio/wav' : 'audio/mpeg';
-                const audio = new Audio(`data:${mimeType};base64,${base64Audio}`);
-                
-                // Гарантируем воспроизведение
-                const playPromise = audio.play();
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            console.log('✅ Аудио воспроизведено успешно');
-                        })
-                        .catch(error => {
-                            console.error('❌ Ошибка воспроизведения аудио:', error);
-                            showTeacherSpeech("(Аудио сообщение)");
-                        });
+                if (isIOS) {
+                    playAudioForIOS(base64Audio);
+                } else {
+                    const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+                    audio.preload = 'auto';
+                    
+                    audioQueue.push(audio);
+                    playNextAudio();
                 }
             } catch (error) {
-                console.error('❌ Ошибка создания аудио:', error);
-                showTeacherSpeech("(Аудио сообщение)");
+                console.error('Ошибка воспроизведения аудио:', error);
             }
         }
 
-        // Инициализация медиа устройств (ТОЛЬКО ДЛЯ SELF-VIEW)
+        // Функции инициализации
+        function initDrawingCanvas() {
+            const resizeCanvas = () => {
+                drawingCanvas.width = drawingCanvas.offsetWidth;
+                drawingCanvas.height = drawingCanvas.offsetHeight;
+                
+                if (drawingCtx) {
+                    drawingCtx.lineWidth = isEraser ? 20 : 3;
+                    drawingCtx.lineCap = 'round';
+                    drawingCtx.lineJoin = 'round';
+                    drawingCtx.strokeStyle = isEraser ? '#F5F6F8' : currentColor;
+                }
+            };
+            
+            resizeCanvas();
+            
+            drawingCtx = drawingCanvas.getContext('2d');
+            drawingCtx.lineWidth = 3;
+            drawingCtx.lineCap = 'round';
+            drawingCtx.lineJoin = 'round';
+            drawingCtx.strokeStyle = currentColor;
+            
+            if (isIOS) {
+                drawingCanvas.style.touchAction = 'none';
+                drawingCanvas.style.webkitUserSelect = 'none';
+                drawingCanvas.style.webkitTouchCallout = 'none';
+            }
+            
+            drawingCanvas.addEventListener('mousedown', startDrawing);
+            drawingCanvas.addEventListener('mousemove', draw);
+            drawingCanvas.addEventListener('mouseup', stopDrawing);
+            drawingCanvas.addEventListener('mouseout', stopDrawing);
+            
+            drawingCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            drawingCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            drawingCanvas.addEventListener('touchend', handleTouchEnd);
+            
+            window.addEventListener('resize', resizeCanvas);
+        }
+
+        function isDrawingWindowVisible() {
+            return isDrawingWindowOpen && 
+                   drawingWindow.style.display === 'block' &&
+                   drawingWindow.offsetWidth > 0 &&
+                   drawingWindow.offsetHeight > 0;
+        }
+
+        function getCanvasCoordinates(e) {
+            const rect = drawingCanvas.getBoundingClientRect();
+            const scaleX = drawingCanvas.width / rect.width;
+            const scaleY = drawingCanvas.height / rect.height;
+            
+            let clientX, clientY;
+            
+            if (e.type.includes('touch')) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        function startDrawing(e) {
+            if (!isDrawingWindowVisible()) return;
+            
+            isDrawing = true;
+            const coords = getCanvasCoordinates(e);
+            lastX = coords.x;
+            lastY = coords.y;
+            
+            drawingCtx.beginPath();
+            drawingCtx.moveTo(lastX, lastY);
+            
+            e.preventDefault();
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const coords = getCanvasCoordinates(e);
+            const currentX = coords.x;
+            const currentY = coords.y;
+            
+            drawingCtx.lineTo(currentX, currentY);
+            drawingCtx.stroke();
+            
+            lastX = currentX;
+            lastY = currentY;
+            
+            e.preventDefault();
+        }
+
+        function stopDrawing() {
+            if (!isDrawing) return;
+            
+            isDrawing = false;
+            drawingCtx.closePath();
+        }
+
+        function handleTouchStart(e) {
+            if (!isDrawingWindowVisible()) return;
+            
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const customEvent = {
+                type: 'mousedown',
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                target: drawingCanvas
+            };
+            
+            startDrawing(customEvent);
+        }
+
+        function handleTouchMove(e) {
+            if (!isDrawing || !isDrawingWindowVisible()) return;
+            
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const customEvent = {
+                type: 'mousemove',
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                target: drawingCanvas
+            };
+            
+            draw(customEvent);
+        }
+
+        function handleTouchEnd() {
+            if (!isDrawing) return;
+            
+            stopDrawing();
+        }
+
+        function clearDrawing() {
+            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+        }
+
+        function setDrawingTool(tool) {
+            currentTool = tool;
+            isEraser = (tool === 'eraser');
+            
+            document.getElementById('drawing-pen').classList.remove('active');
+            document.getElementById('drawing-eraser').classList.remove('active');
+            
+            if (tool === 'pen') {
+                document.getElementById('drawing-pen').classList.add('active');
+                drawingCtx.lineWidth = 3;
+                drawingCtx.strokeStyle = currentColor;
+                drawingCtx.globalCompositeOperation = 'source-over';
+            } else if (tool === 'eraser') {
+                document.getElementById('drawing-eraser').classList.add('active');
+                drawingCtx.lineWidth = 20;
+                drawingCtx.strokeStyle = '#F5F6F8';
+                drawingCtx.globalCompositeOperation = 'destination-out';
+            }
+        }
+
+        function initWindowDragging() {
+            function initDragForWindow(windowElement) {
+                const header = windowElement.querySelector('.window-header');
+                
+                header.addEventListener('mousedown', startDragWindow);
+                header.addEventListener('touchstart', startDragWindow, { passive: false });
+                
+                header.addEventListener('touchstart', (e) => {
+                    e.stopPropagation();
+                });
+                header.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                });
+                
+                function startDragWindow(e) {
+                    isDraggingWindow = true;
+                    currentDraggedWindow = windowElement;
+                    
+                    const rect = windowElement.getBoundingClientRect();
+                    if (e.type === 'mousedown') {
+                        dragOffsetX = e.clientX - rect.left;
+                        dragOffsetY = e.clientY - rect.top;
+                    } else {
+                        dragOffsetX = e.touches[0].clientX - rect.left;
+                        dragOffsetY = e.touches[0].clientY - rect.top;
+                        e.preventDefault();
+                    }
+                    
+                    document.addEventListener('mousemove', dragWindow);
+                    document.addEventListener('touchmove', dragWindow, { passive: false });
+                    document.addEventListener('mouseup', stopDragWindow);
+                    document.addEventListener('touchend', stopDragWindow);
+                }
+            }
+            
+            function dragWindow(e) {
+                if (!isDraggingWindow || !currentDraggedWindow) return;
+                
+                let clientX, clientY;
+                if (e.type === 'mousemove') {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                } else {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                    e.preventDefault();
+                }
+                
+                const newX = clientX - dragOffsetX;
+                const newY = clientY - dragOffsetY;
+                
+                const maxX = window.innerWidth - currentDraggedWindow.offsetWidth;
+                const maxY = window.innerHeight - currentDraggedWindow.offsetHeight;
+                
+                currentDraggedWindow.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+                currentDraggedWindow.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+                currentDraggedWindow.style.transform = 'none';
+            }
+            
+            function stopDragWindow() {
+                isDraggingWindow = false;
+                currentDraggedWindow = null;
+                document.removeEventListener('mousemove', dragWindow);
+                document.removeEventListener('touchmove', dragWindow);
+                document.removeEventListener('mouseup', stopDragWindow);
+                document.removeEventListener('touchend', stopDragWindow);
+            }
+            
+            initDragForWindow(lessonContent);
+            initDragForWindow(drawingWindow);
+            initDragForWindow(visualizationWindow);
+            initDragForWindow(messageWindow);
+        }
+
+        // Исправленная функция setTool
+        function setTool(tool) {
+            console.log('🛠️ Активация инструмента:', tool);
+            
+            // Сбрасываем активность всех кнопок
+            textToolBtn.classList.remove('active');
+            drawToolBtn.classList.remove('active');
+            messageToolBtn.classList.remove('active');
+            visualizationToolBtn.classList.remove('active');
+            
+            if (tool === 'text') {
+                textToolBtn.classList.add('active');
+                lessonContent.style.display = 'block';
+                bringWindowToFront(lessonContent);
+                console.log('📝 Активирована текстовая доска');
+            } 
+            else if (tool === 'draw') {
+                drawToolBtn.classList.add('active');
+                drawingWindow.style.display = 'block';
+                isDrawingWindowOpen = true;
+                bringWindowToFront(drawingWindow);
+                
+                setTimeout(() => {
+                    const rect = drawingCanvas.getBoundingClientRect();
+                    drawingCanvas.width = rect.width;
+                    drawingCanvas.height = rect.height;
+                }, 50);
+                console.log('🎨 Активировано окно рисования');
+            } 
+            else if (tool === 'message') {
+                messageToolBtn.classList.add('active');
+                messageWindow.style.display = 'block';
+                isMessageWindowOpen = true;
+                bringWindowToFront(messageWindow);
+                messageText.focus();
+                console.log('💬 Активировано окно сообщений');
+            } 
+            else if (tool === 'visualization') {
+                visualizationToolBtn.classList.add('active');
+                visualizationWindow.style.display = 'block';
+                isVisualizationWindowOpen = true;
+                bringWindowToFront(visualizationWindow);
+                console.log('📊 Активировано окно визуализации');
+            }
+        }
+
+        // Безопасная активация инструментов
+        function ensureLessonWindowVisible() {
+            // Гарантируем, что окно урока всегда видимо во время урока
+            if (isLessonActive && lessonContent.style.display === 'none') {
+                lessonContent.style.display = 'block';
+                console.log('🔧 Восстановлено окно урока');
+            }
+        }
+
+        function safeToolActivation(tool) {
+            ensureLessonWindowVisible();
+            setTool(tool);
+        }
+
+        function sendMessage() {
+            const message = messageText.value.trim();
+            if (message) {
+                // При отправке сообщения приостанавливаем автопродолжение
+                autoContinuePaused = true;
+                setAutoContinueEnabled(false);
+                
+                if (socket) {
+                    socket.emit('student_message', {
+                        room_id: roomId,
+                        message: message
+                    });
+                }
+                messageText.value = '';
+                setTool('text');
+                showStudentSpeech(message, 'me');
+            }
+        }
+
+        function cancelMessage() {
+            messageText.value = '';
+            setTool('text');
+        }
+
+        function initZoom() {
+            let lessonScale = 1;
+            const zoomInBtn = document.getElementById('zoom-in');
+            const zoomOutBtn = document.getElementById('zoom-out');
+            const zoomResetBtn = document.getElementById('zoom-reset');
+            
+            zoomInBtn.addEventListener('click', () => {
+                lessonScale = Math.min(lessonScale + 0.1, 2);
+                updateLessonZoom();
+            });
+            
+            zoomOutBtn.addEventListener('click', () => {
+                lessonScale = Math.max(lessonScale - 0.1, 0.5);
+                updateLessonZoom();
+            });
+            
+            zoomResetBtn.addEventListener('click', () => {
+                lessonScale = 1;
+                updateLessonZoom();
+            });
+            
+            function updateLessonZoom() {
+                lessonCanvas.style.transform = `scale(${lessonScale})`;
+                lessonCanvas.style.transformOrigin = 'center center';
+            }
+            
+            let drawingScale = 1;
+            const drawingZoomInBtn = document.getElementById('drawing-zoom-in');
+            const drawingZoomOutBtn = document.getElementById('drawing-zoom-out');
+            const drawingZoomResetBtn = document.getElementById('drawing-zoom-reset');
+            
+            drawingZoomInBtn.addEventListener('click', () => {
+                drawingScale = Math.min(drawingScale + 0.1, 2);
+                updateDrawingZoom();
+            });
+            
+            drawingZoomOutBtn.addEventListener('click', () => {
+                drawingScale = Math.max(drawingScale - 0.1, 0.5);
+                updateDrawingZoom();
+            });
+            
+            drawingZoomResetBtn.addEventListener('click', () => {
+                drawingScale = 1;
+                updateDrawingZoom();
+            });
+            
+            function updateDrawingZoom() {
+                drawingCanvas.style.transform = `scale(${drawingScale})`;
+                drawingCanvas.style.transformOrigin = 'center center';
+            }
+        }
+
+        // Демонстрация экрана
+        async function shareScreen() {
+            try {
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: true
+                });
+                
+                // Заменяем локальный поток на экран
+                if (localStream) {
+                    localStream.getTracks().forEach(track => track.stop());
+                }
+                
+                localStream = screenStream;
+                selfVideo.srcObject = screenStream;
+                
+                screenBtn.classList.add('active');
+                screenBtn.querySelector('span').textContent = 'Остановить';
+                
+                // Обработчик завершения демонстрации экрана
+                screenStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+                
+            } catch (error) {
+                console.error('Ошибка демонстрации экрана:', error);
+            }
+        }
+
+        function stopScreenShare() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Возвращаем камеру
+            enableCameraAndMicrophone();
+            
+            screenBtn.classList.remove('active');
+            screenBtn.querySelector('span').textContent = 'Экран';
+        }
+
+        // Обновленные функции управления медиа
+        async function toggleMicrophone() {
+            if (!localStream) return;
+            
+            const audioTracks = localStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const newState = !audioTracks[0].enabled;
+                audioTracks[0].enabled = newState;
+                
+                isMicOn = newState;
+                if (newState) {
+                    micBtn.classList.add('active');
+                    micBtn.querySelector('span').textContent = 'Выкл';
+                    statusDiv.textContent = 'Микрофон включен';
+                    
+                    // Запускаем распознавание речи при включении микрофона
+                    if (recognition) {
+                        setTimeout(() => {
+                            recognition.start();
+                            updateSpeechStatus(true);
+                        }, 500);
+                    }
+                } else {
+                    micBtn.classList.remove('active');
+                    micBtn.querySelector('span').textContent = 'Вкл';
+                    statusDiv.textContent = 'Микрофон выключен';
+                    
+                    // Останавливаем распознавание речи при выключении микрофона
+                    if (recognition) {
+                        recognition.stop();
+                        updateSpeechStatus(false);
+                        hideSpeechDisplay();
+                    }
+                }
+            }
+        }
+
+        async function toggleCamera() {
+            if (!localStream) return;
+            
+            const videoTracks = localStream.getVideoTracks();
+            if (videoTracks.length > 0) {
+                const newState = !videoTracks[0].enabled;
+                videoTracks[0].enabled = newState;
+                
+                isCamOn = newState;
+                if (newState) {
+                    camBtn.classList.add('active');
+                    camBtn.querySelector('span').textContent = 'Выкл';
+                    statusDiv.textContent = 'Камера включена';
+                    document.getElementById('self-video-container').style.display = 'block';
+                } else {
+                    camBtn.classList.remove('active');
+                    camBtn.querySelector('span').textContent = 'Вкл';
+                    statusDiv.textContent = 'Камера выключена';
+                    document.getElementById('self-video-container').style.display = 'none';
+                }
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!isFullscreen) {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                } else if (document.documentElement.webkitRequestFullscreen) {
+                    document.documentElement.webkitRequestFullscreen();
+                } else if (document.documentElement.msRequestFullscreen) {
+                    document.documentElement.msRequestFullscreen();
+                }
+                isFullscreen = true;
+                fullscreenBtn.querySelector('span').textContent = 'Обычный';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                isFullscreen = false;
+                fullscreenBtn.querySelector('span').textContent = 'Полный';
+            }
+        }
+
+        function endCall() {
+            // Закрываем все медиа потоки
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            if (recognition) {
+                recognition.stop();
+            }
+            
+            stopAnimation();
+            setAutoContinueEnabled(false);
+            hideSpeechDisplay();
+            hideThinkingIndicator();
+            
+            if (socket) {
+                socket.emit('leave_room', { room_id: roomId });
+                socket.disconnect();
+            }
+            
+            if (isEmbedded) {
+                window.parent.postMessage('conference_ended', '*');
+            } else {
+                window.location.href = '/';
+            }
+        }
+
+        // Инициализация медиа устройств
         async function enableCameraAndMicrophone() {
             try {
-                console.log('Запрос доступа к камере и микрофону для self-view...');
+                console.log('Запрос доступа к камере и микрофону...');
                 
                 localStream = await navigator.mediaDevices.getUserMedia({ 
                     video: {
@@ -4068,9 +4613,6 @@
                 statusDiv.textContent = 'Камера и микрофон включены';
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
-                
-                // ФИКС: Инициализируем аудиоконтекст при первом взаимодействии
-                initializeAudioContext();
                 
                 // Инициализируем распознавание речи
                 initSpeechRecognition();
@@ -4102,23 +4644,18 @@
                 statusDiv.textContent = 'Подключено к серверу';
                 console.log('✅ WebSocket подключен для комнаты:', roomId);
                 
-                // Сразу присоединяемся к комнате
+                // PeerJS удален, поэтому просто отправляем join_room
                 socket.emit('join_room', { 
-                    room_id: roomId
+                    room_id: roomId,
+                    peer_id: null // PeerJS удален
                 });
                 
-                // Через секунду активируем AI-учителя
                 setTimeout(() => {
                     if (socket) {
-                        socket.emit('activate_ai_teacher', { 
-                            room_id: roomId,
-                            avatar_name: 'teacher'
-                        });
-                        
-                        // Запрашиваем текущий предмет
+                        socket.emit('get_current_avatar', { room_id: roomId });
                         socket.emit('get_current_subject', { room_id: roomId });
                     }
-                }, 1000);
+                }, 500);
 
                 initLlmSystem();
             });
@@ -4129,85 +4666,8 @@
                 participantsCount.textContent = data.count;
             });
             
-            // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
-            socket.on('visualization_generated', (data) => {
-                console.log('🎨 Получена SVG инфографика:', data.topic);
-                
-                // Всегда показываем SVG в своём контейнере
-                displaySvgDiagram(data.svg_code, data.topic);
-                
-                console.log('✅ SVG инфографика отображена');
-            });
+            // УДАЛЕНО: обработчики для peer_id, так как PeerJS удален
             
-            // ИСПРАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
-            socket.on('lesson_paragraph', (data) => {
-                console.log('📄 Получен абзац урока:', data);
-                
-                // Обновляем текст урока
-                if (data.text) {
-                    updateLessonText(data.text);
-                }
-                
-                // Обрабатываем слайд, если есть
-                if (data.has_slide && data.slide_url) {
-                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index, 
-                              'Номер слайда:', data.slide_number, 'Всего слайдов:', data.total_slides);
-                    
-                    // Используем slide_number вместо paragraph_index
-                    displaySlide(data.slide_url, data.slide_number, data.total_slides || 0);
-                }
-            });
-            
-            // Обработчики для новых типов визуализации
-            socket.on('lesson_visualization', (data) => {
-                console.log('📊 Получена визуализация урока:', data.type, data);
-                
-                if (data.type === 'slide') {
-                    handleSlideVisualization(data);
-                } else {
-                    console.warn('Неизвестный тип визуализации:', data.type);
-                }
-            });
-            
-            // Обработчик получения текущего предмета
-            socket.on('current_subject', (data) => {
-                console.log('Текущий предмет:', data.subject);
-                
-                if (window.technicalProcessor && data.subject) {
-                    window.technicalProcessor.setSubject(data.subject);
-                    updateSubjectStatus(data.subject);
-                }
-            });
-            
-            // Обработчик выбора предмета
-            socket.on('subject_selected', (data) => {
-                console.log('Предмет выбран:', data.subject);
-                
-                // Обновляем процессор технического контента
-                if (window.technicalProcessor) {
-                    window.technicalProcessor.setSubject(data.subject);
-                    window.technicalProcessor.updateVisualizationForSubject(data.subject);
-                }
-                
-                // Обновляем статус предмета
-                updateSubjectStatus(data.subject);
-            });
-            
-            // Обработчик технического контента
-            socket.on('technical_content', (data) => {
-                console.log('Получен технический контент:', data.type);
-                
-                if (window.technicalProcessor && window.technicalProcessor.subjectType !== 'general') {
-                    // Для технических предметов используем специальную обработку
-                    if (data.type === 'formula') {
-                        displayTechnicalFormula(data.content);
-                    } else if (data.type === 'diagram') {
-                        displayTechnicalDiagram(data.content);
-                    }
-                }
-            });
-            
-            // Остальные обработчики
             socket.on('disconnect', () => {
                 statusDiv.textContent = 'Отключено от сервера';
                 setAutoContinueEnabled(false);
@@ -4285,7 +4745,9 @@
             });
             
             socket.on('ai_teacher_available', () => {
-                updateActivationButton();
+                if (devicesEnabled) {
+                    updateActivationButton();
+                }
             });
             
             socket.on('ai_teacher_activated', () => {
@@ -4381,6 +4843,84 @@
                 currentLlmPriority = data.priority;
                 updateLlmPriorityDisplay();
                 updateLlmStatus(`Приоритет: ${getPriorityName(data.priority)}`, 'success');
+            });
+            
+            // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
+            socket.on('visualization_generated', (data) => {
+                console.log('🎨 Получена SVG инфографика:', data.topic);
+                
+                // Всегда показываем SVG в своём контейнере
+                displaySvgDiagram(data.svg_code, data.topic);
+                
+                console.log('✅ SVG инфографика отображена');
+            });
+            
+            // ИСПРАВЛЕННЫЙ ОБРАБОТЧИК ДЛЯ СЛАЙДОВ УРОКА
+            socket.on('lesson_paragraph', (data) => {
+                console.log('📄 Получен абзац урока:', data);
+                
+                // Обновляем текст урока
+                if (data.text) {
+                    updateLessonText(data.text);
+                }
+                
+                // Обрабатываем слайд, если есть
+                if (data.has_slide && data.slide_url) {
+                    console.log('🖼️ Отображение слайда для абзаца:', data.paragraph_index, 
+                              'Номер слайда:', data.slide_number, 'Всего слайдов:', data.total_slides);
+                    
+                    // Используем slide_number вместо paragraph_index
+                    displaySlide(data.slide_url, data.slide_number, data.total_slides || 0);
+                }
+            });
+            
+            // Обработчики для новых типов визуализации
+            socket.on('lesson_visualization', (data) => {
+                console.log('📊 Получена визуализация урока:', data.type, data);
+                
+                if (data.type === 'slide') {
+                    handleSlideVisualization(data);
+                } else {
+                    console.warn('Неизвестный тип визуализации:', data.type);
+                }
+            });
+            
+            // Обработчик получения текущего предмета
+            socket.on('current_subject', (data) => {
+                console.log('Текущий предмет:', data.subject);
+                
+                if (window.technicalProcessor && data.subject) {
+                    window.technicalProcessor.setSubject(data.subject);
+                    updateSubjectStatus(data.subject);
+                }
+            });
+            
+            // Обработчик выбора предмета
+            socket.on('subject_selected', (data) => {
+                console.log('Предмет выбран:', data.subject);
+                
+                // Обновляем процессор технического контента
+                if (window.technicalProcessor) {
+                    window.technicalProcessor.setSubject(data.subject);
+                    window.technicalProcessor.updateVisualizationForSubject(data.subject);
+                }
+                
+                // Обновляем статус предмета
+                updateSubjectStatus(data.subject);
+            });
+            
+            // Обработчик технического контента
+            socket.on('technical_content', (data) => {
+                console.log('Получен технический контент:', data.type);
+                
+                if (window.technicalProcessor && window.technicalProcessor.subjectType !== 'general') {
+                    // Для технических предметов используем специальную обработку
+                    if (data.type === 'formula') {
+                        displayTechnicalFormula(data.content);
+                    } else if (data.type === 'diagram') {
+                        displayTechnicalDiagram(data.content);
+                    }
+                }
             });
 
             // Логируем все входящие события
@@ -4611,7 +5151,7 @@
             }, 5000);
         }
 
-        // ФИКС: Упрощенная инициализация кнопки активации с вызовом initializeAudioContext
+        // Упрощенная инициализация кнопки активации
         function initActivateButton() {
             const button = document.getElementById('activate-ai-btn');
             
@@ -4624,7 +5164,6 @@
             button.replaceWith(button.cloneNode(true));
             const newButton = document.getElementById('activate-ai-btn');
             
-            // НОВЫЙ ОБРАБОТЧИК КНОПКИ
             newButton.addEventListener('click', function(event) {
                 console.log('=== КЛИК ПО КНОПКЕ АКТИВАЦИИ ===');
                 console.log('Room ID:', roomId);
@@ -4632,63 +5171,56 @@
                 event.preventDefault();
                 event.stopPropagation();
                 
-                // ФИКС: Инициализируем аудиоконтекст при клике
-                initializeAudioContext();
-                
+                // УПРОЩЕНИЕ: Сервер всегда готов, не проверяем сложные состояния
                 if (socket && socket.connected) {
                     console.log('✅ Отправка запроса активации для комнаты:', roomId);
-                    
-                    // Отправляем "привет" как распознанную речь на сервер
-                    socket.emit('recognized_speech', {
-                        room_id: roomId,
-                        text: 'привет'
-                    });
-                    
-                    // Показываем визуальную обратную связь
-                    showStudentSpeech('привет', 'me');
-                    showSpeechDisplay('привет');
+                    socket.emit('activate_ai_teacher', { room_id: roomId });
                     
                     // Немедленная обратная связь
                     newButton.style.display = 'none';
-                    statusDiv.textContent = 'Отправлено "привет" на сервер...';
-                    
-                    // Также активируем AI-учителя
-                    socket.emit('activate_ai_teacher', { 
-                        room_id: roomId,
-                        avatar_name: 'teacher'
-                    });
+                    statusDiv.textContent = 'Активация AI-учителя...';
                     
                     // Таймаут для обработки ошибок активации
                     setTimeout(() => {
                         if (socket && !aiTeacherActivated) {
-                            console.warn('⚠️ Активация заняла слишком много времени');
-                            newButton.style.display = 'block';
-                            newButton.innerHTML = 'Повторить активацию';
+                            console.warn('⚠️ Активация заняла слишком много времени, пробуем резервный метод');
+                            backupActivateAI();
                         }
                     }, 5000);
                     
                 } else {
-                    console.error('❌ Socket не подключен');
-                    statusDiv.textContent = 'Ошибка: Socket не подключен';
+                    console.error('❌ Socket не подключен, пробуем резервный метод');
+                    backupActivateAI();
                 }
             });
         }
 
-        function updateActivationButton() {
+        // Резервный метод активации
+        function backupActivateAI() {
+            console.log('Использование резервного метода активации');
+            
+            // Помечаем как активированного
+            aiTeacherActivated = true;
+            aiTeacherWasActivated = true;
+            activateAiBtn.style.display = 'none';
+            statusDiv.textContent = 'AI-Teacher активирован (локальный режим)';
+            
+            // Загружаем аватар
+            loadAvatarFrames('teacher');
+        }
+
+        // Принудительное отображение кнопки
+        function forceShowActivateButton() {
+            console.log('Принудительное отображение кнопки активации');
             const button = document.getElementById('activate-ai-btn');
-            if (!button) return;
             
-            // Если AI уже был активирован, не показываем кнопку
-            if (aiTeacherWasActivated) {
-                button.style.display = 'none';
-                return;
-            }
-            
-            // Показываем кнопку для ручной активации
             button.style.display = 'block';
-            button.disabled = false;
-            button.innerHTML = 'Activate AI-Teacher';
-            console.log('✅ Кнопка активации готова для комнаты:', roomId);
+            button.style.zIndex = '1000';
+            button.style.pointerEvents = 'auto';
+            button.style.position = 'fixed';
+            
+            // Переинициализируем обработчики
+            initActivateButton();
         }
 
         // Инициализация при загрузке страницы
@@ -4702,15 +5234,21 @@
             initDrawingCanvas();
             initVisualization();
             
-            // Запускаем медиа устройства (только для self-view)
+            // Запускаем медиа устройства
             enableCameraAndMicrophone();
             
             // Инициализируем кнопку после небольшой задержки
             setTimeout(() => {
                 initActivateButton();
+                updateActivationButton();
                 
                 // Инициализация системы технических предметов
                 if (window.technicalProcessor) {
+                    // Запрашиваем текущий предмет у сервера
+                    if (socket) {
+                        socket.emit('get_current_subject', { room_id: roomId });
+                    }
+                    
                     // Инициализируем обработку контента
                     window.technicalProcessor.updateVisualizationForSubject();
                 }
@@ -4781,7 +5319,14 @@
             
             micBtn.addEventListener('click', toggleMicrophone);
             camBtn.addEventListener('click', toggleCamera);
-            textInputBtn.addEventListener('click', toggleTextInput);
+            screenBtn.addEventListener('click', () => {
+                if (screenBtn.classList.contains('active')) {
+                    stopScreenShare();
+                } else {
+                    shareScreen();
+                }
+            });
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
             endCallBtn.addEventListener('click', endCall);
 
             enableCameraBtn.addEventListener('click', async () => {
@@ -4791,6 +5336,13 @@
             // Apply embedded mode styles if needed
             if (isEmbedded) {
                 document.body.classList.add('embedded');
+                
+                // Auto-activate AI teacher in embedded mode
+                setTimeout(() => {
+                    if (socket) {
+                        socket.emit('activate_ai_teacher', { room_id: roomId });
+                    }
+                }, 2000);
             }
 
             window.addEventListener('message', (event) => {
@@ -4801,6 +5353,14 @@
             
             setDrawingTool('pen');
             setAutoContinueEnabled(false);
+            
+            // Принудительно показываем кнопку через 3 секунды
+            setTimeout(forceShowActivateButton, 3000);
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            isFullscreen = !!document.fullscreenElement;
+            fullscreenBtn.querySelector('span').textContent = isFullscreen ? 'Обычный' : 'Полный';
         });
 
         // Глобальный обработчик ошибок загрузки изображений
@@ -4821,473 +5381,6 @@
                 }
             }
         }, true);
-        
-        // Исправленная функция setTool
-        function setTool(tool) {
-            console.log('🛠️ Активация инструмента:', tool);
-            
-            // Сбрасываем активность всех кнопок
-            textToolBtn.classList.remove('active');
-            drawToolBtn.classList.remove('active');
-            messageToolBtn.classList.remove('active');
-            visualizationToolBtn.classList.remove('active');
-            
-            if (tool === 'text') {
-                textToolBtn.classList.add('active');
-                lessonContent.style.display = 'block';
-                bringWindowToFront(lessonContent);
-                console.log('📝 Активирована текстовая доска');
-            } 
-            else if (tool === 'draw') {
-                drawToolBtn.classList.add('active');
-                drawingWindow.style.display = 'block';
-                isDrawingWindowOpen = true;
-                bringWindowToFront(drawingWindow);
-                
-                setTimeout(() => {
-                    const rect = drawingCanvas.getBoundingClientRect();
-                    drawingCanvas.width = rect.width;
-                    drawingCanvas.height = rect.height;
-                }, 50);
-                console.log('🎨 Активировано окно рисования');
-            } 
-            else if (tool === 'message') {
-                messageToolBtn.classList.add('active');
-                messageWindow.style.display = 'block';
-                isMessageWindowOpen = true;
-                bringWindowToFront(messageWindow);
-                messageText.focus();
-                console.log('💬 Активировано окно сообщений');
-            } 
-            else if (tool === 'visualization') {
-                visualizationToolBtn.classList.add('active');
-                visualizationWindow.style.display = 'block';
-                isVisualizationWindowOpen = true;
-                bringWindowToFront(visualizationWindow);
-                console.log('📊 Активировано окно визуализации');
-            }
-        }
-        
-        // Безопасная активация инструментов
-        function ensureLessonWindowVisible() {
-            // Гарантируем, что окно урока всегда видимо во время урока
-            if (isLessonActive && lessonContent.style.display === 'none') {
-                lessonContent.style.display = 'block';
-                console.log('🔧 Восстановлено окно урока');
-            }
-        }
-        
-        function safeToolActivation(tool) {
-            ensureLessonWindowVisible();
-            setTool(tool);
-        }
-        
-        function sendMessage() {
-            const message = messageText.value.trim();
-            if (message) {
-                // При отправке сообщения приостанавливаем автопродолжение
-                autoContinuePaused = true;
-                setAutoContinueEnabled(false);
-                
-                if (socket) {
-                    socket.emit('student_message', {
-                        room_id: roomId,
-                        message: message
-                    });
-                }
-                messageText.value = '';
-                setTool('text');
-                showStudentSpeech(message, 'me');
-            }
-        }
-        
-        function cancelMessage() {
-            messageText.value = '';
-            setTool('text');
-        }
-        
-        function initZoom() {
-            let lessonScale = 1;
-            const zoomInBtn = document.getElementById('zoom-in');
-            const zoomOutBtn = document.getElementById('zoom-out');
-            const zoomResetBtn = document.getElementById('zoom-reset');
-            
-            zoomInBtn.addEventListener('click', () => {
-                lessonScale = Math.min(lessonScale + 0.1, 2);
-                updateLessonZoom();
-            });
-            
-            zoomOutBtn.addEventListener('click', () => {
-                lessonScale = Math.max(lessonScale - 0.1, 0.5);
-                updateLessonZoom();
-            });
-            
-            zoomResetBtn.addEventListener('click', () => {
-                lessonScale = 1;
-                updateLessonZoom();
-            });
-            
-            function updateLessonZoom() {
-                lessonCanvas.style.transform = `scale(${lessonScale})`;
-                lessonCanvas.style.transformOrigin = 'center center';
-            }
-            
-            let drawingScale = 1;
-            const drawingZoomInBtn = document.getElementById('drawing-zoom-in');
-            const drawingZoomOutBtn = document.getElementById('drawing-zoom-out');
-            const drawingZoomResetBtn = document.getElementById('drawing-zoom-reset');
-            
-            drawingZoomInBtn.addEventListener('click', () => {
-                drawingScale = Math.min(drawingScale + 0.1, 2);
-                updateDrawingZoom();
-            });
-            
-            drawingZoomOutBtn.addEventListener('click', () => {
-                drawingScale = Math.max(drawingScale - 0.1, 0.5);
-                updateDrawingZoom();
-            });
-            
-            drawingZoomResetBtn.addEventListener('click', () => {
-                drawingScale = 1;
-                updateDrawingZoom();
-            });
-            
-            function updateDrawingZoom() {
-                drawingCanvas.style.transform = `scale(${drawingScale})`;
-                drawingCanvas.style.transformOrigin = 'center center';
-            }
-        }
-        
-        // Обновленные функции управления медиа
-        async function toggleMicrophone() {
-            if (!localStream) return;
-            
-            const audioTracks = localStream.getAudioTracks();
-            if (audioTracks.length > 0) {
-                const newState = !audioTracks[0].enabled;
-                audioTracks[0].enabled = newState;
-                
-                isMicOn = newState;
-                if (newState) {
-                    micBtn.classList.add('active');
-                    micBtn.querySelector('span').textContent = 'Выкл';
-                    statusDiv.textContent = 'Микрофон включен';
-                    
-                    // Запускаем распознавание речи при включении микрофона
-                    if (recognition) {
-                        setTimeout(() => {
-                            recognition.start();
-                            updateSpeechStatus(true);
-                        }, 500);
-                    }
-                } else {
-                    micBtn.classList.remove('active');
-                    micBtn.querySelector('span').textContent = 'Вкл';
-                    statusDiv.textContent = 'Микрофон выключен';
-                    
-                    // Останавливаем распознавание речи при выключении микрофона
-                    if (recognition) {
-                        recognition.stop();
-                        updateSpeechStatus(false);
-                        hideSpeechDisplay();
-                    }
-                }
-            }
-        }
-        
-        async function toggleCamera() {
-            if (!localStream) return;
-            
-            const videoTracks = localStream.getVideoTracks();
-            if (videoTracks.length > 0) {
-                const newState = !videoTracks[0].enabled;
-                videoTracks[0].enabled = newState;
-                
-                isCamOn = newState;
-                if (newState) {
-                    camBtn.classList.add('active');
-                    camBtn.querySelector('span').textContent = 'Выкл';
-                    statusDiv.textContent = 'Камера включена';
-                    document.getElementById('self-video-container').style.display = 'block';
-                } else {
-                    camBtn.classList.remove('active');
-                    camBtn.querySelector('span').textContent = 'Вкл';
-                    statusDiv.textContent = 'Камера выключена';
-                    document.getElementById('self-video-container').style.display = 'none';
-                }
-            }
-        }
-        
-        function toggleTextInput() {
-            setTool('message');
-        }
-        
-        function endCall() {
-            // Закрываем все медиа потоки
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            
-            if (recognition) {
-                recognition.stop();
-            }
-            
-            stopAnimation();
-            setAutoContinueEnabled(false);
-            hideSpeechDisplay();
-            hideThinkingIndicator();
-            
-            if (socket) {
-                socket.emit('leave_room', { room_id: roomId });
-                socket.disconnect();
-            }
-            
-            if (isEmbedded) {
-                window.parent.postMessage('conference_ended', '*');
-            } else {
-                window.location.href = '/';
-            }
-        }
-        
-        function initDrawingCanvas() {
-            const resizeCanvas = () => {
-                drawingCanvas.width = drawingCanvas.offsetWidth;
-                drawingCanvas.height = drawingCanvas.offsetHeight;
-                
-                if (drawingCtx) {
-                    drawingCtx.lineWidth = isEraser ? 20 : 3;
-                    drawingCtx.lineCap = 'round';
-                    drawingCtx.lineJoin = 'round';
-                    drawingCtx.strokeStyle = isEraser ? '#F5F6F8' : currentColor;
-                }
-            };
-            
-            resizeCanvas();
-            
-            drawingCtx = drawingCanvas.getContext('2d');
-            drawingCtx.lineWidth = 3;
-            drawingCtx.lineCap = 'round';
-            drawingCtx.lineJoin = 'round';
-            drawingCtx.strokeStyle = currentColor;
-            
-            if (isIOS) {
-                drawingCanvas.style.touchAction = 'none';
-                drawingCanvas.style.webkitUserSelect = 'none';
-                drawingCanvas.style.webkitTouchCallout = 'none';
-            }
-            
-            drawingCanvas.addEventListener('mousedown', startDrawing);
-            drawingCanvas.addEventListener('mousemove', draw);
-            drawingCanvas.addEventListener('mouseup', stopDrawing);
-            drawingCanvas.addEventListener('mouseout', stopDrawing);
-            
-            drawingCanvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-            drawingCanvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-            drawingCanvas.addEventListener('touchend', handleTouchEnd);
-            
-            window.addEventListener('resize', resizeCanvas);
-        }
-        
-        function isDrawingWindowVisible() {
-            return isDrawingWindowOpen && 
-                   drawingWindow.style.display === 'block' &&
-                   drawingWindow.offsetWidth > 0 &&
-                   drawingWindow.offsetHeight > 0;
-        }
-        
-        function getCanvasCoordinates(e) {
-            const rect = drawingCanvas.getBoundingClientRect();
-            const scaleX = drawingCanvas.width / rect.width;
-            const scaleY = drawingCanvas.height / rect.height;
-            
-            let clientX, clientY;
-            
-            if (e.type.includes('touch')) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            
-            return {
-                x: (clientX - rect.left) * scaleX,
-                y: (clientY - rect.top) * scaleY
-            };
-        }
-        
-        function startDrawing(e) {
-            if (!isDrawingWindowVisible()) return;
-            
-            isDrawing = true;
-            const coords = getCanvasCoordinates(e);
-            lastX = coords.x;
-            lastY = coords.y;
-            
-            drawingCtx.beginPath();
-            drawingCtx.moveTo(lastX, lastY);
-            
-            e.preventDefault();
-        }
-        
-        function draw(e) {
-            if (!isDrawing) return;
-            
-            const coords = getCanvasCoordinates(e);
-            const currentX = coords.x;
-            const currentY = coords.y;
-            
-            drawingCtx.lineTo(currentX, currentY);
-            drawingCtx.stroke();
-            
-            lastX = currentX;
-            lastY = currentY;
-            
-            e.preventDefault();
-        }
-        
-        function stopDrawing() {
-            if (!isDrawing) return;
-            
-            isDrawing = false;
-            drawingCtx.closePath();
-        }
-        
-        function handleTouchStart(e) {
-            if (!isDrawingWindowVisible()) return;
-            
-            e.preventDefault();
-            
-            const touch = e.touches[0];
-            const customEvent = {
-                type: 'mousedown',
-                clientX: touch.clientX,
-                clientY: touch.clientY,
-                target: drawingCanvas
-            };
-            
-            startDrawing(customEvent);
-        }
-        
-        function handleTouchMove(e) {
-            if (!isDrawing || !isDrawingWindowVisible()) return;
-            
-            e.preventDefault();
-            
-            const touch = e.touches[0];
-            const customEvent = {
-                type: 'mousemove',
-                clientX: touch.clientX,
-                clientY: touch.clientY,
-                target: drawingCanvas
-            };
-            
-            draw(customEvent);
-        }
-        
-        function handleTouchEnd() {
-            if (!isDrawing) return;
-            
-            stopDrawing();
-        }
-        
-        function clearDrawing() {
-            drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-        }
-        
-        function setDrawingTool(tool) {
-            currentTool = tool;
-            isEraser = (tool === 'eraser');
-            
-            document.getElementById('drawing-pen').classList.remove('active');
-            document.getElementById('drawing-eraser').classList.remove('active');
-            
-            if (tool === 'pen') {
-                document.getElementById('drawing-pen').classList.add('active');
-                drawingCtx.lineWidth = 3;
-                drawingCtx.strokeStyle = currentColor;
-                drawingCtx.globalCompositeOperation = 'source-over';
-            } else if (tool === 'eraser') {
-                document.getElementById('drawing-eraser').classList.add('active');
-                drawingCtx.lineWidth = 20;
-                drawingCtx.strokeStyle = '#F5F6F8';
-                drawingCtx.globalCompositeOperation = 'destination-out';
-            }
-        }
-        
-        function initWindowDragging() {
-            function initDragForWindow(windowElement) {
-                const header = windowElement.querySelector('.window-header');
-                
-                header.addEventListener('mousedown', startDragWindow);
-                header.addEventListener('touchstart', startDragWindow, { passive: false });
-                
-                header.addEventListener('touchstart', (e) => {
-                    e.stopPropagation();
-                });
-                header.addEventListener('mousedown', (e) => {
-                    e.stopPropagation();
-                });
-                
-                function startDragWindow(e) {
-                    isDraggingWindow = true;
-                    currentDraggedWindow = windowElement;
-                    
-                    const rect = windowElement.getBoundingClientRect();
-                    if (e.type === 'mousedown') {
-                        dragOffsetX = e.clientX - rect.left;
-                        dragOffsetY = e.clientY - rect.top;
-                    } else {
-                        dragOffsetX = e.touches[0].clientX - rect.left;
-                        dragOffsetY = e.touches[0].clientY - rect.top;
-                        e.preventDefault();
-                    }
-                    
-                    document.addEventListener('mousemove', dragWindow);
-                    document.addEventListener('touchmove', dragWindow, { passive: false });
-                    document.addEventListener('mouseup', stopDragWindow);
-                    document.addEventListener('touchend', stopDragWindow);
-                }
-            }
-            
-            function dragWindow(e) {
-                if (!isDraggingWindow || !currentDraggedWindow) return;
-                
-                let clientX, clientY;
-                if (e.type === 'mousemove') {
-                    clientX = e.clientX;
-                    clientY = e.clientY;
-                } else {
-                    clientX = e.touches[0].clientX;
-                    clientY = e.touches[0].clientY;
-                    e.preventDefault();
-                }
-                
-                const newX = clientX - dragOffsetX;
-                const newY = clientY - dragOffsetY;
-                
-                const maxX = window.innerWidth - currentDraggedWindow.offsetWidth;
-                const maxY = window.innerHeight - currentDraggedWindow.offsetHeight;
-                
-                currentDraggedWindow.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
-                currentDraggedWindow.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
-                currentDraggedWindow.style.transform = 'none';
-            }
-            
-            function stopDragWindow() {
-                isDraggingWindow = false;
-                currentDraggedWindow = null;
-                document.removeEventListener('mousemove', dragWindow);
-                document.removeEventListener('touchmove', dragWindow);
-                document.removeEventListener('mouseup', stopDragWindow);
-                document.removeEventListener('touchend', stopDragWindow);
-            }
-            
-            initDragForWindow(lessonContent);
-            initDragForWindow(drawingWindow);
-            initDragForWindow(visualizationWindow);
-            initDragForWindow(messageWindow);
-        }
     </script>
 </body>
 </html>
