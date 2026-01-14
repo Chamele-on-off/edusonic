@@ -3987,6 +3987,47 @@
             stopAnimation();
         }
 
+        // Функция для активации аудиопотока (ИСПРАВЛЕНИЕ ПРОБЛЕМЫ СО ЗВУКОМ)
+        async function activateAudioStream() {
+            if (localStream) {
+                const audioTracks = localStream.getAudioTracks();
+                if (audioTracks.length > 0) {
+                    // Создаем скрытый аудиоэлемент для активации потока
+                    const audioElement = document.createElement('audio');
+                    audioElement.srcObject = localStream;
+                    audioElement.muted = true; // Не воспроизводим, только активируем
+                    
+                    try {
+                        await audioElement.play();
+                        console.log('Аудиопоток активирован');
+                    } catch (e) {
+                        console.log('Активация аудио:', e);
+                    }
+                    
+                    // Принудительно включаем трек
+                    audioTracks[0].enabled = true;
+                }
+            }
+        }
+
+        // Глобальный обработчик для активации аудио
+        let audioActivated = false;
+
+        function activateAudioOnUserInteraction() {
+            if (!audioActivated) {
+                const audioElements = document.querySelectorAll('audio, video');
+                audioElements.forEach(element => {
+                    if (element.paused) {
+                        element.play().catch(e => console.log('Автовоспроизведение заблокировано:', e));
+                    }
+                });
+                audioActivated = true;
+                
+                // Активируем аудиопоток
+                activateAudioStream();
+            }
+        }
+
         function playAudio(base64Audio) {
             try {
                 if (isIOS) {
@@ -4003,7 +4044,7 @@
             }
         }
 
-        // Функции инициализации
+        // Инициализация рисования
         function initDrawingCanvas() {
             const resizeCanvas = () => {
                 drawingCanvas.width = drawingCanvas.offsetWidth;
@@ -4170,6 +4211,7 @@
             }
         }
 
+        // Функции для перетаскивания окон
         function initWindowDragging() {
             function initDragForWindow(windowElement) {
                 const header = windowElement.querySelector('.window-header');
@@ -4380,7 +4422,7 @@
             }
         }
 
-        // Обновленные функции управления медиа
+        // ИСПРАВЛЕННАЯ ФУНКЦИЯ toggleMicrophone с активацией аудио
         async function toggleMicrophone() {
             if (!localStream) return;
             
@@ -4388,6 +4430,20 @@
             if (audioTracks.length > 0) {
                 const newState = !audioTracks[0].enabled;
                 audioTracks[0].enabled = newState;
+                
+                // ПРИНУДИТЕЛЬНАЯ АКТИВАЦИЯ АУДИОКОНТЕКСТА
+                if (newState) {
+                    // Создаем и тут же удаляем аудиоэлемент для активации
+                    const tempAudio = new Audio();
+                    tempAudio.srcObject = localStream;
+                    tempAudio.play().then(() => {
+                        tempAudio.pause();
+                        tempAudio.srcObject = null;
+                    }).catch(e => console.log('Активация аудио при включении микрофона:', e));
+                    
+                    // Активируем аудиопоток
+                    activateAudioStream();
+                }
                 
                 isMicOn = newState;
                 if (newState) {
@@ -4471,7 +4527,7 @@
             }
         }
 
-        // Инициализация медиа устройств (ТОЛЬКО ДЛЯ SELF-VIEW)
+        // ИСПРАВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ МЕДИА УСТРОЙСТВ с аудиофиксом
         async function enableCameraAndMicrophone() {
             try {
                 console.log('Запрос доступа к камере и микрофону для self-view...');
@@ -4505,8 +4561,26 @@
                 cameraPermission.style.display = 'none';
                 devicesEnabled = true;
                 
+                // АУДИОФИКС: Создаем скрытый аудиоэлемент для активации потока
+                const audioActivationElement = document.createElement('audio');
+                audioActivationElement.style.display = 'none';
+                audioActivationElement.srcObject = localStream;
+                document.body.appendChild(audioActivationElement);
+                
+                // Пытаемся воспроизвести (даже если muted)
+                setTimeout(() => {
+                    audioActivationElement.play().catch(e => {
+                        console.log('Первоначальная активация аудио:', e);
+                        // Если не удалось, создаем кнопку для ручной активации
+                        createAudioActivationButton();
+                    });
+                }, 1000);
+                
                 // Инициализируем распознавание речи
                 initSpeechRecognition();
+                
+                // Активируем аудиопоток
+                activateAudioStream();
                 
             } catch (error) {
                 console.error('Ошибка доступа к камере/микрофону:', error);
@@ -4518,6 +4592,34 @@
                     statusDiv.textContent = 'Ошибка доступа к устройствам';
                 }
             }
+        }
+
+        // Функция создания кнопки активации аудио
+        function createAudioActivationButton() {
+            const button = document.createElement('button');
+            button.innerHTML = '🔊 Активировать аудио';
+            button.style.position = 'fixed';
+            button.style.top = '10px';
+            button.style.right = '10px';
+            button.style.zIndex = '10000';
+            button.style.padding = '10px';
+            button.style.background = 'var(--primary)';
+            button.style.color = 'white';
+            button.style.border = 'none';
+            button.style.borderRadius = '5px';
+            button.style.cursor = 'pointer';
+            
+            button.onclick = () => {
+                // Активируем все аудиоэлементы
+                document.querySelectorAll('audio, video').forEach(el => {
+                    el.play().catch(e => console.log('Ручная активация:', e));
+                });
+                // Активируем аудиопоток
+                activateAudioStream();
+                button.remove();
+            };
+            
+            document.body.appendChild(button);
         }
 
         // Улучшенная Socket.io инициализация
@@ -4556,10 +4658,15 @@
                 initLlmSystem();
             });
             
-            // Обработка присоединения к комнате
+            // Обработка присоединения к комнате с активацией аудио
             socket.on('participants_update', (data) => {
                 console.log('✅ Успешно присоединились к комнате:', roomId, 'участников:', data.count);
                 participantsCount.textContent = data.count;
+                
+                // Активируем аудио при подключении
+                setTimeout(() => {
+                    activateAudioStream();
+                }, 500);
             });
             
             // НОВЫЙ ОБРАБОТЧИК ДЛЯ SVG ВИЗУАЛИЗАЦИИ
@@ -5131,6 +5238,10 @@
             initZoom();
             initDrawingCanvas();
             initVisualization();
+            
+            // Добавляем глобальные обработчики для активации аудио
+            document.addEventListener('click', activateAudioOnUserInteraction, { once: true });
+            document.addEventListener('touchstart', activateAudioOnUserInteraction, { once: true });
             
             // Запускаем медиа устройства (только для self-view)
             enableCameraAndMicrophone();
