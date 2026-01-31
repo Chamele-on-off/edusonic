@@ -307,7 +307,7 @@ def get_subject_type(subject: str) -> str:
             return "technical"
     
     # Естественные науки
-    for science_subj in NATURAL_CIENCES:
+    for science_subj in NATURAL_SCIENCES:
         if science_subj in subject_lower:
             return "natural_science"
     
