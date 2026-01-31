@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "base_url": "http://localhost:11434",
         "model": "qwen2.5:1.5b",
-        "timeout": 120,
+        "timeout": 400,
         "max_retries": 2
     },
     "fallback": {
