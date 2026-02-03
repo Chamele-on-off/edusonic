@@ -62,7 +62,7 @@ class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
-                 model: str = "meta-llama/llama-3.3-70b-instruct:free"):
+                 model: str = "google/gemma-3-12b-it:free"):
         
         config = load_config()
         openrouter_config = get_model_config("openrouter")
