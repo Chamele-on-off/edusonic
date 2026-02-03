@@ -377,7 +377,7 @@ class LLMIntegration:
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://ai-teacher.com",
+                    "HTTP-Referer": "https://ai.zindaki-edu.ru",
                     "X-Title": "AI Teacher"
                 }
                 
