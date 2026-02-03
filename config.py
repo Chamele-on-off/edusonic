@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
     },
     "fallback": {
         "enabled": True,
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "google/gemma-3-12b-it:free",
         "max_retries": 3,
         "retry_delay": 2.0
     },
