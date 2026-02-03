@@ -9,8 +9,8 @@ CONFIG_FILE = Path(__file__).parent / 'api_config.json'
 DEFAULT_CONFIG = {
     "llm": {
         "api_key": "",
-        "model": "google/gemma-3-12b-it:free",
-        "api_url": "https://api.openrouter.ai/v1/chat/completions",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "api_url": "https://openrouter.ai/api/v1/chat/completions",
         "provider": "openrouter",
         "max_tokens": 500,
         "temperature": 0.4,
@@ -19,8 +19,8 @@ DEFAULT_CONFIG = {
     },
     "openrouter": {
         "api_key": "",
-        "model": "google/gemma-3-12b-it:free",
-        "api_url": "https://api.openrouter.ai/v1/chat/completions",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "api_url": "https://openrouter.ai/api/v1/chat/completions",
         "max_tokens": 1000,
         "temperature": 0.7
     },
@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
     },
     "fallback": {
         "enabled": True,
-        "model": "google/gemma-3-12b-it:free",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
         "max_retries": 3,
         "retry_delay": 2.0
     },
