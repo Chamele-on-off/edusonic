@@ -62,7 +62,7 @@ class LLMIntegration:
     def __init__(self, api_key: str = None, 
                  api_url: str = "https://openrouter.ai/api/v1/chat/completions",
                  cache_dir: str = "cache",
-                 model: str = "google/gemma-3-12b-it:free"):
+                 model: str = "meta-llama/llama-3.3-70b-instruct:free"):
         
         config = load_config()
         openrouter_config = get_model_config("openrouter")
@@ -377,8 +377,8 @@ class LLMIntegration:
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://ai.zindaki-edu.ru",
-                    "X-Title": "https://ai.zindaki-edu.ru"
+                    "HTTP-Referer": "https://ai-teacher.com",
+                    "X-Title": "AI Teacher"
                 }
                 
                 # 🔥 УПРОЩЕННЫЙ ПРОМПТ
