@@ -378,7 +378,7 @@ class LLMIntegration:
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://ai.zindaki-edu.ru",
-                    "X-Title": "AI Teacher"
+                    "X-Title": "https://ai.zindaki-edu.ru"
                 }
                 
                 # 🔥 УПРОЩЕННЫЙ ПРОМПТ
