@@ -81,7 +81,7 @@ class LLMIntegration:
         self.max_retries = 3
         
         # УВЕЛИЧЕННЫЕ ТАЙМАУТЫ
-        self.timeout = 120  # 2 минуты для локальной модели
+        self.timeout = 400  # 2 минуты для локальной модели
         self.request_timeout = 60  # 1 минута для OpenRouter
         self.retry_delay = 5.0  # Увеличиваем задержку между попытками
         
