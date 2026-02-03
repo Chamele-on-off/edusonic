@@ -10,7 +10,7 @@ DEFAULT_CONFIG = {
     "llm": {
         "api_key": "",
         "model": "google/gemma-3-12b-it:free",
-        "api_url": "https://openrouter.ai/api/v1/chat/completions",
+        "api_url": "https://api.openrouter.ai/v1/chat/completions",
         "provider": "openrouter",
         "max_tokens": 500,
         "temperature": 0.4,
@@ -20,7 +20,7 @@ DEFAULT_CONFIG = {
     "openrouter": {
         "api_key": "",
         "model": "google/gemma-3-12b-it:free",
-        "api_url": "https://openrouter.ai/api/v1/chat/completions",
+        "api_url": "https://api.openrouter.ai/v1/chat/completions",
         "max_tokens": 1000,
         "temperature": 0.7
     },
