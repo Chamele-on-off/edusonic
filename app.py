@@ -3475,7 +3475,7 @@ def test_api_key():
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://ai.zindaki-edu.ru",
-            "X-Title": "AI Teacher"
+            "X-Title": "https://ai.zindaki-edu.ru"
         }
         
         test_data = {
